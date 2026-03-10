@@ -1,7 +1,9 @@
 slug: Prekzursil/WebCoder
 stack: fullstack-web
 verify_command: bash scripts/verify
-codex_setup_command: npm ci
+required_secrets:
+  - CHROMATIC_PROJECT_TOKEN
+  - APPLITOOLS_API_KEY
 coverage:
   command: |
     mkdir -p coverage
@@ -17,6 +19,18 @@ coverage:
     - format: lcov
       name: frontend
       path: frontend/webcoder_ui/coverage/lcov.info
+required_contexts:
+  always:
+    - Chromatic Playwright
+    - Applitools Visual
+visual_pair_required: true
+visual_lane:
+  kind: web
+providers:
+  chromatic:
+    status_context: Chromatic Playwright
+  applitools:
+    status_context: Applitools Visual
 vendors:
   sonar:
     project_key: Prekzursil_WebCoder

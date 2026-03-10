@@ -1,7 +1,6 @@
 slug: Prekzursil/env-inspector
 stack: python-desktop
 verify_command: make verify
-codex_setup_command: python -m pip install -r requirements-build.txt
 coverage:
   command: |
     mkdir -p coverage

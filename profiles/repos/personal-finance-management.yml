@@ -1,7 +1,6 @@
 slug: Prekzursil/Personal-Finance-Management
 stack: gradle-java
 verify_command: bash scripts/verify
-codex_setup_command: ./gradlew --no-daemon testClasses
 coverage:
   command: |
     chmod +x gradlew || true

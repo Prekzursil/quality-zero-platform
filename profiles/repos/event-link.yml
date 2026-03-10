@@ -1,0 +1,22 @@
+slug: Prekzursil/event-link
+stack: fullstack-web
+verify_command: bash scripts/verify
+coverage:
+  command: |
+    python -m pip install --upgrade pip
+    python -m pip install -r backend/requirements.txt pytest pytest-cov
+    npm --prefix ui ci
+    PYTHONPATH=backend pytest backend/tests backend/integration_tests \
+      --cov=backend/app \
+      --cov-report=xml:backend/coverage.xml
+    npm --prefix ui run test
+  inputs:
+    - format: xml
+      name: backend
+      path: backend/coverage.xml
+    - format: lcov
+      name: frontend
+      path: ui/coverage/lcov.info
+vendors:
+  sonar:
+    project_key: Prekzursil_event-link

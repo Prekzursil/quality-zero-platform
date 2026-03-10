@@ -1,7 +1,6 @@
 slug: Prekzursil/Star-Wars-Galactic-Battlegrounds-Save-Game-Editor
 stack: python-desktop
 verify_command: bash scripts/verify
-codex_setup_command: python -m pip install -r requirements-build.txt
 coverage:
   command: |
     mkdir -p coverage

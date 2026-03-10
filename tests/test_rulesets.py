@@ -36,8 +36,21 @@ class RulesetPayloadTests(unittest.TestCase):
         contexts = [entry["context"] for entry in required]
 
         self.assertIn("CodeQL", contexts)
-        self.assertIn("BrowserStack E2E", contexts)
+        self.assertIn("Chromatic Playwright", contexts)
+        self.assertIn("Applitools Visual", contexts)
+        self.assertIn("Qlty Gate", contexts)
         self.assertIn("Codacy Static Code Analysis", contexts)
+
+    def test_quality_zero_platform_self_ruleset_includes_qlty_contexts(self) -> None:
+        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
+        profile = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
+        payload = build_ruleset_payload(profile)
+
+        contexts = [entry["context"] for entry in payload["rules"][1]["parameters"]["required_status_checks"]]
+
+        self.assertIn("Qlty Gate", contexts)
+        self.assertIn("Qlty Coverage", contexts)
+        self.assertIn("Qlty Diff Coverage", contexts)
 
 
 if __name__ == "__main__":

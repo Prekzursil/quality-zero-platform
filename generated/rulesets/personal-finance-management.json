@@ -36,6 +36,18 @@
             "integration_id": null
           },
           {
+            "context": "Qlty Gate",
+            "integration_id": null
+          },
+          {
+            "context": "Qlty Coverage",
+            "integration_id": null
+          },
+          {
+            "context": "Qlty Diff Coverage",
+            "integration_id": null
+          },
+          {
             "context": "Sonar Zero",
             "integration_id": null
           },

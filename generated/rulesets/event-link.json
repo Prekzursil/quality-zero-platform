@@ -9,9 +9,9 @@
     }
   },
   "enforcement": "active",
-  "name": "quality-zero-platform / Reframe",
-  "profile_id": "reframe",
-  "repo_slug": "Prekzursil/Reframe",
+  "name": "quality-zero-platform / event-link",
+  "profile_id": "event-link",
+  "repo_slug": "Prekzursil/event-link",
   "rules": [
     {
       "parameters": {
@@ -72,43 +72,11 @@
             "integration_id": null
           },
           {
-            "context": "DeepScan",
-            "integration_id": null
-          },
-          {
-            "context": "Python API & worker checks",
-            "integration_id": null
-          },
-          {
-            "context": "Web build",
-            "integration_id": null
-          },
-          {
-            "context": "Analyze (python)",
-            "integration_id": null
-          },
-          {
-            "context": "Analyze (typescript)",
-            "integration_id": null
-          },
-          {
-            "context": "Chromatic Playwright",
-            "integration_id": null
-          },
-          {
-            "context": "Applitools Visual",
-            "integration_id": null
-          },
-          {
-            "context": "CodeQL",
-            "integration_id": null
-          },
-          {
-            "context": "CodeRabbit",
-            "integration_id": null
-          },
-          {
             "context": "Codacy Static Code Analysis",
+            "integration_id": null
+          },
+          {
+            "context": "DeepScan",
             "integration_id": null
           }
         ],

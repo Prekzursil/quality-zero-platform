@@ -1,0 +1,19 @@
+name: Quality Zero Backlog
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      lane:
+        description: Backlog lane to sweep
+        required: false
+        default: quality
+
+jobs:
+  shared-backlog-sweep:
+    uses: ./.github/workflows/reusable-backlog-sweep.yml
+    with:
+      repo_slug: Prekzursil/quality-zero-platform
+      lane: ${{ github.event.inputs.lane || 'quality' }}
+    secrets: inherit

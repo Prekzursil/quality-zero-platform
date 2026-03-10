@@ -1,0 +1,17 @@
+name: Quality Zero Platform
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  shared-scanner-matrix:
+    uses: ./.github/workflows/reusable-scanner-matrix.yml
+    with:
+      repo_slug: Prekzursil/quality-zero-platform
+      event_name: ${{ github.event_name }}
+      sha: ${{ github.event.pull_request.head.sha || github.sha }}
+    secrets: inherit

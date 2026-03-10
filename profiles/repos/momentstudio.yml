@@ -1,18 +1,22 @@
-slug: Prekzursil/TanksFlashMobile
-stack: node-frontend
+slug: Prekzursil/momentstudio
+stack: fullstack-web
 verify_command: make verify
 required_secrets:
   - CHROMATIC_PROJECT_TOKEN
   - APPLITOOLS_API_KEY
 coverage:
   command: |
-    npm ci
-    npm --prefix apps/web ci
-    npm --prefix apps/web test -- --coverage --watch=false
+    python -m pip install --upgrade pip
+    python -m pip install -r backend/requirements.txt coverage pytest ruff mypy
+    npm --prefix frontend ci
+    make coverage
   inputs:
+    - format: xml
+      name: backend
+      path: backend/coverage.xml
     - format: lcov
-      name: web
-      path: apps/web/coverage/lcov.info
+      name: frontend
+      path: frontend/coverage/**/lcov.info
 required_contexts:
   always:
     - Chromatic Playwright
@@ -25,6 +29,5 @@ providers:
     status_context: Chromatic Playwright
   applitools:
     status_context: Applitools Visual
-vendors:
   sonar:
-    project_key: Prekzursil_TanksFlashMobile
+    project_key: Prekzursil_AdrianaArt

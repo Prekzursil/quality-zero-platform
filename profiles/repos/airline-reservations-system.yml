@@ -1,7 +1,7 @@
 slug: Prekzursil/Airline-Reservations-System
 stack: cpp-cmake
 verify_command: bash scripts/verify
-codex_setup_command: cmake -S . -B build
+required_contexts_mode: replace
 coverage:
   command: |
     npm --prefix airline-gui ci
@@ -34,6 +34,9 @@ required_contexts:
   always:
     - Coverage 100 Gate
     - Codecov Analytics
+    - Qlty Gate
+    - Qlty Coverage
+    - Qlty Diff Coverage
     - Sonar Zero
     - Codacy Zero
     - Semgrep Zero

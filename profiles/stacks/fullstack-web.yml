@@ -1,6 +1,5 @@
 extends: quality-zero-phase1-common
 stack_family: fullstack-web
-codex_setup_command: npm ci
 coverage:
   mode: mixed
   artifact_path: quality-artifacts/coverage/summary.json

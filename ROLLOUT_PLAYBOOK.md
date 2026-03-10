@@ -13,7 +13,7 @@
 2. Enable caller workflows on the common phase-1 template repos.
 3. Migrate the four overlay repos: `SWFOC-Mod-Menu`, `env-inspector`, `Airline-Reservations-System`, and `Reframe`.
 4. Generate repo-level ruleset payloads and validate emitted contexts before applying them.
-5. Configure Codex Web per repo using the `codex_setup_command` declared in the repo profile.
+5. Configure Codex with the repo profile's automatic environment contract and unrestricted network.
 
 ## Wrapper Contract
 
@@ -37,6 +37,6 @@ Each governed repo should converge on:
 For each repo in scope:
 
 1. Connect the GitHub repo in Codex Web.
-2. Configure the environment with the repo profile's `codex_setup_command`.
+2. Ensure the repo uses the profile's automatic environment contract with unrestricted network and all methods.
 3. Run the repo profile's `verify_command`.
 4. Store the verification note in the rollout tracker before enabling backlog sweeps.

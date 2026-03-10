@@ -85,7 +85,18 @@ def _load_stack(inventory: dict[str, Any], stack_id: str, seen: set[str] | None 
 def _normalize_required_contexts(raw: dict[str, Any]) -> dict[str, list[str]]:
     always = dedupe_strings(raw.get("always", []))
     pull_request_only = [item for item in dedupe_strings(raw.get("pull_request_only", [])) if item not in always]
-    return {"always": always, "pull_request_only": pull_request_only}
+    required_now = dedupe_strings(raw.get("required_now", []) or [*always, *pull_request_only])
+    return {"always": always, "pull_request_only": pull_request_only, "required_now": required_now}
+
+
+def _merge_required_contexts(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, list[str]]:
+    return _normalize_required_contexts(
+        {
+            "always": [*base.get("always", []), *overlay.get("always", [])],
+            "pull_request_only": [*base.get("pull_request_only", []), *overlay.get("pull_request_only", [])],
+            "required_now": [*base.get("required_now", []), *overlay.get("required_now", [])],
+        }
+    )
 
 
 def _normalize_coverage_inputs(raw_inputs: Any) -> list[dict[str, str]]:
@@ -154,10 +165,28 @@ def _normalize_coverage(raw: dict[str, Any]) -> dict[str, Any]:
     return coverage
 
 
+def _normalize_codex_environment(raw: dict[str, Any], *, verify_command: str) -> dict[str, str]:
+    payload = deepcopy(raw or {})
+    return {
+        "mode": str(payload.get("mode", "automatic")).strip() or "automatic",
+        "verify_command": str(payload.get("verify_command", verify_command)).strip() or verify_command,
+        "network_profile": str(payload.get("network_profile", "unrestricted")).strip() or "unrestricted",
+        "methods": str(payload.get("methods", "all")).strip() or "all",
+    }
+
+
+def _normalize_visual_lane(raw: dict[str, Any]) -> dict[str, str]:
+    payload = deepcopy(raw or {})
+    return {
+        "kind": str(payload.get("kind", "none")).strip() or "none",
+    }
+
+
 def _finalize_vendors(profile: dict[str, Any]) -> dict[str, Any]:
     owner = profile["owner"]
     repo_name = profile["repo_name"]
-    vendors = deepcopy(profile.get("vendors", {}))
+    vendor_source = _deep_merge(profile.get("vendors", {}), profile.get("providers", {}))
+    vendors = deepcopy(vendor_source)
 
     sonar = vendors.setdefault("sonar", {})
     project_key = str(sonar.get("project_key", "")).strip()
@@ -184,12 +213,28 @@ def _finalize_vendors(profile: dict[str, Any]) -> dict[str, Any]:
             allowed_host_suffixes={"codecov.io"},
         )
 
+    qlty = vendors.setdefault("qlty", {})
+    qlty.setdefault("gate_context", "Qlty Gate")
+    qlty.setdefault("coverage_context", "Qlty Coverage")
+    qlty.setdefault("diff_coverage_context", "Qlty Diff Coverage")
+    if not qlty.get("dashboard_url"):
+        qlty["dashboard_url"] = normalize_https_url(
+            f"https://qlty.sh/gh/{quote(owner, safe='')}/projects/{quote(repo_name, safe='')}",
+            allowed_host_suffixes={"qlty.sh"},
+        )
+
     deepscan = vendors.setdefault("deepscan", {})
     deepscan.setdefault("open_issues_url_var", "DEEPSCAN_OPEN_ISSUES_URL")
 
     sentry = vendors.setdefault("sentry", {})
     sentry.setdefault("org_var", "SENTRY_ORG")
     sentry.setdefault("project_vars", ["SENTRY_PROJECT"])
+
+    chromatic = vendors.setdefault("chromatic", {})
+    chromatic.setdefault("status_context", "Chromatic Playwright")
+
+    applitools = vendors.setdefault("applitools", {})
+    applitools.setdefault("status_context", "Applitools Visual")
 
     github = vendors.setdefault("github", {})
     github["repo_url"] = normalize_https_url(
@@ -215,6 +260,20 @@ def load_repo_profile(inventory: dict[str, Any], repo_slug: str) -> dict[str, An
     stack_profile = _load_stack(inventory, stack_id)
 
     merged = _deep_merge(stack_profile, repo_profile)
+    required_contexts_mode = str(repo_profile.get("required_contexts_mode", "merge")).strip() or "merge"
+    if required_contexts_mode == "replace":
+        merged["required_contexts"] = _normalize_required_contexts(repo_profile.get("required_contexts", {}))
+    else:
+        merged["required_contexts"] = _merge_required_contexts(
+            stack_profile.get("required_contexts", {}),
+            repo_profile.get("required_contexts", {}),
+        )
+    merged["required_secrets"] = dedupe_strings(
+        [*stack_profile.get("required_secrets", []), *repo_profile.get("required_secrets", [])]
+    )
+    merged["required_vars"] = dedupe_strings([*stack_profile.get("required_vars", []), *repo_profile.get("required_vars", [])])
+    merged["providers"] = _deep_merge(stack_profile.get("providers", {}), repo_profile.get("providers", {}))
+    merged["vendors"] = _deep_merge(stack_profile.get("vendors", {}), repo_profile.get("vendors", {}))
     merged = _deep_merge(
         merged,
         {
@@ -224,6 +283,7 @@ def load_repo_profile(inventory: dict[str, Any], repo_slug: str) -> dict[str, An
             "rollout_notes": repo_entry.get("notes", ""),
             "profile_id": profile_id,
             "stack": stack_id,
+            "required_contexts_mode": required_contexts_mode,
         },
     )
 
@@ -231,22 +291,32 @@ def load_repo_profile(inventory: dict[str, Any], repo_slug: str) -> dict[str, An
     merged["owner"] = owner
     merged["repo_name"] = repo_name
     merged["verify_command"] = str(merged.get("verify_command", "bash scripts/verify")).strip()
-    merged["codex_setup_command"] = str(merged.get("codex_setup_command", "")).strip()
     merged["required_secrets"] = dedupe_strings(merged.get("required_secrets", []))
     merged["required_vars"] = dedupe_strings(merged.get("required_vars", []))
     merged["required_contexts"] = _normalize_required_contexts(merged.get("required_contexts", {}))
     merged["enabled_scanners"] = merged.get("enabled_scanners", {})
     merged["coverage"] = _normalize_coverage(merged.get("coverage", {}))
+    merged["codex_environment"] = _normalize_codex_environment(
+        merged.get("codex_environment", {}),
+        verify_command=merged["verify_command"],
+    )
+    merged["visual_pair_required"] = bool(merged.get("visual_pair_required", False))
+    merged["visual_lane"] = _normalize_visual_lane(merged.get("visual_lane", {}))
     merged["ruleset_mode"] = str(merged.get("ruleset_mode", "strict-zero-phase1")).strip()
     merged["preserve_public_check_names"] = bool(merged.get("preserve_public_check_names", True))
     merged["vendors"] = _finalize_vendors(merged)
+    merged["providers"] = deepcopy(merged["vendors"])
     return merged
 
 
 def active_required_contexts(profile: dict[str, Any], *, event_name: str) -> list[str]:
-    required = list(profile["required_contexts"]["always"])
-    if event_name in {"pull_request", "pull_request_target", "ruleset"}:
-        required.extend(profile["required_contexts"]["pull_request_only"])
+    required_contexts = profile["required_contexts"]
+    if event_name == "ruleset":
+        return dedupe_strings(required_contexts.get("required_now", []))
+
+    required = list(required_contexts["always"])
+    if event_name in {"pull_request", "pull_request_target"}:
+        required.extend(required_contexts["pull_request_only"])
     return dedupe_strings(required)
 
 
@@ -294,10 +364,34 @@ def validate_profile(profile: dict[str, Any]) -> list[str]:
     findings: list[str] = []
     if not profile.get("verify_command"):
         findings.append(f"{profile['slug']}: verify_command is required")
-    if not profile.get("codex_setup_command"):
-        findings.append(f"{profile['slug']}: codex_setup_command is required")
+    codex_environment = profile.get("codex_environment", {})
+    if codex_environment.get("mode") != "automatic":
+        findings.append(f"{profile['slug']}: codex_environment.mode must be automatic")
+    if not codex_environment.get("verify_command"):
+        findings.append(f"{profile['slug']}: codex_environment.verify_command is required")
+    if codex_environment.get("network_profile") != "unrestricted":
+        findings.append(f"{profile['slug']}: codex_environment.network_profile must be unrestricted")
+    if codex_environment.get("methods") != "all":
+        findings.append(f"{profile['slug']}: codex_environment.methods must be all")
     if not active_required_contexts(profile, event_name="ruleset"):
         findings.append(f"{profile['slug']}: at least one required context is required")
+    pr_contexts = dedupe_strings(
+        [*profile["required_contexts"].get("always", []), *profile["required_contexts"].get("pull_request_only", [])]
+    )
+    required_now = set(profile["required_contexts"].get("required_now", []))
+    missing_required_now = [name for name in pr_contexts if name not in required_now]
+    if missing_required_now:
+        findings.append(
+            f"{profile['slug']}: required_contexts.required_now is missing {', '.join(missing_required_now)}"
+        )
+
+    if profile.get("visual_pair_required"):
+        ruleset_contexts = set(active_required_contexts(profile, event_name="ruleset"))
+        chromatic = profile["vendors"]["chromatic"]["status_context"]
+        applitools = profile["vendors"]["applitools"]["status_context"]
+        if (chromatic in ruleset_contexts) != (applitools in ruleset_contexts):
+            findings.append(f"{profile['slug']}: visual_pair_required needs both Chromatic and Applitools contexts")
+
     coverage = profile.get("coverage", {})
     if profile.get("enabled_scanners", {}).get("coverage", False):
         if not coverage.get("command"):

@@ -13,13 +13,17 @@ It replaces the old queue/template baseline with reusable workflows, shared qual
 - `templates/repo/`: thin wrapper contract for governed repos
 - `generated/rulesets/`: committed ruleset payloads for review and drift detection
 
-## Phase 1 Cohort
+## Governed Repositories
 
-Phase 1 preserves existing public check names for:
+The current governed surface covers 13 repositories:
 
 - `Prekzursil/Airline-Reservations-System`
 - `Prekzursil/DevExtreme-Filter-Go-Language`
+- `Prekzursil/event-link`
+- `Prekzursil/momentstudio`
 - `Prekzursil/Personal-Finance-Management`
+- `Prekzursil/pbinfo-get-unsolved`
+- `Prekzursil/quality-zero-platform`
 - `Prekzursil/Reframe`
 - `Prekzursil/SWFOC-Mod-Menu`
 - `Prekzursil/Star-Wars-Galactic-Battlegrounds-Save-Game-Editor`
@@ -27,7 +31,7 @@ Phase 1 preserves existing public check names for:
 - `Prekzursil/WebCoder`
 - `Prekzursil/env-inspector`
 
-`Prekzursil/pbinfo-get-unsolved` stays in the inventory as the dry-run fixture and script portability source.
+Phase-1 compatibility still preserves the established public check names for the original strict-zero cohort while `event-link`, `momentstudio`, and `quality-zero-platform` join the governed inventory.
 
 ## Control-Plane Flow
 
@@ -48,7 +52,9 @@ bash scripts/verify
 
 Codex Web is intentionally secondary. Each enrolled repo declares:
 
-- `codex_setup_command`: the environment bootstrap command for Codex Web
+- `codex_environment.mode: automatic`
+- `codex_environment.network_profile: unrestricted`
+- `codex_environment.methods: all`
 - `verify_command`: the canonical repo verification command
 
-Codex Web is used for backlog sweeps and manual review, not for merge-gate authority.
+Codex Web is used for backlog sweeps and manual review, not for merge-gate authority. Manual setup and maintenance scripts are intentionally not part of the control-plane contract.

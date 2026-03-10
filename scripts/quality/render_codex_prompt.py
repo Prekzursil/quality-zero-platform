@@ -27,6 +27,7 @@ def _render_prompt(profile: dict, *, lane: str, event_name: str, failure_context
     contexts = active_required_contexts(profile, event_name=event_name)
     artifact_lines = "\n".join(f"- {item}" for item in artifacts) or "- None"
     headline = "PR failure remediation" if lane == "remediation" else "backlog sweep"
+    codex_environment = profile.get("codex_environment", {})
     return f"""# Codex {headline}
 
 Repo: {profile['slug']}
@@ -39,7 +40,10 @@ Never push to the default branch. Use `codex/fix/<context>/<shortsha>` for remed
 ## Repo contract
 
 - Verify command: `{profile['verify_command']}`
-- Codex setup command: `{profile['codex_setup_command']}`
+- Codex environment mode: `{codex_environment.get('mode', 'automatic')}`
+- Codex environment verify command: `{codex_environment.get('verify_command', profile['verify_command'])}`
+- Codex environment network profile: `{codex_environment.get('network_profile', 'unrestricted')}`
+- Codex environment methods: `{codex_environment.get('methods', 'all')}`
 - Default branch: `{profile['default_branch']}`
 - Preserve public check names: `{profile['preserve_public_check_names']}`
 

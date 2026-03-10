@@ -1,0 +1,8 @@
+extends: quality-zero-phase1-common
+stack_family: gradle-java
+codex_setup_command: ./gradlew --no-daemon testClasses
+coverage:
+  setup:
+    java:
+      distribution: temurin
+      version: "17"

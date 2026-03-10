@@ -1,0 +1,107 @@
+name: Reusable Remediation Loop
+
+on:
+  workflow_call:
+    inputs:
+      repo_slug:
+        type: string
+        required: true
+      failure_context:
+        type: string
+        required: false
+        default: Quality Zero Gate
+      sha:
+        type: string
+        required: false
+        default: ""
+      max_attempts:
+        type: number
+        required: false
+        default: 3
+      platform_repository:
+        type: string
+        required: false
+        default: Prekzursil/quality-zero-platform
+      platform_ref:
+        type: string
+        required: false
+        default: main
+
+jobs:
+  remediate:
+    name: Codex Remediation Loop
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: repo
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.platform_repository }}
+          ref: ${{ inputs.platform_ref }}
+          path: platform
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install platform dependencies
+        run: python -m pip install -r platform/requirements-dev.txt
+      - name: Export resolved profile
+        run: |
+          python platform/scripts/quality/export_profile.py \
+            --repo-slug "${{ inputs.repo_slug }}" \
+            --event-name pull_request \
+            --out-json "$RUNNER_TEMP/profile.json"
+      - name: Compute remediation branch
+        id: branch
+        shell: bash
+        run: |
+          SHA_VALUE="${{ inputs.sha }}"
+          if [ -z "$SHA_VALUE" ]; then
+            SHA_VALUE="${GITHUB_SHA}"
+          fi
+          SHORT_SHA="$(printf '%s' "$SHA_VALUE" | cut -c1-8)"
+          SAFE_CONTEXT="$(printf '%s' "${{ inputs.failure_context }}" | tr '[:upper:] ' '[:lower:]-' | tr -cd 'a-z0-9-')"
+          echo "branch=codex/fix/${SAFE_CONTEXT}/${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+      - name: Render Codex prompt
+        run: |
+          python platform/scripts/quality/render_codex_prompt.py \
+            --repo-slug "${{ inputs.repo_slug }}" \
+            --lane remediation \
+            --failure-context "${{ inputs.failure_context }}" \
+            --output "$RUNNER_TEMP/remediation-prompt.md"
+      - name: Run Codex
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: ${{ runner.temp }}/remediation-prompt.md
+          sandbox: workspace-write
+          model: gpt-5-codex
+      - name: Create remediation pull request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          path: repo
+          branch: ${{ steps.branch.outputs.branch }}
+          title: "[codex] Fix ${{ inputs.failure_context }}"
+          commit-message: |
+            chore: remediate ${{ inputs.failure_context }}
+
+            Co-authored-by: Codex <noreply@openai.com>
+          body: |
+            Automated remediation for `${{ inputs.failure_context }}`.
+
+            - Branch: `${{ steps.branch.outputs.branch }}`
+            - Source SHA: `${{ inputs.sha || github.sha }}`
+            - Verify command: `bash scripts/verify`
+      - name: Escalate final attempt
+        if: ${{ github.run_attempt >= inputs.max_attempts }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh pr list --head "${{ steps.branch.outputs.branch }}" --state open --json number --jq '.[0].number' > pr.txt
+          if [ -s pr.txt ]; then
+            gh pr edit "$(cat pr.txt)" --add-label "manual:codex-remediation"
+          fi

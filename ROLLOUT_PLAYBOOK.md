@@ -1,20 +1,42 @@
-# Fleet Baseline Lite v2 Rollout Playbook
+# quality-zero-platform Rollout Playbook
 
-## Adoption Steps
-1. Copy baseline files into target repository root, preserving paths.
-2. Replace `scripts.verify.template` with `scripts/verify` customized for the repository stack.
-3. Validate `AGENTS.md` verify command and queue warning text against repo reality.
-4. Open bootstrap PR named `chore/governance-wave2-bootstrap`.
-5. Require green `verify` and zero unresolved review threads.
-6. Merge with `squash` after non-author human approval.
-7. Run `agent-label-sync.yml` on default branch once post-merge.
-8. Create one pilot issue from `agent_task.yml` with `agent:ready`, `risk:low`, and area label.
-9. Confirm queue transition to `agent:in-progress` and exactly one execution-contract comment.
-10. Merge pilot PR after human review; only then activate Phase-2 hardening issue.
+## Goals
 
-## Rollback Steps
-1. Disable queue workflow by removing `agent:ready` usage and pausing agent assignment.
-2. Revert bootstrap PR via a single rollback PR if governance workflow causes blocking regressions.
-3. Keep branch protections intact; do not loosen protections during rollback.
-4. Re-run `agent-label-sync.yml` after rollback to reconcile labels.
-5. Document rollback root cause in tracker issue before attempting re-adoption.
+- keep absolute strict-zero enforcement intact
+- preserve phase-1 public check names
+- move policy resolution and reusable workflow logic out of per-repo copy templates
+- make remediation deterministic and branch-safe
+
+## Rollout Order
+
+1. Dry-run profile and ruleset generation against `Prekzursil/pbinfo-get-unsolved`.
+2. Enable caller workflows on the common phase-1 template repos.
+3. Migrate the four overlay repos: `SWFOC-Mod-Menu`, `env-inspector`, `Airline-Reservations-System`, and `Reframe`.
+4. Generate repo-level ruleset payloads and validate emitted contexts before applying them.
+5. Configure Codex Web per repo using the `codex_setup_command` declared in the repo profile.
+
+## Wrapper Contract
+
+Each governed repo should converge on:
+
+- `.github/workflows/quality-zero-platform.yml`
+- `.github/workflows/quality-zero-backlog.yml`
+- `.github/workflows/quality-zero-remediation.yml`
+- `bash scripts/verify`
+- a repo-local `AGENTS.md` that points back to strict-zero verification
+
+## Safety Checks
+
+- Do not require a context in rulesets until the provider actually emits it.
+- Treat missing vendor statuses as drift in policy, secrets, or provider wiring.
+- Keep child check names stable until the migration is explicitly marked complete in `inventory/repos.yml`.
+- Never let remediation or backlog workflows write to `main` or `master`.
+
+## Codex Web Manual Pass
+
+For each repo in scope:
+
+1. Connect the GitHub repo in Codex Web.
+2. Configure the environment with the repo profile's `codex_setup_command`.
+3. Run the repo profile's `verify_command`.
+4. Store the verification note in the rollout tracker before enabling backlog sweeps.

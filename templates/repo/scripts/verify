@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "Replace templates/repo/scripts/verify with the repo-specific canonical verification flow." >&2
+exit 1

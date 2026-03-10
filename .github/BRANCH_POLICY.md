@@ -1,21 +1,20 @@
-# Branch Naming and Default Branch Policy
+# Branch Policy
 
-## Canonical Default Branch
+`quality-zero-platform` uses feature branches and pull requests only.
 
-The canonical default branch name for this repository is `main`.
+## Local Policy
 
-## Transition Rule
+- develop on topic branches
+- verify with `bash scripts/verify`
+- keep generated ruleset payloads in the same change as the profile update that produced them
 
-If the repository currently uses `master`, transition to `main` during Wave-2 rollout and keep workflow compatibility for one transition cycle before removing `master` triggers.
+## Automation Policy
 
-## Working Branches
+- reusable workflows in this repo never push to a governed repo's default branch
+- remediation branches must use `codex/fix/<context>/<shortsha>`
+- backlog branches must use `codex/backlog/<tool>`
 
-- Governance bootstrap branch: `chore/governance-wave2-bootstrap`
-- Hardening branch: `chore/governance-wave2-hardening`
-- KPI/protection branch: `chore/governance-wave2-kpi-protection`
+## Review Policy
 
-## Merge Rules
-
-- Human-reviewed merges only.
-- Squash merge by default.
-- No direct pushes to default branch.
+- pull requests require human review
+- policy and workflow changes should include validation or fixture coverage

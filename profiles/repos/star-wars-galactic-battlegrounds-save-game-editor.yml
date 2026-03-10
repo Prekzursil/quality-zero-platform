@@ -1,0 +1,18 @@
+slug: Prekzursil/Star-Wars-Galactic-Battlegrounds-Save-Game-Editor
+stack: python-desktop
+verify_command: bash scripts/verify
+codex_setup_command: python -m pip install -r requirements-build.txt
+coverage:
+  command: |
+    mkdir -p coverage
+    python -m pip install --upgrade pip
+    if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
+    python -m pip install pytest pytest-cov
+    python -m pytest --cov=. --cov-report=xml:coverage/python-coverage.xml
+  inputs:
+    - format: xml
+      name: python
+      path: coverage/python-coverage.xml
+vendors:
+  sonar:
+    project_key: Prekzursil_Star-Wars-Galactic-Battlegrounds-Save-Game-Editor

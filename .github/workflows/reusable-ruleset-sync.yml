@@ -1,0 +1,89 @@
+name: Reusable Ruleset Sync
+
+on:
+  workflow_call:
+    inputs:
+      repo_slug:
+        type: string
+        required: true
+      platform_repository:
+        type: string
+        required: false
+        default: Prekzursil/quality-zero-platform
+      platform_ref:
+        type: string
+        required: false
+        default: main
+
+jobs:
+  ruleset-sync:
+    name: Ruleset Sync Validation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.platform_repository }}
+          ref: ${{ inputs.platform_ref }}
+          path: platform
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install platform dependencies
+        run: python -m pip install -r platform/requirements-dev.txt
+      - name: Generate expected ruleset payload
+        run: |
+          python platform/scripts/quality/generate_ruleset_payload.py \
+            --repo-slug "${{ inputs.repo_slug }}" \
+            --output-dir "$RUNNER_TEMP/generated"
+      - name: Compare committed ruleset payload
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          generated_dir = Path("${{ runner.temp }}/generated")
+          generated = next(generated_dir.glob("*.json"))
+          expected = json.loads(generated.read_text(encoding="utf-8"))
+          committed = Path("platform/generated/rulesets") / generated.name
+          if not committed.exists():
+            raise SystemExit(f"Missing committed ruleset payload: {committed}")
+          observed = json.loads(committed.read_text(encoding="utf-8"))
+          if expected != observed:
+            raise SystemExit(f"Committed ruleset payload drift detected for {generated.name}")
+          PY
+      - name: Compare live ruleset contexts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
+
+          generated_dir = Path("${{ runner.temp }}/generated")
+          generated = next(generated_dir.glob("*.json"))
+          expected = json.loads(generated.read_text(encoding="utf-8"))
+          response = subprocess.run(
+            ["gh", "api", f"repos/${{ inputs.repo_slug }}/rulesets"],
+            check=True,
+            capture_output=True,
+            text=True,
+          )
+          live_rulesets = json.loads(response.stdout or "[]")
+          target = next((item for item in live_rulesets if item.get("name") == expected["name"]), None)
+          if target is None:
+            raise SystemExit(f"Live ruleset not found: {expected['name']}")
+          expected_contexts = [item["context"] for item in expected["rules"][1]["parameters"]["required_status_checks"]]
+          live_required = next(
+            rule["parameters"]["required_status_checks"]
+            for rule in target["rules"]
+            if rule["type"] == "required_status_checks"
+          )
+          live_contexts = [item["context"] for item in live_required]
+          if expected_contexts != live_contexts:
+            raise SystemExit(
+              f"Live ruleset contexts drift detected. expected={expected_contexts} live={live_contexts}"
+            )
+          PY

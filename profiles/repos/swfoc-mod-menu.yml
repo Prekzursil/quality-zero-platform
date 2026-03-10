@@ -1,0 +1,35 @@
+slug: Prekzursil/SWFOC-Mod-Menu
+stack: dotnet-wpf
+verify_command: dotnet test tests/SwfocTrainer.Tests/SwfocTrainer.Tests.csproj -c Release --no-build --filter "FullyQualifiedName!~SwfocTrainer.Tests.Profiles.Live&FullyQualifiedName!~RuntimeAttachSmokeTests"
+codex_setup_command: dotnet restore
+coverage:
+  runner: windows-latest
+  shell: pwsh
+  command: |
+    pwsh -ExecutionPolicy Bypass -File ./tools/quality/collect-dotnet-coverage.ps1 -Configuration Release -DeterministicOnly
+    $candidates = @(
+      (Join-Path (Get-Location) 'TestResults/coverage/cobertura.xml'),
+      (Join-Path (Get-Location) 'tests/SwfocTrainer.Tests/TestResults/coverage.cobertura.xml'),
+      (Join-Path (Get-Location) 'TestResults/coverage.cobertura.xml')
+    )
+    $resolved = $candidates | Where-Object { Test-Path -Path $_ } | Select-Object -First 1
+    if (-not $resolved) {
+      throw "Coverage report not found. Checked: $($candidates -join '; ')"
+    }
+    Write-Host "Using coverage report: $resolved"
+  inputs:
+    - format: xml
+      name: dotnet
+      path: TestResults/coverage/cobertura.xml
+  assert_mode:
+    default: enforce
+    pull_request: evidence_only
+  evidence_note: 100/100 hard gate is enforced on protected branch pushes.
+trigger:
+  mode: standard
+  pr_head_sha: true
+legacy_policy_checks:
+  - code/snyk
+vendors:
+  sonar:
+    project_key: Prekzursil_SWFOC-Mod-Menu

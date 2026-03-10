@@ -1,0 +1,233 @@
+name: Reusable Scanner Matrix
+
+on:
+  workflow_call:
+    inputs:
+      repo_slug:
+        type: string
+        required: true
+      event_name:
+        type: string
+        required: false
+        default: pull_request
+      sha:
+        type: string
+        required: false
+        default: ""
+      platform_repository:
+        type: string
+        required: false
+        default: Prekzursil/quality-zero-platform
+      platform_ref:
+        type: string
+        required: false
+        default: main
+
+jobs:
+  scanner:
+    name: ${{ matrix.job_name }}
+    runs-on: ${{ inputs.repo_slug == 'Prekzursil/SWFOC-Mod-Menu' && 'windows-latest' || 'ubuntu-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - job_name: Quality Secrets Preflight
+            lane: secrets
+          - job_name: Coverage 100 Gate
+            lane: coverage
+          - job_name: Sonar Zero
+            lane: sonar
+          - job_name: Codacy Zero
+            lane: codacy
+          - job_name: Semgrep Zero
+            lane: semgrep
+          - job_name: Sentry Zero
+            lane: sentry
+          - job_name: DeepScan Zero
+            lane: deepscan
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: repo
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.platform_repository }}
+          ref: ${{ inputs.platform_ref }}
+          path: platform
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install platform dependencies
+        run: python -m pip install -r platform/requirements-dev.txt
+      - name: Export resolved profile
+        id: profile
+        run: |
+          python platform/scripts/quality/export_profile.py \
+            --repo-slug "${{ inputs.repo_slug }}" \
+            --event-name "${{ inputs.event_name }}" \
+            --out-json "$RUNNER_TEMP/profile.json" \
+            --github-output "$GITHUB_OUTPUT"
+      - name: Install coverage system packages
+        if: matrix.lane == 'coverage' && runner.os != 'Windows' && steps.profile.outputs.coverage_system_packages_json != '[]'
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+
+          packages = json.loads(os.environ["PACKAGES_JSON"])
+          if packages:
+              subprocess.run(["sudo", "apt-get", "update"], check=True)
+              subprocess.run(["sudo", "apt-get", "install", "-y", *packages], check=True)
+          PY
+        env:
+          PACKAGES_JSON: ${{ steps.profile.outputs.coverage_system_packages_json }}
+      - name: Set up Node
+        if: matrix.lane == 'coverage' && steps.profile.outputs.coverage_node_version != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.profile.outputs.coverage_node_version }}
+      - name: Set up Go
+        if: matrix.lane == 'coverage' && steps.profile.outputs.coverage_go_version != ''
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ steps.profile.outputs.coverage_go_version }}
+      - name: Set up Java
+        if: matrix.lane == 'coverage' && steps.profile.outputs.coverage_java_version != ''
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ steps.profile.outputs.coverage_java_distribution }}
+          java-version: ${{ steps.profile.outputs.coverage_java_version }}
+      - name: Set up .NET
+        if: matrix.lane == 'coverage' && steps.profile.outputs.coverage_dotnet_version != ''
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ steps.profile.outputs.coverage_dotnet_version }}
+      - name: Set up Rust
+        if: matrix.lane == 'coverage' && steps.profile.outputs.coverage_needs_rust == 'true'
+        uses: dtolnay/rust-toolchain@stable
+      - name: Run selected lane
+        env:
+          LANE: ${{ matrix.lane }}
+          EVENT_NAME: ${{ inputs.event_name }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import shlex
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          root = Path.cwd()
+          profile = json.loads((Path(os.environ["RUNNER_TEMP"]) / "profile.json").read_text(encoding="utf-8"))
+          lane = os.environ["LANE"]
+          repo_dir = root / "repo"
+          platform_dir = root / "platform"
+
+          def run(cmd, *, cwd):
+            subprocess.run(cmd, cwd=cwd, check=True)
+
+          if lane == "secrets":
+            cmd = [
+              sys.executable,
+              str(platform_dir / "scripts/quality/check_quality_secrets.py"),
+              "--out-json",
+              "quality-secrets/secrets.json",
+              "--out-md",
+              "quality-secrets/secrets.md",
+            ]
+            for name in profile["required_secrets"]:
+              cmd.extend(["--required-secret", name])
+            for name in profile["required_vars"]:
+              cmd.extend(["--required-var", name])
+            run(cmd, cwd=repo_dir)
+          elif lane == "coverage":
+            cmd = [
+              sys.executable,
+              str(platform_dir / "scripts/quality/run_coverage_gate.py"),
+              "--profile-json",
+              str(Path(os.environ["RUNNER_TEMP"]) / "profile.json"),
+              "--event-name",
+              os.environ["EVENT_NAME"],
+              "--repo-dir",
+              str(repo_dir),
+              "--platform-dir",
+              str(platform_dir),
+            ]
+            run(cmd, cwd=repo_dir)
+          elif lane == "sonar":
+            project_key = profile["vendors"]["sonar"]["project_key"]
+            cmd = [
+              sys.executable,
+              str(platform_dir / "scripts/quality/check_sonar_zero.py"),
+              "--project-key",
+              project_key,
+              "--out-json",
+              "sonar-zero/sonar.json",
+              "--out-md",
+              "sonar-zero/sonar.md",
+            ]
+            run(cmd, cwd=repo_dir)
+          elif lane == "codacy":
+            codacy = profile["vendors"]["codacy"]
+            cmd = [
+              sys.executable,
+              str(platform_dir / "scripts/quality/check_codacy_zero.py"),
+              "--provider",
+              codacy["provider"],
+              "--owner",
+              codacy["owner"],
+              "--repo",
+              codacy["repo"],
+              "--out-json",
+              "codacy-zero/codacy.json",
+              "--out-md",
+              "codacy-zero/codacy.md",
+            ]
+            run(cmd, cwd=repo_dir)
+          elif lane == "semgrep":
+            run([sys.executable, "-m", "pip", "install", "semgrep"], cwd=repo_dir)
+            run(["semgrep", "ci", "--error"], cwd=repo_dir)
+          elif lane == "sentry":
+            sentry = profile["vendors"]["sentry"]
+            cmd = [
+              sys.executable,
+              str(platform_dir / "scripts/quality/check_sentry_zero.py"),
+              "--org",
+              os.environ.get(sentry["org_var"], ""),
+              "--out-json",
+              "sentry-zero/sentry.json",
+              "--out-md",
+              "sentry-zero/sentry.md",
+            ]
+            for project_var in sentry.get("project_vars", []):
+              value = os.environ.get(project_var, "").strip()
+              if value:
+                cmd.extend(["--project", value])
+            run(cmd, cwd=repo_dir)
+          elif lane == "deepscan":
+            cmd = [
+              sys.executable,
+              str(platform_dir / "scripts/quality/check_deepscan_zero.py"),
+              "--out-json",
+              "deepscan-zero/deepscan.json",
+              "--out-md",
+              "deepscan-zero/deepscan.md",
+            ]
+            run(cmd, cwd=repo_dir)
+          else:
+            raise SystemExit(f"Unsupported lane: {lane}")
+          PY
+      - name: Upload lane artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.lane }}-artifacts
+          path: |
+            repo/quality-secrets
+            repo/coverage-100
+            repo/sonar-zero
+            repo/codacy-zero
+            repo/sentry-zero
+            repo/deepscan-zero

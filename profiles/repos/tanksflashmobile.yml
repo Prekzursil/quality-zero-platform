@@ -1,0 +1,16 @@
+slug: Prekzursil/TanksFlashMobile
+stack: node-frontend
+verify_command: make verify
+codex_setup_command: npm ci
+coverage:
+  command: |
+    npm ci
+    npm --prefix apps/web ci
+    npm --prefix apps/web test -- --coverage --watch=false
+  inputs:
+    - format: lcov
+      name: web
+      path: apps/web/coverage/lcov.info
+vendors:
+  sonar:
+    project_key: Prekzursil_TanksFlashMobile

@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if command -v python >/dev/null 2>&1; then
+  PYTHON_CMD=(python)
+elif command -v python3 >/dev/null 2>&1; then
+  PYTHON_CMD=(python3)
+elif command -v py >/dev/null 2>&1; then
+  PYTHON_CMD=(py -3)
+else
+  echo "No Python interpreter found on PATH." >&2
+  exit 1
+fi
+
+"${PYTHON_CMD[@]}" -m unittest discover -s tests -p 'test_*.py'
+"${PYTHON_CMD[@]}" scripts/quality/validate_control_plane.py --write-generated generated/rulesets
+"${PYTHON_CMD[@]}" scripts/quality/generate_ruleset_payload.py --output-dir build/rulesets >/dev/null

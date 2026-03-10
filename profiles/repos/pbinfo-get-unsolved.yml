@@ -1,0 +1,18 @@
+slug: Prekzursil/pbinfo-get-unsolved
+stack: node-frontend
+verify_command: bash scripts/verify
+codex_setup_command: npm ci
+coverage:
+  command: |
+    npm ci
+    npm test -- --coverage --watch=false
+  inputs:
+    - format: lcov
+      name: node
+      path: coverage/lcov.info
+vendors:
+  sonar:
+    project_key: Prekzursil_pbinfo-get-unsolved
+  sentry:
+    project_vars:
+      - SENTRY_PROJECT

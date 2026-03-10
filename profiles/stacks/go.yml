@@ -1,0 +1,6 @@
+extends: quality-zero-phase1-common
+stack_family: go
+codex_setup_command: go mod download
+coverage:
+  setup:
+    go: "1.22"

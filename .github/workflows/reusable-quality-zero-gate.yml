@@ -1,0 +1,82 @@
+name: Reusable Quality Zero Gate
+
+on:
+  workflow_call:
+    inputs:
+      repo_slug:
+        type: string
+        required: true
+      event_name:
+        type: string
+        required: false
+        default: pull_request
+      sha:
+        type: string
+        required: false
+        default: ""
+      platform_repository:
+        type: string
+        required: false
+        default: Prekzursil/quality-zero-platform
+      platform_ref:
+        type: string
+        required: false
+        default: main
+
+jobs:
+  quality-zero-gate:
+    name: Quality Zero Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.platform_repository }}
+          ref: ${{ inputs.platform_ref }}
+          path: platform
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install platform dependencies
+        run: python -m pip install -r platform/requirements-dev.txt
+      - name: Export resolved profile
+        run: |
+          python platform/scripts/quality/export_profile.py \
+            --repo-slug "${{ inputs.repo_slug }}" \
+            --event-name "${{ inputs.event_name }}" \
+            --out-json "$RUNNER_TEMP/profile.json"
+      - name: Assert required quality contexts are green
+        env:
+          TARGET_SHA: ${{ inputs.sha }}
+          EVENT_NAME: ${{ inputs.event_name }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          profile = json.loads((Path(os.environ["RUNNER_TEMP"]) / "profile.json").read_text(encoding="utf-8"))
+          sha = os.environ.get("TARGET_SHA", "").strip() or os.environ.get("GITHUB_SHA", "").strip()
+          cmd = [
+            sys.executable,
+            "platform/scripts/quality/check_required_checks.py",
+            "--repo",
+            profile["slug"],
+            "--sha",
+            sha,
+            "--out-json",
+            "quality-zero-gate/required-checks.json",
+            "--out-md",
+            "quality-zero-gate/required-checks.md",
+          ]
+          for context in profile["active_required_contexts"]:
+            cmd.extend(["--required-context", context])
+          subprocess.run(cmd, check=True)
+          PY
+      - name: Upload aggregate artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-zero-gate
+          path: quality-zero-gate

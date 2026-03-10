@@ -1,0 +1,6 @@
+extends: quality-zero-phase1-common
+stack_family: dotnet-wpf
+codex_setup_command: dotnet restore
+coverage:
+  setup:
+    dotnet: "8.0.x"

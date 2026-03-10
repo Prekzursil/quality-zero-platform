@@ -1,0 +1,15 @@
+slug: Prekzursil/Personal-Finance-Management
+stack: gradle-java
+verify_command: bash scripts/verify
+codex_setup_command: ./gradlew --no-daemon testClasses
+coverage:
+  command: |
+    chmod +x gradlew || true
+    ./gradlew test jacocoTestReport
+  inputs:
+    - format: xml
+      name: java
+      path: app/build/reports/jacoco/test/jacocoTestReport.xml
+vendors:
+  sonar:
+    project_key: Prekzursil_Personal-Finance-Management

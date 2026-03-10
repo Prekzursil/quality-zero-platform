@@ -1,0 +1,44 @@
+slug: Prekzursil/env-inspector
+stack: python-desktop
+verify_command: make verify
+codex_setup_command: python -m pip install -r requirements-build.txt
+coverage:
+  command: |
+    mkdir -p coverage
+    mkdir -p .tmp
+    export TMPDIR="$PWD/.tmp"
+    python -m pip install --upgrade pip
+    if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
+    python -m pip install pytest pytest-cov
+    python -m pytest -q -s \
+      --cov=env_inspector \
+      --cov=env_inspector_core.service \
+      --cov=env_inspector_core.service_listing \
+      --cov=env_inspector_core.service_ops \
+      --cov=env_inspector_core.service_privileged \
+      --cov=env_inspector_core.service_restore \
+      --cov=env_inspector_core.service_paths \
+      --cov=scripts.quality.assert_coverage_100 \
+      --cov=scripts.quality.check_sentry_zero \
+      --cov-report=xml:coverage/python-coverage.xml
+  inputs:
+    - format: xml
+      name: python
+      path: coverage/python-coverage.xml
+  require_sources:
+    - env_inspector.py
+    - env_inspector_core/service.py
+    - env_inspector_core/service_listing.py
+    - env_inspector_core/service_ops.py
+    - env_inspector_core/service_privileged.py
+    - env_inspector_core/service_restore.py
+    - env_inspector_core/service_paths.py
+    - scripts/quality/assert_coverage_100.py
+    - scripts/quality/check_sentry_zero.py
+  min_percent: 100.0
+trigger:
+  mode: pr-focused
+  pr_head_sha: true
+vendors:
+  sonar:
+    project_key: Prekzursil_env-inspector

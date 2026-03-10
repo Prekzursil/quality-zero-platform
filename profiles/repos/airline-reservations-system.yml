@@ -1,0 +1,48 @@
+slug: Prekzursil/Airline-Reservations-System
+stack: cpp-cmake
+verify_command: bash scripts/verify
+codex_setup_command: cmake -S . -B build
+coverage:
+  command: |
+    npm --prefix airline-gui ci
+    npm --prefix airline-gui test -- --coverage --watch=false
+    bash scripts/verify
+    python3 -m venv .venv-gcovr
+    . .venv-gcovr/bin/activate
+    python -m pip install --disable-pip-version-check gcovr
+    mkdir -p coverage/cpp
+    gcovr \
+      --root . \
+      --filter 'src' \
+      --exclude 'tests' \
+      --object-directory build \
+      --merge-mode-functions=merge-use-line-min \
+      --gcov-exclude-directory '.*/CMakeFiles/airline_api_server.dir/.*' \
+      --gcov-exclude-directory '.*/CMakeFiles/airline_reservation_system.dir/.*' \
+      --lcov coverage/cpp/lcov.info \
+      --print-summary
+    cp coverage/cpp/lcov.info coverage/cpp/lcov.raw.info
+    python3 -m scripts.quality.normalize_lcov < coverage/cpp/lcov.raw.info > coverage/cpp/lcov.info
+  inputs:
+    - format: lcov
+      name: node
+      path: airline-gui/coverage/lcov.info
+    - format: lcov
+      name: cpp
+      path: coverage/cpp/lcov.info
+required_contexts:
+  always:
+    - Coverage 100 Gate
+    - Codecov Analytics
+    - Sonar Zero
+    - Codacy Zero
+    - Semgrep Zero
+    - Sentry Zero
+    - SonarCloud Code Analysis
+    - Codacy Static Code Analysis
+  pull_request_only:
+    - DeepScan Zero
+    - DeepScan
+vendors:
+  sonar:
+    project_key: Prekzursil_Airline-Reservations-System

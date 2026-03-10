@@ -1,0 +1,17 @@
+slug: Prekzursil/DevExtreme-Filter-Go-Language
+stack: go
+verify_command: bash scripts/verify
+codex_setup_command: go mod download
+coverage:
+  command: |
+    mkdir -p coverage
+    go test ./... -coverprofile=coverage/go-coverage.out -covermode=count
+    go install github.com/boumenot/gocover-cobertura@latest
+    "$(go env GOPATH)/bin/gocover-cobertura" < coverage/go-coverage.out > coverage/go-coverage.xml
+  inputs:
+    - format: xml
+      name: go
+      path: coverage/go-coverage.xml
+vendors:
+  sonar:
+    project_key: Prekzursil_DevExtreme-Filter-Go-Language

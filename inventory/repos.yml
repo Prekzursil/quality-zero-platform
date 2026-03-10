@@ -1,0 +1,52 @@
+version: 1
+repos:
+  - slug: Prekzursil/pbinfo-get-unsolved
+    profile: pbinfo-get-unsolved
+    rollout: fixture
+    default_branch: main
+    notes: Dry-run fixture and portability source for strict-zero scripts.
+  - slug: Prekzursil/Airline-Reservations-System
+    profile: airline-reservations-system
+    rollout: phase1-wave4
+    default_branch: main
+    notes: Airline overlay with PR-only DeepScan contexts.
+  - slug: Prekzursil/DevExtreme-Filter-Go-Language
+    profile: devextreme-filter-go-language
+    rollout: phase1-wave2
+    default_branch: main
+    notes: Common template cohort.
+  - slug: Prekzursil/Personal-Finance-Management
+    profile: personal-finance-management
+    rollout: phase1-wave2
+    default_branch: main
+    notes: Common template cohort.
+  - slug: Prekzursil/Reframe
+    profile: reframe
+    rollout: phase1-wave5
+    default_branch: main
+    notes: Broadest custom context set; migrate last.
+  - slug: Prekzursil/SWFOC-Mod-Menu
+    profile: swfoc-mod-menu
+    rollout: phase1-wave3
+    default_branch: main
+    notes: Preserve PR-head-SHA handling and legacy policy metadata.
+  - slug: Prekzursil/Star-Wars-Galactic-Battlegrounds-Save-Game-Editor
+    profile: star-wars-galactic-battlegrounds-save-game-editor
+    rollout: phase1-wave2
+    default_branch: main
+    notes: Common template cohort.
+  - slug: Prekzursil/TanksFlashMobile
+    profile: tanksflashmobile
+    rollout: phase1-wave2
+    default_branch: main
+    notes: Common template cohort.
+  - slug: Prekzursil/WebCoder
+    profile: webcoder
+    rollout: phase1-wave2
+    default_branch: main
+    notes: Common template cohort.
+  - slug: Prekzursil/env-inspector
+    profile: env-inspector
+    rollout: phase1-wave3
+    default_branch: main
+    notes: Preserve PR-focused trigger behavior metadata.

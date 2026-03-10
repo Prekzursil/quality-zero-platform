@@ -1,22 +1,28 @@
-name: Verify
+name: Control Plane Verify
 
 on:
-  workflow_dispatch:
-  pull_request:
-    branches: [main, master]
   push:
-    branches: [main, master]
-
-permissions:
-  contents: read
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
   verify:
-    name: verify
+    name: Control Plane Verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-python@v5
         with:
-          node-version: '20'
-      - run: bash scripts/verify
+          python-version: "3.12"
+      - name: Install dev dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Run control-plane verification
+        run: bash scripts/verify
+      - name: Upload generated rulesets
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-rulesets
+          path: generated/rulesets

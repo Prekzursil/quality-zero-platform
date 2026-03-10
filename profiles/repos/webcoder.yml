@@ -1,0 +1,22 @@
+slug: Prekzursil/WebCoder
+stack: fullstack-web
+verify_command: bash scripts/verify
+codex_setup_command: npm ci
+coverage:
+  command: |
+    mkdir -p coverage
+    python -m pip install --upgrade pip
+    python -m pip install -r backend/requirements.txt pytest pytest-cov
+    python -m pytest backend --cov=backend --cov-report=xml:backend/coverage.xml
+    npm --prefix frontend/webcoder_ui ci
+    npm --prefix frontend/webcoder_ui test -- --coverage --watch=false
+  inputs:
+    - format: xml
+      name: backend
+      path: backend/coverage.xml
+    - format: lcov
+      name: frontend
+      path: frontend/webcoder_ui/coverage/lcov.info
+vendors:
+  sonar:
+    project_key: Prekzursil_WebCoder

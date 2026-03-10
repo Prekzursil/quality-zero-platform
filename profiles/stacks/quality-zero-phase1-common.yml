@@ -1,0 +1,58 @@
+default_branch: main
+verify_command: bash scripts/verify
+required_secrets:
+  - SONAR_TOKEN
+  - CODACY_API_TOKEN
+  - CODECOV_TOKEN
+  - SENTRY_AUTH_TOKEN
+required_vars:
+  - SENTRY_ORG
+  - SENTRY_PROJECT
+enabled_scanners:
+  coverage: true
+  codecov: true
+  sonar: true
+  codacy: true
+  semgrep: true
+  sentry: true
+  deepscan: true
+required_contexts:
+  always:
+    - Coverage 100 Gate
+    - Codecov Analytics
+    - Sonar Zero
+    - Codacy Zero
+    - Semgrep Zero
+    - Sentry Zero
+    - DeepScan Zero
+    - SonarCloud Code Analysis
+    - Codacy Static Code Analysis
+    - DeepScan
+  pull_request_only: []
+coverage:
+  runner: ubuntu-latest
+  shell: bash
+  setup:
+    python: "3.12"
+    node: "20"
+  inputs: []
+  min_percent: 100.0
+  assert_mode:
+    default: enforce
+  policy: whole-project-100
+ruleset_mode: strict-zero-phase1
+preserve_public_check_names: true
+vendors:
+  codacy:
+    provider: gh
+  codecov:
+    status_context: Codecov Analytics
+  deepscan:
+    open_issues_url_var: DEEPSCAN_OPEN_ISSUES_URL
+  sentry:
+    org_var: SENTRY_ORG
+    project_vars:
+      - SENTRY_PROJECT
+trigger:
+  mode: standard
+  pr_head_sha: false

@@ -1,0 +1,83 @@
+{
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "exclude": [],
+      "include": [
+        "refs/heads/main"
+      ]
+    }
+  },
+  "enforcement": "active",
+  "name": "quality-zero-platform / Personal-Finance-Management",
+  "profile_id": "personal-finance-management",
+  "repo_slug": "Prekzursil/Personal-Finance-Management",
+  "rules": [
+    {
+      "parameters": {
+        "dismiss_stale_reviews_on_push": false,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_approving_review_count": 1,
+        "required_review_thread_resolution": false
+      },
+      "type": "pull_request"
+    },
+    {
+      "parameters": {
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          {
+            "context": "Coverage 100 Gate",
+            "integration_id": null
+          },
+          {
+            "context": "Codecov Analytics",
+            "integration_id": null
+          },
+          {
+            "context": "Sonar Zero",
+            "integration_id": null
+          },
+          {
+            "context": "Codacy Zero",
+            "integration_id": null
+          },
+          {
+            "context": "Semgrep Zero",
+            "integration_id": null
+          },
+          {
+            "context": "Sentry Zero",
+            "integration_id": null
+          },
+          {
+            "context": "DeepScan Zero",
+            "integration_id": null
+          },
+          {
+            "context": "SonarCloud Code Analysis",
+            "integration_id": null
+          },
+          {
+            "context": "Codacy Static Code Analysis",
+            "integration_id": null
+          },
+          {
+            "context": "DeepScan",
+            "integration_id": null
+          }
+        ],
+        "strict_required_status_checks_policy": true
+      },
+      "type": "required_status_checks"
+    },
+    {
+      "type": "non_fast_forward"
+    },
+    {
+      "type": "deletion"
+    }
+  ],
+  "target": "branch"
+}

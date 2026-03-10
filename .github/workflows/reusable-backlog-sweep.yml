@@ -1,0 +1,70 @@
+name: Reusable Backlog Sweep
+
+on:
+  workflow_call:
+    inputs:
+      repo_slug:
+        type: string
+        required: true
+      tool:
+        type: string
+        required: true
+      platform_repository:
+        type: string
+        required: false
+        default: Prekzursil/quality-zero-platform
+      platform_ref:
+        type: string
+        required: false
+        default: main
+
+jobs:
+  backlog:
+    name: Codex Backlog Sweep
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: repo
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.platform_repository }}
+          ref: ${{ inputs.platform_ref }}
+          path: platform
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install platform dependencies
+        run: python -m pip install -r platform/requirements-dev.txt
+      - name: Render backlog prompt
+        run: |
+          python platform/scripts/quality/render_codex_prompt.py \
+            --repo-slug "${{ inputs.repo_slug }}" \
+            --lane backlog \
+            --failure-context "${{ inputs.tool }}" \
+            --output "$RUNNER_TEMP/backlog-prompt.md"
+      - name: Run Codex
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: ${{ runner.temp }}/backlog-prompt.md
+          sandbox: workspace-write
+          model: gpt-5-codex
+      - name: Create or update backlog pull request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          path: repo
+          branch: codex/backlog/${{ inputs.tool }}
+          title: "[codex] Backlog sweep: ${{ inputs.tool }}"
+          commit-message: |
+            chore: backlog sweep ${{ inputs.tool }}
+
+            Co-authored-by: Codex <noreply@openai.com>
+          body: |
+            Automated backlog sweep for `${{ inputs.tool }}`.
+
+            - Branch: `codex/backlog/${{ inputs.tool }}`
+            - Verify command: `bash scripts/verify`

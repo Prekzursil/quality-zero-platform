@@ -1,27 +1,17 @@
-# Branch Protection Policy
+# Branch Protection
 
-## Default Branch Requirements
+Apply repository rulesets to the renamed GitHub repository after the committed payloads in `generated/rulesets/` are reviewed.
 
-The default branch must enforce:
+## Required Checks For This Repo
 
-- Pull request required before merge
-- At least 1 human approval
-- Required status check: `verify`
-- Branch must be up to date before merge
-- No force pushes
-- No deletions
+- `Control Plane Verify`
 
-## Risk Routing
+## Required Checks For Governed Repos
 
-- `risk:low`: standard gate
-- `risk:medium`: standard gate + explicit rollback section
-- `risk:high`: standard gate + additional human scrutiny and explicit rollback plan
+Governed repos should consume generated payloads from `generated/rulesets/` and only require the contexts declared by their resolved profile.
 
-## Review Policy
+## Non-Negotiables
 
-- Human-reviewed merges only
-- Agent-generated PRs are never auto-merged
-
-## Escaped Regression Tracking
-
-Mark post-merge regressions with label `escaped-regression` and include link to causative PR.
+- no direct pushes to default branches
+- PR review required
+- required status checks must come from generated payloads, not ad hoc UI edits

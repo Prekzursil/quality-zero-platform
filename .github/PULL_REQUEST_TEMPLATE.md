@@ -1,27 +1,14 @@
 ## Summary
 
-- What changed?
-- Why was it needed?
+- describe the control-plane change
+- note which repos or profiles are affected
 
-## Risk
+## Verification
 
-- Risk level: `low | medium | high`
-- Regression surface (frontend/backend/infra/docs/security/release):
-- Security/runtime safety impact:
+- [ ] `bash scripts/verify`
 
-## Evidence
+## Rollout Notes
 
-- Deterministic verification command: `bash scripts/verify`
-- Command output summary:
-- Any justified skips:
-
-## Rollback
-
-- Rollback command or steps:
-- Data/schema/runtime rollback impact:
-
-## Scope Guard
-
-- [ ] Change is minimal and task-focused
-- [ ] No unrelated refactors included
-- [ ] No secrets or private tokens added
+- [ ] generated ruleset payloads updated when profile behavior changed
+- [ ] phase-1 public check names preserved where required
+- [ ] Codex remediation or backlog prompts updated if lane behavior changed

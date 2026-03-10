@@ -1,0 +1,6 @@
+extends: quality-zero-phase1-common
+stack_family: cpp-cmake
+codex_setup_command: cmake -S . -B build
+coverage:
+  mode: lcov
+  artifact_path: quality-artifacts/coverage/coverage.info

@@ -1,0 +1,6 @@
+extends: quality-zero-phase1-common
+stack_family: python-desktop
+codex_setup_command: python -m pip install -r requirements-build.txt
+coverage:
+  mode: coverage-xml
+  artifact_path: quality-artifacts/coverage/coverage.xml

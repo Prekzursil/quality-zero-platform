@@ -57,6 +57,25 @@ class WorkflowContractTests(unittest.TestCase):
     def test_scanner_matrix_pins_qlty_coverage_action_to_full_sha(self) -> None:
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
         self.assertIn("qltysh/qlty-action/coverage@a19242102d17e497f437d7466aa01b528537e899", text)
+        self.assertIn("dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7", text)
+
+        backlog_text = (ROOT / ".github" / "workflows" / "reusable-backlog-sweep.yml").read_text(encoding="utf-8")
+        remediation_text = (ROOT / ".github" / "workflows" / "reusable-remediation-loop.yml").read_text(encoding="utf-8")
+        self.assertIn("peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c", backlog_text)
+        self.assertIn("peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c", remediation_text)
+
+    def test_scanner_matrix_exports_provider_credentials_to_lane_runtime(self) -> None:
+        text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
+        for expected in [
+            "SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}",
+            "CODACY_API_TOKEN: ${{ secrets.CODACY_API_TOKEN }}",
+            "SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}",
+            "DEEPSCAN_API_TOKEN: ${{ secrets.DEEPSCAN_API_TOKEN }}",
+            "SENTRY_ORG: ${{ vars.SENTRY_ORG }}",
+            "SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}",
+            "DEEPSCAN_OPEN_ISSUES_URL: ${{ vars.DEEPSCAN_OPEN_ISSUES_URL }}",
+        ]:
+            self.assertIn(expected, text)
 
 
 if __name__ == "__main__":

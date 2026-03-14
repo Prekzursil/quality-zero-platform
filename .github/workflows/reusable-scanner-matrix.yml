@@ -122,6 +122,13 @@ jobs:
         env:
           LANE: ${{ matrix.lane }}
           EVENT_NAME: ${{ inputs.event_name }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          CODACY_API_TOKEN: ${{ secrets.CODACY_API_TOKEN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          DEEPSCAN_API_TOKEN: ${{ secrets.DEEPSCAN_API_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+          DEEPSCAN_OPEN_ISSUES_URL: ${{ vars.DEEPSCAN_OPEN_ISSUES_URL }}
         run: |
           python - <<'PY'
           import json

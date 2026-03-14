@@ -90,6 +90,17 @@ def _validate_deepscan_inputs(token: str, open_issues_url: str) -> tuple[str, li
     return normalized_url, findings
 
 
+def _evaluate_deepscan_open_issues(open_issues_url: str, token: str) -> tuple[int | None, list[str]]:
+    findings: list[str] = []
+    payload = _request_json(open_issues_url, token)
+    open_issues = extract_total_open(payload)
+    if open_issues is None:
+        findings.append("DeepScan response did not include a parseable total issue count.")
+    elif open_issues != 0:
+        findings.append(f"DeepScan reports {open_issues} open issues (expected 0).")
+    return open_issues, findings
+
+
 def main() -> int:
     args = _parse_args()
     token = (args.token or os.environ.get("DEEPSCAN_API_TOKEN", "")).strip()
@@ -102,12 +113,7 @@ def main() -> int:
     status = "fail"
     if not findings:
         try:
-            payload = _request_json(open_issues_url, token)
-            open_issues = extract_total_open(payload)
-            if open_issues is None:
-                findings.append("DeepScan response did not include a parseable total issue count.")
-            elif open_issues != 0:
-                findings.append(f"DeepScan reports {open_issues} open issues (expected 0).")
+            open_issues, findings = _evaluate_deepscan_open_issues(open_issues_url, token)
             status = "pass" if not findings else "fail"
         except (OSError, RuntimeError, ValueError) as exc:  # pragma: no cover
             findings.append(f"DeepScan API request failed: {exc}")

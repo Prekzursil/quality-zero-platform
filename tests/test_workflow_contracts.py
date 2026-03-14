@@ -34,6 +34,16 @@ class WorkflowContractTests(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             self.assertNotIn("secrets: inherit", text, path.name)
 
+    def test_manual_wrapper_dispatches_do_not_expose_user_supplied_inputs(self) -> None:
+        workflow_paths = [
+            ROOT / ".github" / "workflows" / "quality-zero-remediation.yml",
+            ROOT / ".github" / "workflows" / "quality-zero-backlog.yml",
+        ]
+
+        for path in workflow_paths:
+            text = path.read_text(encoding="utf-8")
+            self.assertNotIn("workflow_dispatch:\n    inputs:", text, path.name)
+
     def test_mutation_workflows_sanitize_user_controlled_inputs_in_run_blocks(self) -> None:
         workflow_paths = [
             ROOT / ".github" / "workflows" / "reusable-remediation-loop.yml",

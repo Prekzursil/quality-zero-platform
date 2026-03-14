@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import unittest
+from email.message import Message
 from typing import Literal
+from urllib.request import Request
 from unittest.mock import patch
 
 from scripts.security_helpers import load_json_https, normalize_https_url
@@ -10,7 +12,10 @@ from scripts.security_helpers import load_json_https, normalize_https_url
 class _FakeHttpResponse:
     def __init__(self, payload: str, headers: dict[str, str] | None = None) -> None:
         self._payload = payload.encode("utf-8")
-        self.headers = headers or {}
+        message = Message()
+        for key, value in (headers or {}).items():
+            message[key] = value
+        self.headers = message
 
     def read(self) -> bytes:
         return self._payload
@@ -22,26 +27,10 @@ class _FakeHttpResponse:
         return False
 
 
-class _FakeConnection:
-    def __init__(self, host: str, *, timeout: int) -> None:
-        self.host = host
+class _FakeUrlOpenCall:
+    def __init__(self, request: Request, timeout: int) -> None:
+        self.request = request
         self.timeout = timeout
-        self.request_args: dict[str, object] = {}
-        self.closed = False
-
-    def request(self, method: str, path: str, body: bytes | None = None, headers: dict[str, str] | None = None) -> None:
-        self.request_args = {
-            "method": method,
-            "path": path,
-            "body": body,
-            "headers": headers or {},
-        }
-
-    def getresponse(self) -> _FakeHttpResponse:
-        return _FakeHttpResponse('{"ok": true}', {"X-Test": "value"})
-
-    def close(self) -> None:
-        self.closed = True
 
 
 class SecurityHelpersTests(unittest.TestCase):
@@ -56,16 +45,14 @@ class SecurityHelpersTests(unittest.TestCase):
         connection_cls.assert_not_called()
 
     def test_load_json_https_uses_normalized_request_and_collects_headers(self) -> None:
-        captured: dict[str, object] = {}
+        captured: list[_FakeUrlOpenCall] = []
 
-        def fake_connection(host: str, *, timeout: int):
-            connection = _FakeConnection(host, timeout=timeout)
-            captured["connection"] = connection
-            return connection
+        def fake_urlopen(request: Request, timeout: int = 30) -> _FakeHttpResponse:
+            captured.append(_FakeUrlOpenCall(request, timeout))
+            return _FakeHttpResponse('{"ok": true}', {"X-Test": "value"})
 
         with (
-            patch("http.client.HTTPSConnection", side_effect=fake_connection),
-            patch("urllib.request.urlopen", side_effect=AssertionError("urllib.request.urlopen should not be used")),
+            patch("scripts.security_helpers.urlopen", side_effect=fake_urlopen),
         ):
             payload, headers = load_json_https(
                 "https://api.github.com/repos/Prekzursil/quality-zero-platform/status#frag",
@@ -74,22 +61,24 @@ class SecurityHelpersTests(unittest.TestCase):
                 timeout=15,
             )
 
-        connection = captured["connection"]
-        self.assertIsInstance(connection, _FakeConnection)
+        self.assertEqual(len(captured), 1)
+        call = captured[0]
         self.assertEqual(payload, {"ok": True})
         self.assertEqual(headers, {"x-test": "value"})
-        self.assertEqual(connection.host, "api.github.com")
-        self.assertEqual(connection.timeout, 15)
+        self.assertEqual(call.request.full_url, "https://api.github.com/repos/Prekzursil/quality-zero-platform/status")
+        self.assertEqual(call.timeout, 15)
         self.assertEqual(
-            connection.request_args,
+            {
+                "method": call.request.get_method(),
+                "body": call.request.data,
+                "headers": {key: value for key, value in call.request.header_items()},
+            },
             {
                 "method": "GET",
-                "path": "/repos/Prekzursil/quality-zero-platform/status",
                 "body": None,
                 "headers": {"Accept": "application/json"},
             },
         )
-        self.assertTrue(connection.closed)
 
 
 if __name__ == "__main__":

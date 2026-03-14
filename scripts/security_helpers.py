@@ -4,7 +4,8 @@ import http.client
 import ipaddress
 import json
 from typing import Any, Mapping
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import ParseResult, urlparse, urlunparse
+from urllib.request import Request, urlopen
 
 
 _FORBIDDEN_IP_FLAGS = (
@@ -25,11 +26,51 @@ def _is_forbidden_ip_address(ip_value: ipaddress._BaseAddress) -> bool:
     return any(_get_ip_flag(ip_value, flag_name) for flag_name in _FORBIDDEN_IP_FLAGS)
 
 
-def _build_request_target(parsed_url) -> str:
-    target = parsed_url.path or "/"
-    if parsed_url.query:
-        target = f"{target}?{parsed_url.query}"
-    return target
+def _require_https_scheme(parsed: ParseResult, raw_url: str) -> None:
+    if parsed.scheme != "https":
+        raise ValueError(f"Only https URLs are allowed: {raw_url!r}")
+
+
+def _normalize_hostname(parsed: ParseResult, raw_url: str) -> str:
+    if not parsed.hostname:
+        raise ValueError(f"URL is missing a hostname: {raw_url!r}")
+    if parsed.username or parsed.password:
+        raise ValueError(f"URL credentials are not allowed: {raw_url!r}")
+    return parsed.hostname.lower().strip(".")
+
+
+def _validate_allowed_hostname(
+    hostname: str,
+    *,
+    allowed_hosts: set[str] | None = None,
+    allowed_host_suffixes: set[str] | None = None,
+) -> None:
+    if allowed_hosts is not None and hostname not in {host.lower().strip(".") for host in allowed_hosts}:
+        raise ValueError(f"URL host is not in allowlist: {hostname}")
+    if allowed_host_suffixes is not None:
+        suffixes = {suffix.lower().strip(".") for suffix in allowed_host_suffixes if suffix.strip(".")}
+        if suffixes and not any(hostname == suffix or hostname.endswith(f".{suffix}") for suffix in suffixes):
+            raise ValueError(f"URL host is not in suffix allowlist: {hostname}")
+
+
+def _validate_public_hostname(hostname: str) -> None:
+    try:
+        ip_value = ipaddress.ip_address(hostname)
+    except ValueError:
+        ip_value = None
+
+    if ip_value is not None and _is_forbidden_ip_address(ip_value):
+        raise ValueError(f"Private or local addresses are not allowed: {hostname}")
+
+    if hostname in {"localhost", "localhost.localdomain"}:
+        raise ValueError("Localhost URLs are not allowed.")
+
+
+def _sanitize_url(parsed: ParseResult, *, strip_query: bool) -> str:
+    sanitized = parsed._replace(fragment="", params="")
+    if strip_query:
+        sanitized = sanitized._replace(query="")
+    return urlunparse(sanitized)
 
 
 def normalize_https_url(
@@ -42,36 +83,31 @@ def normalize_https_url(
     """Validate and normalize external URLs used by control-plane scripts."""
 
     parsed = urlparse((raw_url or "").strip())
-    if parsed.scheme != "https":
-        raise ValueError(f"Only https URLs are allowed: {raw_url!r}")
-    if not parsed.hostname:
-        raise ValueError(f"URL is missing a hostname: {raw_url!r}")
-    if parsed.username or parsed.password:
-        raise ValueError(f"URL credentials are not allowed: {raw_url!r}")
+    _require_https_scheme(parsed, raw_url)
+    hostname = _normalize_hostname(parsed, raw_url)
+    _validate_allowed_hostname(
+        hostname,
+        allowed_hosts=allowed_hosts,
+        allowed_host_suffixes=allowed_host_suffixes,
+    )
+    _validate_public_hostname(hostname)
+    return _sanitize_url(parsed, strip_query=strip_query)
 
-    hostname = parsed.hostname.lower().strip(".")
-    if allowed_hosts is not None and hostname not in {host.lower().strip(".") for host in allowed_hosts}:
-        raise ValueError(f"URL host is not in allowlist: {hostname}")
-    if allowed_host_suffixes is not None:
-        suffixes = {suffix.lower().strip(".") for suffix in allowed_host_suffixes if suffix.strip(".")}
-        if suffixes and not any(hostname == suffix or hostname.endswith(f".{suffix}") for suffix in suffixes):
-            raise ValueError(f"URL host is not in suffix allowlist: {hostname}")
 
-    try:
-        ip_value = ipaddress.ip_address(hostname)
-    except ValueError:
-        ip_value = None
+def _build_request(safe_url: str, *, headers: Mapping[str, str] | None, method: str, data: bytes | None) -> Request:
+    return Request(
+        safe_url,
+        data=data,
+        headers=dict(headers or {}),
+        method=method,
+    )
 
-    if ip_value is not None and _is_forbidden_ip_address(ip_value):
-        raise ValueError(f"Private or local addresses are not allowed: {hostname}")
 
-    if hostname in {"localhost", "localhost.localdomain"}:
-        raise ValueError("Localhost URLs are not allowed.")
-
-    sanitized = parsed._replace(fragment="", params="")
-    if strip_query:
-        sanitized = sanitized._replace(query="")
-    return urlunparse(sanitized)
+def _read_json_response(request: Request, *, timeout: int) -> tuple[Any, dict[str, str]]:
+    with urlopen(request, timeout=timeout) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+        response_headers = {key.lower(): value for key, value in response.headers.items()}
+    return payload, response_headers
 
 
 def load_json_https(
@@ -89,19 +125,10 @@ def load_json_https(
         allowed_hosts=allowed_hosts,
         allowed_host_suffixes=allowed_host_suffixes,
     )
-    parsed_url = urlparse(safe_url)
-    request_target = _build_request_target(parsed_url)
-    connection = http.client.HTTPSConnection(parsed_url.hostname, timeout=timeout)
-    try:
-        connection.request(
-            method,
-            request_target,
-            body=data,
-            headers=dict(headers or {}),
-        )
-        with connection.getresponse() as response:
-            payload = json.loads(response.read().decode("utf-8"))
-            response_headers = {key.lower(): value for key, value in response.headers.items()}
-    finally:
-        connection.close()
-    return payload, response_headers
+    request = _build_request(
+        safe_url,
+        headers=headers,
+        method=method,
+        data=data,
+    )
+    return _read_json_response(request, timeout=timeout)

@@ -52,7 +52,7 @@ def _context_details(state: str, conclusion: str, source: str) -> dict[str, str]
     }
 
 
-def _collect_contexts(check_runs_payload: dict[str, Any], status_payload: dict[str, Any]) -> dict[str, dict[str, str]]:
+def _collect_check_run_contexts(check_runs_payload: dict[str, Any]) -> dict[str, dict[str, str]]:
     contexts: dict[str, dict[str, str]] = {}
     for run in check_runs_payload.get("check_runs", []) or []:
         name = str(run.get("name") or "").strip()
@@ -63,13 +63,23 @@ def _collect_contexts(check_runs_payload: dict[str, Any], status_payload: dict[s
             str(run.get("conclusion") or ""),
             "check_run",
         )
+    return contexts
 
+
+def _collect_status_contexts(status_payload: dict[str, Any]) -> dict[str, dict[str, str]]:
+    contexts: dict[str, dict[str, str]] = {}
     for status in status_payload.get("statuses", []) or []:
         name = str(status.get("context") or "").strip()
         if not name:
             continue
         state = str(status.get("state") or "")
         contexts[name] = _context_details(state, state, "status")
+    return contexts
+
+
+def _collect_contexts(check_runs_payload: dict[str, Any], status_payload: dict[str, Any]) -> dict[str, dict[str, str]]:
+    contexts = _collect_check_run_contexts(check_runs_payload)
+    contexts.update(_collect_status_contexts(status_payload))
     return contexts
 
 
@@ -123,6 +133,21 @@ def _collect_payload(repo: str, sha: str, required: list[str], token: str) -> di
     }
 
 
+def _wait_for_payload(args: argparse.Namespace, required: list[str], token: str) -> dict[str, Any]:
+    deadline = time.time() + max(args.timeout_seconds, 1)
+    final_payload: dict[str, Any] | None = None
+    while time.time() <= deadline:
+        final_payload = _collect_payload(args.repo, args.sha, required, token)
+        if final_payload["status"] == "pass":
+            break
+        if not final_payload["missing"] and not _has_in_progress_check_runs(final_payload["contexts"]):
+            break
+        time.sleep(max(args.poll_seconds, 1))
+    if final_payload is None:
+        raise SystemExit("No payload collected")
+    return final_payload
+
+
 def _render_md(payload: Mapping[str, Any]) -> str:
     lines = [
         "# Quality Zero Gate - Required Contexts",
@@ -147,19 +172,7 @@ def main() -> int:
         raise SystemExit("At least one --required-context is required")
     if not token:
         raise SystemExit("GITHUB_TOKEN or GH_TOKEN is required")
-
-    deadline = time.time() + max(args.timeout_seconds, 1)
-    final_payload: dict[str, Any] | None = None
-    while time.time() <= deadline:
-        final_payload = _collect_payload(args.repo, args.sha, required, token)
-        if final_payload["status"] == "pass":
-            break
-        if not final_payload["missing"] and not _has_in_progress_check_runs(final_payload["contexts"]):
-            break
-        time.sleep(max(args.poll_seconds, 1))
-
-    if final_payload is None:
-        raise SystemExit("No payload collected")
+    final_payload = _wait_for_payload(args, required, token)
 
     return_code = write_report(
         final_payload,

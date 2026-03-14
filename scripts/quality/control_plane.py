@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -203,59 +203,84 @@ def _normalize_visual_lane(raw: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def _ensure_vendor_url(
+    vendor: dict[str, Any],
+    key: str,
+    url: str,
+    *,
+    allowed_host_suffixes: set[str],
+) -> None:
+    if not vendor.get(key):
+        vendor[key] = normalize_https_url(url, allowed_host_suffixes=allowed_host_suffixes)
+
+
+def _finalize_sonar_vendor(vendors: dict[str, Any]) -> None:
+    sonar = vendors.setdefault("sonar", {})
+    project_key = str(sonar.get("project_key", "")).strip()
+    if project_key:
+        _ensure_vendor_url(
+            sonar,
+            "dashboard_url",
+            f"https://sonarcloud.io/project/overview?id={quote(project_key, safe='')}",
+            allowed_host_suffixes={"sonarcloud.io"},
+        )
+
+
+def _finalize_codacy_vendor(vendors: dict[str, Any], *, owner: str, repo_name: str) -> None:
+    codacy = vendors.setdefault("codacy", {})
+    codacy.setdefault("provider", "gh")
+    codacy.setdefault("owner", owner)
+    codacy.setdefault("repo", repo_name)
+    _ensure_vendor_url(
+        codacy,
+        "dashboard_url",
+        f"https://app.codacy.com/gh/{quote(owner, safe='')}/{quote(repo_name, safe='')}/dashboard",
+        allowed_host_suffixes={"codacy.com"},
+    )
+
+
+def _finalize_codecov_vendor(vendors: dict[str, Any], *, owner: str, repo_name: str) -> None:
+    _ensure_vendor_url(
+        vendors.setdefault("codecov", {}),
+        "dashboard_url",
+        f"https://app.codecov.io/gh/{quote(owner, safe='')}/{quote(repo_name, safe='')}",
+        allowed_host_suffixes={"codecov.io"},
+    )
+
+
+def _finalize_qlty_vendor(vendors: dict[str, Any], *, owner: str, repo_name: str) -> None:
+    qlty = vendors.setdefault("qlty", {})
+    qlty.setdefault("gate_context", "Qlty Gate")
+    qlty.setdefault("coverage_context", "Qlty Coverage")
+    qlty.setdefault("diff_coverage_context", "Qlty Diff Coverage")
+    _ensure_vendor_url(
+        qlty,
+        "dashboard_url",
+        f"https://qlty.sh/gh/{quote(owner, safe='')}/projects/{quote(repo_name, safe='')}",
+        allowed_host_suffixes={"qlty.sh"},
+    )
+
+
+def _finalize_passthrough_vendors(vendors: dict[str, Any]) -> None:
+    vendors.setdefault("deepscan", {}).setdefault("open_issues_url_var", "DEEPSCAN_OPEN_ISSUES_URL")
+    sentry = vendors.setdefault("sentry", {})
+    sentry.setdefault("org_var", "SENTRY_ORG")
+    sentry.setdefault("project_vars", ["SENTRY_PROJECT"])
+    vendors.setdefault("chromatic", {}).setdefault("status_context", "Chromatic Playwright")
+    vendors.setdefault("applitools", {}).setdefault("status_context", "Applitools Visual")
+
+
 def _finalize_vendors(profile: dict[str, Any]) -> dict[str, Any]:
     owner = profile["owner"]
     repo_name = profile["repo_name"]
     vendor_source = _deep_merge(profile.get("vendors", {}), profile.get("providers", {}))
     vendors = deepcopy(vendor_source)
 
-    sonar = vendors.setdefault("sonar", {})
-    project_key = str(sonar.get("project_key", "")).strip()
-    if project_key and not sonar.get("dashboard_url"):
-        sonar["dashboard_url"] = normalize_https_url(
-            f"https://sonarcloud.io/project/overview?id={quote(project_key, safe='')}",
-            allowed_host_suffixes={"sonarcloud.io"},
-        )
-
-    codacy = vendors.setdefault("codacy", {})
-    codacy.setdefault("provider", "gh")
-    codacy.setdefault("owner", owner)
-    codacy.setdefault("repo", repo_name)
-    if not codacy.get("dashboard_url"):
-        codacy["dashboard_url"] = normalize_https_url(
-            f"https://app.codacy.com/gh/{quote(owner, safe='')}/{quote(repo_name, safe='')}/dashboard",
-            allowed_host_suffixes={"codacy.com"},
-        )
-
-    codecov = vendors.setdefault("codecov", {})
-    if not codecov.get("dashboard_url"):
-        codecov["dashboard_url"] = normalize_https_url(
-            f"https://app.codecov.io/gh/{quote(owner, safe='')}/{quote(repo_name, safe='')}",
-            allowed_host_suffixes={"codecov.io"},
-        )
-
-    qlty = vendors.setdefault("qlty", {})
-    qlty.setdefault("gate_context", "Qlty Gate")
-    qlty.setdefault("coverage_context", "Qlty Coverage")
-    qlty.setdefault("diff_coverage_context", "Qlty Diff Coverage")
-    if not qlty.get("dashboard_url"):
-        qlty["dashboard_url"] = normalize_https_url(
-            f"https://qlty.sh/gh/{quote(owner, safe='')}/projects/{quote(repo_name, safe='')}",
-            allowed_host_suffixes={"qlty.sh"},
-        )
-
-    deepscan = vendors.setdefault("deepscan", {})
-    deepscan.setdefault("open_issues_url_var", "DEEPSCAN_OPEN_ISSUES_URL")
-
-    sentry = vendors.setdefault("sentry", {})
-    sentry.setdefault("org_var", "SENTRY_ORG")
-    sentry.setdefault("project_vars", ["SENTRY_PROJECT"])
-
-    chromatic = vendors.setdefault("chromatic", {})
-    chromatic.setdefault("status_context", "Chromatic Playwright")
-
-    applitools = vendors.setdefault("applitools", {})
-    applitools.setdefault("status_context", "Applitools Visual")
+    _finalize_sonar_vendor(vendors)
+    _finalize_codacy_vendor(vendors, owner=owner, repo_name=repo_name)
+    _finalize_codecov_vendor(vendors, owner=owner, repo_name=repo_name)
+    _finalize_qlty_vendor(vendors, owner=owner, repo_name=repo_name)
+    _finalize_passthrough_vendors(vendors)
 
     github = vendors.setdefault("github", {})
     github["repo_url"] = normalize_https_url(
@@ -421,18 +446,8 @@ def build_ruleset_payload(profile: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _validate_control_plane_lanes(profile: dict[str, Any]) -> list[str]:
+def _validate_codex_environment(profile: dict[str, Any], codex_environment: dict[str, Any]) -> list[str]:
     findings: list[str] = []
-    if not profile.get("verify_command"):
-        findings.append(f"{profile['slug']}: verify_command is required")
-    if profile.get("github_mutation_lane") != "codex-private-runner":
-        findings.append(f"{profile['slug']}: github_mutation_lane must be codex-private-runner")
-    if profile.get("codex_auth_lane") != "chatgpt-account":
-        findings.append(f"{profile['slug']}: codex_auth_lane must be chatgpt-account")
-    if profile.get("provider_ui_mode") != "playwright-manual-login":
-        findings.append(f"{profile['slug']}: provider_ui_mode must be playwright-manual-login")
-
-    codex_environment = profile.get("codex_environment", {})
     if codex_environment.get("mode") != "automatic":
         findings.append(f"{profile['slug']}: codex_environment.mode must be automatic")
     if not codex_environment.get("verify_command"):
@@ -448,6 +463,21 @@ def _validate_control_plane_lanes(profile: dict[str, Any]) -> list[str]:
         findings.append(f"{profile['slug']}: codex_environment.runner_labels is required")
     elif "self-hosted" not in runner_labels:
         findings.append(f"{profile['slug']}: codex_environment.runner_labels must include self-hosted")
+    return findings
+
+
+def _validate_control_plane_lanes(profile: dict[str, Any]) -> list[str]:
+    findings: list[str] = []
+    if not profile.get("verify_command"):
+        findings.append(f"{profile['slug']}: verify_command is required")
+    if profile.get("github_mutation_lane") != "codex-private-runner":
+        findings.append(f"{profile['slug']}: github_mutation_lane must be codex-private-runner")
+    if profile.get("codex_auth_lane") != "chatgpt-account":
+        findings.append(f"{profile['slug']}: codex_auth_lane must be chatgpt-account")
+    if profile.get("provider_ui_mode") != "playwright-manual-login":
+        findings.append(f"{profile['slug']}: provider_ui_mode must be playwright-manual-login")
+
+    findings.extend(_validate_codex_environment(profile, profile.get("codex_environment", {})))
     return findings
 
 

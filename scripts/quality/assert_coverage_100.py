@@ -4,8 +4,9 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any, Mapping
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -195,7 +196,7 @@ def evaluate(
     return ("pass" if not findings else "fail", findings)
 
 
-def _render_md(payload: dict) -> str:
+def _render_md(payload: Mapping[str, Any]) -> str:
     lines = [
         "# Coverage 100 Gate",
         "",
@@ -227,8 +228,7 @@ def _render_md(payload: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def main() -> int:
-    args = _parse_args()
+def _collect_coverage_inputs(args: argparse.Namespace) -> tuple[list[CoverageStats], set[str]]:
     stats: list[CoverageStats] = []
     covered_sources: set[str] = set()
     for item in args.xml:
@@ -239,6 +239,30 @@ def main() -> int:
         name, path = parse_named_path(item)
         stats.append(parse_lcov(name, path))
         covered_sources.update(coverage_sources_from_lcov(path))
+    return stats, covered_sources
+
+
+def _build_payload(
+    *,
+    stats: list[CoverageStats],
+    covered_sources: set[str],
+    min_percent: float,
+    status: str,
+    findings: list[str],
+) -> dict[str, Any]:
+    return {
+        "status": status,
+        "timestamp_utc": utc_timestamp(),
+        "min_percent": min_percent,
+        "components": [asdict(item) | {"percent": item.percent} for item in stats],
+        "covered_sources": sorted(covered_sources),
+        "findings": findings,
+    }
+
+
+def main() -> int:
+    args = _parse_args()
+    stats, covered_sources = _collect_coverage_inputs(args)
     if not stats:
         raise SystemExit("No coverage files were provided; pass --xml and/or --lcov inputs.")
 
@@ -249,23 +273,13 @@ def main() -> int:
         required_sources=list(args.require_source),
         reported_sources=covered_sources,
     )
-    payload = {
-        "status": status,
-        "timestamp_utc": utc_timestamp(),
-        "min_percent": min_percent,
-        "components": [
-            {
-                "name": item.name,
-                "path": item.path,
-                "covered": item.covered,
-                "total": item.total,
-                "percent": item.percent,
-            }
-            for item in stats
-        ],
-        "covered_sources": sorted(covered_sources),
-        "findings": findings,
-    }
+    payload = _build_payload(
+        stats=stats,
+        covered_sources=covered_sources,
+        min_percent=min_percent,
+        status=status,
+        findings=findings,
+    )
     out_json = str(safe_output_path(args.out_json, "coverage-100/coverage.json"))
     out_md = str(safe_output_path(args.out_md, "coverage-100/coverage.md"))
     return_code = write_report(

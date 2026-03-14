@@ -160,30 +160,48 @@ export function parseArgs(argv) {
     args.command = tokens.shift();
   }
 
-  const optionHandlers = {
-    '--provider': () => { args.provider = shiftRequiredValue(tokens, '--provider'); },
-    '-p': () => { args.provider = shiftRequiredValue(tokens, '-p'); },
-    '--repo': () => { args.repo = shiftRequiredValue(tokens, '--repo'); },
-    '-r': () => { args.repo = shiftRequiredValue(tokens, '-r'); },
-    '--owner': () => { args.owner = shiftRequiredValue(tokens, '--owner'); },
-    '--state-root': () => { args.stateRoot = path.resolve(shiftRequiredValue(tokens, '--state-root')); },
-    '--profile-dir': () => { args.profileDir = path.resolve(shiftRequiredValue(tokens, '--profile-dir')); },
-    '--timeout-ms': () => { args.timeoutMs = Number(shiftRequiredValue(tokens, '--timeout-ms')); },
-    '--headless': () => { args.headless = true; },
-    '--headed': () => { args.headless = false; },
-    '--keep-open': () => { args.keepOpen = true; },
-    '--slow-mo-ms': () => { args.slowMoMs = Number(shiftRequiredValue(tokens, '--slow-mo-ms')); },
-    '--help': () => { args.command = 'help'; },
-    '-h': () => { args.command = 'help'; }
-  };
-
   while (tokens.length > 0) {
     const token = tokens.shift();
-    const handler = optionHandlers[token];
-    if (!handler) {
-      throw new Error(`Unknown argument: ${token}`);
+    switch (token) {
+      case '--provider':
+      case '-p':
+        args.provider = shiftRequiredValue(tokens, token);
+        break;
+      case '--repo':
+      case '-r':
+        args.repo = shiftRequiredValue(tokens, token);
+        break;
+      case '--owner':
+        args.owner = shiftRequiredValue(tokens, token);
+        break;
+      case '--state-root':
+        args.stateRoot = path.resolve(shiftRequiredValue(tokens, token));
+        break;
+      case '--profile-dir':
+        args.profileDir = path.resolve(shiftRequiredValue(tokens, token));
+        break;
+      case '--timeout-ms':
+        args.timeoutMs = Number(shiftRequiredValue(tokens, token));
+        break;
+      case '--headless':
+        args.headless = true;
+        break;
+      case '--headed':
+        args.headless = false;
+        break;
+      case '--keep-open':
+        args.keepOpen = true;
+        break;
+      case '--slow-mo-ms':
+        args.slowMoMs = Number(shiftRequiredValue(tokens, token));
+        break;
+      case '--help':
+      case '-h':
+        args.command = 'help';
+        break;
+      default:
+        throw new Error(`Unknown argument: ${token}`);
     }
-    handler();
   }
 
   if (!Number.isFinite(args.timeoutMs) || args.timeoutMs <= 0) {

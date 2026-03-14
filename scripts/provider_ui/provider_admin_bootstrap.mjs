@@ -207,11 +207,15 @@ async function main() {
   }
 }
 
-if (isCliEntrypoint(import.meta.url)) {
+async function runCli() {
   try {
     await main();
   } catch (error) {
     console.error(error instanceof Error ? error.stack ?? error.message : error);
     process.exitCode = 1;
   }
+}
+
+if (isCliEntrypoint(import.meta.url)) {
+  runCli();
 }

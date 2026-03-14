@@ -74,7 +74,7 @@ def _build_sonar_query(project_key: str, *, branch: str, pull_request: str) -> d
     return query
 
 
-def _load_sonar_findings(args: argparse.Namespace, auth: str) -> tuple[int, str, list[str]]:
+def _load_open_issues(args: argparse.Namespace, auth: str) -> int:
     issues_query = {
         "componentKeys": args.project_key,
         "resolved": "false",
@@ -88,8 +88,10 @@ def _load_sonar_findings(args: argparse.Namespace, auth: str) -> tuple[int, str,
         f"{SONAR_API_BASE}/api/issues/search?{urllib.parse.urlencode(issues_query)}",
         auth,
     )
-    open_issues = int((issues_payload.get("paging") or {}).get("total") or 0)
+    return int((issues_payload.get("paging") or {}).get("total") or 0)
 
+
+def _load_quality_gate(args: argparse.Namespace, auth: str) -> str:
     gate_query = _build_sonar_query(
         args.project_key,
         branch=args.branch,
@@ -99,8 +101,12 @@ def _load_sonar_findings(args: argparse.Namespace, auth: str) -> tuple[int, str,
         f"{SONAR_API_BASE}/api/qualitygates/project_status?{urllib.parse.urlencode(gate_query)}",
         auth,
     )
-    quality_gate = str((gate_payload.get("projectStatus") or {}).get("status") or "UNKNOWN")
+    return str((gate_payload.get("projectStatus") or {}).get("status") or "UNKNOWN")
 
+
+def _load_sonar_findings(args: argparse.Namespace, auth: str) -> tuple[int, str, list[str]]:
+    open_issues = _load_open_issues(args, auth)
+    quality_gate = _load_quality_gate(args, auth)
     findings: list[str] = []
     if open_issues != 0:
         findings.append(f"Sonar reports {open_issues} open issues (expected 0).")

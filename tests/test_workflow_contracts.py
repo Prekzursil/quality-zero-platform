@@ -94,11 +94,41 @@ class WorkflowContractTests(unittest.TestCase):
             "CODACY_API_TOKEN: ${{ secrets.CODACY_API_TOKEN }}",
             "SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}",
             "DEEPSCAN_API_TOKEN: ${{ secrets.DEEPSCAN_API_TOKEN }}",
+            "GITHUB_TOKEN: ${{ github.token }}",
+            "REPO_SLUG: ${{ inputs.repo_slug }}",
+            "TARGET_SHA: ${{ inputs.sha != '' && inputs.sha || github.sha }}",
             "SENTRY_ORG: ${{ vars.SENTRY_ORG }}",
             "SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}",
+            "DEEPSCAN_POLICY_MODE: ${{ vars.DEEPSCAN_POLICY_MODE }}",
             "DEEPSCAN_OPEN_ISSUES_URL: ${{ vars.DEEPSCAN_OPEN_ISSUES_URL }}",
         ]:
             self.assertIn(expected, text)
+
+    def test_semgrep_lane_uses_supported_cli_invocation(self) -> None:
+        text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
+        self.assertIn('run(["semgrep", "ci"], cwd=repo_dir)', text)
+        self.assertNotIn('run(["semgrep", "ci", "--error"], cwd=repo_dir)', text)
+
+    def test_reusable_workflows_do_not_inline_inputs_inside_run_blocks(self) -> None:
+        workflow_expectations = {
+            "reusable-quality-zero-gate.yml": [
+                '--repo-slug "${{ inputs.repo_slug }}"',
+                '--event-name "${{ inputs.event_name }}"',
+            ],
+            "reusable-ruleset-sync.yml": [
+                '--repo-slug "${{ inputs.repo_slug }}"',
+                'f"repos/${{ inputs.repo_slug }}/rulesets"',
+            ],
+            "reusable-scanner-matrix.yml": [
+                '--repo-slug "${{ inputs.repo_slug }}"',
+                '--event-name "${{ inputs.event_name }}"',
+            ],
+        }
+
+        for name, forbidden_snippets in workflow_expectations.items():
+            text = (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
+            for snippet in forbidden_snippets:
+                self.assertNotIn(snippet, text, f"{name}: {snippet}")
 
 
 if __name__ == "__main__":

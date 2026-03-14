@@ -105,6 +105,32 @@ def build_issues_url(provider: str, owner: str, repo: str, *, pull_request: str 
     return f"{CODACY_API_BASE}/api/v3/analysis/organizations/{provider}/{owner}/repositories/{repo}/issues/search?{query}"
 
 
+def _request_mode(pull_request: str) -> tuple[str, dict[str, Any] | None]:
+    if pull_request:
+        return "GET", None
+    return "POST", {}
+
+
+def _query_codacy_provider(
+    provider: str,
+    owner: str,
+    repo: str,
+    token: str,
+    *,
+    pull_request: str = "",
+) -> tuple[int | None, list[str]]:
+    url = build_issues_url(provider, owner, repo, pull_request=pull_request)
+    request_method, request_data = _request_mode(pull_request)
+    payload = _request_json(url, token, method=request_method, data=request_data)
+
+    open_issues = extract_total_open(payload)
+    if open_issues is None:
+        return None, ["Codacy response did not include a parseable total issue count."]
+    if open_issues != 0:
+        return open_issues, [f"Codacy reports {open_issues} open issues (expected 0)."]
+    return open_issues, []
+
+
 def _query_codacy_open_issues(
     owner: str,
     repo: str,
@@ -116,11 +142,14 @@ def _query_codacy_open_issues(
     findings: list[str] = []
     last_exc: Exception | None = None
     for provider in provider_candidates:
-        url = build_issues_url(provider, owner, repo, pull_request=pull_request)
         try:
-            request_method = "GET" if pull_request else "POST"
-            request_data = None if pull_request else {}
-            payload = _request_json(url, token, method=request_method, data=request_data)
+            open_issues, findings = _query_codacy_provider(
+                provider,
+                owner,
+                repo,
+                token,
+                pull_request=pull_request,
+            )
         except urllib.error.HTTPError as exc:
             last_exc = exc
             if exc.code == 404:
@@ -130,11 +159,6 @@ def _query_codacy_open_issues(
             last_exc = exc
             return None, [f"Codacy API request failed: {exc}"], last_exc
 
-        open_issues = extract_total_open(payload)
-        if open_issues is None:
-            findings.append("Codacy response did not include a parseable total issue count.")
-        elif open_issues != 0:
-            findings.append(f"Codacy reports {open_issues} open issues (expected 0).")
         return open_issues, findings, last_exc
 
     findings.append(f"Codacy API endpoint was not found for providers: {', '.join(provider_candidates)}.")

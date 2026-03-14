@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import readline from 'node:readline/promises';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { stdin as input, stdout as output } from 'node:process';
 import { createRequire } from 'node:module';
 import {
@@ -26,7 +26,27 @@ async function loadPlaywrightChromium() {
   const runnerRequire = createRequire(path.join(runnerDir, 'package.json'));
   const playwrightEntry = runnerRequire.resolve('playwright');
   const playwrightModule = await import(pathToFileURL(playwrightEntry).href);
-  return playwrightModule.chromium;
+  return resolvePlaywrightChromium(playwrightModule);
+}
+
+export function resolvePlaywrightChromium(playwrightModule) {
+  const candidate = playwrightModule?.chromium ?? playwrightModule?.default?.chromium ?? null;
+  if (!candidate) {
+    throw new Error('Playwright module does not expose chromium.');
+  }
+
+  return candidate;
+}
+
+export function isCliEntrypoint(importMetaUrl, argv = process.argv) {
+  const entryPath = argv?.[1];
+  if (!entryPath) {
+    return false;
+  }
+
+  const entryUrl = pathToFileURL(path.resolve(entryPath)).href;
+  const moduleUrl = pathToFileURL(path.resolve(fileURLToPath(importMetaUrl))).href;
+  return entryUrl === moduleUrl;
 }
 
 async function promptForManualLogin(target, profileDir) {
@@ -174,9 +194,13 @@ async function main() {
   }
 }
 
-try {
-  await main();
-} catch (error) {
-  console.error(error instanceof Error ? error.stack ?? error.message : error);
-  process.exitCode = 1;
+if (isCliEntrypoint(import.meta.url)) {
+  (async () => {
+    try {
+      await main();
+    } catch (error) {
+      console.error(error instanceof Error ? error.stack ?? error.message : error);
+      process.exitCode = 1;
+    }
+  })();
 }

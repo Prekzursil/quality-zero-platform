@@ -125,7 +125,7 @@ def _open_https_connection(parsed: ParseResult, *, timeout: int) -> http.client.
     hostname = parsed.hostname
     if not hostname:
         raise ValueError(f"Request URL is missing a hostname: {urlunparse(parsed)!r}")
-    return http.client.HTTPSConnection(  # nosec B309 - normalize_https_url constrains callers to validated HTTPS hosts on supported Python runtimes.
+    return http.client.HTTPSConnection(  # noqa: S309  # nosec B309 - normalize_https_url constrains callers to validated HTTPS hosts on supported Python runtimes.
         hostname,
         parsed.port or 443,
         timeout=timeout,

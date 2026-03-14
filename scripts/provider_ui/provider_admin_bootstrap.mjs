@@ -1,4 +1,3 @@
-import fs from 'node:fs/promises';
 import path from 'node:path';
 import readline from 'node:readline/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -12,20 +11,6 @@ import {
   renderHelp,
   resolveProviderTarget
 } from './provider_admin_config.mjs';
-
-function toManagedDirectoryUrl(targetPath, stateRoot) {
-  const managedPath = ensureManagedStatePath(targetPath, stateRoot);
-  const directoryPath = managedPath.endsWith(path.sep) ? managedPath : `${managedPath}${path.sep}`;
-  const directoryUrl = pathToFileURL(directoryPath);
-  return { managedPath, directoryUrl };
-}
-
-async function ensureManagedDirectory(targetPath, stateRoot) {
-  const { managedPath, directoryUrl } = toManagedDirectoryUrl(targetPath, stateRoot);
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- ensureManagedStatePath constrains provider-ui directories to the managed external state root.
-  await fs.mkdir(directoryUrl, { recursive: true }); // nosemgrep: javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename
-  return managedPath;
-}
 
 export function ensureManagedStatePath(targetPath, stateRoot) {
   const resolvedPath = path.resolve(targetPath);
@@ -100,8 +85,7 @@ async function launchContextWithFallback(chromium, profileDir, options) {
 
 async function launchPersistentContext(args, { headlessDefault, includeManualPrompt }) {
   const target = resolveProviderTarget(args.provider, { repo: args.repo, owner: args.owner });
-  const profileDir = await ensureManagedDirectory(args.profileDir, args.stateRoot);
-  await ensureManagedDirectory(path.dirname(profileDir), args.stateRoot);
+  const profileDir = ensureManagedStatePath(args.profileDir, args.stateRoot);
 
   const headless = args.headless ?? headlessDefault;
   const chromium = await loadPlaywrightChromium();

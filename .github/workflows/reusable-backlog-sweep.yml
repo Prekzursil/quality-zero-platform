@@ -17,6 +17,9 @@ on:
         type: string
         required: false
         default: main
+    secrets:
+      CODEX_AUTH_JSON:
+        required: false
 
 jobs:
   resolve-profile:
@@ -42,9 +45,11 @@ jobs:
         run: python -m pip install -r platform/requirements-dev.txt
       - name: Export resolved profile
         id: profile
+        env:
+          REPO_SLUG: ${{ inputs.repo_slug }}
         run: |
           python platform/scripts/quality/export_profile.py \
-            --repo-slug "${{ inputs.repo_slug }}" \
+            --repo-slug "$REPO_SLUG" \
             --event-name pull_request \
             --out-json "$RUNNER_TEMP/profile.json" \
             --github-output "$GITHUB_OUTPUT"
@@ -82,12 +87,16 @@ jobs:
             --bootstrap-env-var CODEX_AUTH_JSON \
             --out-json "$RUNNER_TEMP/codex-auth.json"
       - name: Render backlog prompt
+        env:
+          REPO_SLUG: ${{ inputs.repo_slug }}
+          BACKLOG_LANE: ${{ inputs.lane }}
+          ACTIONS_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           python platform/scripts/quality/render_codex_prompt.py \
-            --repo-slug "${{ inputs.repo_slug }}" \
+            --repo-slug "$REPO_SLUG" \
             --lane backlog \
-            --failure-context "${{ inputs.lane }}" \
-            --artifact "Actions run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --failure-context "$BACKLOG_LANE" \
+            --artifact "Actions run: $ACTIONS_RUN_URL" \
             --output "$RUNNER_TEMP/backlog-prompt.md"
       - name: Run Codex on the trusted private runner
         run: |
@@ -107,7 +116,7 @@ jobs:
             ${{ runner.temp }}/codex-events.jsonl
             ${{ runner.temp }}/backlog-prompt.md
       - name: Create or update backlog pull request
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c
         with:
           path: repo
           branch: codex/backlog/${{ inputs.lane }}

@@ -25,7 +25,7 @@ test('supports the full provider set for strict-zero admin work', () => {
 });
 
 test('default state locations stay outside the repository tree', () => {
-  const env = { LOCALAPPDATA: 'C:\\Users\\Prekzursil\\AppData\\Local' };
+  const env = { LOCALAPPDATA: String.raw`C:\Users\Prekzursil\AppData\Local` };
   const stateRoot = getDefaultStateRoot(env);
   assert.equal(stateRoot, path.join(env.LOCALAPPDATA, 'quality-zero-platform', 'provider-ui'));
   assert.equal(getDefaultProfileDir(env), path.join(stateRoot, 'chromium-profile'));

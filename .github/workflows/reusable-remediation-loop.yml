@@ -26,6 +26,9 @@ on:
         type: string
         required: false
         default: main
+    secrets:
+      CODEX_AUTH_JSON:
+        required: false
 
 jobs:
   resolve-profile:
@@ -54,9 +57,11 @@ jobs:
         run: python -m pip install -r platform/requirements-dev.txt
       - name: Export resolved profile
         id: profile
+        env:
+          REPO_SLUG: ${{ inputs.repo_slug }}
         run: |
           python platform/scripts/quality/export_profile.py \
-            --repo-slug "${{ inputs.repo_slug }}" \
+            --repo-slug "$REPO_SLUG" \
             --event-name pull_request \
             --out-json "$RUNNER_TEMP/profile.json" \
             --github-output "$GITHUB_OUTPUT"
@@ -96,8 +101,10 @@ jobs:
     steps:
       - name: Guard retry budget
         if: ${{ github.run_attempt > inputs.max_attempts }}
+        env:
+          MAX_ATTEMPTS: ${{ inputs.max_attempts }}
         run: |
-          echo "Retry budget exhausted on run attempt ${{ github.run_attempt }} (max ${{ inputs.max_attempts }})." >&2
+          echo "Retry budget exhausted on run attempt ${GITHUB_RUN_ATTEMPT} (max ${MAX_ATTEMPTS})." >&2
           exit 1
       - uses: actions/checkout@v4
         with:
@@ -115,9 +122,11 @@ jobs:
       - name: Verify Codex CLI
         run: codex --version
       - name: Export resolved profile
+        env:
+          REPO_SLUG: ${{ inputs.repo_slug }}
         run: |
           python platform/scripts/quality/export_profile.py \
-            --repo-slug "${{ inputs.repo_slug }}" \
+            --repo-slug "$REPO_SLUG" \
             --event-name pull_request \
             --out-json "$RUNNER_TEMP/profile.json"
       - name: Ensure Codex account auth
@@ -129,14 +138,19 @@ jobs:
             --bootstrap-env-var CODEX_AUTH_JSON \
             --out-json "$RUNNER_TEMP/codex-auth.json"
       - name: Render remediation prompt
+        env:
+          REPO_SLUG: ${{ inputs.repo_slug }}
+          FAILURE_CONTEXT: ${{ inputs.failure_context }}
+          TARGET_SHA: ${{ inputs.sha || github.sha }}
+          ACTIONS_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           python platform/scripts/quality/render_codex_prompt.py \
-            --repo-slug "${{ inputs.repo_slug }}" \
+            --repo-slug "$REPO_SLUG" \
             --lane remediation \
             --event-name pull_request \
-            --failure-context "${{ inputs.failure_context }}" \
-            --artifact "Actions run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --artifact "Target SHA: ${{ inputs.sha || github.sha }}" \
+            --failure-context "$FAILURE_CONTEXT" \
+            --artifact "Actions run: $ACTIONS_RUN_URL" \
+            --artifact "Target SHA: $TARGET_SHA" \
             --output "$RUNNER_TEMP/remediation-prompt.md"
       - name: Run Codex on the trusted private runner
         run: |
@@ -156,7 +170,7 @@ jobs:
             ${{ runner.temp }}/codex-events.jsonl
             ${{ runner.temp }}/remediation-prompt.md
       - name: Create or update remediation pull request
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c
         with:
           path: repo
           branch: ${{ needs.resolve-profile.outputs.branch }}

@@ -12,6 +12,9 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
 from scripts.quality.common import dedupe_strings, utc_timestamp, write_report
 
 
+NONE_BULLET = "- None"
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Validate required quality-gate secrets and variables.")
     parser.add_argument("--required-secret", action="append", default=[], help="Required secret env var name")
@@ -32,13 +35,13 @@ def _render_md(payload: dict) -> str:
         "",
         "## Missing secrets",
     ]
-    lines.extend([f"- `{item}`" for item in payload.get("missing_secrets", [])] or ["- None"])
+    lines.extend([f"- `{item}`" for item in payload.get("missing_secrets", [])] or [NONE_BULLET])
     lines.extend(["", "## Missing conditional secrets"])
-    lines.extend([f"- `{item}`" for item in payload.get("missing_conditional_secrets", [])] or ["- None"])
+    lines.extend([f"- `{item}`" for item in payload.get("missing_conditional_secrets", [])] or [NONE_BULLET])
     lines.extend(["", "## Missing variables"])
-    lines.extend([f"- `{item}`" for item in payload.get("missing_vars", [])] or ["- None"])
+    lines.extend([f"- `{item}`" for item in payload.get("missing_vars", [])] or [NONE_BULLET])
     lines.extend(["", "## Missing conditional variables"])
-    lines.extend([f"- `{item}`" for item in payload.get("missing_conditional_vars", [])] or ["- None"])
+    lines.extend([f"- `{item}`" for item in payload.get("missing_conditional_vars", [])] or [NONE_BULLET])
     return "\n".join(lines) + "\n"
 
 

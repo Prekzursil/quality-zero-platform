@@ -23,16 +23,12 @@ def _write_payload(path: str, payload: dict[str, object]) -> None:
     target.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def main() -> int:
-    args = _parse_args()
+def _resolve_auth_payload(args: argparse.Namespace) -> dict[str, str]:
     auth_path = Path(args.auth_file).expanduser()
     auth_path.parent.mkdir(parents=True, exist_ok=True)
 
     if auth_path.is_file() and auth_path.stat().st_size > 0:
-        payload = {"auth_file": str(auth_path), "source": "existing"}
-        _write_payload(args.out_json, payload)
-        print(json.dumps(payload))
-        return 0
+        return {"auth_file": str(auth_path), "source": "existing"}
 
     bootstrap_value = os.environ.get(args.bootstrap_env_var, "").strip()
     if bootstrap_value:
@@ -41,15 +37,20 @@ def main() -> int:
         except json.JSONDecodeError as exc:
             raise SystemExit(f"{args.bootstrap_env_var} is not valid JSON: {exc}") from exc
         auth_path.write_text(json.dumps(parsed, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        payload = {"auth_file": str(auth_path), "source": args.bootstrap_env_var}
-        _write_payload(args.out_json, payload)
-        print(json.dumps(payload))
-        return 0
+        return {"auth_file": str(auth_path), "source": args.bootstrap_env_var}
 
     raise SystemExit(
         "Codex account auth is missing. Seed the trusted private runner once with `codex login` "
         f"or provide {args.bootstrap_env_var} as a repository secret for bootstrap."
     )
+
+
+def main() -> int:
+    args = _parse_args()
+    payload = _resolve_auth_payload(args)
+    _write_payload(args.out_json, payload)
+    print(json.dumps(payload))
+    return 0
 
 
 if __name__ == "__main__":

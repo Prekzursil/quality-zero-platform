@@ -19,4 +19,5 @@ jobs:
       repo_slug: Prekzursil/quality-zero-platform
       failure_context: ${{ github.event.inputs.failure_context || 'Quality Zero Gate' }}
       sha: ${{ github.event.workflow_run.head_sha || github.sha }}
-    secrets: inherit
+    secrets:
+      CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}

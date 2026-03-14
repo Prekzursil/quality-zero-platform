@@ -22,6 +22,15 @@ on:
         type: string
         required: false
         default: main
+    secrets:
+      SONAR_TOKEN:
+        required: false
+      CODACY_API_TOKEN:
+        required: false
+      SENTRY_AUTH_TOKEN:
+        required: false
+      DEEPSCAN_API_TOKEN:
+        required: false
 
 jobs:
   scanner:
@@ -108,7 +117,7 @@ jobs:
           dotnet-version: ${{ steps.profile.outputs.coverage_dotnet_version }}
       - name: Set up Rust
         if: matrix.lane == 'coverage' && steps.profile.outputs.coverage_needs_rust == 'true'
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7
       - name: Run selected lane
         env:
           LANE: ${{ matrix.lane }}
@@ -226,7 +235,7 @@ jobs:
           PY
       - name: Publish Qlty coverage
         if: matrix.lane == 'coverage' && steps.profile.outputs.qlty_enabled == 'true' && steps.profile.outputs.qlty_coverage_files != ''
-        uses: qltysh/qlty-action/coverage@v2
+        uses: qltysh/qlty-action/coverage@a19242102d17e497f437d7466aa01b528537e899
         with:
           oidc: true
           files: ${{ steps.profile.outputs.qlty_coverage_files }}

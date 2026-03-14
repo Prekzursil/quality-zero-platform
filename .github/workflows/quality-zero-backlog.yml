@@ -16,4 +16,5 @@ jobs:
     with:
       repo_slug: Prekzursil/quality-zero-platform
       lane: ${{ github.event.inputs.lane || 'quality' }}
-    secrets: inherit
+    secrets:
+      CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}

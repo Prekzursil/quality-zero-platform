@@ -71,7 +71,7 @@ class SecurityHelpersTests(unittest.TestCase):
             {
                 "method": call.request.get_method(),
                 "body": call.request.data,
-                "headers": {key: value for key, value in call.request.header_items()},
+                "headers": dict(call.request.header_items()),
             },
             {
                 "method": "GET",

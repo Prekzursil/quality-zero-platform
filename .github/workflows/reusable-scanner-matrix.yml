@@ -130,6 +130,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           REPO_SLUG: ${{ inputs.repo_slug }}
           TARGET_SHA: ${{ inputs.sha != '' && inputs.sha || github.sha }}
+          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || '' }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           CODACY_API_TOKEN: ${{ secrets.CODACY_API_TOKEN }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -150,6 +152,8 @@ jobs:
           root = Path.cwd()
           profile = json.loads((Path(os.environ["RUNNER_TEMP"]) / "profile.json").read_text(encoding="utf-8"))
           lane = os.environ["LANE"]
+          branch_name = os.environ.get("BRANCH_NAME", "").strip()
+          pull_request_number = os.environ.get("PULL_REQUEST_NUMBER", "").strip()
           repo_dir = root / "repo"
           platform_dir = root / "platform"
 
@@ -198,6 +202,10 @@ jobs:
               "--out-md",
               "sonar-zero/sonar.md",
             ]
+            if pull_request_number:
+              cmd.extend(["--pull-request", pull_request_number])
+            elif branch_name:
+              cmd.extend(["--branch", branch_name])
             run(cmd, cwd=repo_dir)
           elif lane == "codacy":
             codacy = profile["vendors"]["codacy"]
@@ -215,6 +223,8 @@ jobs:
               "--out-md",
               "codacy-zero/codacy.md",
             ]
+            if pull_request_number:
+              cmd.extend(["--pull-request", pull_request_number])
             run(cmd, cwd=repo_dir)
           elif lane == "semgrep":
             run([sys.executable, "-m", "pip", "install", "semgrep"], cwd=repo_dir)

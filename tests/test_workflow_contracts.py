@@ -97,12 +97,21 @@ class WorkflowContractTests(unittest.TestCase):
             "GITHUB_TOKEN: ${{ github.token }}",
             "REPO_SLUG: ${{ inputs.repo_slug }}",
             "TARGET_SHA: ${{ inputs.sha != '' && inputs.sha || github.sha }}",
+            "BRANCH_NAME: ${{ github.head_ref || github.ref_name }}",
+            "PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || '' }}",
             "SENTRY_ORG: ${{ vars.SENTRY_ORG }}",
             "SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}",
             "DEEPSCAN_POLICY_MODE: ${{ vars.DEEPSCAN_POLICY_MODE }}",
             "DEEPSCAN_OPEN_ISSUES_URL: ${{ vars.DEEPSCAN_OPEN_ISSUES_URL }}",
         ]:
             self.assertIn(expected, text)
+
+    def test_scanner_matrix_scopes_sonar_and_codacy_zero_to_the_current_pull_request(self) -> None:
+        text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
+        self.assertIn('pull_request_number = os.environ.get("PULL_REQUEST_NUMBER", "").strip()', text)
+        self.assertIn('branch_name = os.environ.get("BRANCH_NAME", "").strip()', text)
+        self.assertIn('cmd.extend(["--pull-request", pull_request_number])', text)
+        self.assertIn('cmd.extend(["--branch", branch_name])', text)
 
     def test_semgrep_lane_uses_supported_cli_invocation(self) -> None:
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")

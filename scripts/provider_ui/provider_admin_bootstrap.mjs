@@ -217,5 +217,5 @@ async function runCli() {
 }
 
 if (isCliEntrypoint(import.meta.url)) {
-  runCli();
+  await runCli();
 }

@@ -20,6 +20,7 @@ from scripts.security_helpers import load_json_https
 
 TOTAL_KEYS = {"total", "totalItems", "total_items", "count", "hits", "open_issues"}
 CODACY_API_BASE = "https://api.codacy.com"
+CODACY_APP_API_BASE = "https://app.codacy.com/api/v3"
 
 
 def _parse_args() -> argparse.Namespace:
@@ -27,6 +28,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--provider", default="gh")
     parser.add_argument("--owner", required=True)
     parser.add_argument("--repo", required=True)
+    parser.add_argument("--pull-request", default="")
     parser.add_argument("--token", default="")
     parser.add_argument("--out-json", default="codacy-zero/codacy.json")
     parser.add_argument("--out-md", default="codacy-zero/codacy.md")
@@ -91,14 +93,34 @@ def _provider_candidates(primary_provider: str) -> list[str]:
     return list(dict.fromkeys([primary_provider, "gh", "github"]))
 
 
-def _query_codacy_open_issues(owner: str, repo: str, token: str, provider_candidates: list[str]) -> tuple[int | None, list[str], Exception | None]:
+def build_issues_url(provider: str, owner: str, repo: str, *, pull_request: str = "") -> str:
+    if pull_request:
+        query = urllib.parse.urlencode({"status": "new", "limit": "1"})
+        return (
+            f"{CODACY_APP_API_BASE}/analysis/organizations/{provider}/{owner}/repositories/{repo}"
+            f"/pull-requests/{pull_request}/issues?{query}"
+        )
+
+    query = urllib.parse.urlencode({"limit": "1"})
+    return f"{CODACY_API_BASE}/api/v3/analysis/organizations/{provider}/{owner}/repositories/{repo}/issues/search?{query}"
+
+
+def _query_codacy_open_issues(
+    owner: str,
+    repo: str,
+    token: str,
+    provider_candidates: list[str],
+    *,
+    pull_request: str = "",
+) -> tuple[int | None, list[str], Exception | None]:
     findings: list[str] = []
     last_exc: Exception | None = None
-    query = urllib.parse.urlencode({"limit": "1"})
     for provider in provider_candidates:
-        url = f"{CODACY_API_BASE}/api/v3/analysis/organizations/{provider}/{owner}/repositories/{repo}/issues/search?{query}"
+        url = build_issues_url(provider, owner, repo, pull_request=pull_request)
         try:
-            payload = _request_json(url, token, method="POST", data={})
+            request_method = "GET" if pull_request else "POST"
+            request_data = None if pull_request else {}
+            payload = _request_json(url, token, method=request_method, data=request_data)
         except urllib.error.HTTPError as exc:
             last_exc = exc
             if exc.code == 404:
@@ -126,16 +148,22 @@ def main() -> int:
     token = (args.token or os.environ.get("CODACY_API_TOKEN", "")).strip()
     owner = urllib.parse.quote(args.owner.strip(), safe="")
     repo = urllib.parse.quote(args.repo.strip(), safe="")
+    pull_request = str(args.pull_request or "").strip()
     findings: list[str] = []
     open_issues: int | None = None
+    status = "fail"
 
     if not token:
         findings.append("CODACY_API_TOKEN is missing.")
-        status = "fail"
     else:
         provider_candidates = _provider_candidates(args.provider)
-        status = "fail"
-        open_issues, findings, _ = _query_codacy_open_issues(owner, repo, token, provider_candidates)
+        open_issues, findings, _ = _query_codacy_open_issues(
+            owner,
+            repo,
+            token,
+            provider_candidates,
+            pull_request=pull_request,
+        )
         status = "pass" if not findings else "fail"
 
     payload = {
@@ -143,6 +171,7 @@ def main() -> int:
         "owner": args.owner,
         "repo": args.repo,
         "provider": args.provider,
+        "pull_request": pull_request or None,
         "open_issues": open_issues,
         "timestamp_utc": utc_timestamp(),
         "findings": findings,

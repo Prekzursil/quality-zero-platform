@@ -125,8 +125,11 @@ def _open_https_connection(parsed: ParseResult, *, timeout: int) -> http.client.
     hostname = parsed.hostname
     if not hostname:
         raise ValueError(f"Request URL is missing a hostname: {urlunparse(parsed)!r}")
-    # nosec B309 - normalize_https_url constrains callers to validated HTTPS hosts on supported Python runtimes.
-    return http.client.HTTPSConnection(hostname, parsed.port or 443, timeout=timeout)
+    return http.client.HTTPSConnection(  # nosec B309 - normalize_https_url constrains callers to validated HTTPS hosts on supported Python runtimes.
+        hostname,
+        parsed.port or 443,
+        timeout=timeout,
+    )
 
 
 def _read_json_response(

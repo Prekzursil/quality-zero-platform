@@ -23,7 +23,7 @@ function toManagedDirectoryUrl(targetPath, stateRoot) {
 async function ensureManagedDirectory(targetPath, stateRoot) {
   const { managedPath, directoryUrl } = toManagedDirectoryUrl(targetPath, stateRoot);
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- ensureManagedStatePath constrains provider-ui directories to the managed external state root.
-  await fs.mkdir(directoryUrl, { recursive: true });
+  await fs.mkdir(directoryUrl, { recursive: true }); // nosemgrep: javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename
   return managedPath;
 }
 
@@ -221,19 +221,16 @@ function reportCliError(error) {
   process.exitCode = 1;
 }
 
-async function runCli() {
+if (isCliEntrypoint(import.meta.url)) {
+  let exitCode = 0;
   try {
-    await main();
-    return false;
+    const cliResult = await main();
+    exitCode = typeof cliResult === 'number' ? cliResult : 0;
   } catch (error) {
     reportCliError(error);
-    return true;
+    exitCode = 1;
   }
-}
-
-if (isCliEntrypoint(import.meta.url)) {
-  const failed = await runCli();
-  if (failed) {
-    process.exitCode = process.exitCode ?? 1;
+  if (exitCode !== 0) {
+    process.exitCode = process.exitCode ?? exitCode;
   }
 }

@@ -22,7 +22,7 @@ function toManagedDirectoryUrl(targetPath, stateRoot) {
 
 async function ensureManagedDirectory(targetPath, stateRoot) {
   const { managedPath, directoryUrl } = toManagedDirectoryUrl(targetPath, stateRoot);
-  // nosemgrep: javascript.lang.security.audit.detect-non-literal-fs-filename.detect-non-literal-fs-filename
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- ensureManagedStatePath constrains provider-ui directories to the managed external state root.
   await fs.mkdir(directoryUrl, { recursive: true });
   return managedPath;
 }

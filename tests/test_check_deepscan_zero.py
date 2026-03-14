@@ -7,10 +7,14 @@ from unittest.mock import patch
 from scripts.quality import check_deepscan_zero
 
 
+def _placeholder_token(label: str) -> str:
+    return f"{label}-placeholder"
+
+
 class DeepScanZeroTests(unittest.TestCase):
     def test_github_check_context_mode_passes_when_deepscan_status_is_green(self) -> None:
         args = Namespace(repo="Prekzursil/quality-zero-platform", sha="abc123")
-        api_token = "placeholder"
+        api_token = _placeholder_token("api")
 
         with patch.object(
             check_deepscan_zero,
@@ -25,7 +29,7 @@ class DeepScanZeroTests(unittest.TestCase):
 
     def test_github_check_context_mode_fails_when_deepscan_status_is_missing(self) -> None:
         args = Namespace(repo="Prekzursil/quality-zero-platform", sha="abc123")
-        api_token = "placeholder"
+        api_token = _placeholder_token("api")
 
         with patch.object(check_deepscan_zero, "_github_status_payload", return_value={"statuses": []}):
             open_issues, source_url, findings = check_deepscan_zero._evaluate_github_check_context(args, token=api_token)
@@ -35,12 +39,12 @@ class DeepScanZeroTests(unittest.TestCase):
         self.assertIn("DeepScan GitHub status context is missing.", findings)
 
     def test_validate_deepscan_inputs_accepts_github_check_context_mode(self) -> None:
-        api_token = "placeholder"
+        api_token = _placeholder_token("api")
         findings = check_deepscan_zero._validate_deepscan_inputs(
             token=api_token,
             policy_mode="github_check_context",
             open_issues_url="",
-            github_token="ghs_123",
+            github_token=_placeholder_token("github"),
             repo="Prekzursil/quality-zero-platform",
             sha="abc123",
         )

@@ -197,22 +197,23 @@ async function main() {
   switch (args.command) {
     case 'list':
       await listProviders(args);
-      return;
+      return 0;
     case 'bootstrap':
       normalizeProvider(args.provider);
       await bootstrap(args);
-      return;
+      return 0;
     case 'open':
       normalizeProvider(args.provider);
       await openOrInspect(args, { inspectOnly: false });
-      return;
+      return 0;
     case 'inspect':
       normalizeProvider(args.provider);
       await openOrInspect(args, { inspectOnly: true });
-      return;
+      return 0;
     case 'help':
     default:
       console.log(renderHelp());
+      return 0;
   }
 }
 
@@ -224,8 +225,7 @@ function reportCliError(error) {
 if (isCliEntrypoint(import.meta.url)) {
   let exitCode = 0;
   try {
-    const cliResult = await main();
-    exitCode = typeof cliResult === 'number' ? cliResult : 0;
+    exitCode = await main();
   } catch (error) {
     reportCliError(error);
     exitCode = 1;

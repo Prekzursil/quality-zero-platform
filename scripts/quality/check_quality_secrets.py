@@ -26,23 +26,35 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _append_missing_section(lines: list[str], title: str, items: list[str]) -> None:
+    lines.extend(["", title])
+    lines.extend([f"- `{item}`" for item in items] or [NONE_BULLET])
+
+
 def _render_md(payload: dict) -> str:
     lines = [
         "# Quality Secrets Preflight",
         "",
         f"- Status: `{payload['status']}`",
         f"- Timestamp (UTC): `{payload['timestamp_utc']}`",
-        "",
-        "## Missing secrets",
     ]
-    lines.extend([f"- `{item}`" for item in payload.get("missing_secrets", [])] or [NONE_BULLET])
-    lines.extend(["", "## Missing conditional secrets"])
-    lines.extend([f"- `{item}`" for item in payload.get("missing_conditional_secrets", [])] or [NONE_BULLET])
-    lines.extend(["", "## Missing variables"])
-    lines.extend([f"- `{item}`" for item in payload.get("missing_vars", [])] or [NONE_BULLET])
-    lines.extend(["", "## Missing conditional variables"])
-    lines.extend([f"- `{item}`" for item in payload.get("missing_conditional_vars", [])] or [NONE_BULLET])
+    _append_missing_section(lines, "## Missing secrets", payload.get("missing_secrets", []))
+    _append_missing_section(
+        lines,
+        "## Missing conditional secrets",
+        payload.get("missing_conditional_secrets", []),
+    )
+    _append_missing_section(lines, "## Missing variables", payload.get("missing_vars", []))
+    _append_missing_section(
+        lines,
+        "## Missing conditional variables",
+        payload.get("missing_conditional_vars", []),
+    )
     return "\n".join(lines) + "\n"
+
+
+def _missing_env_names(names: list[str]) -> list[str]:
+    return [name for name in names if not str(os.environ.get(name, "")).strip()]
 
 
 def main() -> int:
@@ -51,10 +63,10 @@ def main() -> int:
     conditional_secrets = dedupe_strings(args.conditional_secret or [])
     required_vars = dedupe_strings(args.required_var or [])
     conditional_vars = dedupe_strings(args.conditional_var or [])
-    missing_secrets = [name for name in required_secrets if not str(os.environ.get(name, "")).strip()]
-    missing_conditional_secrets = [name for name in conditional_secrets if not str(os.environ.get(name, "")).strip()]
-    missing_vars = [name for name in required_vars if not str(os.environ.get(name, "")).strip()]
-    missing_conditional_vars = [name for name in conditional_vars if not str(os.environ.get(name, "")).strip()]
+    missing_secrets = _missing_env_names(required_secrets)
+    missing_conditional_secrets = _missing_env_names(conditional_secrets)
+    missing_vars = _missing_env_names(required_vars)
+    missing_conditional_vars = _missing_env_names(conditional_vars)
     payload = {
         "status": "pass" if not missing_secrets and not missing_vars else "fail",
         "timestamp_utc": utc_timestamp(),

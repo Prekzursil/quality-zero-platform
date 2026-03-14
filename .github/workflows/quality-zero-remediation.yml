@@ -1,5 +1,7 @@
 name: Quality Zero Remediation
 
+permissions: {}
+
 on:
   workflow_run:
     workflows: ["Quality Zero Gate"]
@@ -13,6 +15,9 @@ on:
 
 jobs:
   shared-remediation-loop:
+    permissions:
+      contents: write
+      pull-requests: write
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'failure' }}
     uses: ./.github/workflows/reusable-remediation-loop.yml
     with:

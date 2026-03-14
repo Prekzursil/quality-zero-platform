@@ -17,6 +17,17 @@ async function ensureDirectory(targetPath) {
   await fs.mkdir(targetPath, { recursive: true });
 }
 
+export function ensureManagedStatePath(targetPath, stateRoot) {
+  const resolvedPath = path.resolve(targetPath);
+  const resolvedRoot = path.resolve(stateRoot);
+  const relativePath = path.relative(resolvedRoot, resolvedPath);
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    throw new Error(`Provider UI state paths must stay under the managed state root: ${resolvedPath}`);
+  }
+
+  return resolvedPath;
+}
+
 async function loadPlaywrightChromium() {
   const runnerDir = process.env.QUALITY_ZERO_PROVIDER_UI_RUNNER_DIR;
   if (!runnerDir) {
@@ -62,39 +73,41 @@ async function promptForManualLogin(target, profileDir) {
   }
 }
 
-async function launchPersistentContext(args, { headlessDefault, includeManualPrompt }) {
-  const target = resolveProviderTarget(args.provider, { repo: args.repo, owner: args.owner });
-  await ensureDirectory(path.dirname(args.profileDir));
-  await ensureDirectory(args.profileDir);
-
-  const headless = args.headless ?? headlessDefault;
-  const chromium = await loadPlaywrightChromium();
-  let context;
+async function launchContextWithFallback(chromium, profileDir, options) {
   try {
-    context = await chromium.launchPersistentContext(args.profileDir, {
+    return await chromium.launchPersistentContext(profileDir, {
       channel: process.platform === 'win32' ? 'msedge' : undefined,
-      headless,
-      slowMo: args.slowMoMs,
-      viewport: { width: 1440, height: 960 }
+      ...options
     });
   } catch (error) {
     if (process.platform !== 'win32') {
       throw error;
     }
 
-    context = await chromium.launchPersistentContext(args.profileDir, {
-      headless,
-      slowMo: args.slowMoMs,
-      viewport: { width: 1440, height: 960 }
-    });
+    return chromium.launchPersistentContext(profileDir, options);
   }
+}
+
+async function launchPersistentContext(args, { headlessDefault, includeManualPrompt }) {
+  const target = resolveProviderTarget(args.provider, { repo: args.repo, owner: args.owner });
+  const profileDir = ensureManagedStatePath(args.profileDir, args.stateRoot);
+  await ensureDirectory(ensureManagedStatePath(path.dirname(profileDir), args.stateRoot));
+  await ensureDirectory(profileDir);
+
+  const headless = args.headless ?? headlessDefault;
+  const chromium = await loadPlaywrightChromium();
+  const context = await launchContextWithFallback(chromium, profileDir, {
+    headless,
+    slowMo: args.slowMoMs,
+    viewport: { width: 1440, height: 960 }
+  });
 
   const page = context.pages()[0] ?? await context.newPage();
   page.setDefaultTimeout(args.timeoutMs);
   await page.goto(target.targetUrl, { waitUntil: 'domcontentloaded', timeout: args.timeoutMs });
 
   if (includeManualPrompt) {
-    await promptForManualLogin(target, args.profileDir);
+    await promptForManualLogin(target, profileDir);
   }
 
   const title = await page.title();
@@ -195,12 +208,10 @@ async function main() {
 }
 
 if (isCliEntrypoint(import.meta.url)) {
-  (async () => {
-    try {
-      await main();
-    } catch (error) {
-      console.error(error instanceof Error ? error.stack ?? error.message : error);
-      process.exitCode = 1;
-    }
-  })();
+  try {
+    await main();
+  } catch (error) {
+    console.error(error instanceof Error ? error.stack ?? error.message : error);
+    process.exitCode = 1;
+  }
 }

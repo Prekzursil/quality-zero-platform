@@ -2,12 +2,11 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 import urllib.parse
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -60,7 +59,7 @@ def _collect_projects(args_projects: list[str]) -> list[str]:
     return dedupe_strings(inputs)
 
 
-def _render_md(payload: dict) -> str:
+def _render_md(payload: Mapping[str, Any]) -> str:
     lines = [
         "# Sentry Zero Gate",
         "",
@@ -87,36 +86,47 @@ def _issues_url(org: str, project_slug: str) -> str:
     return f"{SENTRY_API_BASE}/projects/{org_slug}/{project_param}/issues/?{query}"
 
 
-def main() -> int:
-    args = _parse_args()
-    token = (args.token or os.environ.get("SENTRY_AUTH_TOKEN", "")).strip()
-    org = (args.org or os.environ.get("SENTRY_ORG", "")).strip()
-    projects = _collect_projects(args.project)
+def _validate_sentry_inputs(token: str, org: str, projects: list[str]) -> list[str]:
     findings: list[str] = []
-    project_results: list[dict[str, Any]] = []
-
     if not token:
         findings.append("SENTRY_AUTH_TOKEN is missing.")
     if not org:
         findings.append("SENTRY_ORG is missing.")
     if not projects:
         findings.append("No Sentry projects configured.")
+    return findings
+
+
+def _collect_project_results(org: str, projects: list[str], token: str) -> tuple[list[dict[str, Any]], list[str]]:
+    findings: list[str] = []
+    project_results: list[dict[str, Any]] = []
+    for project in projects:
+        payload, headers = _request_json(_issues_url(org, project), token)
+        if not isinstance(payload, list):
+            raise RuntimeError("Unexpected Sentry issues response payload")
+        unresolved = _hits_from_headers(headers)
+        if unresolved is None:
+            unresolved = len(payload)
+        if unresolved != 0:
+            findings.append(f"Sentry project {project} has {unresolved} unresolved issues (expected 0).")
+        project_results.append({"project": project, "unresolved": unresolved})
+    return project_results, findings
+
+
+def main() -> int:
+    args = _parse_args()
+    token = (args.token or os.environ.get("SENTRY_AUTH_TOKEN", "")).strip()
+    org = (args.org or os.environ.get("SENTRY_ORG", "")).strip()
+    projects = _collect_projects(args.project)
+    findings = _validate_sentry_inputs(token, org, projects)
+    project_results: list[dict[str, Any]] = []
 
     status = "fail"
     if not findings:
         try:
-            for project in projects:
-                payload, headers = _request_json(_issues_url(org, project), token)
-                if not isinstance(payload, list):
-                    raise RuntimeError("Unexpected Sentry issues response payload")
-                unresolved = _hits_from_headers(headers)
-                if unresolved is None:
-                    unresolved = len(payload)
-                if unresolved != 0:
-                    findings.append(f"Sentry project {project} has {unresolved} unresolved issues (expected 0).")
-                project_results.append({"project": project, "unresolved": unresolved})
+            project_results, findings = _collect_project_results(org, projects, token)
             status = "pass" if not findings else "fail"
-        except Exception as exc:  # pragma: no cover
+        except (OSError, RuntimeError, ValueError) as exc:  # pragma: no cover
             findings.append(f"Sentry API request failed: {exc}")
 
     payload = {

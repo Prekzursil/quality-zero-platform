@@ -2,11 +2,10 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -26,20 +25,23 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _nested_payload_values(payload: Any) -> list[Any]:
+    if isinstance(payload, dict):
+        return list(payload.values())
+    if isinstance(payload, list):
+        return list(payload)
+    return []
+
+
 def extract_total_open(payload: Any) -> int | None:
     if isinstance(payload, dict):
         for key, value in payload.items():
             if key in TOTAL_KEYS and isinstance(value, (int, float)):
                 return int(value)
-        for nested in payload.values():
-            total = extract_total_open(nested)
-            if total is not None:
-                return total
-    elif isinstance(payload, list):
-        for nested in payload:
-            total = extract_total_open(nested)
-            if total is not None:
-                return total
+    for nested in _nested_payload_values(payload):
+        total = extract_total_open(nested)
+        if total is not None:
+            return total
     return None
 
 
@@ -58,7 +60,7 @@ def _request_json(url: str, token: str) -> dict[str, Any]:
     return payload
 
 
-def _render_md(payload: dict) -> str:
+def _render_md(payload: Mapping[str, Any]) -> str:
     lines = [
         "# DeepScan Zero Gate",
         "",
@@ -73,22 +75,29 @@ def _render_md(payload: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def main() -> int:
-    args = _parse_args()
-    token = (args.token or os.environ.get("DEEPSCAN_API_TOKEN", "")).strip()
-    open_issues_url = os.environ.get("DEEPSCAN_OPEN_ISSUES_URL", "").strip()
+def _validate_deepscan_inputs(token: str, open_issues_url: str) -> tuple[str, list[str]]:
     findings: list[str] = []
-    open_issues: int | None = None
-
+    normalized_url = open_issues_url
     if not token:
         findings.append("DEEPSCAN_API_TOKEN is missing.")
-    if not open_issues_url:
+    if not normalized_url:
         findings.append("DEEPSCAN_OPEN_ISSUES_URL is missing.")
     else:
         try:
-            open_issues_url = normalize_https_url(open_issues_url, allowed_host_suffixes={"deepscan.io"})
+            normalized_url = normalize_https_url(normalized_url, allowed_host_suffixes={"deepscan.io"})
         except ValueError as exc:
             findings.append(str(exc))
+    return normalized_url, findings
+
+
+def main() -> int:
+    args = _parse_args()
+    token = (args.token or os.environ.get("DEEPSCAN_API_TOKEN", "")).strip()
+    open_issues_url, findings = _validate_deepscan_inputs(
+        token,
+        os.environ.get("DEEPSCAN_OPEN_ISSUES_URL", "").strip(),
+    )
+    open_issues: int | None = None
 
     status = "fail"
     if not findings:
@@ -100,7 +109,7 @@ def main() -> int:
             elif open_issues != 0:
                 findings.append(f"DeepScan reports {open_issues} open issues (expected 0).")
             status = "pass" if not findings else "fail"
-        except Exception as exc:  # pragma: no cover
+        except (OSError, RuntimeError, ValueError) as exc:  # pragma: no cover
             findings.append(f"DeepScan API request failed: {exc}")
 
     payload = {

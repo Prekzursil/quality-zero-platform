@@ -1,5 +1,9 @@
 name: Quality Zero Platform
 
+permissions:
+  contents: read
+  id-token: write
+
 on:
   push:
     branches: [main]
@@ -9,6 +13,9 @@ on:
 
 jobs:
   shared-scanner-matrix:
+    permissions:
+      contents: read
+      id-token: write
     uses: ./.github/workflows/reusable-scanner-matrix.yml
     with:
       repo_slug: Prekzursil/quality-zero-platform

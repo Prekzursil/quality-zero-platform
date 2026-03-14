@@ -58,7 +58,7 @@ if ($RefreshDeps -and (Test-Path $nodeModulesPlaywright)) {
 }
 
 if (-not $SkipDependencyInstall -and -not (Test-Path $nodeModulesPlaywright)) {
-  Write-Host "Installing Playwright into external runner dir: $runnerDir"
+  Write-Information "Installing Playwright into external runner dir: $runnerDir" -InformationAction Continue
   & npm install --prefix $runnerDir --no-audit --no-fund --silent playwright | Out-Host
 }
 

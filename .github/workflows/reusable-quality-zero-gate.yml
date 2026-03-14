@@ -1,5 +1,7 @@
 name: Reusable Quality Zero Gate
 
+permissions: {}
+
 on:
   workflow_call:
     inputs:
@@ -25,6 +27,8 @@ on:
 
 jobs:
   quality-zero-gate:
+    permissions:
+      contents: read
     name: Quality Zero Gate
     runs-on: ubuntu-latest
     steps:

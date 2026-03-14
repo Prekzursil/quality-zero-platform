@@ -1,5 +1,7 @@
 name: Quality Zero Backlog
 
+permissions: {}
+
 on:
   schedule:
     - cron: "17 3 * * *"
@@ -12,6 +14,9 @@ on:
 
 jobs:
   shared-backlog-sweep:
+    permissions:
+      contents: write
+      pull-requests: write
     uses: ./.github/workflows/reusable-backlog-sweep.yml
     with:
       repo_slug: Prekzursil/quality-zero-platform

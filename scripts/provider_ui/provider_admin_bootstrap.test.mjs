@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { resolvePlaywrightChromium } from './provider_admin_bootstrap.mjs';
+import { ensureManagedStatePath, resolvePlaywrightChromium } from './provider_admin_bootstrap.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -36,4 +36,16 @@ test('importing bootstrap helpers does not execute the CLI entrypoint', () => {
   assert.equal(child.status, 0);
   assert.equal(child.stdout.trim(), '');
   assert.equal(child.stderr.trim(), '');
+});
+
+test('ensureManagedStatePath keeps provider state under the managed root', () => {
+  const stateRoot = path.resolve('C:/provider-ui-root');
+  assert.equal(
+    ensureManagedStatePath(path.join(stateRoot, 'chromium-profile'), stateRoot),
+    path.join(stateRoot, 'chromium-profile')
+  );
+  assert.throws(
+    () => ensureManagedStatePath('C:/outside-profile', stateRoot),
+    /managed state root/
+  );
 });

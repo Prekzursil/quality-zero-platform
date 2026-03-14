@@ -1,5 +1,7 @@
 name: Reusable Backlog Sweep
 
+permissions: {}
+
 on:
   workflow_call:
     inputs:

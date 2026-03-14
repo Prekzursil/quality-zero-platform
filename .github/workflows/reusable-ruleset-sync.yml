@@ -1,5 +1,7 @@
 name: Reusable Ruleset Sync
 
+permissions: {}
+
 on:
   workflow_call:
     inputs:

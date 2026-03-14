@@ -3,12 +3,11 @@ from __future__ import annotations
 
 import argparse
 import base64
-import json
 import os
 import sys
 import urllib.parse
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -50,7 +49,7 @@ def _request_json(url: str, auth_header: str) -> dict[str, Any]:
     return payload
 
 
-def _render_md(payload: dict) -> str:
+def _render_md(payload: Mapping[str, Any]) -> str:
     lines = [
         "# Sonar Zero Gate",
         "",
@@ -66,6 +65,50 @@ def _render_md(payload: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _build_sonar_query(project_key: str, *, branch: str, pull_request: str) -> dict[str, str]:
+    query = {"projectKey": project_key}
+    if branch:
+        query["branch"] = branch
+    if pull_request:
+        query["pullRequest"] = pull_request
+    return query
+
+
+def _load_sonar_findings(args: argparse.Namespace, auth: str) -> tuple[int, str, list[str]]:
+    issues_query = {
+        "componentKeys": args.project_key,
+        "resolved": "false",
+        "ps": "1",
+    }
+    if args.branch:
+        issues_query["branch"] = args.branch
+    if args.pull_request:
+        issues_query["pullRequest"] = args.pull_request
+    issues_payload = _request_json(
+        f"{SONAR_API_BASE}/api/issues/search?{urllib.parse.urlencode(issues_query)}",
+        auth,
+    )
+    open_issues = int((issues_payload.get("paging") or {}).get("total") or 0)
+
+    gate_query = _build_sonar_query(
+        args.project_key,
+        branch=args.branch,
+        pull_request=args.pull_request,
+    )
+    gate_payload = _request_json(
+        f"{SONAR_API_BASE}/api/qualitygates/project_status?{urllib.parse.urlencode(gate_query)}",
+        auth,
+    )
+    quality_gate = str((gate_payload.get("projectStatus") or {}).get("status") or "UNKNOWN")
+
+    findings: list[str] = []
+    if open_issues != 0:
+        findings.append(f"Sonar reports {open_issues} open issues (expected 0).")
+    if quality_gate != "OK":
+        findings.append(f"Sonar quality gate status is {quality_gate} (expected OK).")
+    return open_issues, quality_gate, findings
+
+
 def main() -> int:
     args = _parse_args()
     token = (args.token or os.environ.get("SONAR_TOKEN", "")).strip()
@@ -79,36 +122,9 @@ def main() -> int:
     else:
         try:
             auth = _auth_header(token)
-            issues_query = {
-                "componentKeys": args.project_key,
-                "resolved": "false",
-                "ps": "1",
-            }
-            if args.branch:
-                issues_query["branch"] = args.branch
-            if args.pull_request:
-                issues_query["pullRequest"] = args.pull_request
-            issues_payload = _request_json(
-                f"{SONAR_API_BASE}/api/issues/search?{urllib.parse.urlencode(issues_query)}",
-                auth,
-            )
-            open_issues = int((issues_payload.get("paging") or {}).get("total") or 0)
-            gate_query = {"projectKey": args.project_key}
-            if args.branch:
-                gate_query["branch"] = args.branch
-            if args.pull_request:
-                gate_query["pullRequest"] = args.pull_request
-            gate_payload = _request_json(
-                f"{SONAR_API_BASE}/api/qualitygates/project_status?{urllib.parse.urlencode(gate_query)}",
-                auth,
-            )
-            quality_gate = str((gate_payload.get("projectStatus") or {}).get("status") or "UNKNOWN")
-            if open_issues != 0:
-                findings.append(f"Sonar reports {open_issues} open issues (expected 0).")
-            if quality_gate != "OK":
-                findings.append(f"Sonar quality gate status is {quality_gate} (expected OK).")
+            open_issues, quality_gate, findings = _load_sonar_findings(args, auth)
             status = "pass" if not findings else "fail"
-        except Exception as exc:  # pragma: no cover
+        except (OSError, RuntimeError, ValueError) as exc:  # pragma: no cover
             findings.append(f"Sonar API request failed: {exc}")
             status = "fail"
 

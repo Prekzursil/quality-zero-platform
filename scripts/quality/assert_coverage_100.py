@@ -153,13 +153,7 @@ def _is_tests_only_report(reported_sources: set[str]) -> bool:
     )
 
 
-def evaluate(
-    stats: list[CoverageStats],
-    min_percent: float,
-    *,
-    required_sources: list[str] | None = None,
-    reported_sources: set[str] | None = None,
-) -> tuple[str, list[str]]:
+def _coverage_threshold_findings(stats: list[CoverageStats], min_percent: float) -> list[str]:
     findings: list[str] = []
     for item in stats:
         if item.percent < min_percent:
@@ -174,13 +168,30 @@ def evaluate(
         findings.append(
             f"combined coverage below {min_percent:.2f}%: {combined:.2f}% ({combined_covered}/{combined_total})"
         )
+    return findings
 
-    normalized_sources = reported_sources or set()
-    if _is_tests_only_report(normalized_sources):
+
+def _required_source_findings(reported_sources: set[str], required_sources: list[str]) -> list[str]:
+    findings: list[str] = []
+    if _is_tests_only_report(reported_sources):
         findings.append("coverage inputs only reference tests/ paths; first-party sources are missing.")
-    for missing_source in _find_missing_required_sources(normalized_sources, list(required_sources or [])):
-        findings.append(f"missing required source path: {missing_source}")
+    findings.extend(
+        f"missing required source path: {missing_source}"
+        for missing_source in _find_missing_required_sources(reported_sources, required_sources)
+    )
+    return findings
 
+
+def evaluate(
+    stats: list[CoverageStats],
+    min_percent: float,
+    *,
+    required_sources: list[str] | None = None,
+    reported_sources: set[str] | None = None,
+) -> tuple[str, list[str]]:
+    normalized_sources = reported_sources or set()
+    findings = _coverage_threshold_findings(stats, min_percent)
+    findings.extend(_required_source_findings(normalized_sources, list(required_sources or [])))
     return ("pass" if not findings else "fail", findings)
 
 

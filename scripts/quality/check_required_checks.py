@@ -2,11 +2,10 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 import time
-from typing import Any
+from typing import Any, Mapping
 
 from pathlib import Path
 
@@ -45,49 +44,86 @@ def _api_get(repo: str, path: str, token: str) -> dict[str, Any]:
     return payload
 
 
+def _context_details(state: str, conclusion: str, source: str) -> dict[str, str]:
+    return {
+        "state": state,
+        "conclusion": conclusion,
+        "source": source,
+    }
+
+
 def _collect_contexts(check_runs_payload: dict[str, Any], status_payload: dict[str, Any]) -> dict[str, dict[str, str]]:
     contexts: dict[str, dict[str, str]] = {}
     for run in check_runs_payload.get("check_runs", []) or []:
         name = str(run.get("name") or "").strip()
         if not name:
             continue
-        contexts[name] = {
-            "state": str(run.get("status") or ""),
-            "conclusion": str(run.get("conclusion") or ""),
-            "source": "check_run",
-        }
+        contexts[name] = _context_details(
+            str(run.get("status") or ""),
+            str(run.get("conclusion") or ""),
+            "check_run",
+        )
 
     for status in status_payload.get("statuses", []) or []:
         name = str(status.get("context") or "").strip()
         if not name:
             continue
-        contexts[name] = {
-            "state": str(status.get("state") or ""),
-            "conclusion": str(status.get("state") or ""),
-            "source": "status",
-        }
+        state = str(status.get("state") or "")
+        contexts[name] = _context_details(state, state, "status")
     return contexts
 
 
+def _evaluate_observed_context(context: str, observed: dict[str, str] | None) -> str | None:
+    if not observed:
+        return None
+    if observed["source"] == "check_run":
+        if observed["state"] != "completed":
+            return f"{context}: status={observed['state']}"
+        if observed["conclusion"] != "success":
+            return f"{context}: conclusion={observed['conclusion']}"
+        return None
+    if observed["conclusion"] != "success":
+        return f"{context}: state={observed['conclusion']}"
+    return None
+
+
 def _evaluate(required: list[str], contexts: dict[str, dict[str, str]]) -> tuple[str, list[str], list[str]]:
-    missing: list[str] = []
-    failed: list[str] = []
-    for context in required:
-        observed = contexts.get(context)
-        if not observed:
-            missing.append(context)
-            continue
-        if observed["source"] == "check_run":
-            if observed["state"] != "completed":
-                failed.append(f"{context}: status={observed['state']}")
-            elif observed["conclusion"] != "success":
-                failed.append(f"{context}: conclusion={observed['conclusion']}")
-        elif observed["conclusion"] != "success":
-            failed.append(f"{context}: state={observed['conclusion']}")
+    missing = [context for context in required if context not in contexts]
+    failed = [
+        failure
+        for context in required
+        for failure in [_evaluate_observed_context(context, contexts.get(context))]
+        if failure
+    ]
     return ("pass" if not missing and not failed else "fail", missing, failed)
 
 
-def _render_md(payload: dict[str, Any]) -> str:
+def _has_in_progress_check_runs(contexts: dict[str, dict[str, str]]) -> bool:
+    return any(
+        details.get("state") != "completed"
+        for details in contexts.values()
+        if details.get("source") == "check_run"
+    )
+
+
+def _collect_payload(repo: str, sha: str, required: list[str], token: str) -> dict[str, Any]:
+    check_runs = _api_get(repo, f"commits/{sha}/check-runs?per_page=100", token)
+    statuses = _api_get(repo, f"commits/{sha}/status", token)
+    contexts = _collect_contexts(check_runs, statuses)
+    status, missing, failed = _evaluate(required, contexts)
+    return {
+        "status": status,
+        "repo": repo,
+        "sha": sha,
+        "required": required,
+        "missing": missing,
+        "failed": failed,
+        "contexts": contexts,
+        "timestamp_utc": utc_timestamp(),
+    }
+
+
+def _render_md(payload: Mapping[str, Any]) -> str:
     lines = [
         "# Quality Zero Gate - Required Contexts",
         "",
@@ -115,24 +151,10 @@ def main() -> int:
     deadline = time.time() + max(args.timeout_seconds, 1)
     final_payload: dict[str, Any] | None = None
     while time.time() <= deadline:
-        check_runs = _api_get(args.repo, f"commits/{args.sha}/check-runs?per_page=100", token)
-        statuses = _api_get(args.repo, f"commits/{args.sha}/status", token)
-        contexts = _collect_contexts(check_runs, statuses)
-        status, missing, failed = _evaluate(required, contexts)
-        final_payload = {
-            "status": status,
-            "repo": args.repo,
-            "sha": args.sha,
-            "required": required,
-            "missing": missing,
-            "failed": failed,
-            "contexts": contexts,
-            "timestamp_utc": utc_timestamp(),
-        }
-        if status == "pass":
+        final_payload = _collect_payload(args.repo, args.sha, required, token)
+        if final_payload["status"] == "pass":
             break
-        in_progress = any(v.get("state") != "completed" for v in contexts.values() if v.get("source") == "check_run")
-        if not missing and not in_progress:
+        if not final_payload["missing"] and not _has_in_progress_check_runs(final_payload["contexts"]):
             break
         time.sleep(max(args.poll_seconds, 1))
 

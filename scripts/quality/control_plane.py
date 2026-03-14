@@ -123,52 +123,64 @@ def _normalize_coverage_inputs(raw_inputs: Any) -> list[dict[str, str]]:
     return normalized
 
 
-def _normalize_coverage(raw: dict[str, Any]) -> dict[str, Any]:
-    coverage = deepcopy(raw or {})
+def _infer_coverage_inputs(coverage: dict[str, Any]) -> list[dict[str, str]]:
     inputs = _normalize_coverage_inputs(coverage.get("inputs", []))
-
     legacy_path = str(coverage.get("artifact_path", "")).strip()
-    if not inputs and legacy_path:
-        inferred = "xml" if legacy_path.endswith(".xml") else "lcov"
-        inputs = [{"format": inferred, "name": "default", "path": legacy_path}]
+    if inputs or not legacy_path:
+        return inputs
 
-    raw_setup = coverage.get("setup", {})
-    setup = deepcopy(raw_setup) if isinstance(raw_setup, dict) else {}
-    raw_java = setup.get("java", {})
+    inferred = "xml" if legacy_path.endswith(".xml") else "lcov"
+    return [{"format": inferred, "name": "default", "path": legacy_path}]
+
+
+def _normalize_java_setup(raw_java: Any) -> dict[str, Any]:
     if isinstance(raw_java, str):
         raw_java = {"distribution": "temurin", "version": raw_java}
     java = deepcopy(raw_java) if isinstance(raw_java, dict) else {}
+    return {
+        "distribution": str(java.get("distribution", "")).strip(),
+        "version": str(java.get("version", "")).strip(),
+    }
 
-    raw_assert_mode = coverage.get("assert_mode", {})
-    if isinstance(raw_assert_mode, str):
-        raw_assert_mode = {"default": raw_assert_mode}
-    assert_mode = {"default": "enforce"}
-    if isinstance(raw_assert_mode, dict):
-        for key, value in raw_assert_mode.items():
-            text = str(value or "").strip()
-            if text:
-                assert_mode[str(key)] = text
 
-    coverage["runner"] = str(coverage.get("runner", "ubuntu-latest")).strip() or "ubuntu-latest"
-    coverage["shell"] = str(coverage.get("shell", "bash")).strip() or "bash"
-    coverage["command"] = str(coverage.get("command", "")).strip()
-    coverage["inputs"] = inputs
-    coverage["require_sources"] = dedupe_strings(coverage.get("require_sources", []))
-    coverage["min_percent"] = float(coverage.get("min_percent", 100.0))
-    coverage["assert_mode"] = assert_mode
-    coverage["evidence_note"] = str(coverage.get("evidence_note", "")).strip()
-    coverage["setup"] = {
+def _normalize_coverage_setup(raw_setup: Any) -> dict[str, Any]:
+    setup = deepcopy(raw_setup) if isinstance(raw_setup, dict) else {}
+    return {
         "python": str(setup.get("python", "")).strip(),
         "node": str(setup.get("node", "")).strip(),
         "go": str(setup.get("go", "")).strip(),
         "dotnet": str(setup.get("dotnet", "")).strip(),
         "rust": bool(setup.get("rust", False)),
         "system_packages": dedupe_strings(setup.get("system_packages", [])),
-        "java": {
-            "distribution": str(java.get("distribution", "")).strip(),
-            "version": str(java.get("version", "")).strip(),
-        },
+        "java": _normalize_java_setup(setup.get("java", {})),
     }
+
+
+def _normalize_coverage_assert_mode(raw_assert_mode: Any) -> dict[str, str]:
+    if isinstance(raw_assert_mode, str):
+        raw_assert_mode = {"default": raw_assert_mode}
+
+    assert_mode = {"default": "enforce"}
+    if isinstance(raw_assert_mode, dict):
+        for key, value in raw_assert_mode.items():
+            text = str(value or "").strip()
+            if text:
+                assert_mode[str(key)] = text
+    return assert_mode
+
+
+def _normalize_coverage(raw: dict[str, Any]) -> dict[str, Any]:
+    coverage = deepcopy(raw or {})
+    inputs = _infer_coverage_inputs(coverage)
+    coverage["runner"] = str(coverage.get("runner", "ubuntu-latest")).strip() or "ubuntu-latest"
+    coverage["shell"] = str(coverage.get("shell", "bash")).strip() or "bash"
+    coverage["command"] = str(coverage.get("command", "")).strip()
+    coverage["inputs"] = inputs
+    coverage["require_sources"] = dedupe_strings(coverage.get("require_sources", []))
+    coverage["min_percent"] = float(coverage.get("min_percent", 100.0))
+    coverage["assert_mode"] = _normalize_coverage_assert_mode(coverage.get("assert_mode", {}))
+    coverage["evidence_note"] = str(coverage.get("evidence_note", "")).strip()
+    coverage["setup"] = _normalize_coverage_setup(coverage.get("setup", {}))
     return coverage
 
 
@@ -254,7 +266,7 @@ def _finalize_vendors(profile: dict[str, Any]) -> dict[str, Any]:
     return vendors
 
 
-def load_repo_profile(inventory: dict[str, Any], repo_slug: str) -> dict[str, Any]:
+def _resolve_repo_sources(inventory: dict[str, Any], repo_slug: str) -> tuple[dict[str, Any], str, dict[str, Any], str, dict[str, Any]]:
     repo_entry = next((item for item in inventory["repos"] if item.get("slug") == repo_slug), None)
     if repo_entry is None:
         raise KeyError(f"Repo {repo_slug} not found in inventory")
@@ -267,7 +279,10 @@ def load_repo_profile(inventory: dict[str, Any], repo_slug: str) -> dict[str, An
     repo_profile = _load_yaml(profile_path)
     stack_id = str(repo_profile.get("stack", "")).strip()
     stack_profile = _load_stack(inventory, stack_id)
+    return repo_entry, profile_id, repo_profile, stack_id, stack_profile
 
+
+def _merge_repo_profile(stack_profile: dict[str, Any], repo_profile: dict[str, Any]) -> tuple[dict[str, Any], str]:
     merged = _deep_merge(stack_profile, repo_profile)
     required_contexts_mode = str(repo_profile.get("required_contexts_mode", "merge")).strip() or "merge"
     if required_contexts_mode == "replace":
@@ -286,7 +301,19 @@ def load_repo_profile(inventory: dict[str, Any], repo_slug: str) -> dict[str, An
     merged["required_vars"] = dedupe_strings([*stack_profile.get("required_vars", []), *repo_profile.get("required_vars", [])])
     merged["providers"] = _deep_merge(stack_profile.get("providers", {}), repo_profile.get("providers", {}))
     merged["vendors"] = _deep_merge(stack_profile.get("vendors", {}), repo_profile.get("vendors", {}))
-    merged = _deep_merge(
+    return merged, required_contexts_mode
+
+
+def _apply_inventory_overrides(
+    merged: dict[str, Any],
+    *,
+    repo_entry: dict[str, Any],
+    repo_slug: str,
+    profile_id: str,
+    stack_id: str,
+    required_contexts_mode: str,
+) -> dict[str, Any]:
+    return _deep_merge(
         merged,
         {
             "slug": repo_slug,
@@ -299,6 +326,8 @@ def load_repo_profile(inventory: dict[str, Any], repo_slug: str) -> dict[str, An
         },
     )
 
+
+def _finalize_repo_profile(merged: dict[str, Any], repo_slug: str) -> dict[str, Any]:
     owner, repo_name = repo_slug.split("/", 1)
     merged["owner"] = owner
     merged["repo_name"] = repo_name
@@ -325,6 +354,20 @@ def load_repo_profile(inventory: dict[str, Any], repo_slug: str) -> dict[str, An
     merged["vendors"] = _finalize_vendors(merged)
     merged["providers"] = deepcopy(merged["vendors"])
     return merged
+
+
+def load_repo_profile(inventory: dict[str, Any], repo_slug: str) -> dict[str, Any]:
+    repo_entry, profile_id, repo_profile, stack_id, stack_profile = _resolve_repo_sources(inventory, repo_slug)
+    merged, required_contexts_mode = _merge_repo_profile(stack_profile, repo_profile)
+    merged = _apply_inventory_overrides(
+        merged,
+        repo_entry=repo_entry,
+        repo_slug=repo_slug,
+        profile_id=profile_id,
+        stack_id=stack_id,
+        required_contexts_mode=required_contexts_mode,
+    )
+    return _finalize_repo_profile(merged, repo_slug)
 
 
 def active_required_contexts(profile: dict[str, Any], *, event_name: str) -> list[str]:
@@ -378,7 +421,7 @@ def build_ruleset_payload(profile: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def validate_profile(profile: dict[str, Any]) -> list[str]:
+def _validate_control_plane_lanes(profile: dict[str, Any]) -> list[str]:
     findings: list[str] = []
     if not profile.get("verify_command"):
         findings.append(f"{profile['slug']}: verify_command is required")
@@ -388,6 +431,7 @@ def validate_profile(profile: dict[str, Any]) -> list[str]:
         findings.append(f"{profile['slug']}: codex_auth_lane must be chatgpt-account")
     if profile.get("provider_ui_mode") != "playwright-manual-login":
         findings.append(f"{profile['slug']}: provider_ui_mode must be playwright-manual-login")
+
     codex_environment = profile.get("codex_environment", {})
     if codex_environment.get("mode") != "automatic":
         findings.append(f"{profile['slug']}: codex_environment.mode must be automatic")
@@ -404,6 +448,11 @@ def validate_profile(profile: dict[str, Any]) -> list[str]:
         findings.append(f"{profile['slug']}: codex_environment.runner_labels is required")
     elif "self-hosted" not in runner_labels:
         findings.append(f"{profile['slug']}: codex_environment.runner_labels must include self-hosted")
+    return findings
+
+
+def _validate_required_context_sets(profile: dict[str, Any]) -> list[str]:
+    findings: list[str] = []
     if not active_required_contexts(profile, event_name="ruleset"):
         findings.append(f"{profile['slug']}: at least one required context is required")
     pr_contexts = dedupe_strings(
@@ -421,6 +470,11 @@ def validate_profile(profile: dict[str, Any]) -> list[str]:
         findings.append(
             f"{profile['slug']}: required_contexts.target is missing {', '.join(missing_target)}"
         )
+    return findings
+
+
+def _validate_secret_contract(profile: dict[str, Any]) -> list[str]:
+    findings: list[str] = []
     duplicate_conditional = [name for name in profile.get("conditional_secrets", []) if name in profile.get("required_secrets", [])]
     if duplicate_conditional:
         findings.append(
@@ -428,29 +482,45 @@ def validate_profile(profile: dict[str, Any]) -> list[str]:
         )
     if "OPENAI_API_KEY" in profile.get("required_secrets", []):
         findings.append(f"{profile['slug']}: OPENAI_API_KEY must not be part of required_secrets")
+    return findings
 
-    if profile.get("visual_pair_required"):
-        chromatic = profile["vendors"]["chromatic"]["status_context"]
-        applitools = profile["vendors"]["applitools"]["status_context"]
-        ruleset_contexts = set(active_required_contexts(profile, event_name="ruleset"))
-        target_contexts = set(profile["required_contexts"].get("target", []))
-        if (chromatic in ruleset_contexts) != (applitools in ruleset_contexts):
-            findings.append(f"{profile['slug']}: visual_pair_required needs both Chromatic and Applitools contexts in required_now")
-        if (chromatic in target_contexts) != (applitools in target_contexts):
-            findings.append(f"{profile['slug']}: visual_pair_required needs both Chromatic and Applitools contexts in target")
 
+def _validate_visual_pair_contract(profile: dict[str, Any]) -> list[str]:
+    if not profile.get("visual_pair_required"):
+        return []
+
+    findings: list[str] = []
+    chromatic = profile["vendors"]["chromatic"]["status_context"]
+    applitools = profile["vendors"]["applitools"]["status_context"]
+    ruleset_contexts = set(active_required_contexts(profile, event_name="ruleset"))
+    target_contexts = set(profile["required_contexts"].get("target", []))
+    if (chromatic in ruleset_contexts) != (applitools in ruleset_contexts):
+        findings.append(f"{profile['slug']}: visual_pair_required needs both Chromatic and Applitools contexts in required_now")
+    if (chromatic in target_contexts) != (applitools in target_contexts):
+        findings.append(f"{profile['slug']}: visual_pair_required needs both Chromatic and Applitools contexts in target")
+    return findings
+
+
+def _validate_coverage_contract(profile: dict[str, Any]) -> list[str]:
+    findings: list[str] = []
     coverage = profile.get("coverage", {})
-    if profile.get("enabled_scanners", {}).get("coverage", False):
-        if not coverage.get("command"):
-            findings.append(f"{profile['slug']}: coverage.command is required")
-        if not coverage.get("inputs"):
-            findings.append(f"{profile['slug']}: coverage.inputs must declare at least one report")
-        if coverage.get("shell") not in {"bash", "pwsh"}:
-            findings.append(f"{profile['slug']}: coverage.shell must be bash or pwsh")
-        for mode_name, mode_value in coverage.get("assert_mode", {}).items():
-            if mode_value not in {"enforce", "evidence_only"}:
-                findings.append(f"{profile['slug']}: coverage.assert_mode.{mode_name} must be enforce or evidence_only")
+    if not profile.get("enabled_scanners", {}).get("coverage", False):
+        return findings
 
+    if not coverage.get("command"):
+        findings.append(f"{profile['slug']}: coverage.command is required")
+    if not coverage.get("inputs"):
+        findings.append(f"{profile['slug']}: coverage.inputs must declare at least one report")
+    if coverage.get("shell") not in {"bash", "pwsh"}:
+        findings.append(f"{profile['slug']}: coverage.shell must be bash or pwsh")
+    for mode_name, mode_value in coverage.get("assert_mode", {}).items():
+        if mode_value not in {"enforce", "evidence_only"}:
+            findings.append(f"{profile['slug']}: coverage.assert_mode.{mode_name} must be enforce or evidence_only")
+    return findings
+
+
+def _validate_vendor_urls(profile: dict[str, Any]) -> list[str]:
+    findings: list[str] = []
     for vendor_name, vendor_payload in profile["vendors"].items():
         if not isinstance(vendor_payload, dict):
             continue
@@ -460,6 +530,20 @@ def validate_profile(profile: dict[str, Any]) -> list[str]:
                     normalize_https_url(str(value))
                 except ValueError as exc:
                     findings.append(f"{profile['slug']}: invalid {vendor_name}.{key}: {exc}")
+    return findings
+
+
+def validate_profile(profile: dict[str, Any]) -> list[str]:
+    findings: list[str] = []
+    for validator in (
+        _validate_control_plane_lanes,
+        _validate_required_context_sets,
+        _validate_secret_contract,
+        _validate_visual_pair_contract,
+        _validate_coverage_contract,
+        _validate_vendor_urls,
+    ):
+        findings.extend(validator(profile))
     return findings
 
 

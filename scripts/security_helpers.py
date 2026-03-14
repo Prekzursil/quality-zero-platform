@@ -1,10 +1,35 @@
 from __future__ import annotations
 
+import http.client
 import ipaddress
 import json
-import urllib.request
 from typing import Any, Mapping
 from urllib.parse import urlparse, urlunparse
+
+
+_FORBIDDEN_IP_FLAGS = (
+    "is_private",
+    "is_loopback",
+    "is_link_local",
+    "is_reserved",
+    "is_multicast",
+)
+
+
+def _get_ip_flag(ip_value: ipaddress._BaseAddress, flag_name: str) -> bool:
+    value = getattr(ip_value, flag_name)
+    return bool(value() if callable(value) else value)
+
+
+def _is_forbidden_ip_address(ip_value: ipaddress._BaseAddress) -> bool:
+    return any(_get_ip_flag(ip_value, flag_name) for flag_name in _FORBIDDEN_IP_FLAGS)
+
+
+def _build_request_target(parsed_url) -> str:
+    target = parsed_url.path or "/"
+    if parsed_url.query:
+        target = f"{target}?{parsed_url.query}"
+    return target
 
 
 def normalize_https_url(
@@ -37,13 +62,7 @@ def normalize_https_url(
     except ValueError:
         ip_value = None
 
-    if ip_value is not None and (
-        ip_value.is_private
-        or ip_value.is_loopback
-        or ip_value.is_link_local
-        or ip_value.is_reserved
-        or ip_value.is_multicast
-    ):
+    if ip_value is not None and _is_forbidden_ip_address(ip_value):
         raise ValueError(f"Private or local addresses are not allowed: {hostname}")
 
     if hostname in {"localhost", "localhost.localdomain"}:
@@ -70,14 +89,19 @@ def load_json_https(
         allowed_hosts=allowed_hosts,
         allowed_host_suffixes=allowed_host_suffixes,
     )
-    request = urllib.request.Request(
-        safe_url,
-        headers=dict(headers or {}),
-        method=method,
-        data=data,
-    )
-    # nosec B310: normalize_https_url restricts this request to allowlisted https hosts and blocks local/private addresses.
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        payload = json.loads(response.read().decode("utf-8"))
-        response_headers = {key.lower(): value for key, value in response.headers.items()}
+    parsed_url = urlparse(safe_url)
+    request_target = _build_request_target(parsed_url)
+    connection = http.client.HTTPSConnection(parsed_url.hostname, timeout=timeout)
+    try:
+        connection.request(
+            method,
+            request_target,
+            body=data,
+            headers=dict(headers or {}),
+        )
+        with connection.getresponse() as response:
+            payload = json.loads(response.read().decode("utf-8"))
+            response_headers = {key.lower(): value for key, value in response.headers.items()}
+    finally:
+        connection.close()
     return payload, response_headers

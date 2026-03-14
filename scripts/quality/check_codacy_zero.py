@@ -2,14 +2,13 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -52,24 +51,27 @@ def _request_json(url: str, token: str, *, method: str = "GET", data: dict[str, 
     return payload
 
 
+def _nested_payload_values(payload: Any) -> list[Any]:
+    if isinstance(payload, dict):
+        return list(payload.values())
+    if isinstance(payload, list):
+        return list(payload)
+    return []
+
+
 def extract_total_open(payload: Any) -> int | None:
     if isinstance(payload, dict):
         for key, value in payload.items():
             if key in TOTAL_KEYS and isinstance(value, (int, float)):
                 return int(value)
-        for value in payload.values():
-            total = extract_total_open(value)
-            if total is not None:
-                return total
-    elif isinstance(payload, list):
-        for item in payload:
-            total = extract_total_open(item)
-            if total is not None:
-                return total
+    for nested in _nested_payload_values(payload):
+        total = extract_total_open(nested)
+        if total is not None:
+            return total
     return None
 
 
-def _render_md(payload: dict) -> str:
+def _render_md(payload: Mapping[str, Any]) -> str:
     lines = [
         "# Codacy Zero Gate",
         "",
@@ -84,6 +86,40 @@ def _render_md(payload: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _provider_candidates(primary_provider: str) -> list[str]:
+    return list(dict.fromkeys([primary_provider, "gh", "github"]))
+
+
+def _query_codacy_open_issues(owner: str, repo: str, token: str, provider_candidates: list[str]) -> tuple[int | None, list[str], Exception | None]:
+    findings: list[str] = []
+    last_exc: Exception | None = None
+    query = urllib.parse.urlencode({"limit": "1"})
+    for provider in provider_candidates:
+        url = f"{CODACY_API_BASE}/api/v3/analysis/organizations/{provider}/{owner}/repositories/{repo}/issues/search?{query}"
+        try:
+            payload = _request_json(url, token, method="POST", data={})
+        except urllib.error.HTTPError as exc:
+            last_exc = exc
+            if exc.code == 404:
+                continue
+            return None, [f"Codacy API request failed: HTTP {exc.code}"], last_exc
+        except (OSError, RuntimeError, ValueError) as exc:  # pragma: no cover
+            last_exc = exc
+            return None, [f"Codacy API request failed: {exc}"], last_exc
+
+        open_issues = extract_total_open(payload)
+        if open_issues is None:
+            findings.append("Codacy response did not include a parseable total issue count.")
+        elif open_issues != 0:
+            findings.append(f"Codacy reports {open_issues} open issues (expected 0).")
+        return open_issues, findings, last_exc
+
+    findings.append(f"Codacy API endpoint was not found for providers: {', '.join(provider_candidates)}.")
+    if last_exc is not None:
+        findings.append(f"Last Codacy API error: {last_exc}")
+    return None, findings, last_exc
+
+
 def main() -> int:
     args = _parse_args()
     token = (args.token or os.environ.get("CODACY_API_TOKEN", "")).strip()
@@ -96,35 +132,10 @@ def main() -> int:
         findings.append("CODACY_API_TOKEN is missing.")
         status = "fail"
     else:
-        provider_candidates = list(dict.fromkeys([args.provider, "gh", "github"]))
-        query = urllib.parse.urlencode({"limit": "1"})
-        last_exc: Exception | None = None
+        provider_candidates = _provider_candidates(args.provider)
         status = "fail"
-        for provider in provider_candidates:
-            url = f"{CODACY_API_BASE}/api/v3/analysis/organizations/{provider}/{owner}/repositories/{repo}/issues/search?{query}"
-            try:
-                payload = _request_json(url, token, method="POST", data={})
-                open_issues = extract_total_open(payload)
-                if open_issues is None:
-                    findings.append("Codacy response did not include a parseable total issue count.")
-                elif open_issues != 0:
-                    findings.append(f"Codacy reports {open_issues} open issues (expected 0).")
-                status = "pass" if not findings else "fail"
-                break
-            except urllib.error.HTTPError as exc:
-                last_exc = exc
-                if exc.code == 404:
-                    continue
-                findings.append(f"Codacy API request failed: HTTP {exc.code}")
-                break
-            except Exception as exc:  # pragma: no cover
-                last_exc = exc
-                findings.append(f"Codacy API request failed: {exc}")
-                break
-        else:
-            findings.append(f"Codacy API endpoint was not found for providers: {', '.join(provider_candidates)}.")
-            if last_exc is not None:
-                findings.append(f"Last Codacy API error: {last_exc}")
+        open_issues, findings, _ = _query_codacy_open_issues(owner, repo, token, provider_candidates)
+        status = "pass" if not findings else "fail"
 
     payload = {
         "status": status,

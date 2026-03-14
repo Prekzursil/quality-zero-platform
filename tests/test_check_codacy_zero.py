@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from email.message import Message
 from unittest.mock import patch
 
 from scripts.quality.check_codacy_zero import _query_codacy_open_issues, build_issues_url
@@ -30,7 +31,8 @@ class CodacyZeroTests(unittest.TestCase):
             if isinstance(current, Exception):
                 from urllib.error import HTTPError
 
-                raise HTTPError(url, 404, "Not Found", hdrs=None, fp=None)
+                headers = Message()
+                raise HTTPError(url, 404, "Not Found", hdrs=headers, fp=None)
             return current
 
         with patch("scripts.quality.check_codacy_zero._request_json", side_effect=fake_request):
@@ -62,16 +64,11 @@ class CodacyZeroTests(unittest.TestCase):
 
         self.assertEqual(open_issues, 0)
         self.assertEqual(findings, [])
-        self.assertEqual(
-            captured,
-            [
-                (
-                    "https://app.codacy.com/api/v3/analysis/organizations/gh/Prekzursil/repositories/quality-zero-platform/pull-requests/5/issues?status=new&limit=1",
-                    "GET",
-                    None,
-                )
-            ],
+        expected_url = (
+            "https://app.codacy.com/api/v3/analysis/organizations/gh/Prekzursil/repositories/"
+            "quality-zero-platform/pull-requests/5/issues?status=new&limit=1"
         )
+        self.assertEqual(captured, [(expected_url, "GET", None)])
 
 
 if __name__ == "__main__":

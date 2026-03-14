@@ -3,9 +3,10 @@ from __future__ import annotations
 import http.client
 import ipaddress
 import json
+from email.message import Message
 from typing import Any, Mapping
+from urllib.error import HTTPError
 from urllib.parse import ParseResult, urlparse, urlunparse
-from urllib.request import Request, urlopen
 
 
 _FORBIDDEN_IP_FLAGS = (
@@ -94,19 +95,54 @@ def normalize_https_url(
     return _sanitize_url(parsed, strip_query=strip_query)
 
 
-def _build_request(safe_url: str, *, headers: Mapping[str, str] | None, method: str, data: bytes | None) -> Request:
-    return Request(
-        safe_url,
-        data=data,
-        headers=dict(headers or {}),
-        method=method,
-    )
+def _build_request_path(parsed: ParseResult) -> str:
+    request_path = parsed.path or "/"
+    if parsed.query:
+        request_path = f"{request_path}?{parsed.query}"
+    return request_path
 
 
-def _read_json_response(request: Request, *, timeout: int) -> tuple[Any, dict[str, str]]:
-    with urlopen(request, timeout=timeout) as response:
-        payload = json.loads(response.read().decode("utf-8"))
-        response_headers = {key.lower(): value for key, value in response.headers.items()}
+def _message_from_headers(response_headers: Mapping[str, str]) -> Message:
+    message = Message()
+    for key, value in response_headers.items():
+        message[key] = value
+    return message
+
+
+def _open_https_connection(parsed: ParseResult, *, timeout: int) -> http.client.HTTPSConnection:
+    return http.client.HTTPSConnection(parsed.hostname, parsed.port or 443, timeout=timeout)
+
+
+def _read_json_response(
+    parsed: ParseResult,
+    *,
+    headers: Mapping[str, str] | None,
+    method: str,
+    data: bytes | None,
+    timeout: int,
+) -> tuple[Any, dict[str, str]]:
+    connection = _open_https_connection(parsed, timeout=timeout)
+    try:
+        connection.request(
+            method,
+            _build_request_path(parsed),
+            body=data,
+            headers=dict(headers or {}),
+        )
+        response = connection.getresponse()
+        payload_bytes = response.read()
+        response_headers = {key.lower(): value for key, value in response.getheaders()}
+        if response.status >= 400:
+            raise HTTPError(
+                urlunparse(parsed),
+                response.status,
+                response.reason,
+                hdrs=_message_from_headers(response_headers),
+                fp=None,
+            )
+        payload = json.loads(payload_bytes.decode("utf-8"))
+    finally:
+        connection.close()
     return payload, response_headers
 
 
@@ -125,10 +161,11 @@ def load_json_https(
         allowed_hosts=allowed_hosts,
         allowed_host_suffixes=allowed_host_suffixes,
     )
-    request = _build_request(
-        safe_url,
+    parsed = urlparse(safe_url)
+    return _read_json_response(
+        parsed,
         headers=headers,
         method=method,
         data=data,
+        timeout=timeout,
     )
-    return _read_json_response(request, timeout=timeout)

@@ -13,8 +13,11 @@ import {
   resolveProviderTarget
 } from './provider_admin_config.mjs';
 
-async function ensureDirectory(targetPath) {
-  await fs.mkdir(targetPath, { recursive: true });
+async function ensureManagedDirectory(targetPath, stateRoot) {
+  const managedPath = ensureManagedStatePath(targetPath, stateRoot);
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- managed paths are validated to remain under the external provider-ui state root.
+  await fs.mkdir(managedPath, { recursive: true });
+  return managedPath;
 }
 
 export function ensureManagedStatePath(targetPath, stateRoot) {
@@ -90,9 +93,8 @@ async function launchContextWithFallback(chromium, profileDir, options) {
 
 async function launchPersistentContext(args, { headlessDefault, includeManualPrompt }) {
   const target = resolveProviderTarget(args.provider, { repo: args.repo, owner: args.owner });
-  const profileDir = ensureManagedStatePath(args.profileDir, args.stateRoot);
-  await ensureDirectory(ensureManagedStatePath(path.dirname(profileDir), args.stateRoot));
-  await ensureDirectory(profileDir);
+  const profileDir = await ensureManagedDirectory(args.profileDir, args.stateRoot);
+  await ensureManagedDirectory(path.dirname(profileDir), args.stateRoot);
 
   const headless = args.headless ?? headlessDefault;
   const chromium = await loadPlaywrightChromium();
@@ -207,15 +209,15 @@ async function main() {
   }
 }
 
+function reportCliError(error) {
+  console.error(error instanceof Error ? error.stack ?? error.message : error);
+  process.exitCode = 1;
+}
+
 async function runCli() {
-  try {
-    await main();
-  } catch (error) {
-    console.error(error instanceof Error ? error.stack ?? error.message : error);
-    process.exitCode = 1;
-  }
+  await main();
 }
 
 if (isCliEntrypoint(import.meta.url)) {
-  await runCli();
+  runCli().catch(reportCliError);
 }

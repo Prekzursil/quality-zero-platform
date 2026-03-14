@@ -63,18 +63,15 @@ export const PROVIDERS = Object.freeze({
 
 export const PROVIDER_KEYS = Object.freeze(Object.keys(PROVIDERS));
 
+function resolveStateBaseDir(env = process.env) {
+  return env.LOCALAPPDATA
+    ? path.join(env.LOCALAPPDATA, 'quality-zero-platform')
+    : path.join(os.homedir(), '.quality-zero-platform');
+}
+
 export function getDefaultStateRoot(env = process.env) {
   const explicit = env.QUALITY_ZERO_PROVIDER_UI_HOME;
-  if (explicit) {
-    return path.resolve(explicit);
-  }
-
-  const localAppData = env.LOCALAPPDATA;
-  if (localAppData) {
-    return path.join(localAppData, 'quality-zero-platform', 'provider-ui');
-  }
-
-  return path.join(os.homedir(), '.quality-zero-platform', 'provider-ui');
+  return explicit ? path.resolve(explicit) : path.join(resolveStateBaseDir(env), 'provider-ui');
 }
 
 export function getDefaultProfileDir(env = process.env) {
@@ -140,6 +137,70 @@ function shiftRequiredValue(tokens, option) {
   return value;
 }
 
+function setResolvedPath(args, key, tokens, option) {
+  args[key] = path.resolve(shiftRequiredValue(tokens, option));
+}
+
+function setNumericValue(args, key, tokens, option) {
+  args[key] = Number(shiftRequiredValue(tokens, option));
+}
+
+const ARGUMENT_HANDLERS = Object.freeze({
+  '--provider': (args, tokens) => {
+    args.provider = shiftRequiredValue(tokens, '--provider');
+  },
+  '-p': (args, tokens) => ARGUMENT_HANDLERS['--provider'](args, tokens),
+  '--repo': (args, tokens) => {
+    args.repo = shiftRequiredValue(tokens, '--repo');
+  },
+  '-r': (args, tokens) => ARGUMENT_HANDLERS['--repo'](args, tokens),
+  '--owner': (args, tokens) => {
+    args.owner = shiftRequiredValue(tokens, '--owner');
+  },
+  '--state-root': (args, tokens) => setResolvedPath(args, 'stateRoot', tokens, '--state-root'),
+  '--profile-dir': (args, tokens) => setResolvedPath(args, 'profileDir', tokens, '--profile-dir'),
+  '--timeout-ms': (args, tokens) => setNumericValue(args, 'timeoutMs', tokens, '--timeout-ms'),
+  '--headless': (args) => {
+    args.headless = true;
+  },
+  '--headed': (args) => {
+    args.headless = false;
+  },
+  '--keep-open': (args) => {
+    args.keepOpen = true;
+  },
+  '--slow-mo-ms': (args, tokens) => setNumericValue(args, 'slowMoMs', tokens, '--slow-mo-ms'),
+  '--help': (args) => {
+    args.command = 'help';
+  },
+  '-h': (args, tokens) => ARGUMENT_HANDLERS['--help'](args, tokens)
+});
+
+function applyArgumentToken(args, tokens, token) {
+  const handler = ARGUMENT_HANDLERS[token];
+  if (!handler) {
+    throw new Error(`Unknown argument: ${token}`);
+  }
+  handler(args, tokens);
+}
+
+function validateNumericArgs(args) {
+  if (!Number.isFinite(args.timeoutMs) || args.timeoutMs <= 0) {
+    throw new Error(`Invalid --timeout-ms value: ${args.timeoutMs}`);
+  }
+
+  if (!Number.isFinite(args.slowMoMs) || args.slowMoMs < 0) {
+    throw new Error(`Invalid --slow-mo-ms value: ${args.slowMoMs}`);
+  }
+}
+
+function finalizeArgs(args) {
+  validateNumericArgs(args);
+  if (!args.profileDir) {
+    args.profileDir = path.join(args.stateRoot, 'chromium-profile');
+  }
+  return args;
+}
 
 export function parseArgs(argv) {
   const args = {
@@ -161,62 +222,10 @@ export function parseArgs(argv) {
   }
 
   while (tokens.length > 0) {
-    const token = tokens.shift();
-    switch (token) {
-      case '--provider':
-      case '-p':
-        args.provider = shiftRequiredValue(tokens, token);
-        break;
-      case '--repo':
-      case '-r':
-        args.repo = shiftRequiredValue(tokens, token);
-        break;
-      case '--owner':
-        args.owner = shiftRequiredValue(tokens, token);
-        break;
-      case '--state-root':
-        args.stateRoot = path.resolve(shiftRequiredValue(tokens, token));
-        break;
-      case '--profile-dir':
-        args.profileDir = path.resolve(shiftRequiredValue(tokens, token));
-        break;
-      case '--timeout-ms':
-        args.timeoutMs = Number(shiftRequiredValue(tokens, token));
-        break;
-      case '--headless':
-        args.headless = true;
-        break;
-      case '--headed':
-        args.headless = false;
-        break;
-      case '--keep-open':
-        args.keepOpen = true;
-        break;
-      case '--slow-mo-ms':
-        args.slowMoMs = Number(shiftRequiredValue(tokens, token));
-        break;
-      case '--help':
-      case '-h':
-        args.command = 'help';
-        break;
-      default:
-        throw new Error(`Unknown argument: ${token}`);
-    }
+    applyArgumentToken(args, tokens, tokens.shift());
   }
 
-  if (!Number.isFinite(args.timeoutMs) || args.timeoutMs <= 0) {
-    throw new Error(`Invalid --timeout-ms value: ${args.timeoutMs}`);
-  }
-
-  if (!Number.isFinite(args.slowMoMs) || args.slowMoMs < 0) {
-    throw new Error(`Invalid --slow-mo-ms value: ${args.slowMoMs}`);
-  }
-
-  if (!args.profileDir) {
-    args.profileDir = path.join(args.stateRoot, 'chromium-profile');
-  }
-
-  return args;
+  return finalizeArgs(args);
 }
 
 export function renderHelp() {
@@ -238,7 +247,9 @@ Options:
   --keep-open                       Keep the browser open after navigation.
   --slow-mo-ms <ms>                 Optional Playwright slowMo for interactive sessions.
 
-Environment:
-  QUALITY_ZERO_PROVIDER_UI_HOME     Override the external state root.
+Examples:
+  node scripts/provider_ui/provider_admin_bootstrap.mjs list
+  node scripts/provider_ui/provider_admin_bootstrap.mjs bootstrap --provider codecov --repo quality-zero-platform
+  node scripts/provider_ui/provider_admin_bootstrap.mjs inspect --provider sentry --repo quality-zero-platform --headless
 `;
 }

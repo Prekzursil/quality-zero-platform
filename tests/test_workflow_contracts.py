@@ -33,6 +33,19 @@ class WorkflowContractTests(unittest.TestCase):
         for path in workflow_paths:
             text = path.read_text(encoding="utf-8")
             self.assertNotIn("secrets: inherit", text, path.name)
+            self.assertIn("platform_repository: ${{ github.repository }}", text, path.name)
+
+    def test_self_wrapper_workflows_use_current_ref_for_platform_checkout(self) -> None:
+        workflow_expectations = {
+            "quality-zero-platform.yml": "platform_ref: ${{ github.event.pull_request.head.sha || github.sha }}",
+            "quality-zero-gate.yml": "platform_ref: ${{ github.event.pull_request.head.sha || github.sha }}",
+            "quality-zero-remediation.yml": "platform_ref: ${{ github.event.workflow_run.head_sha || github.sha }}",
+            "quality-zero-backlog.yml": "platform_ref: ${{ github.sha }}",
+        }
+
+        for name, expected in workflow_expectations.items():
+            text = (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
+            self.assertIn(expected, text, name)
 
     def test_manual_wrapper_dispatches_do_not_expose_user_supplied_inputs(self) -> None:
         workflow_paths = [

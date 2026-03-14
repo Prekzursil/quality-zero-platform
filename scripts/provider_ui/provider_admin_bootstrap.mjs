@@ -222,9 +222,18 @@ function reportCliError(error) {
 }
 
 async function runCli() {
-  await main();
+  try {
+    await main();
+    return false;
+  } catch (error) {
+    reportCliError(error);
+    return true;
+  }
 }
 
 if (isCliEntrypoint(import.meta.url)) {
-  void runCli().catch(reportCliError);
+  const failed = await runCli();
+  if (failed) {
+    process.exitCode = process.exitCode ?? 1;
+  }
 }

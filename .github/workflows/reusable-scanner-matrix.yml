@@ -142,6 +142,8 @@ jobs:
             ]
             for name in profile["required_secrets"]:
               cmd.extend(["--required-secret", name])
+            for name in profile.get("conditional_secrets", []):
+              cmd.extend(["--conditional-secret", name])
             for name in profile["required_vars"]:
               cmd.extend(["--required-var", name])
             run(cmd, cwd=repo_dir)

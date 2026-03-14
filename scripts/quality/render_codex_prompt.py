@@ -40,10 +40,15 @@ Never push to the default branch. Use `codex/fix/<context>/<shortsha>` for remed
 ## Repo contract
 
 - Verify command: `{profile['verify_command']}`
+- GitHub mutation lane: `{profile.get('github_mutation_lane', 'codex-private-runner')}`
+- Codex auth lane: `{profile.get('codex_auth_lane', 'chatgpt-account')}`
+- Provider UI mode: `{profile.get('provider_ui_mode', 'playwright-manual-login')}`
 - Codex environment mode: `{codex_environment.get('mode', 'automatic')}`
 - Codex environment verify command: `{codex_environment.get('verify_command', profile['verify_command'])}`
+- Codex auth file: `{codex_environment.get('auth_file', '~/.codex/auth.json')}`
 - Codex environment network profile: `{codex_environment.get('network_profile', 'unrestricted')}`
 - Codex environment methods: `{codex_environment.get('methods', 'all')}`
+- Codex runner labels: `{", ".join(codex_environment.get('runner_labels', []))}`
 - Default branch: `{profile['default_branch']}`
 - Preserve public check names: `{profile['preserve_public_check_names']}`
 

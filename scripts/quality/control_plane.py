@@ -86,7 +86,13 @@ def _normalize_required_contexts(raw: dict[str, Any]) -> dict[str, list[str]]:
     always = dedupe_strings(raw.get("always", []))
     pull_request_only = [item for item in dedupe_strings(raw.get("pull_request_only", [])) if item not in always]
     required_now = dedupe_strings(raw.get("required_now", []) or [*always, *pull_request_only])
-    return {"always": always, "pull_request_only": pull_request_only, "required_now": required_now}
+    target = dedupe_strings(raw.get("target", []) or [*required_now])
+    return {
+        "always": always,
+        "pull_request_only": pull_request_only,
+        "required_now": required_now,
+        "target": target,
+    }
 
 
 def _merge_required_contexts(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, list[str]]:
@@ -95,6 +101,7 @@ def _merge_required_contexts(base: dict[str, Any], overlay: dict[str, Any]) -> d
             "always": [*base.get("always", []), *overlay.get("always", [])],
             "pull_request_only": [*base.get("pull_request_only", []), *overlay.get("pull_request_only", [])],
             "required_now": [*base.get("required_now", []), *overlay.get("required_now", [])],
+            "target": [*base.get("target", []), *overlay.get("target", [])],
         }
     )
 
@@ -165,13 +172,15 @@ def _normalize_coverage(raw: dict[str, Any]) -> dict[str, Any]:
     return coverage
 
 
-def _normalize_codex_environment(raw: dict[str, Any], *, verify_command: str) -> dict[str, str]:
+def _normalize_codex_environment(raw: dict[str, Any], *, verify_command: str) -> dict[str, Any]:
     payload = deepcopy(raw or {})
     return {
         "mode": str(payload.get("mode", "automatic")).strip() or "automatic",
         "verify_command": str(payload.get("verify_command", verify_command)).strip() or verify_command,
+        "auth_file": str(payload.get("auth_file", "~/.codex/auth.json")).strip() or "~/.codex/auth.json",
         "network_profile": str(payload.get("network_profile", "unrestricted")).strip() or "unrestricted",
         "methods": str(payload.get("methods", "all")).strip() or "all",
+        "runner_labels": dedupe_strings(payload.get("runner_labels", ["self-hosted", "codex-trusted"])),
     }
 
 
@@ -271,6 +280,9 @@ def load_repo_profile(inventory: dict[str, Any], repo_slug: str) -> dict[str, An
     merged["required_secrets"] = dedupe_strings(
         [*stack_profile.get("required_secrets", []), *repo_profile.get("required_secrets", [])]
     )
+    merged["conditional_secrets"] = dedupe_strings(
+        [*stack_profile.get("conditional_secrets", []), *repo_profile.get("conditional_secrets", [])]
+    )
     merged["required_vars"] = dedupe_strings([*stack_profile.get("required_vars", []), *repo_profile.get("required_vars", [])])
     merged["providers"] = _deep_merge(stack_profile.get("providers", {}), repo_profile.get("providers", {}))
     merged["vendors"] = _deep_merge(stack_profile.get("vendors", {}), repo_profile.get("vendors", {}))
@@ -291,7 +303,13 @@ def load_repo_profile(inventory: dict[str, Any], repo_slug: str) -> dict[str, An
     merged["owner"] = owner
     merged["repo_name"] = repo_name
     merged["verify_command"] = str(merged.get("verify_command", "bash scripts/verify")).strip()
+    merged["github_mutation_lane"] = (
+        str(merged.get("github_mutation_lane", "codex-private-runner")).strip() or "codex-private-runner"
+    )
+    merged["codex_auth_lane"] = str(merged.get("codex_auth_lane", "chatgpt-account")).strip() or "chatgpt-account"
+    merged["provider_ui_mode"] = str(merged.get("provider_ui_mode", "playwright-manual-login")).strip() or "playwright-manual-login"
     merged["required_secrets"] = dedupe_strings(merged.get("required_secrets", []))
+    merged["conditional_secrets"] = dedupe_strings(merged.get("conditional_secrets", []))
     merged["required_vars"] = dedupe_strings(merged.get("required_vars", []))
     merged["required_contexts"] = _normalize_required_contexts(merged.get("required_contexts", {}))
     merged["enabled_scanners"] = merged.get("enabled_scanners", {})
@@ -364,15 +382,28 @@ def validate_profile(profile: dict[str, Any]) -> list[str]:
     findings: list[str] = []
     if not profile.get("verify_command"):
         findings.append(f"{profile['slug']}: verify_command is required")
+    if profile.get("github_mutation_lane") != "codex-private-runner":
+        findings.append(f"{profile['slug']}: github_mutation_lane must be codex-private-runner")
+    if profile.get("codex_auth_lane") != "chatgpt-account":
+        findings.append(f"{profile['slug']}: codex_auth_lane must be chatgpt-account")
+    if profile.get("provider_ui_mode") != "playwright-manual-login":
+        findings.append(f"{profile['slug']}: provider_ui_mode must be playwright-manual-login")
     codex_environment = profile.get("codex_environment", {})
     if codex_environment.get("mode") != "automatic":
         findings.append(f"{profile['slug']}: codex_environment.mode must be automatic")
     if not codex_environment.get("verify_command"):
         findings.append(f"{profile['slug']}: codex_environment.verify_command is required")
+    if not codex_environment.get("auth_file"):
+        findings.append(f"{profile['slug']}: codex_environment.auth_file is required")
     if codex_environment.get("network_profile") != "unrestricted":
         findings.append(f"{profile['slug']}: codex_environment.network_profile must be unrestricted")
     if codex_environment.get("methods") != "all":
         findings.append(f"{profile['slug']}: codex_environment.methods must be all")
+    runner_labels = codex_environment.get("runner_labels", [])
+    if not runner_labels:
+        findings.append(f"{profile['slug']}: codex_environment.runner_labels is required")
+    elif "self-hosted" not in runner_labels:
+        findings.append(f"{profile['slug']}: codex_environment.runner_labels must include self-hosted")
     if not active_required_contexts(profile, event_name="ruleset"):
         findings.append(f"{profile['slug']}: at least one required context is required")
     pr_contexts = dedupe_strings(
@@ -384,13 +415,29 @@ def validate_profile(profile: dict[str, Any]) -> list[str]:
         findings.append(
             f"{profile['slug']}: required_contexts.required_now is missing {', '.join(missing_required_now)}"
         )
+    target_contexts = set(profile["required_contexts"].get("target", []))
+    missing_target = [name for name in required_now if name not in target_contexts]
+    if missing_target:
+        findings.append(
+            f"{profile['slug']}: required_contexts.target is missing {', '.join(missing_target)}"
+        )
+    duplicate_conditional = [name for name in profile.get("conditional_secrets", []) if name in profile.get("required_secrets", [])]
+    if duplicate_conditional:
+        findings.append(
+            f"{profile['slug']}: conditional_secrets duplicates required_secrets for {', '.join(duplicate_conditional)}"
+        )
+    if "OPENAI_API_KEY" in profile.get("required_secrets", []):
+        findings.append(f"{profile['slug']}: OPENAI_API_KEY must not be part of required_secrets")
 
     if profile.get("visual_pair_required"):
-        ruleset_contexts = set(active_required_contexts(profile, event_name="ruleset"))
         chromatic = profile["vendors"]["chromatic"]["status_context"]
         applitools = profile["vendors"]["applitools"]["status_context"]
+        ruleset_contexts = set(active_required_contexts(profile, event_name="ruleset"))
+        target_contexts = set(profile["required_contexts"].get("target", []))
         if (chromatic in ruleset_contexts) != (applitools in ruleset_contexts):
-            findings.append(f"{profile['slug']}: visual_pair_required needs both Chromatic and Applitools contexts")
+            findings.append(f"{profile['slug']}: visual_pair_required needs both Chromatic and Applitools contexts in required_now")
+        if (chromatic in target_contexts) != (applitools in target_contexts):
+            findings.append(f"{profile['slug']}: visual_pair_required needs both Chromatic and Applitools contexts in target")
 
     coverage = profile.get("coverage", {})
     if profile.get("enabled_scanners", {}).get("coverage", False):

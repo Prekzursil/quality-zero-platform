@@ -1,7 +1,7 @@
 # quality-zero-platform
 
 `quality-zero-platform` is the personal-account control plane for strict-zero governance.
-It replaces the old queue/template baseline with reusable workflows, shared quality scripts, repo metadata, ruleset payload generation, and Codex remediation contracts.
+It replaces the old queue/template baseline with reusable workflows, shared quality scripts, repo metadata, ruleset payload generation, provider-admin browser bootstrap helpers, and trusted-runner Codex remediation contracts.
 
 ## What This Repo Owns
 
@@ -9,6 +9,7 @@ It replaces the old queue/template baseline with reusable workflows, shared qual
 - `profiles/stacks/*.yml`: reusable stack defaults
 - `profiles/repos/*.yml`: repo-specific overrides
 - `scripts/quality/`: shared strict-zero policy, provider checks, ruleset generation, and remediation prompt rendering
+- `scripts/provider_ui/`: Playwright-based provider-admin bootstrap scripts that persist browser state outside the repo
 - `.github/workflows/`: reusable workflows called by governed repos
 - `templates/repo/`: thin wrapper contract for governed repos
 - `generated/rulesets/`: committed ruleset payloads for review and drift detection
@@ -38,8 +39,24 @@ Phase-1 compatibility still preserves the established public check names for the
 1. Wrapper repos call the reusable scanner and gate workflows from this repo.
 2. Shared Python utilities resolve the repo profile, compute required contexts, validate provider inputs, and emit artifacts.
 3. Ruleset payloads are generated from the same repo profile data that powers the gate.
-4. Failed pull requests enter the Codex remediation loop and write only to `codex/fix/<context>/<shortsha>`.
+4. Failed pull requests enter the trusted-runner Codex remediation loop and write only to `codex/fix/<context>/<shortsha>`.
 5. Nightly backlog sweeps isolate one tool lane per run on `codex/backlog/<tool>`.
+
+## Trusted Runner Codex Lane
+
+GitHub-side mutation runs are intentionally limited to **trusted private runners** that already have Codex CLI installed and authenticated with a ChatGPT/Codex account session.
+
+The common control-plane contract now assumes:
+
+- `github_mutation_lane: codex-private-runner`
+- `codex_auth_lane: chatgpt-account`
+- `provider_ui_mode: playwright-manual-login`
+- `codex_environment.runner_labels: ["self-hosted", "codex-trusted"]`
+- `codex_environment.auth_file: ~/.codex/auth.json`
+
+`OPENAI_API_KEY` is **not** part of the common strict-zero contract. The reusable remediation and backlog workflows run `codex exec` on the trusted runner instead of `openai/codex-action`.
+
+Bootstrap the runner once with `codex login`, or provide a temporary `CODEX_AUTH_JSON` secret until the runner has a persistent `auth.json`.
 
 ## Local Development
 
@@ -58,3 +75,10 @@ Codex Web is intentionally secondary. Each enrolled repo declares:
 - `verify_command`: the canonical repo verification command
 
 Codex Web is used for backlog sweeps and manual review, not for merge-gate authority. Manual setup and maintenance scripts are intentionally not part of the control-plane contract.
+
+## Provider UI Bootstrap
+
+Provider-admin browser work lives under `scripts/provider_ui/` and `docs/provider-browser-bootstrap.md`. The bootstrap uses a dedicated persistent Playwright profile outside the repository tree so manual login can be completed once and later reused for authenticated provider checks.
+
+See also: `docs/codex-private-runner-auth.md`
+

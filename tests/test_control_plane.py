@@ -29,9 +29,6 @@ class ControlPlaneTests(unittest.TestCase):
             [
                 "Coverage 100 Gate",
                 "Codecov Analytics",
-                "Qlty Gate",
-                "Qlty Coverage",
-                "Qlty Diff Coverage",
                 "Sonar Zero",
                 "Codacy Zero",
                 "Semgrep Zero",
@@ -40,10 +37,10 @@ class ControlPlaneTests(unittest.TestCase):
                 "SonarCloud Code Analysis",
                 "Codacy Static Code Analysis",
                 "DeepScan",
-                "Chromatic Playwright",
-                "Applitools Visual",
             ],
         )
+        self.assertTrue({"Qlty Gate", "Qlty Coverage", "Qlty Diff Coverage"}.issubset(profile["required_contexts"]["target"]))
+        self.assertTrue({"Chromatic Playwright", "Applitools Visual"}.issubset(profile["required_contexts"]["target"]))
 
     def test_phase1_repo_verify_commands_follow_repo_contracts(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
@@ -62,6 +59,8 @@ class ControlPlaneTests(unittest.TestCase):
         )
         self.assertEqual(reframe["codex_environment"]["mode"], "automatic")
         self.assertEqual(tanks["codex_environment"]["verify_command"], "make verify")
+        self.assertEqual(reframe["codex_environment"]["auth_file"], "~/.codex/auth.json")
+        self.assertEqual(reframe["codex_environment"]["runner_labels"], ["self-hosted", "codex-trusted"])
 
     def test_airline_keeps_deepscan_contexts_pr_only(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
@@ -75,26 +74,30 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertIn("DeepScan Zero", pr_contexts)
         self.assertIn("DeepScan", pr_contexts)
 
-    def test_reframe_overlay_adds_visual_and_platform_contexts(self) -> None:
+    def test_reframe_overlay_adds_visual_and_platform_contexts_to_target(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/Reframe")
 
         pr_contexts = active_required_contexts(profile, event_name="pull_request")
+        target_contexts = set(profile["required_contexts"]["target"])
 
         for name in (
-            "Qlty Gate",
-            "Qlty Coverage",
-            "Qlty Diff Coverage",
             "Python API & worker checks",
             "Web build",
             "Analyze (python)",
             "Analyze (typescript)",
-            "Chromatic Playwright",
-            "Applitools Visual",
             "CodeQL",
             "CodeRabbit",
         ):
             self.assertIn(name, pr_contexts)
+        for name in (
+            "Qlty Gate",
+            "Qlty Coverage",
+            "Qlty Diff Coverage",
+            "Chromatic Playwright",
+            "Applitools Visual",
+        ):
+            self.assertIn(name, target_contexts)
 
     def test_special_repo_coverage_profiles_capture_existing_behaviors(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
@@ -127,11 +130,15 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(swfoc["coverage"]["runner"], "windows-latest")
         self.assertEqual(swfoc["visual_lane"]["kind"], "desktop-adapter")
         self.assertIn("DEEPSCAN_POLICY_MODE", quality_zero_platform["required_vars"])
+        self.assertEqual(quality_zero_platform["github_mutation_lane"], "codex-private-runner")
+        self.assertEqual(quality_zero_platform["codex_auth_lane"], "chatgpt-account")
+        self.assertNotIn("OPENAI_API_KEY", quality_zero_platform["required_secrets"])
+        self.assertIn("CODEX_AUTH_JSON", quality_zero_platform["conditional_secrets"])
 
     def test_visual_pair_validation_flags_single_context(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
-        profile["required_contexts"]["required_now"] = [name for name in profile["required_contexts"]["required_now"] if name != "Applitools Visual"]
+        profile["required_contexts"]["target"] = [name for name in profile["required_contexts"]["target"] if name != "Applitools Visual"]
 
         findings = validate_profile(profile)
 

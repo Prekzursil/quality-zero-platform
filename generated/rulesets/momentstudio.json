@@ -36,18 +36,6 @@
             "integration_id": null
           },
           {
-            "context": "Qlty Gate",
-            "integration_id": null
-          },
-          {
-            "context": "Qlty Coverage",
-            "integration_id": null
-          },
-          {
-            "context": "Qlty Diff Coverage",
-            "integration_id": null
-          },
-          {
             "context": "Sonar Zero",
             "integration_id": null
           },
@@ -77,14 +65,6 @@
           },
           {
             "context": "DeepScan",
-            "integration_id": null
-          },
-          {
-            "context": "Chromatic Playwright",
-            "integration_id": null
-          },
-          {
-            "context": "Applitools Visual",
             "integration_id": null
           }
         ],

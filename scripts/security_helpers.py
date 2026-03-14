@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import ipaddress
+import json
+import urllib.request
+from typing import Any, Mapping
 from urllib.parse import urlparse, urlunparse
 
 
@@ -50,3 +53,31 @@ def normalize_https_url(
     if strip_query:
         sanitized = sanitized._replace(query="")
     return urlunparse(sanitized)
+
+
+def load_json_https(
+    raw_url: str,
+    *,
+    allowed_hosts: set[str] | None = None,
+    allowed_host_suffixes: set[str] | None = None,
+    headers: Mapping[str, str] | None = None,
+    method: str = "GET",
+    data: bytes | None = None,
+    timeout: int = 30,
+) -> tuple[Any, dict[str, str]]:
+    safe_url = normalize_https_url(
+        raw_url,
+        allowed_hosts=allowed_hosts,
+        allowed_host_suffixes=allowed_host_suffixes,
+    )
+    request = urllib.request.Request(
+        safe_url,
+        headers=dict(headers or {}),
+        method=method,
+        data=data,
+    )
+    # nosec B310: normalize_https_url restricts this request to allowlisted https hosts and blocks local/private addresses.
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+        response_headers = {key.lower(): value for key, value in response.headers.items()}
+    return payload, response_headers

@@ -5,7 +5,6 @@ import argparse
 import json
 import os
 import sys
-import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +12,7 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.quality.common import utc_timestamp, write_report
-from scripts.security_helpers import normalize_https_url
+from scripts.security_helpers import load_json_https, normalize_https_url
 
 
 TOTAL_KEYS = {"total", "totalItems", "total_items", "count", "hits", "open_issues"}
@@ -45,18 +44,18 @@ def extract_total_open(payload: Any) -> int | None:
 
 
 def _request_json(url: str, token: str) -> dict[str, Any]:
-    safe_url = normalize_https_url(url, allowed_host_suffixes={"deepscan.io"})
-    request = urllib.request.Request(
-        safe_url,
+    payload, _ = load_json_https(
+        url,
+        allowed_host_suffixes={"deepscan.io"},
         headers={
             "Accept": "application/json",
             "Authorization": f"Bearer {token}",
             "User-Agent": "quality-zero-platform",
         },
-        method="GET",
     )
-    with urllib.request.urlopen(request, timeout=30) as response:
-        return json.loads(response.read().decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise RuntimeError("Unexpected DeepScan API response payload")
+    return payload
 
 
 def _render_md(payload: dict) -> str:

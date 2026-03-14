@@ -15,7 +15,7 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.quality.common import utc_timestamp, write_report
-from scripts.security_helpers import normalize_https_url
+from scripts.security_helpers import load_json_https
 
 
 TOTAL_KEYS = {"total", "totalItems", "total_items", "count", "hits", "open_issues"}
@@ -34,18 +34,22 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _request_json(url: str, token: str, *, method: str = "GET", data: dict[str, Any] | None = None) -> dict[str, Any]:
-    safe_url = normalize_https_url(url, allowed_host_suffixes={"codacy.com"}).rstrip("/")
     body = json.dumps(data).encode("utf-8") if data is not None else None
-    headers = {
-        "Accept": "application/json",
-        "api-token": token,
-        "User-Agent": "quality-zero-platform",
-    }
-    if body is not None:
-        headers["Content-Type"] = "application/json"
-    request = urllib.request.Request(safe_url, headers=headers, method=method, data=body)
-    with urllib.request.urlopen(request, timeout=30) as response:
-        return json.loads(response.read().decode("utf-8"))
+    payload, _ = load_json_https(
+        url.rstrip("/"),
+        allowed_host_suffixes={"codacy.com"},
+        headers={
+            "Accept": "application/json",
+            "api-token": token,
+            "User-Agent": "quality-zero-platform",
+            **({"Content-Type": "application/json"} if body is not None else {}),
+        },
+        method=method,
+        data=body,
+    )
+    if not isinstance(payload, dict):
+        raise RuntimeError("Unexpected Codacy API response payload")
+    return payload
 
 
 def extract_total_open(payload: Any) -> int | None:

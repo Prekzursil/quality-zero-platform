@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+from typing import Mapping
 
 
 def _parse_args() -> argparse.Namespace:
@@ -15,7 +16,7 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _write_payload(path: str, payload: dict[str, object]) -> None:
+def _write_payload(path: str, payload: Mapping[str, object]) -> None:
     if not path:
         return
     target = Path(path)

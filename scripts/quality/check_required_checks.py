@@ -6,7 +6,6 @@ import json
 import os
 import sys
 import time
-import urllib.request
 from typing import Any
 
 from pathlib import Path
@@ -15,6 +14,7 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.quality.common import utc_timestamp, write_report
+from scripts.security_helpers import load_json_https
 
 
 def _parse_args() -> argparse.Namespace:
@@ -30,19 +30,19 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _api_get(repo: str, path: str, token: str) -> dict[str, Any]:
-    url = f"https://api.github.com/repos/{repo}/{path.lstrip('/')}"
-    request = urllib.request.Request(
-        url,
+    payload, _ = load_json_https(
+        f"https://api.github.com/repos/{repo}/{path.lstrip('/')}",
+        allowed_hosts={"api.github.com"},
         headers={
             "Accept": "application/vnd.github+json",
             "Authorization": f"Bearer {token}",
             "X-GitHub-Api-Version": "2022-11-28",
             "User-Agent": "quality-zero-platform",
         },
-        method="GET",
     )
-    with urllib.request.urlopen(request, timeout=30) as response:
-        return json.loads(response.read().decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise RuntimeError("Unexpected GitHub API response payload")
+    return payload
 
 
 def _collect_contexts(check_runs_payload: dict[str, Any], status_payload: dict[str, Any]) -> dict[str, dict[str, str]]:

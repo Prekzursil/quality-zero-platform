@@ -4,7 +4,7 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable, Mapping
 
 
 def utc_timestamp() -> str:
@@ -37,13 +37,13 @@ def safe_output_path(raw: str, fallback: str, base: Path | None = None) -> Path:
 
 
 def write_report(
-    payload: dict[str, Any],
+    payload: Mapping[str, Any],
     *,
     out_json: str,
     out_md: str,
     default_json: str,
     default_md: str,
-    render_md: callable,
+    render_md: Callable[[Mapping[str, Any]], str],
 ) -> int:
     try:
         json_path = safe_output_path(out_json, default_json)

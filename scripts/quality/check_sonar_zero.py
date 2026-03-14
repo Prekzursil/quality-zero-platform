@@ -7,7 +7,6 @@ import json
 import os
 import sys
 import urllib.parse
-import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +14,7 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.quality.common import utc_timestamp, write_report
-from scripts.security_helpers import normalize_https_url
+from scripts.security_helpers import load_json_https
 
 
 SONAR_API_BASE = "https://sonarcloud.io"
@@ -37,18 +36,18 @@ def _auth_header(token: str) -> str:
 
 
 def _request_json(url: str, auth_header: str) -> dict[str, Any]:
-    safe_url = normalize_https_url(url, allowed_host_suffixes={"sonarcloud.io"}).rstrip("/")
-    request = urllib.request.Request(
-        safe_url,
+    payload, _ = load_json_https(
+        url.rstrip("/"),
+        allowed_host_suffixes={"sonarcloud.io"},
         headers={
             "Accept": "application/json",
             "Authorization": auth_header,
             "User-Agent": "quality-zero-platform",
         },
-        method="GET",
     )
-    with urllib.request.urlopen(request, timeout=30) as response:
-        return json.loads(response.read().decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise RuntimeError("Unexpected SonarCloud API response payload")
+    return payload
 
 
 def _render_md(payload: dict) -> str:

@@ -130,6 +130,10 @@ class WorkflowContractTests(unittest.TestCase):
             for snippet in forbidden_snippets:
                 self.assertNotIn(snippet, text, f"{name}: {snippet}")
 
+    def test_quality_zero_gate_exports_github_token_to_required_check_probe(self) -> None:
+        text = (ROOT / ".github" / "workflows" / "reusable-quality-zero-gate.yml").read_text(encoding="utf-8")
+        self.assertIn("GITHUB_TOKEN: ${{ github.token }}", text)
+
 
 if __name__ == "__main__":
     unittest.main()

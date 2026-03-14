@@ -53,6 +53,7 @@ jobs:
             --out-json "$RUNNER_TEMP/profile.json"
       - name: Assert required quality contexts are green
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           TARGET_SHA: ${{ inputs.sha }}
           EVENT_NAME: ${{ inputs.event_name }}
         run: |

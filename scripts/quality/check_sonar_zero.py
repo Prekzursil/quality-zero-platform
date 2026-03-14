@@ -5,6 +5,7 @@ import argparse
 import base64
 import os
 import sys
+import time
 import urllib.parse
 from pathlib import Path
 from typing import Any, Mapping
@@ -115,6 +116,27 @@ def _load_sonar_findings(args: argparse.Namespace, auth: str) -> tuple[int, str,
     return open_issues, quality_gate, findings
 
 
+def _is_scoped_analysis(args: argparse.Namespace) -> bool:
+    return bool(getattr(args, "branch", "").strip() or getattr(args, "pull_request", "").strip())
+
+
+def load_sonar_findings_with_retry(
+    args: argparse.Namespace,
+    auth: str,
+    *,
+    fetch_fn=_load_sonar_findings,
+    attempts: int = 4,
+    sleep_seconds: float = 5.0,
+) -> tuple[int, str, list[str]]:
+    retry_budget = max(1, int(attempts))
+    for attempt in range(retry_budget):
+        open_issues, quality_gate, findings = fetch_fn(args, auth)
+        if not findings or not _is_scoped_analysis(args) or attempt == retry_budget - 1:
+            return open_issues, quality_gate, findings
+        time.sleep(max(0.0, float(sleep_seconds)))
+    raise AssertionError("Retry loop must return before exhaustion.")
+
+
 def main() -> int:
     args = _parse_args()
     token = (args.token or os.environ.get("SONAR_TOKEN", "")).strip()
@@ -128,7 +150,7 @@ def main() -> int:
     else:
         try:
             auth = _auth_header(token)
-            open_issues, quality_gate, findings = _load_sonar_findings(args, auth)
+            open_issues, quality_gate, findings = load_sonar_findings_with_retry(args, auth)
             status = "pass" if not findings else "fail"
         except (OSError, RuntimeError, ValueError) as exc:  # pragma: no cover
             findings.append(f"Sonar API request failed: {exc}")

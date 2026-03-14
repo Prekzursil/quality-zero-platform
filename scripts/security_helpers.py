@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import http.client
 import ipaddress
 import json
-from email.message import Message
 from typing import Any, Mapping
-from urllib.error import HTTPError
 from urllib.parse import ParseResult, urlparse, urlunparse
+from urllib.request import Request, urlopen
 
 
 _FORBIDDEN_IP_FLAGS = (
@@ -107,29 +105,11 @@ def normalize_https_url(
     return _sanitize_url(parsed, strip_query=strip_query)
 
 
-def _build_request_path(parsed: ParseResult) -> str:
-    request_path = parsed.path or "/"
-    if parsed.query:
-        request_path = f"{request_path}?{parsed.query}"
-    return request_path
-
-
-def _message_from_headers(response_headers: Mapping[str, str]) -> Message:
-    message = Message()
-    for key, value in response_headers.items():
-        message[key] = value
-    return message
-
-
-def _open_https_connection(parsed: ParseResult, *, timeout: int) -> http.client.HTTPSConnection:
-    hostname = parsed.hostname
-    if not hostname:
+def _build_request(parsed: ParseResult, *, headers: Mapping[str, str] | None, method: str, data: bytes | None) -> Request:
+    if not parsed.hostname:
         raise ValueError(f"Request URL is missing a hostname: {urlunparse(parsed)!r}")
-    return http.client.HTTPSConnection(  # noqa: S309  # nosec B309 - normalize_https_url constrains callers to validated HTTPS hosts on supported Python runtimes.
-        hostname,
-        parsed.port or 443,
-        timeout=timeout,
-    )
+    request_url = urlunparse(parsed._replace(fragment=""))
+    return Request(request_url, data=data, headers=dict(headers or {}), method=method)
 
 
 def _read_json_response(
@@ -140,28 +120,11 @@ def _read_json_response(
     data: bytes | None,
     timeout: int,
 ) -> tuple[Any, dict[str, str]]:
-    connection = _open_https_connection(parsed, timeout=timeout)
-    try:
-        connection.request(
-            method,
-            _build_request_path(parsed),
-            body=data,
-            headers=dict(headers or {}),
-        )
-        response = connection.getresponse()
+    request = _build_request(parsed, headers=headers, method=method, data=data)
+    with urlopen(request, timeout=timeout) as response:
         payload_bytes = response.read()
-        response_headers = {key.lower(): value for key, value in response.getheaders()}
-        if response.status >= 400:
-            raise HTTPError(
-                urlunparse(parsed),
-                response.status,
-                response.reason,
-                hdrs=_message_from_headers(response_headers),
-                fp=None,
-            )
+        response_headers = {key.lower(): value for key, value in response.headers.items()}
         payload = json.loads(payload_bytes.decode("utf-8"))
-    finally:
-        connection.close()
     return payload, response_headers
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from urllib.error import HTTPError
 from unittest.mock import patch
 
 from scripts.security_helpers import load_json_https, normalize_https_url
@@ -23,46 +24,15 @@ class _FakeHttpResponse:
     def read(self) -> bytes:
         return self._payload
 
-    def getheaders(self) -> list[tuple[str, str]]:
-        return list(self._headers.items())
+    @property
+    def headers(self) -> dict[str, str]:
+        return self._headers
 
+    def __enter__(self) -> _FakeHttpResponse:
+        return self
 
-class _FakeConnectionCall:
-    def __init__(self, host: str | None, port: int, timeout: int) -> None:
-        self.host = host
-        self.port = port
-        self.timeout = timeout
-
-
-class _FakeHttpsConnection:
-    def __init__(
-        self,
-        host: str | None,
-        port: int,
-        *,
-        timeout: int,
-        response: _FakeHttpResponse | None = None,
-    ) -> None:
-        self.init_call = _FakeConnectionCall(host, port, timeout)
-        self.request_calls: list[dict[str, object | None]] = []
-        self.closed = False
-        self._response = response or _FakeHttpResponse('{"ok": true}', {"X-Test": "value"})
-
-    def request(self, method: str, url: str, *, body: bytes | None = None, headers: dict[str, str] | None = None) -> None:
-        self.request_calls.append(
-            {
-                "method": method,
-                "url": url,
-                "body": body,
-                "headers": dict(headers or {}),
-            }
-        )
-
-    def getresponse(self) -> _FakeHttpResponse:
-        return self._response
-
-    def close(self) -> None:
-        self.closed = True
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
 
 
 class SecurityHelpersTests(unittest.TestCase):
@@ -71,23 +41,14 @@ class SecurityHelpersTests(unittest.TestCase):
             normalize_https_url("file:///tmp/example.json")
 
     def test_load_json_https_validates_allowlisted_host_before_open(self) -> None:
-        with patch("http.client.HTTPSConnection") as connection_cls:
+        with patch("scripts.security_helpers.urlopen") as urlopen_mock:
             with self.assertRaises(ValueError):
                 load_json_https("https://evil.example.com/path", allowed_hosts={"api.github.com"})
-        connection_cls.assert_not_called()
+        urlopen_mock.assert_not_called()
 
     def test_load_json_https_uses_normalized_request_and_collects_headers(self) -> None:
-        captured: list[_FakeHttpsConnection] = []
-
-        def fake_connection(host: str | None, port: int, *, timeout: int = 30) -> _FakeHttpsConnection:
-            connection = _FakeHttpsConnection(host, port, timeout=timeout)
-            captured.append(connection)
-            return connection
-
-        with patch(
-            "scripts.security_helpers._open_https_connection",
-            side_effect=lambda parsed, timeout: fake_connection(parsed.hostname, parsed.port or 443, timeout=timeout),
-        ):
+        response = _FakeHttpResponse('{"ok": true}', {"X-Test": "value"})
+        with patch("scripts.security_helpers.urlopen", return_value=response) as urlopen_mock:
             payload, headers = load_json_https(
                 "https://api.github.com/repos/Prekzursil/quality-zero-platform/status#frag",
                 allowed_hosts={"api.github.com"},
@@ -95,39 +56,29 @@ class SecurityHelpersTests(unittest.TestCase):
                 timeout=15,
             )
 
-        self.assertEqual(len(captured), 1)
-        call = captured[0]
         self.assertEqual(payload, {"ok": True})
         self.assertEqual(headers, {"x-test": "value"})
-        self.assertEqual(call.init_call.host, "api.github.com")
-        self.assertEqual(call.init_call.port, 443)
-        self.assertEqual(call.init_call.timeout, 15)
+        urlopen_mock.assert_called_once()
+        request = urlopen_mock.call_args.args[0]
+        timeout = urlopen_mock.call_args.kwargs["timeout"]
+        self.assertEqual(timeout, 15)
+        self.assertEqual(request.full_url, "https://api.github.com/repos/Prekzursil/quality-zero-platform/status")
+        self.assertEqual(request.get_method(), "GET")
+        self.assertEqual(request.data, None)
         self.assertEqual(
-            call.request_calls,
-            [
-                {
-                    "method": "GET",
-                    "url": "/repos/Prekzursil/quality-zero-platform/status",
-                    "body": None,
-                    "headers": {"Accept": "application/json"},
-                }
-            ],
+            {key.lower(): value for key, value in request.header_items()},
+            {"accept": "application/json"},
         )
-        self.assertTrue(call.closed)
 
     def test_load_json_https_raises_http_error_for_non_success_response(self) -> None:
-        def fake_connection(host: str | None, port: int, *, timeout: int = 30) -> _FakeHttpsConnection:
-            return _FakeHttpsConnection(
-                host,
-                port,
-                timeout=timeout,
-                response=_FakeHttpResponse("{}", status=404, reason="Not Found"),
-            )
-
-        with patch(
-            "scripts.security_helpers._open_https_connection",
-            side_effect=lambda parsed, timeout: fake_connection(parsed.hostname, parsed.port or 443, timeout=timeout),
-        ):
+        error = HTTPError(
+            "https://api.github.com/repos/Prekzursil/quality-zero-platform/status",
+            404,
+            "Not Found",
+            hdrs=None,
+            fp=None,
+        )
+        with patch("scripts.security_helpers.urlopen", side_effect=error):
             with self.assertRaisesRegex(Exception, "HTTP Error 404: Not Found"):
                 load_json_https("https://api.github.com/repos/Prekzursil/quality-zero-platform/status")
 

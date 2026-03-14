@@ -13,10 +13,17 @@ import {
   resolveProviderTarget
 } from './provider_admin_config.mjs';
 
-async function ensureManagedDirectory(targetPath, stateRoot) {
+function toManagedDirectoryUrl(targetPath, stateRoot) {
   const managedPath = ensureManagedStatePath(targetPath, stateRoot);
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- managed paths are validated to remain under the external provider-ui state root.
-  await fs.mkdir(managedPath, { recursive: true });
+  const directoryPath = managedPath.endsWith(path.sep) ? managedPath : `${managedPath}${path.sep}`;
+  const directoryUrl = pathToFileURL(directoryPath);
+  return { managedPath, directoryUrl };
+}
+
+async function ensureManagedDirectory(targetPath, stateRoot) {
+  const { managedPath, directoryUrl } = toManagedDirectoryUrl(targetPath, stateRoot);
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- ensureManagedStatePath constrains provider-ui directories to the managed external state root.
+  await fs.mkdir(directoryUrl, { recursive: true });
   return managedPath;
 }
 
@@ -215,9 +222,18 @@ function reportCliError(error) {
 }
 
 async function runCli() {
-  await main();
+  try {
+    await main();
+    return false;
+  } catch (error) {
+    reportCliError(error);
+    return true;
+  }
 }
 
 if (isCliEntrypoint(import.meta.url)) {
-  runCli().catch(reportCliError);
+  const failed = await runCli();
+  if (failed) {
+    process.exitCode ??= 1;
+  }
 }

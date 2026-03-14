@@ -40,18 +40,30 @@ def _normalize_hostname(parsed: ParseResult, raw_url: str) -> str:
     return parsed.hostname.lower().strip(".")
 
 
+def _normalized_allowlist(values: set[str] | None) -> set[str]:
+    return {value.lower().strip(".") for value in (values or set()) if value.strip(".")}
+
+
+def _validate_exact_hostname(hostname: str, allowed_hosts: set[str] | None) -> None:
+    normalized_hosts = _normalized_allowlist(allowed_hosts)
+    if normalized_hosts and hostname not in normalized_hosts:
+        raise ValueError(f"URL host is not in allowlist: {hostname}")
+
+
+def _validate_hostname_suffixes(hostname: str, allowed_host_suffixes: set[str] | None) -> None:
+    suffixes = _normalized_allowlist(allowed_host_suffixes)
+    if suffixes and not any(hostname == suffix or hostname.endswith(f".{suffix}") for suffix in suffixes):
+        raise ValueError(f"URL host is not in suffix allowlist: {hostname}")
+
+
 def _validate_allowed_hostname(
     hostname: str,
     *,
     allowed_hosts: set[str] | None = None,
     allowed_host_suffixes: set[str] | None = None,
 ) -> None:
-    if allowed_hosts is not None and hostname not in {host.lower().strip(".") for host in allowed_hosts}:
-        raise ValueError(f"URL host is not in allowlist: {hostname}")
-    if allowed_host_suffixes is not None:
-        suffixes = {suffix.lower().strip(".") for suffix in allowed_host_suffixes if suffix.strip(".")}
-        if suffixes and not any(hostname == suffix or hostname.endswith(f".{suffix}") for suffix in suffixes):
-            raise ValueError(f"URL host is not in suffix allowlist: {hostname}")
+    _validate_exact_hostname(hostname, allowed_hosts)
+    _validate_hostname_suffixes(hostname, allowed_host_suffixes)
 
 
 def _validate_public_hostname(hostname: str) -> None:
@@ -110,7 +122,14 @@ def _message_from_headers(response_headers: Mapping[str, str]) -> Message:
 
 
 def _open_https_connection(parsed: ParseResult, *, timeout: int) -> http.client.HTTPSConnection:
-    return http.client.HTTPSConnection(parsed.hostname, parsed.port or 443, timeout=timeout)
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError(f"Request URL is missing a hostname: {urlunparse(parsed)!r}")
+    return http.client.HTTPSConnection(
+        hostname,
+        parsed.port or 443,
+        timeout=timeout,
+    )  # nosec B309 - normalize_https_url constrains callers to validated HTTPS hosts on supported Python runtimes.
 
 
 def _read_json_response(

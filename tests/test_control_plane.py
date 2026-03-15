@@ -189,6 +189,34 @@ class ControlPlaneTests(unittest.TestCase):
 
         self.assertTrue(any("visual_pair_required" in item for item in findings))
 
+    def test_visual_pair_validation_requires_provider_metadata(self) -> None:
+        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
+        profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
+
+        profile["vendors"]["chromatic"]["project_name"] = ""
+        profile["vendors"]["chromatic"]["token_secret"] = ""
+        profile["vendors"]["chromatic"]["local_env_var"] = ""
+        profile["vendors"]["applitools"]["project_name"] = ""
+
+        findings = validate_profile(profile)
+
+        self.assertIn(
+            "Prekzursil/TanksFlashMobile: visual_pair_required requires chromatic.project_name",
+            findings,
+        )
+        self.assertIn(
+            "Prekzursil/TanksFlashMobile: visual_pair_required requires chromatic.token_secret",
+            findings,
+        )
+        self.assertIn(
+            "Prekzursil/TanksFlashMobile: visual_pair_required requires chromatic.local_env_var",
+            findings,
+        )
+        self.assertIn(
+            "Prekzursil/TanksFlashMobile: visual_pair_required requires applitools.project_name",
+            findings,
+        )
+
     def test_validate_profile_flags_invalid_vendor_url(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")

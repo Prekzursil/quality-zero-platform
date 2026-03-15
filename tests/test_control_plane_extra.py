@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any, cast
 from unittest.mock import patch
 
 from scripts.quality.control_plane import (
@@ -32,6 +33,62 @@ CONTROL_PLANE_PATH = ROOT / "scripts" / "quality" / "control_plane.py"
 
 
 class ControlPlaneExtraTests(unittest.TestCase):
+    def _build_invalid_profile(self) -> dict[str, Any]:
+        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
+        profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
+        profile["verify_command"] = ""
+        profile["github_mutation_lane"] = "copilot"
+        profile["codex_auth_lane"] = "local-web-only"
+        profile["provider_ui_mode"] = "manual"
+        profile["codex_environment"].update(
+            {
+                "mode": "manual",
+                "verify_command": "",
+                "auth_file": "",
+                "network_profile": "restricted",
+                "methods": "shell-only",
+                "runner_labels": [],
+            }
+        )
+        profile["required_contexts"]["required_now"] = []
+        profile["required_contexts"]["target"] = ["Coverage 100 Gate"]
+        profile["required_secrets"].append("OPENAI_API_KEY")
+        profile["conditional_secrets"].append("OPENAI_API_KEY")
+        profile["coverage"].update(
+            {
+                "command": "",
+                "inputs": [],
+                "shell": "cmd",
+                "assert_mode": {"default": "invalid"},
+            }
+        )
+        profile["vendors"]["codacy"]["dashboard_url"] = "https://localhost/codacy"
+        return cast(dict[str, Any], profile)
+
+    @staticmethod
+    def _invalid_profile_findings() -> list[str]:
+        return [
+            "verify_command is required",
+            "github_mutation_lane must be codex-private-runner",
+            "codex_auth_lane must be chatgpt-account",
+            "provider_ui_mode must be playwright-manual-login",
+            "codex_environment.mode must be automatic",
+            "codex_environment.verify_command is required",
+            "codex_environment.auth_file is required",
+            "codex_environment.network_profile must be unrestricted",
+            "codex_environment.methods must be all",
+            "codex_environment.runner_labels is required",
+            "at least one required context is required",
+            "required_contexts.required_now is missing",
+            "OPENAI_API_KEY must not be part of required_secrets",
+            "conditional_secrets duplicates required_secrets",
+            "coverage.command is required",
+            "coverage.inputs must declare at least one report",
+            "coverage.shell must be bash or pwsh",
+            "coverage.assert_mode.default must be enforce or evidence_only",
+            "invalid codacy.dashboard_url",
+        ]
+
     def test_normalize_coverage_helpers_filter_invalid_entries_and_support_legacy_path(self) -> None:
         self.assertEqual(repo_root(), ROOT)
         self.assertEqual(_normalize_coverage_inputs("not-a-list"), [])
@@ -96,61 +153,9 @@ class ControlPlaneExtraTests(unittest.TestCase):
                 load_inventory(inventory_path)
 
     def test_validate_profile_collects_contract_and_url_findings(self) -> None:
-        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
-        profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
-
-        profile["verify_command"] = ""
-        profile["github_mutation_lane"] = "copilot"
-        profile["codex_auth_lane"] = "local-web-only"
-        profile["provider_ui_mode"] = "manual"
-        profile["codex_environment"].update(
-            {
-                "mode": "manual",
-                "verify_command": "",
-                "auth_file": "",
-                "network_profile": "restricted",
-                "methods": "shell-only",
-                "runner_labels": [],
-            }
-        )
-        profile["required_contexts"]["required_now"] = []
-        profile["required_contexts"]["target"] = ["Coverage 100 Gate"]
-        profile["required_secrets"].append("OPENAI_API_KEY")
-        profile["conditional_secrets"].append("OPENAI_API_KEY")
-        profile["coverage"].update(
-            {
-                "command": "",
-                "inputs": [],
-                "shell": "cmd",
-                "assert_mode": {"default": "invalid"},
-            }
-        )
-        profile["vendors"]["codacy"]["dashboard_url"] = "https://localhost/codacy"
-
+        profile = self._build_invalid_profile()
         findings = validate_profile(profile)
-
-        expected_fragments = [
-            "verify_command is required",
-            "github_mutation_lane must be codex-private-runner",
-            "codex_auth_lane must be chatgpt-account",
-            "provider_ui_mode must be playwright-manual-login",
-            "codex_environment.mode must be automatic",
-            "codex_environment.verify_command is required",
-            "codex_environment.auth_file is required",
-            "codex_environment.network_profile must be unrestricted",
-            "codex_environment.methods must be all",
-            "codex_environment.runner_labels is required",
-            "at least one required context is required",
-            "required_contexts.required_now is missing",
-            "OPENAI_API_KEY must not be part of required_secrets",
-            "conditional_secrets duplicates required_secrets",
-            "coverage.command is required",
-            "coverage.inputs must declare at least one report",
-            "coverage.shell must be bash or pwsh",
-            "coverage.assert_mode.default must be enforce or evidence_only",
-            "invalid codacy.dashboard_url",
-        ]
-        for fragment in expected_fragments:
+        for fragment in self._invalid_profile_findings():
             self.assertTrue(any(fragment in item for item in findings), fragment)
 
     def test_additional_contract_validators_cover_repo_lookup_target_and_runner_label_edges(self) -> None:
@@ -193,7 +198,7 @@ class ControlPlaneExtraTests(unittest.TestCase):
         self.assertEqual([item for item in validate_profile(non_visual) if "visual_pair_required" in item], [])
 
     def test_main_print_modes_emit_expected_json(self) -> None:
-        outputs: list[object] = []
+        outputs: list[Any] = []
         for mode in ("profile", "ruleset", "contexts"):
             buffer = io.StringIO()
             with patch.object(
@@ -212,7 +217,9 @@ class ControlPlaneExtraTests(unittest.TestCase):
                 self.assertEqual(main(), 0)
             outputs.append(json.loads(buffer.getvalue()))
 
-        profile_payload, ruleset_payload, contexts_payload = outputs
+        profile_payload = cast(dict[str, Any], outputs[0])
+        ruleset_payload = cast(dict[str, Any], outputs[1])
+        contexts_payload = cast(list[str], outputs[2])
         self.assertEqual(profile_payload["slug"], "Prekzursil/quality-zero-platform")
         self.assertEqual(ruleset_payload["repo_slug"], "Prekzursil/quality-zero-platform")
         self.assertIn("Coverage 100 Gate", contexts_payload)

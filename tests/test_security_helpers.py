@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import unittest
 from urllib.parse import urlparse
-from urllib.error import HTTPError
 from unittest.mock import patch
 
 from scripts import security_helpers
@@ -76,14 +75,16 @@ class SecurityHelpersTests(unittest.TestCase):
             _build_request(urlparse("https:///missing-host"), headers=None, method="GET", data=None)
 
     def test_load_json_https_validates_allowlisted_host_before_open(self) -> None:
-        with patch("scripts.security_helpers.urlopen") as urlopen_mock:
+        with patch("scripts.security_helpers.HTTPSConnection") as connection_cls:
             with self.assertRaises(ValueError):
                 load_json_https("https://evil.example.com/path", allowed_hosts={"api.github.com"})
-        urlopen_mock.assert_not_called()
+        connection_cls.assert_not_called()
 
     def test_load_json_https_uses_normalized_request_and_collects_headers(self) -> None:
         response = _FakeHttpResponse('{"ok": true}', {"X-Test": "value"})
-        with patch("scripts.security_helpers.urlopen", return_value=response) as urlopen_mock:
+        with patch("scripts.security_helpers.HTTPSConnection") as connection_cls:
+            connection = connection_cls.return_value
+            connection.getresponse.return_value = response
             payload, headers = load_json_https(
                 "https://api.github.com/repos/Prekzursil/quality-zero-platform/status#frag",
                 allowed_hosts={"api.github.com"},
@@ -93,26 +94,20 @@ class SecurityHelpersTests(unittest.TestCase):
 
         self.assertEqual(payload, {"ok": True})
         self.assertEqual(headers, {"x-test": "value"})
-        urlopen_mock.assert_called_once()
-        request = urlopen_mock.call_args.args[0]
-        timeout = urlopen_mock.call_args.kwargs["timeout"]
-        self.assertEqual(timeout, 15)
-        self.assertEqual(request.full_url, "https://api.github.com/repos/Prekzursil/quality-zero-platform/status")
-        self.assertEqual(request.get_method(), "GET")
-        self.assertIsNone(request.data)
-        self.assertEqual(
-            {key.lower(): value for key, value in request.header_items()},
-            {"accept": "application/json"},
+        connection_cls.assert_called_once_with("api.github.com", port=None, timeout=15)
+        connection.request.assert_called_once_with(
+            "GET",
+            "/repos/Prekzursil/quality-zero-platform/status",
+            body=None,
+            headers={"Accept": "application/json"},
         )
+        connection.close.assert_called_once()
 
     def test_load_json_https_raises_http_error_for_non_success_response(self) -> None:
-        error = HTTPError(
-            "https://api.github.com/repos/Prekzursil/quality-zero-platform/status",
-            404,
-            "Not Found",
-            hdrs=None,
-            fp=None,
-        )
-        with patch("scripts.security_helpers.urlopen", side_effect=error):
+        response = _FakeHttpResponse("{}", status=404, reason="Not Found")
+        with patch("scripts.security_helpers.HTTPSConnection") as connection_cls:
+            connection = connection_cls.return_value
+            connection.getresponse.return_value = response
             with self.assertRaisesRegex(Exception, "HTTP Error 404: Not Found"):
                 load_json_https("https://api.github.com/repos/Prekzursil/quality-zero-platform/status")
+        connection.close.assert_called_once()

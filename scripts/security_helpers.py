@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from http.client import HTTPSConnection
 import ipaddress
 import json
+from urllib.error import HTTPError
 from typing import Any, Mapping
 from urllib.parse import ParseResult, urlparse, urlunparse
-from urllib.request import Request, urlopen
 
 
 _FORBIDDEN_IP_FLAGS = (
@@ -14,6 +16,20 @@ _FORBIDDEN_IP_FLAGS = (
     "is_reserved",
     "is_multicast",
 )
+
+
+@dataclass(frozen=True, slots=True)
+class _HttpsRequest:
+    full_url: str
+    data: bytes | None
+    headers: dict[str, str]
+    method: str
+
+    def get_method(self) -> str:
+        return self.method
+
+    def header_items(self) -> list[tuple[str, str]]:
+        return list(self.headers.items())
 
 
 def _get_ip_flag(ip_value: Any, flag_name: str) -> bool:
@@ -105,11 +121,21 @@ def normalize_https_url(
     return _sanitize_url(parsed, strip_query=strip_query)
 
 
-def _build_request(parsed: ParseResult, *, headers: Mapping[str, str] | None, method: str, data: bytes | None) -> Request:
+def _build_request(parsed: ParseResult, *, headers: Mapping[str, str] | None, method: str, data: bytes | None) -> _HttpsRequest:
     if not parsed.hostname:
         raise ValueError(f"Request URL is missing a hostname: {urlunparse(parsed)!r}")
     request_url = urlunparse(parsed._replace(fragment=""))
-    return Request(request_url, data=data, headers=dict(headers or {}), method=method)
+    return _HttpsRequest(
+        full_url=request_url,
+        data=data,
+        headers=dict(headers or {}),
+        method=method,
+    )
+
+
+def _build_request_target(parsed: ParseResult) -> str:
+    target = urlunparse(("", "", parsed.path or "/", parsed.params, parsed.query, ""))
+    return target or "/"
 
 
 def _read_json_response(
@@ -121,10 +147,25 @@ def _read_json_response(
     timeout: int,
 ) -> tuple[Any, dict[str, str]]:
     request = _build_request(parsed, headers=headers, method=method, data=data)
-    with urlopen(request, timeout=timeout) as response:  # nosec B310 # noqa: S310 - normalize_https_url restricts requests to public HTTPS targets before urlopen is reached.
+    connection = HTTPSConnection(parsed.hostname, port=parsed.port, timeout=timeout)
+    response = None
+    try:
+        connection.request(
+            request.get_method(),
+            _build_request_target(parsed),
+            body=request.data,
+            headers=dict(request.header_items()),
+        )
+        response = connection.getresponse()
         payload_bytes = response.read()
         response_headers = {key.lower(): value for key, value in response.headers.items()}
+        if response.status >= 400:
+            raise HTTPError(request.full_url, response.status, response.reason, hdrs=response.headers, fp=None)
         payload = json.loads(payload_bytes.decode("utf-8"))
+    finally:
+        if response is not None and hasattr(response, "close"):
+            response.close()
+        connection.close()
     return payload, response_headers
 
 

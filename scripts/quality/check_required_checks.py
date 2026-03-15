@@ -83,6 +83,23 @@ def _collect_contexts(check_runs_payload: dict[str, Any], status_payload: dict[s
     return contexts
 
 
+def _resolve_observed_context(
+    context: str,
+    contexts: Mapping[str, dict[str, str]],
+) -> dict[str, str] | None:
+    exact = contexts.get(context)
+    if exact:
+        return exact
+    suffix_matches = [
+        details
+        for name, details in contexts.items()
+        if name.endswith(f" / {context}")
+    ]
+    if len(suffix_matches) == 1:
+        return suffix_matches[0]
+    return None
+
+
 def _evaluate_observed_context(context: str, observed: dict[str, str] | None) -> str | None:
     if not observed:
         return None
@@ -98,11 +115,11 @@ def _evaluate_observed_context(context: str, observed: dict[str, str] | None) ->
 
 
 def _evaluate(required: list[str], contexts: dict[str, dict[str, str]]) -> tuple[str, list[str], list[str]]:
-    missing = [context for context in required if context not in contexts]
+    missing = [context for context in required if _resolve_observed_context(context, contexts) is None]
     failed = [
         failure
         for context in required
-        for failure in [_evaluate_observed_context(context, contexts.get(context))]
+        for failure in [_evaluate_observed_context(context, _resolve_observed_context(context, contexts))]
         if failure
     ]
     return ("pass" if not missing and not failed else "fail", missing, failed)

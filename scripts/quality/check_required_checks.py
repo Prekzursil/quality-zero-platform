@@ -152,16 +152,14 @@ def _collect_payload(repo: str, sha: str, required: list[str], token: str) -> di
 
 def _wait_for_payload(args: argparse.Namespace, required: list[str], token: str) -> dict[str, Any]:
     deadline = time.time() + max(args.timeout_seconds, 1)
-    final_payload: dict[str, Any] | None = None
+    final_payload: dict[str, Any]
     while time.time() <= deadline:
         final_payload = _collect_payload(args.repo, args.sha, required, token)
         if final_payload["status"] == "pass":
             break
-        if not final_payload["missing"] and not _has_in_progress_check_runs(final_payload["contexts"]):
+        if not _has_in_progress_check_runs(final_payload["contexts"]):
             break
         time.sleep(max(args.poll_seconds, 1))
-    if final_payload is None:
-        raise SystemExit("No payload collected")
     return final_payload
 
 

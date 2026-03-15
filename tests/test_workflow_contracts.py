@@ -122,6 +122,7 @@ class WorkflowContractTests(unittest.TestCase):
     def test_scanner_matrix_checks_out_repo_at_requested_sha(self) -> None:
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
         self.assertIn("ref: ${{ inputs.sha != '' && inputs.sha || github.sha }}", text)
+        self.assertEqual(text.count("persist-credentials: false"), 2)
 
     def test_scanner_matrix_scopes_sonar_and_codacy_zero_to_the_current_pull_request(self) -> None:
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")

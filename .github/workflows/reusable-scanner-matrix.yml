@@ -66,11 +66,13 @@ jobs:
         with:
           path: repo
           ref: ${{ inputs.sha != '' && inputs.sha || github.sha }}
+          persist-credentials: false
       - uses: actions/checkout@v4
         with:
           repository: ${{ inputs.platform_repository }}
           ref: ${{ inputs.platform_ref }}
           path: platform
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

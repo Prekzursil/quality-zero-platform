@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from http.client import HTTPSConnection
+from http.client import HTTPConnection, HTTPS_PORT
 import ipaddress
 import json
 import ssl
@@ -153,6 +153,14 @@ def _build_tls_context() -> ssl.SSLContext:
     return context
 
 
+class _ValidatedTLSConnection(HTTPConnection):
+    default_port = HTTPS_PORT
+
+    def connect(self) -> None:
+        super().connect()
+        self.sock = _build_tls_context().wrap_socket(self.sock, server_hostname=self.host)
+
+
 def _read_json_response(
     parsed: ParseResult,
     *,
@@ -163,11 +171,10 @@ def _read_json_response(
 ) -> tuple[Any, dict[str, str]]:
     request = _build_request(parsed, headers=headers, method=method, data=data)
     hostname = _require_request_hostname(parsed)
-    connection = HTTPSConnection(
+    connection = _ValidatedTLSConnection(
         hostname,
         port=parsed.port,
         timeout=timeout,
-        context=_build_tls_context(),  # noqa: S309  # nosec B309 - validated HTTPS hosts plus an explicit TLS client context make this transport intentional and constrained.
     )
     response = None
     try:

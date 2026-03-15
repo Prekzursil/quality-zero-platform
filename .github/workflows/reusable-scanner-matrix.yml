@@ -135,6 +135,7 @@ jobs:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || '' }}
           GITHUB_ACTOR_NAME: ${{ github.actor }}
+          PULL_REQUEST_AUTHOR: ${{ github.event.pull_request.user.login || '' }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           CODACY_API_TOKEN: ${{ secrets.CODACY_API_TOKEN }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -173,7 +174,11 @@ jobs:
               "quality-secrets/secrets.md",
             ]
             required_secrets = list(profile["required_secrets"])
-            if os.environ.get("REPO_SLUG") == "Prekzursil/momentstudio" and os.environ.get("GITHUB_ACTOR_NAME") == "dependabot[bot]":
+            is_dependabot_origin = (
+              os.environ.get("GITHUB_ACTOR_NAME") == "dependabot[bot]"
+              or os.environ.get("PULL_REQUEST_AUTHOR") == "dependabot[bot]"
+            )
+            if os.environ.get("REPO_SLUG") == "Prekzursil/momentstudio" and is_dependabot_origin:
               required_secrets = [name for name in required_secrets if name != "CHROMATIC_PROJECT_TOKEN"]
             for name in required_secrets:
               cmd.extend(["--required-secret", name])

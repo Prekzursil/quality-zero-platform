@@ -176,29 +176,41 @@ async function openOrInspect(args, { inspectOnly }) {
   }
 }
 
-async function main() {
-  const args = parseArgs(process.argv.slice(2));
+export async function runCommand(args, hooks = {}) {
+  const {
+    listProviders: listProvidersHook = listProviders,
+    normalizeProvider: normalizeProviderHook = normalizeProvider,
+    bootstrap: bootstrapHook = bootstrap,
+    openOrInspect: openOrInspectHook = openOrInspect,
+    log: logHook = console.log,
+    renderHelp: renderHelpHook = renderHelp
+  } = hooks;
+
   switch (args.command) {
     case 'list':
-      await listProviders(args);
-      return 0;
+      await listProvidersHook(args);
+      return;
     case 'bootstrap':
-      normalizeProvider(args.provider);
-      await bootstrap(args);
-      return 0;
+      normalizeProviderHook(args.provider);
+      await bootstrapHook(args);
+      return;
     case 'open':
-      normalizeProvider(args.provider);
-      await openOrInspect(args, { inspectOnly: false });
-      return 0;
+      normalizeProviderHook(args.provider);
+      await openOrInspectHook(args, { inspectOnly: false });
+      return;
     case 'inspect':
-      normalizeProvider(args.provider);
-      await openOrInspect(args, { inspectOnly: true });
-      return 0;
+      normalizeProviderHook(args.provider);
+      await openOrInspectHook(args, { inspectOnly: true });
+      return;
     case 'help':
     default:
-      console.log(renderHelp());
-      return 0;
+      logHook(renderHelpHook());
   }
+}
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  await runCommand(args);
 }
 
 function reportCliError(error) {
@@ -207,14 +219,9 @@ function reportCliError(error) {
 }
 
 if (isCliEntrypoint(import.meta.url)) {
-  let exitCode = 0;
   try {
-    exitCode = await main();
+    await main();
   } catch (error) {
     reportCliError(error);
-    exitCode = 1;
-  }
-  if (exitCode !== 0) {
-    process.exitCode = process.exitCode ?? exitCode;
   }
 }

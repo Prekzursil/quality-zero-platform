@@ -121,7 +121,7 @@ def _read_json_response(
     timeout: int,
 ) -> tuple[Any, dict[str, str]]:
     request = _build_request(parsed, headers=headers, method=method, data=data)
-    with urlopen(request, timeout=timeout) as response:
+    with urlopen(request, timeout=timeout) as response:  # nosec B310 - normalize_https_url enforces https and rejects local/private targets before requests are issued.
         payload_bytes = response.read()
         response_headers = {key.lower(): value for key, value in response.headers.items()}
         payload = json.loads(payload_bytes.decode("utf-8"))

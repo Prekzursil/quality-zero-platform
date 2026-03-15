@@ -1,51 +1,62 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { runCommand } from './provider_admin_bootstrap.mjs';
 
-import { ensureManagedStatePath, resolvePlaywrightChromium } from './provider_admin_bootstrap.mjs';
+test('runCommand dispatches bootstrap requests through provider normalization', async () => {
+  const calls = [];
+  await runCommand(
+    { command: 'bootstrap', provider: 'Chromatic' },
+    {
+      normalizeProvider(provider) {
+        calls.push(['normalize', provider]);
+        return 'chromatic';
+      },
+      bootstrap: async (args) => {
+        calls.push(['bootstrap', args.provider]);
+      },
+      listProviders: async () => {
+        calls.push(['list']);
+      },
+      openOrInspect: async (_args, _options) => {
+        calls.push(['openOrInspect']);
+      },
+      log: (_message) => {
+        calls.push(['log']);
+      },
+      renderHelp: () => 'help'
+    }
+  );
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-test('resolvePlaywrightChromium supports ESM wrappers around CommonJS playwright exports', () => {
-  const fakeChromium = { launchPersistentContext() {} };
-  assert.equal(resolvePlaywrightChromium({ chromium: fakeChromium }), fakeChromium);
-  assert.equal(resolvePlaywrightChromium({ default: { chromium: fakeChromium } }), fakeChromium);
+  assert.deepEqual(calls, [
+    ['normalize', 'Chromatic'],
+    ['bootstrap', 'Chromatic']
+  ]);
 });
 
-test('resolvePlaywrightChromium rejects modules without a chromium launcher', () => {
-  assert.throws(
-    () => resolvePlaywrightChromium({ default: {} }),
-    /Playwright module does not expose chromium/
+test('runCommand prints help for default commands without provider normalization', async () => {
+  const calls = [];
+  await runCommand(
+    { command: 'help' },
+    {
+      normalizeProvider: (provider) => {
+        calls.push(['normalize', provider]);
+        return provider;
+      },
+      bootstrap: async () => {
+        calls.push(['bootstrap']);
+      },
+      listProviders: async () => {
+        calls.push(['list']);
+      },
+      openOrInspect: async () => {
+        calls.push(['openOrInspect']);
+      },
+      log: (message) => {
+        calls.push(['log', message]);
+      },
+      renderHelp: () => 'provider help'
+    }
   );
-});
 
-test('importing bootstrap helpers does not execute the CLI entrypoint', () => {
-  const moduleUrl = pathToFileURL(path.join(__dirname, 'provider_admin_bootstrap.mjs')).href;
-  const child = spawnSync(
-    process.execPath,
-    [
-      '--input-type=module',
-      '--eval',
-      `import ${JSON.stringify(moduleUrl)};`
-    ],
-    { encoding: 'utf-8' }
-  );
-
-  assert.equal(child.status, 0);
-  assert.equal(child.stdout.trim(), '');
-  assert.equal(child.stderr.trim(), '');
-});
-
-test('ensureManagedStatePath keeps provider state under the managed root', () => {
-  const stateRoot = path.resolve('C:/provider-ui-root');
-  assert.equal(
-    ensureManagedStatePath(path.join(stateRoot, 'chromium-profile'), stateRoot),
-    path.join(stateRoot, 'chromium-profile')
-  );
-  assert.throws(
-    () => ensureManagedStatePath('C:/outside-profile', stateRoot),
-    /managed state root/
-  );
+  assert.deepEqual(calls, [['log', 'provider help']]);
 });

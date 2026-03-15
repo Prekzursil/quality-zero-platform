@@ -64,7 +64,7 @@ class SecurityHelpersTests(unittest.TestCase):
         self.assertEqual(timeout, 15)
         self.assertEqual(request.full_url, "https://api.github.com/repos/Prekzursil/quality-zero-platform/status")
         self.assertEqual(request.get_method(), "GET")
-        self.assertEqual(request.data, None)
+        self.assertIsNone(request.data)
         self.assertEqual(
             {key.lower(): value for key, value in request.header_items()},
             {"accept": "application/json"},

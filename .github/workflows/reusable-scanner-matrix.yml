@@ -259,24 +259,42 @@ jobs:
           else:
             raise SystemExit(f"Unsupported lane: {lane}")
           PY
-      - name: Prepare git metadata for Qlty coverage
+      - name: Install Qlty CLI
         if: matrix.lane == 'coverage' && steps.profile.outputs.qlty_enabled == 'true' && steps.profile.outputs.qlty_coverage_files != ''
-        shell: bash
-        run: |
-          if [ -d .git ] || [ -f .git ]; then
-            rm -rf .git
-          fi
-
-          mv repo/.git .git
-          git --git-dir "$PWD/.git" config core.worktree "$PWD/repo"
-          git rev-parse --show-toplevel
+        uses: qltysh/qlty-action/install@a19242102d17e497f437d7466aa01b528537e899
       - name: Publish Qlty coverage
         if: matrix.lane == 'coverage' && steps.profile.outputs.qlty_enabled == 'true' && steps.profile.outputs.qlty_coverage_files != ''
-        uses: qltysh/qlty-action/coverage@a19242102d17e497f437d7466aa01b528537e899
-        with:
-          oidc: true
-          files: ${{ steps.profile.outputs.qlty_coverage_files }}
-          skip-errors: false
+        shell: bash
+        working-directory: repo
+        env:
+          QLTY_COVERAGE_FILES: ${{ steps.profile.outputs.qlty_coverage_files }}
+          TARGET_SHA: ${{ inputs.sha != '' && inputs.sha || github.sha }}
+          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+        run: |
+          OIDC_RESPONSE="$(curl -sSf -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https%3A%2F%2Fqlty.sh")"
+          export QLTY_COVERAGE_TOKEN="$(python -c "import json,sys; print(json.load(sys.stdin)['value'])" <<<"$OIDC_RESPONSE")"
+          python - <<'PY' > "$RUNNER_TEMP/qlty-coverage-files.txt"
+          import os
+
+          raw = os.environ["QLTY_COVERAGE_FILES"]
+          items = []
+          for chunk in raw.replace(",", "\n").splitlines():
+              item = chunk.strip()
+              if not item:
+                  continue
+              if item.startswith("repo/"):
+                  item = item[len("repo/") :]
+              items.append(item)
+          print("\n".join(items))
+          PY
+
+          mapfile -t qlty_files < "$RUNNER_TEMP/qlty-coverage-files.txt"
+          qlty coverage publish \
+            --override-commit-sha "$TARGET_SHA" \
+            --override-branch "$BRANCH_NAME" \
+            --validate \
+            --output-dir "$RUNNER_TEMP" \
+            "${qlty_files[@]}"
       - name: Upload lane artifacts
         if: always()
         uses: actions/upload-artifact@v4

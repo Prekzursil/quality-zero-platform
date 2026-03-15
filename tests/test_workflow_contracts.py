@@ -77,9 +77,10 @@ class WorkflowContractTests(unittest.TestCase):
                 self.assertNotIn(f'--failure-context "{snippet}"', text, path.name)
                 self.assertNotIn(f'--artifact "Target SHA: {snippet}"', text, path.name)
 
-    def test_scanner_matrix_pins_qlty_coverage_action_to_full_sha(self) -> None:
+    def test_scanner_matrix_pins_qlty_actions_to_full_sha(self) -> None:
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
-        self.assertIn("qltysh/qlty-action/coverage@a19242102d17e497f437d7466aa01b528537e899", text)
+        self.assertIn("qltysh/qlty-action/install@a19242102d17e497f437d7466aa01b528537e899", text)
+        self.assertIn("qlty coverage publish \\", text)
         self.assertIn("dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7", text)
 
         backlog_text = (ROOT / ".github" / "workflows" / "reusable-backlog-sweep.yml").read_text(encoding="utf-8")

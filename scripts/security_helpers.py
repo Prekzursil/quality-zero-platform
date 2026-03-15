@@ -123,8 +123,7 @@ def normalize_https_url(
 
 
 def _build_request(parsed: ParseResult, *, headers: Mapping[str, str] | None, method: str, data: bytes | None) -> _HttpsRequest:
-    if not parsed.hostname:
-        raise ValueError(f"Request URL is missing a hostname: {urlunparse(parsed)!r}")
+    _require_request_hostname(parsed)
     request_url = urlunparse(parsed._replace(fragment=""))
     return _HttpsRequest(
         full_url=request_url,

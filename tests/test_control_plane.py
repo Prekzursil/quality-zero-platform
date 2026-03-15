@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from scripts.quality.control_plane import (
     active_required_contexts,
@@ -12,6 +12,7 @@ from scripts.quality.control_plane import (
     load_repo_profile,
     validate_profile,
 )
+from scripts.quality import export_profile as export_profile_module
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -159,10 +160,11 @@ class ControlPlaneTests(unittest.TestCase):
     def test_export_profile_emits_coverage_inputs_for_codecov_and_qlty_uploads(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "github-output.txt"
-            subprocess.run(
+            with patch.object(
+                sys,
+                "argv",
                 [
-                    sys.executable,
-                    str(ROOT / "scripts" / "quality" / "export_profile.py"),
+                    "export_profile.py",
                     "--repo-slug",
                     "Prekzursil/quality-zero-platform",
                     "--github-output",
@@ -170,9 +172,8 @@ class ControlPlaneTests(unittest.TestCase):
                     "--out-json",
                     str(Path(tmpdir) / "profile.json"),
                 ],
-                cwd=ROOT,
-                check=True,
-            )
+            ):
+                self.assertEqual(export_profile_module.main(), 0)
 
             output = output_path.read_text(encoding="utf-8")
             self.assertIn("codecov_enabled=true", output)

@@ -136,6 +136,7 @@ jobs:
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || '' }}
           GITHUB_ACTOR_NAME: ${{ github.actor }}
           PULL_REQUEST_AUTHOR: ${{ github.event.pull_request.user.login || '' }}
+          PULL_REQUEST_HEAD_REF: ${{ github.event.pull_request.head.ref || github.head_ref || '' }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           CODACY_API_TOKEN: ${{ secrets.CODACY_API_TOKEN }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -177,6 +178,7 @@ jobs:
             is_dependabot_origin = (
               os.environ.get("GITHUB_ACTOR_NAME") == "dependabot[bot]"
               or os.environ.get("PULL_REQUEST_AUTHOR") == "dependabot[bot]"
+              or os.environ.get("PULL_REQUEST_HEAD_REF", "").startswith("dependabot/")
             )
             if os.environ.get("REPO_SLUG") == "Prekzursil/momentstudio" and is_dependabot_origin:
               required_secrets = [name for name in required_secrets if name != "CHROMATIC_PROJECT_TOKEN"]

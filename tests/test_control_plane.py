@@ -129,7 +129,7 @@ class ControlPlaneTests(unittest.TestCase):
             momentstudio_inputs,
             {
                 ("xml", "backend", "backend/coverage.xml"),
-                ("lcov", "frontend", "frontend/coverage/**/lcov.info"),
+                ("lcov", "frontend", "frontend/coverage/lcov.info"),
             },
         )
         self.assertEqual(env_inspector["coverage"]["min_percent"], 100.0)

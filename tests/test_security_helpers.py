@@ -42,6 +42,13 @@ class SecurityHelpersTests(unittest.TestCase):
         self.assertTrue(_get_ip_flag(_CallableFlag(), "is_private"))
         self.assertTrue(security_helpers._is_forbidden_ip_address(security_helpers.ipaddress.ip_address("127.0.0.1")))
 
+    def test_build_tls_context_enforces_verification_and_modern_tls(self) -> None:
+        context = security_helpers._build_tls_context()
+
+        self.assertTrue(context.check_hostname)
+        self.assertEqual(context.verify_mode, security_helpers.ssl.CERT_REQUIRED)
+        self.assertGreaterEqual(context.minimum_version, security_helpers.ssl.TLSVersion.TLSv1_2)
+
     def test_normalize_https_url_rejects_non_https(self) -> None:
         with self.assertRaises(ValueError):
             normalize_https_url("file:///tmp/example.json")
@@ -82,7 +89,7 @@ class SecurityHelpersTests(unittest.TestCase):
         response = _FakeHttpResponse('{"ok": true}', {"X-Test": "value"})
         ssl_context = sentinel.ssl_context
         with (
-            patch("scripts.security_helpers.ssl.create_default_context", return_value=ssl_context) as create_default_context,
+            patch("scripts.security_helpers._build_tls_context", return_value=ssl_context) as build_tls_context,
             patch("scripts.security_helpers.HTTPSConnection") as connection_cls,
         ):
             connection = connection_cls.return_value
@@ -96,7 +103,7 @@ class SecurityHelpersTests(unittest.TestCase):
 
         self.assertEqual(payload, {"ok": True})
         self.assertEqual(headers, {"x-test": "value"})
-        create_default_context.assert_called_once_with()
+        build_tls_context.assert_called_once_with()
         connection_cls.assert_called_once_with("api.github.com", port=None, timeout=15, context=ssl_context)
         connection.request.assert_called_once_with(
             "GET",

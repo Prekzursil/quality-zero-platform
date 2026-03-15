@@ -144,6 +144,15 @@ def _require_request_hostname(parsed: ParseResult) -> str:
     return cast(str, parsed.hostname)
 
 
+def _build_tls_context() -> ssl.SSLContext:
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.check_hostname = True
+    context.verify_mode = ssl.CERT_REQUIRED
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    context.load_default_certs()
+    return context
+
+
 def _read_json_response(
     parsed: ParseResult,
     *,
@@ -158,7 +167,7 @@ def _read_json_response(
         hostname,
         port=parsed.port,
         timeout=timeout,
-        context=ssl.create_default_context(),
+        context=_build_tls_context(),
     )
     response = None
     try:

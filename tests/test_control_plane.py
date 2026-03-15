@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -152,4 +155,27 @@ class ControlPlaneTests(unittest.TestCase):
         findings = validate_profile(profile)
 
         self.assertTrue(any("invalid codacy.dashboard_url" in item for item in findings))
+
+    def test_export_profile_emits_coverage_inputs_for_codecov_and_qlty_uploads(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "github-output.txt"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "quality" / "export_profile.py"),
+                    "--repo-slug",
+                    "Prekzursil/quality-zero-platform",
+                    "--github-output",
+                    str(output_path),
+                    "--out-json",
+                    str(Path(tmpdir) / "profile.json"),
+                ],
+                cwd=ROOT,
+                check=True,
+            )
+
+            output = output_path.read_text(encoding="utf-8")
+            self.assertIn("codecov_enabled=true", output)
+            self.assertIn("coverage_input_files=repo/coverage/platform-coverage.xml", output)
+            self.assertIn("qlty_coverage_files=repo/coverage/platform-coverage.xml", output)
 

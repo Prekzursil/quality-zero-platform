@@ -29,6 +29,8 @@ on:
         required: false
       CODACY_API_TOKEN:
         required: false
+      CODECOV_TOKEN:
+        required: false
       SENTRY_AUTH_TOKEN:
         required: false
       DEEPSCAN_API_TOKEN:
@@ -262,6 +264,15 @@ jobs:
       - name: Install Qlty CLI
         if: matrix.lane == 'coverage' && steps.profile.outputs.qlty_enabled == 'true' && steps.profile.outputs.qlty_coverage_files != ''
         uses: qltysh/qlty-action/install@a19242102d17e497f437d7466aa01b528537e899
+      - name: Publish Codecov coverage
+        if: matrix.lane == 'coverage' && steps.profile.outputs.codecov_enabled == 'true' && steps.profile.outputs.coverage_input_files != ''
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de
+        with:
+          files: ${{ steps.profile.outputs.coverage_input_files }}
+          fail_ci_if_error: true
+          use_oidc: ${{ secrets.CODECOV_TOKEN == '' }}
+          token: ${{ secrets.CODECOV_TOKEN }}
+          verbose: true
       - name: Publish Qlty coverage
         if: matrix.lane == 'coverage' && steps.profile.outputs.qlty_enabled == 'true' && steps.profile.outputs.qlty_coverage_files != ''
         shell: bash

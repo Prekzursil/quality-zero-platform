@@ -29,7 +29,7 @@ def _write_github_output(path: Path, profile: dict, event_name: str) -> None:
     codex_environment = profile.get("codex_environment", {})
     setup = coverage.get("setup", {})
     java = setup.get("java", {})
-    qlty_files = ",".join(
+    coverage_input_files = ",".join(
         str(PurePosixPath("repo") / PurePosixPath(str(item["path"]).replace("\\", "/")))
         for item in coverage.get("inputs", [])
     )
@@ -60,8 +60,10 @@ def _write_github_output(path: Path, profile: dict, event_name: str) -> None:
         f"coverage_java_version={java.get('version', '')}",
         f"coverage_needs_rust={str(bool(setup.get('rust', False))).lower()}",
         f"coverage_system_packages_json={json.dumps(setup.get('system_packages', []), separators=(',', ':'))}",
+        f"codecov_enabled={str(bool(profile.get('enabled_scanners', {}).get('codecov', False))).lower()}",
+        f"coverage_input_files={coverage_input_files}",
         f"qlty_enabled={str(bool(profile.get('enabled_scanners', {}).get('qlty', False))).lower()}",
-        f"qlty_coverage_files={qlty_files}",
+        f"qlty_coverage_files={coverage_input_files}",
         f"enabled_scanners_json={json.dumps(profile.get('enabled_scanners', {}), separators=(',', ':'))}",
         f"vendors_json={json.dumps(profile.get('vendors', {}), separators=(',', ':'))}",
     ]

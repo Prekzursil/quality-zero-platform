@@ -167,7 +167,7 @@ def _read_json_response(
         hostname,
         port=parsed.port,
         timeout=timeout,
-        context=_build_tls_context(),
+        context=_build_tls_context(),  # noqa: S309  # nosec B309 - validated HTTPS hosts plus an explicit TLS client context make this transport intentional and constrained.
     )
     response = None
     try:

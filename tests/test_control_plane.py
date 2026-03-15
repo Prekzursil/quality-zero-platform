@@ -143,6 +143,16 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertNotIn("OPENAI_API_KEY", quality_zero_platform["required_secrets"])
         self.assertIn("CODEX_AUTH_JSON", quality_zero_platform["conditional_secrets"])
 
+    def test_quality_zero_platform_keeps_codecov_target_only_until_provider_check_emits(self) -> None:
+        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
+        profile = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
+
+        pr_contexts = active_required_contexts(profile, event_name="pull_request")
+        target_contexts = profile["required_contexts"]["target"]
+
+        self.assertNotIn("Codecov Analytics", pr_contexts)
+        self.assertIn("Codecov Analytics", target_contexts)
+
     def test_visual_pair_validation_flags_single_context(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")

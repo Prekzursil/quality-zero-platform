@@ -32,10 +32,6 @@
             "integration_id": null
           },
           {
-            "context": "Codecov Analytics",
-            "integration_id": null
-          },
-          {
             "context": "Sonar Zero",
             "integration_id": null
           },

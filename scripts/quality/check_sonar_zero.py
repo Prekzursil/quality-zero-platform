@@ -129,12 +129,16 @@ def load_sonar_findings_with_retry(
     sleep_seconds: float = 5.0,
 ) -> tuple[int, str, list[str]]:
     retry_budget = max(1, int(attempts))
+    open_issues = 0
+    quality_gate = "UNKNOWN"
+    findings: list[str] = []
     for attempt in range(retry_budget):
         open_issues, quality_gate, findings = fetch_fn(args, auth)
-        if not findings or not _is_scoped_analysis(args) or attempt == retry_budget - 1:
+        if not findings or not _is_scoped_analysis(args):
             return open_issues, quality_gate, findings
-        time.sleep(max(0.0, float(sleep_seconds)))
-    raise AssertionError("Retry loop must return before exhaustion.")
+        if attempt != retry_budget - 1:
+            time.sleep(max(0.0, float(sleep_seconds)))
+    return open_issues, quality_gate, findings
 
 
 def main() -> int:

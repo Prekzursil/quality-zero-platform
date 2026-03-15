@@ -1,10 +1,24 @@
 from __future__ import annotations
 
+import os
 import unittest
+from argparse import Namespace
 from email.message import Message
+import runpy
+import sys
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
-from scripts.quality.check_codacy_zero import _query_codacy_open_issues, build_issues_url
+from scripts.quality import check_codacy_zero
+from scripts.quality.check_codacy_zero import (
+    _provider_candidates,
+    _query_codacy_open_issues,
+    _query_codacy_provider,
+    _request_mode,
+    build_issues_url,
+    extract_total_open,
+)
 
 
 class CodacyZeroTests(unittest.TestCase):
@@ -19,6 +33,25 @@ class CodacyZeroTests(unittest.TestCase):
             build_issues_url("gh", "Prekzursil", "quality-zero-platform", pull_request=""),
             "https://api.codacy.com/api/v3/analysis/organizations/gh/Prekzursil/repositories/quality-zero-platform/issues/search?limit=1",
         )
+
+    def test_extract_total_open_supports_nested_payloads(self) -> None:
+        self.assertEqual(extract_total_open({"paging": {"total": 3}}), 3)
+        self.assertEqual(extract_total_open([{"details": {"open_issues": 2}}]), 2)
+        self.assertIsNone(extract_total_open({"items": [{"details": "no-count"}]}))
+
+    def test_provider_candidates_and_request_mode_cover_default_paths(self) -> None:
+        self.assertEqual(_provider_candidates("gh"), ["gh", "github"])
+        self.assertEqual(_provider_candidates("custom"), ["custom", "gh", "github"])
+        self.assertEqual(_request_mode(""), ("POST", {}))
+        self.assertEqual(_request_mode("5"), ("GET", None))
+
+    def test_request_json_rejects_non_dict_payloads(self) -> None:
+        with patch("scripts.quality.check_codacy_zero.load_json_https", return_value=(["invalid"], {})):
+            with self.assertRaisesRegex(RuntimeError, "Unexpected Codacy API response payload"):
+                check_codacy_zero._request_json("https://api.codacy.com/test", "token")
+
+        with patch("scripts.quality.check_codacy_zero.load_json_https", return_value=({"total": 0}, {})):
+            self.assertEqual(check_codacy_zero._request_json("https://api.codacy.com/test", "token"), {"total": 0})
 
     def test_query_open_issues_falls_back_after_a_404_provider_probe(self) -> None:
         responses = [
@@ -70,6 +103,139 @@ class CodacyZeroTests(unittest.TestCase):
         )
         self.assertEqual(captured, [(expected_url, "GET", None)])
 
+    def test_query_codacy_provider_reports_missing_totals_and_open_issues(self) -> None:
+        with patch("scripts.quality.check_codacy_zero._request_json", return_value={"items": []}):
+            open_issues, findings = _query_codacy_provider("gh", "Prekzursil", "quality-zero-platform", "token")
+        self.assertIsNone(open_issues)
+        self.assertEqual(findings, ["Codacy response did not include a parseable total issue count."])
 
-if __name__ == "__main__":
-    unittest.main()
+        with patch("scripts.quality.check_codacy_zero._request_json", return_value={"total": 2}):
+            open_issues, findings = _query_codacy_provider("gh", "Prekzursil", "quality-zero-platform", "token")
+        self.assertEqual(open_issues, 2)
+        self.assertEqual(findings, ["Codacy reports 2 open issues (expected 0)."])
+
+    def test_query_open_issues_reports_non_404_and_runtime_failures(self) -> None:
+        from urllib.error import HTTPError
+
+        headers = Message()
+        with patch(
+            "scripts.quality.check_codacy_zero._query_codacy_provider",
+            side_effect=HTTPError("https://api.codacy.com", 500, "Boom", hdrs=headers, fp=None),
+        ):
+            open_issues, findings, exc = _query_codacy_open_issues(
+                "Prekzursil",
+                "quality-zero-platform",
+                "token",
+                ["gh"],
+            )
+        self.assertIsNone(open_issues)
+        self.assertEqual(findings, ["Codacy API request failed: HTTP 500"])
+        self.assertIsNotNone(exc)
+
+        with patch(
+            "scripts.quality.check_codacy_zero._query_codacy_provider",
+            side_effect=RuntimeError("network broke"),
+        ):
+            open_issues, findings, exc = _query_codacy_open_issues(
+                "Prekzursil",
+                "quality-zero-platform",
+                "token",
+                ["gh"],
+            )
+        self.assertIsNone(open_issues)
+        self.assertEqual(findings, ["Codacy API request failed: network broke"])
+        self.assertIsInstance(exc, RuntimeError)
+
+    def test_query_open_issues_reports_missing_provider_endpoints_after_all_404s(self) -> None:
+        from urllib.error import HTTPError
+
+        headers = Message()
+
+        def fake_provider(*_args, **_kwargs):
+            raise HTTPError("https://api.codacy.com", 404, "Not Found", hdrs=headers, fp=None)
+
+        with patch("scripts.quality.check_codacy_zero._query_codacy_provider", side_effect=fake_provider):
+            open_issues, findings, exc = _query_codacy_open_issues(
+                "Prekzursil",
+                "quality-zero-platform",
+                "token",
+                ["custom", "github"],
+            )
+
+        self.assertIsNone(open_issues)
+        self.assertIn("Codacy API endpoint was not found", findings[0])
+        self.assertIsNotNone(exc)
+
+    def test_main_handles_missing_token_success_and_report_failures(self) -> None:
+        args = Namespace(
+            provider="gh",
+            owner="Prekzursil",
+            repo="quality-zero-platform",
+            pull_request="",
+            token="",
+            out_json="codacy-zero/codacy.json",
+            out_md="codacy-zero/codacy.md",
+        )
+        with patch.dict("os.environ", {}, clear=True), patch.object(check_codacy_zero, "_parse_args", return_value=args), patch.object(
+            check_codacy_zero, "write_report", return_value=0
+        ) as write_report_mock:
+            self.assertEqual(check_codacy_zero.main(), 1)
+        self.assertEqual(write_report_mock.call_args.args[0]["findings"], ["CODACY_API_TOKEN is missing."])
+
+        success_args = Namespace(**{**args.__dict__, "token": "explicit-token", "pull_request": "5"})
+        with patch.object(check_codacy_zero, "_parse_args", return_value=success_args), patch.object(
+            check_codacy_zero, "_query_codacy_open_issues", return_value=(0, [], None)
+        ), patch.object(check_codacy_zero, "write_report", return_value=0) as write_report_mock:
+            self.assertEqual(check_codacy_zero.main(), 0)
+        self.assertEqual(write_report_mock.call_args.args[0]["status"], "pass")
+
+        with patch.object(check_codacy_zero, "_parse_args", return_value=success_args), patch.object(
+            check_codacy_zero, "_query_codacy_open_issues", return_value=(0, [], None)
+        ), patch.object(check_codacy_zero, "write_report", return_value=7):
+            self.assertEqual(check_codacy_zero.main(), 7)
+
+    def test_parse_args_render_markdown_and_script_entrypoint(self) -> None:
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "check_codacy_zero.py",
+                "--owner",
+                "Prekzursil",
+                "--repo",
+                "quality-zero-platform",
+            ],
+        ):
+            args = check_codacy_zero._parse_args()
+        self.assertEqual(args.provider, "gh")
+        self.assertEqual(args.out_json, "codacy-zero/codacy.json")
+        markdown = check_codacy_zero._render_md(
+            {
+                "status": "pass",
+                "owner": "Prekzursil",
+                "repo": "quality-zero-platform",
+                "open_issues": 0,
+                "timestamp_utc": "2026-03-15T00:00:00+00:00",
+                "findings": [],
+            }
+        )
+        self.assertIn("- None", markdown)
+
+        script_path = Path("scripts/quality/check_codacy_zero.py").resolve()
+        root_text = str(Path.cwd().resolve())
+        trimmed_sys_path = [item for item in sys.path if item != root_text]
+        with tempfile.TemporaryDirectory() as tmp, patch.dict("os.environ", {}, clear=True), patch.object(
+            sys,
+            "argv",
+            [str(script_path), "--owner", "Prekzursil", "--repo", "quality-zero-platform"],
+        ), patch.object(sys, "path", trimmed_sys_path[:]):
+            cwd = Path(tmp)
+            previous = Path.cwd()
+            os.chdir(cwd)
+            try:
+                with self.assertRaises(SystemExit) as result:
+                    runpy.run_path(str(script_path), run_name="__main__")
+            finally:
+                os.chdir(previous)
+        self.assertEqual(result.exception.code, 1)
+

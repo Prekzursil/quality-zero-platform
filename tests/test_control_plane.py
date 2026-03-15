@@ -153,6 +153,3 @@ class ControlPlaneTests(unittest.TestCase):
 
         self.assertTrue(any("invalid codacy.dashboard_url" in item for item in findings))
 
-
-if __name__ == "__main__":
-    unittest.main()

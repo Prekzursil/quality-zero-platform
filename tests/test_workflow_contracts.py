@@ -143,6 +143,3 @@ class WorkflowContractTests(unittest.TestCase):
         text = (ROOT / ".github" / "workflows" / "reusable-quality-zero-gate.yml").read_text(encoding="utf-8")
         self.assertIn("GITHUB_TOKEN: ${{ github.token }}", text)
 
-
-if __name__ == "__main__":
-    unittest.main()

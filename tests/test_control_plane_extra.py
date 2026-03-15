@@ -11,14 +11,18 @@ from pathlib import Path
 from unittest.mock import patch
 
 from scripts.quality.control_plane import (
+    _load_yaml,
     _infer_coverage_inputs,
     _load_stack,
     _normalize_coverage_assert_mode,
     _normalize_coverage_inputs,
     _normalize_java_setup,
+    _validate_coverage_contract,
+    _validate_vendor_urls,
     load_inventory,
     load_repo_profile,
     main,
+    repo_root,
     validate_profile,
 )
 
@@ -29,6 +33,8 @@ CONTROL_PLANE_PATH = ROOT / "scripts" / "quality" / "control_plane.py"
 
 class ControlPlaneExtraTests(unittest.TestCase):
     def test_normalize_coverage_helpers_filter_invalid_entries_and_support_legacy_path(self) -> None:
+        self.assertEqual(repo_root(), ROOT)
+        self.assertEqual(_normalize_coverage_inputs("not-a-list"), [])
         normalized = _normalize_coverage_inputs(
             [
                 {"format": "xml", "name": "platform", "path": "coverage.xml"},
@@ -75,6 +81,19 @@ class ControlPlaneExtraTests(unittest.TestCase):
                 _load_stack(inventory, "cycle-a")
             with self.assertRaisesRegex(ValueError, "missing a profile id"):
                 load_repo_profile(inventory, "Example/Repo")
+
+    def test_yaml_and_inventory_helpers_reject_non_mapping_payloads(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            mapping_path = root / "mapping.yml"
+            mapping_path.write_text("- not-a-mapping\n", encoding="utf-8")
+            inventory_path = root / "inventory.yml"
+            inventory_path.write_text("repos: invalid\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "Expected mapping"):
+                _load_yaml(mapping_path)
+            with self.assertRaisesRegex(ValueError, "inventory repos must be a list"):
+                load_inventory(inventory_path)
 
     def test_validate_profile_collects_contract_and_url_findings(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
@@ -133,6 +152,45 @@ class ControlPlaneExtraTests(unittest.TestCase):
         ]
         for fragment in expected_fragments:
             self.assertTrue(any(fragment in item for item in findings), fragment)
+
+    def test_additional_contract_validators_cover_repo_lookup_target_and_runner_label_edges(self) -> None:
+        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
+        with self.assertRaisesRegex(KeyError, "Repo Missing/Repo not found"):
+            load_repo_profile(inventory, "Missing/Repo")
+
+        profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
+        profile["codex_environment"]["runner_labels"] = ["codex-trusted"]
+        profile["required_contexts"]["required_now"] = ["Coverage 100 Gate"]
+        profile["required_contexts"]["target"] = []
+
+        findings = validate_profile(profile)
+
+        self.assertTrue(any("runner_labels must include self-hosted" in item for item in findings))
+        self.assertTrue(any("required_contexts.target is missing Coverage 100 Gate" in item for item in findings))
+
+    def test_visual_pair_and_optional_validators_cover_remaining_branches(self) -> None:
+        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
+
+        plain_profile = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
+        plain_profile["enabled_scanners"]["coverage"] = False
+        plain_profile["coverage"]["command"] = ""
+        plain_profile["coverage"]["inputs"] = []
+        plain_profile["vendors"]["custom"] = "skip-me"
+
+        self.assertEqual(_validate_coverage_contract(plain_profile), [])
+        self.assertEqual(_validate_vendor_urls(plain_profile), [])
+
+        visual_profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
+        visual_profile["required_contexts"]["required_now"] = [
+            *visual_profile["required_contexts"]["required_now"],
+            "Chromatic Playwright",
+        ]
+
+        findings = validate_profile(visual_profile)
+
+        self.assertTrue(any("visual_pair_required needs both Chromatic and Applitools contexts in required_now" in item for item in findings))
+        non_visual = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
+        self.assertEqual([item for item in validate_profile(non_visual) if "visual_pair_required" in item], [])
 
     def test_main_print_modes_emit_expected_json(self) -> None:
         outputs: list[object] = []

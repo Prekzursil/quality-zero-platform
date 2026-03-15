@@ -57,6 +57,3 @@ class RulesetPayloadTests(unittest.TestCase):
         self.assertIn("Qlty Coverage", profile["required_contexts"]["target"])
         self.assertIn("Qlty Diff Coverage", profile["required_contexts"]["target"])
 
-
-if __name__ == "__main__":
-    unittest.main()

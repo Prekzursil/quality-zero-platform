@@ -16,7 +16,7 @@ coverage:
       path: backend/coverage.xml
     - format: lcov
       name: frontend
-      path: frontend/coverage/**/lcov.info
+      path: frontend/coverage/lcov.info
 required_contexts:
   target:
     - Chromatic Playwright

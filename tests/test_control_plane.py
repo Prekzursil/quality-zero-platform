@@ -193,10 +193,10 @@ class ControlPlaneTests(unittest.TestCase):
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
 
-        profile["vendors"]["chromatic"]["project_name"] = ""
-        profile["vendors"]["chromatic"]["token_secret"] = ""
-        profile["vendors"]["chromatic"]["local_env_var"] = ""
-        profile["vendors"]["applitools"]["project_name"] = ""
+        profile["vendors"]["chromatic"].pop("project_name", None)
+        profile["vendors"]["chromatic"].pop("token_secret", None)
+        profile["vendors"]["chromatic"].pop("local_env_var", None)
+        profile["vendors"]["applitools"]["project_name"] = None
 
         findings = validate_profile(profile)
 

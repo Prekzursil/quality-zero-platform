@@ -31,6 +31,12 @@ on:
         required: false
       CODECOV_TOKEN:
         required: false
+      CHROMATIC_PROJECT_TOKEN:
+        required: false
+      APPLITOOLS_API_KEY:
+        required: false
+      CODEX_AUTH_JSON:
+        required: false
       SENTRY_AUTH_TOKEN:
         required: false
       DEEPSCAN_API_TOKEN:
@@ -139,6 +145,10 @@ jobs:
           PULL_REQUEST_HEAD_REF: ${{ github.event.pull_request.head.ref || github.head_ref || '' }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           CODACY_API_TOKEN: ${{ secrets.CODACY_API_TOKEN }}
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+          APPLITOOLS_API_KEY: ${{ secrets.APPLITOOLS_API_KEY }}
+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           DEEPSCAN_API_TOKEN: ${{ secrets.DEEPSCAN_API_TOKEN }}
           SENTRY_ORG: ${{ vars.SENTRY_ORG }}

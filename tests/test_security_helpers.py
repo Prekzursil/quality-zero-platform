@@ -21,6 +21,7 @@ class _FakeHttpResponse:
         self._headers = dict(headers or {})
         self.status = status
         self.reason = reason
+        self.closed = False
 
     def read(self) -> bytes:
         return self._payload
@@ -29,11 +30,8 @@ class _FakeHttpResponse:
     def headers(self) -> dict[str, str]:
         return self._headers
 
-    def __enter__(self) -> _FakeHttpResponse:
-        return self
-
-    def __exit__(self, exc_type, exc, tb) -> None:
-        return None
+    def close(self) -> None:
+        self.closed = True
 
 
 class SecurityHelpersTests(unittest.TestCase):
@@ -101,6 +99,7 @@ class SecurityHelpersTests(unittest.TestCase):
             body=None,
             headers={"Accept": "application/json"},
         )
+        self.assertTrue(response.closed)
         connection.close.assert_called_once()
 
     def test_load_json_https_raises_http_error_for_non_success_response(self) -> None:
@@ -110,4 +109,5 @@ class SecurityHelpersTests(unittest.TestCase):
             connection.getresponse.return_value = response
             with self.assertRaisesRegex(Exception, "HTTP Error 404: Not Found"):
                 load_json_https("https://api.github.com/repos/Prekzursil/quality-zero-platform/status")
+        self.assertTrue(response.closed)
         connection.close.assert_called_once()

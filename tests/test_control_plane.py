@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import io
+import json
+import runpy
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -179,4 +183,29 @@ class ControlPlaneTests(unittest.TestCase):
             self.assertIn("codecov_enabled=true", output)
             self.assertIn("coverage_input_files=repo/coverage/platform-coverage.xml", output)
             self.assertIn("qlty_coverage_files=repo/coverage/platform-coverage.xml", output)
+
+    def test_export_profile_script_prints_json_when_output_path_is_not_requested(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            stdout = io.StringIO()
+            output_path = Path(tmpdir) / "github-output.txt"
+            argv = [
+                "export_profile.py",
+                "--repo-slug",
+                "Prekzursil/quality-zero-platform",
+                "--github-output",
+                str(output_path),
+            ]
+            repo_root = str(ROOT)
+            sys_path = [entry for entry in sys.path if entry != repo_root]
+            if "" not in sys_path:
+                sys_path.insert(0, "")
+
+            with patch.object(sys, "argv", argv), patch.object(sys, "path", sys_path), redirect_stdout(stdout):
+                with self.assertRaises(SystemExit) as exc:
+                    runpy.run_path(str(ROOT / "scripts" / "quality" / "export_profile.py"), run_name="__main__")
+
+            self.assertEqual(exc.exception.code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["profile_id"], "quality-zero-platform")
+            self.assertEqual(payload["coverage"]["inputs"][0]["path"], "coverage/platform-coverage.xml")
 

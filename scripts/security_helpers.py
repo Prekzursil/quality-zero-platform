@@ -4,8 +4,9 @@ from dataclasses import dataclass
 from http.client import HTTPSConnection
 import ipaddress
 import json
+import ssl
 from urllib.error import HTTPError
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 from urllib.parse import ParseResult, urlparse, urlunparse
 
 
@@ -138,6 +139,12 @@ def _build_request_target(parsed: ParseResult) -> str:
     return target or "/"
 
 
+def _require_request_hostname(parsed: ParseResult) -> str:
+    if not parsed.hostname:
+        raise ValueError(f"Request URL is missing a hostname: {urlunparse(parsed)!r}")
+    return cast(str, parsed.hostname)
+
+
 def _read_json_response(
     parsed: ParseResult,
     *,
@@ -147,7 +154,13 @@ def _read_json_response(
     timeout: int,
 ) -> tuple[Any, dict[str, str]]:
     request = _build_request(parsed, headers=headers, method=method, data=data)
-    connection = HTTPSConnection(parsed.hostname, port=parsed.port, timeout=timeout)
+    hostname = _require_request_hostname(parsed)
+    connection = HTTPSConnection(
+        hostname,
+        port=parsed.port,
+        timeout=timeout,
+        context=ssl.create_default_context(),
+    )
     response = None
     try:
         connection.request(

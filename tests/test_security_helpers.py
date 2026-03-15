@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 from urllib.parse import urlparse
-from unittest.mock import patch
+from unittest.mock import sentinel, patch
 
 from scripts import security_helpers
 from scripts.security_helpers import _build_request, _get_ip_flag, load_json_https, normalize_https_url
@@ -80,7 +80,11 @@ class SecurityHelpersTests(unittest.TestCase):
 
     def test_load_json_https_uses_normalized_request_and_collects_headers(self) -> None:
         response = _FakeHttpResponse('{"ok": true}', {"X-Test": "value"})
-        with patch("scripts.security_helpers.HTTPSConnection") as connection_cls:
+        ssl_context = sentinel.ssl_context
+        with (
+            patch("scripts.security_helpers.ssl.create_default_context", return_value=ssl_context) as create_default_context,
+            patch("scripts.security_helpers.HTTPSConnection") as connection_cls,
+        ):
             connection = connection_cls.return_value
             connection.getresponse.return_value = response
             payload, headers = load_json_https(
@@ -92,7 +96,8 @@ class SecurityHelpersTests(unittest.TestCase):
 
         self.assertEqual(payload, {"ok": True})
         self.assertEqual(headers, {"x-test": "value"})
-        connection_cls.assert_called_once_with("api.github.com", port=None, timeout=15)
+        create_default_context.assert_called_once_with()
+        connection_cls.assert_called_once_with("api.github.com", port=None, timeout=15, context=ssl_context)
         connection.request.assert_called_once_with(
             "GET",
             "/repos/Prekzursil/quality-zero-platform/status",

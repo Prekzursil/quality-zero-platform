@@ -125,7 +125,7 @@ class ControlPlaneExtraTests(unittest.TestCase):
                 "assert_mode": {"default": "invalid"},
             }
         )
-        profile["vendors"]["codacy"]["dashboard_url"] = "http://insecure.example.com"
+        profile["vendors"]["codacy"]["dashboard_url"] = "https://localhost/codacy"
 
         findings = validate_profile(profile)
 

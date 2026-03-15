@@ -1,7 +1,6 @@
 slug: Prekzursil/pbinfo-get-unsolved
 stack: node-frontend
 verify_command: bash scripts/verify
-codex_setup_command: npm ci
 coverage:
   command: |
     npm ci

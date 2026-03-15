@@ -1,6 +1,5 @@
 extends: quality-zero-phase1-common
 stack_family: node-frontend
-codex_setup_command: npm ci
 coverage:
   mode: lcov
   artifact_path: quality-artifacts/coverage/lcov.info

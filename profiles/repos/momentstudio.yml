@@ -1,0 +1,33 @@
+slug: Prekzursil/momentstudio
+stack: fullstack-web
+verify_command: make verify
+required_secrets:
+  - CHROMATIC_PROJECT_TOKEN
+  - APPLITOOLS_API_KEY
+coverage:
+  command: |
+    python -m pip install --upgrade pip
+    python -m pip install -r backend/requirements.txt coverage pytest ruff mypy
+    npm --prefix frontend ci
+    make coverage
+  inputs:
+    - format: xml
+      name: backend
+      path: backend/coverage.xml
+    - format: lcov
+      name: frontend
+      path: frontend/coverage/**/lcov.info
+required_contexts:
+  target:
+    - Chromatic Playwright
+    - Applitools Visual
+visual_pair_required: true
+visual_lane:
+  kind: web
+providers:
+  chromatic:
+    status_context: Chromatic Playwright
+  applitools:
+    status_context: Applitools Visual
+  sonar:
+    project_key: Prekzursil_AdrianaArt

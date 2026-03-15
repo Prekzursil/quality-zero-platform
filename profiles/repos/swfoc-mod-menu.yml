@@ -1,7 +1,9 @@
 slug: Prekzursil/SWFOC-Mod-Menu
 stack: dotnet-wpf
 verify_command: dotnet test tests/SwfocTrainer.Tests/SwfocTrainer.Tests.csproj -c Release --no-build --filter "FullyQualifiedName!~SwfocTrainer.Tests.Profiles.Live&FullyQualifiedName!~RuntimeAttachSmokeTests"
-codex_setup_command: dotnet restore
+required_secrets:
+  - CHROMATIC_PROJECT_TOKEN
+  - APPLITOOLS_API_KEY
 coverage:
   runner: windows-latest
   shell: pwsh
@@ -30,6 +32,18 @@ trigger:
   pr_head_sha: true
 legacy_policy_checks:
   - code/snyk
+required_contexts:
+  target:
+    - Chromatic Playwright
+    - Applitools Visual
+visual_pair_required: true
+visual_lane:
+  kind: desktop-adapter
+providers:
+  chromatic:
+    status_context: Chromatic Playwright
+  applitools:
+    status_context: Applitools Visual
 vendors:
   sonar:
     project_key: Prekzursil_SWFOC-Mod-Menu

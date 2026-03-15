@@ -1,7 +1,10 @@
 slug: Prekzursil/Reframe
 stack: fullstack-web
 verify_command: make verify
-codex_setup_command: python -m pip install -r requirements-dev.txt && npm ci
+required_contexts_mode: replace
+required_secrets:
+  - CHROMATIC_PROJECT_TOKEN
+  - APPLITOOLS_API_KEY
 coverage:
   setup:
     rust: true
@@ -50,13 +53,40 @@ required_contexts:
     - Web build
     - Analyze (python)
     - Analyze (typescript)
-    - Percy Visual
-    - Applitools Visual
-    - BrowserStack E2E
   pull_request_only:
     - CodeQL
     - CodeRabbit
     - Codacy Static Code Analysis
+  target:
+    - Coverage 100 Gate
+    - Codecov Analytics
+    - Qlty Gate
+    - Qlty Coverage
+    - Qlty Diff Coverage
+    - Sonar Zero
+    - Codacy Zero
+    - Semgrep Zero
+    - Sentry Zero
+    - DeepScan Zero
+    - SonarCloud Code Analysis
+    - DeepScan
+    - Python API & worker checks
+    - Web build
+    - Analyze (python)
+    - Analyze (typescript)
+    - Chromatic Playwright
+    - Applitools Visual
+    - CodeQL
+    - CodeRabbit
+    - Codacy Static Code Analysis
+visual_pair_required: true
+visual_lane:
+  kind: web
+providers:
+  chromatic:
+    status_context: Chromatic Playwright
+  applitools:
+    status_context: Applitools Visual
 vendors:
   sonar:
     project_key: Prekzursil_Reframe

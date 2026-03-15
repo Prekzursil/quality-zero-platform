@@ -5,6 +5,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
+from typing import Any, Mapping
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -12,44 +13,88 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
 from scripts.quality.common import dedupe_strings, utc_timestamp, write_report
 
 
+NONE_BULLET = "- None"
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Validate required quality-gate secrets and variables.")
     parser.add_argument("--required-secret", action="append", default=[], help="Required secret env var name")
+    parser.add_argument("--conditional-secret", action="append", default=[], help="Conditional secret env var name")
     parser.add_argument("--required-var", action="append", default=[], help="Required variable env var name")
+    parser.add_argument("--conditional-var", action="append", default=[], help="Conditional variable env var name")
     parser.add_argument("--out-json", default="quality-secrets/secrets.json")
     parser.add_argument("--out-md", default="quality-secrets/secrets.md")
     return parser.parse_args()
 
 
-def _render_md(payload: dict) -> str:
+def _append_missing_section(lines: list[str], title: str, items: list[str]) -> None:
+    lines.extend(["", title])
+    lines.extend([f"- `{item}`" for item in items] or [NONE_BULLET])
+
+
+def _render_md(payload: Mapping[str, Any]) -> str:
     lines = [
         "# Quality Secrets Preflight",
         "",
         f"- Status: `{payload['status']}`",
         f"- Timestamp (UTC): `{payload['timestamp_utc']}`",
-        "",
-        "## Missing secrets",
     ]
-    lines.extend([f"- `{item}`" for item in payload.get("missing_secrets", [])] or ["- None"])
-    lines.extend(["", "## Missing variables"])
-    lines.extend([f"- `{item}`" for item in payload.get("missing_vars", [])] or ["- None"])
+    _append_missing_section(lines, "## Missing secrets", payload.get("missing_secrets", []))
+    _append_missing_section(
+        lines,
+        "## Missing conditional secrets",
+        payload.get("missing_conditional_secrets", []),
+    )
+    _append_missing_section(lines, "## Missing variables", payload.get("missing_vars", []))
+    _append_missing_section(
+        lines,
+        "## Missing conditional variables",
+        payload.get("missing_conditional_vars", []),
+    )
     return "\n".join(lines) + "\n"
+
+
+def _missing_env_names(names: list[str]) -> list[str]:
+    return [name for name in names if not str(os.environ.get(name, "")).strip()]
+
+
+def _build_payload(
+    *,
+    required_secrets: list[str],
+    conditional_secrets: list[str],
+    required_vars: list[str],
+    conditional_vars: list[str],
+) -> dict[str, Any]:
+    missing_secrets = _missing_env_names(required_secrets)
+    missing_conditional_secrets = _missing_env_names(conditional_secrets)
+    missing_vars = _missing_env_names(required_vars)
+    missing_conditional_vars = _missing_env_names(conditional_vars)
+    return {
+        "status": "pass" if not missing_secrets and not missing_vars else "fail",
+        "timestamp_utc": utc_timestamp(),
+        "required_secrets": required_secrets,
+        "conditional_secrets": conditional_secrets,
+        "required_vars": required_vars,
+        "conditional_vars": conditional_vars,
+        "missing_secrets": missing_secrets,
+        "missing_conditional_secrets": missing_conditional_secrets,
+        "missing_vars": missing_vars,
+        "missing_conditional_vars": missing_conditional_vars,
+    }
 
 
 def main() -> int:
     args = _parse_args()
     required_secrets = dedupe_strings(args.required_secret or [])
+    conditional_secrets = dedupe_strings(args.conditional_secret or [])
     required_vars = dedupe_strings(args.required_var or [])
-    missing_secrets = [name for name in required_secrets if not str(os.environ.get(name, "")).strip()]
-    missing_vars = [name for name in required_vars if not str(os.environ.get(name, "")).strip()]
-    payload = {
-        "status": "pass" if not missing_secrets and not missing_vars else "fail",
-        "timestamp_utc": utc_timestamp(),
-        "required_secrets": required_secrets,
-        "required_vars": required_vars,
-        "missing_secrets": missing_secrets,
-        "missing_vars": missing_vars,
-    }
+    conditional_vars = dedupe_strings(args.conditional_var or [])
+    payload = _build_payload(
+        required_secrets=required_secrets,
+        conditional_secrets=conditional_secrets,
+        required_vars=required_vars,
+        conditional_vars=conditional_vars,
+    )
     return_code = write_report(
         payload,
         out_json=args.out_json,

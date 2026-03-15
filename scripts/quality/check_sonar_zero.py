@@ -3,19 +3,18 @@ from __future__ import annotations
 
 import argparse
 import base64
-import json
 import os
 import sys
+import time
 import urllib.parse
-import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.quality.common import utc_timestamp, write_report
-from scripts.security_helpers import normalize_https_url
+from scripts.security_helpers import load_json_https
 
 
 SONAR_API_BASE = "https://sonarcloud.io"
@@ -37,21 +36,21 @@ def _auth_header(token: str) -> str:
 
 
 def _request_json(url: str, auth_header: str) -> dict[str, Any]:
-    safe_url = normalize_https_url(url, allowed_host_suffixes={"sonarcloud.io"}).rstrip("/")
-    request = urllib.request.Request(
-        safe_url,
+    payload, _ = load_json_https(
+        url.rstrip("/"),
+        allowed_host_suffixes={"sonarcloud.io"},
         headers={
             "Accept": "application/json",
             "Authorization": auth_header,
             "User-Agent": "quality-zero-platform",
         },
-        method="GET",
     )
-    with urllib.request.urlopen(request, timeout=30) as response:
-        return json.loads(response.read().decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise RuntimeError("Unexpected SonarCloud API response payload")
+    return payload
 
 
-def _render_md(payload: dict) -> str:
+def _render_md(payload: Mapping[str, Any]) -> str:
     lines = [
         "# Sonar Zero Gate",
         "",
@@ -67,6 +66,81 @@ def _render_md(payload: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _build_sonar_query(project_key: str, *, branch: str, pull_request: str) -> dict[str, str]:
+    query = {"projectKey": project_key}
+    if branch:
+        query["branch"] = branch
+    if pull_request:
+        query["pullRequest"] = pull_request
+    return query
+
+
+def _load_open_issues(args: argparse.Namespace, auth: str) -> int:
+    issues_query = {
+        "componentKeys": args.project_key,
+        "resolved": "false",
+        "ps": "1",
+    }
+    if args.branch:
+        issues_query["branch"] = args.branch
+    if args.pull_request:
+        issues_query["pullRequest"] = args.pull_request
+    issues_payload = _request_json(
+        f"{SONAR_API_BASE}/api/issues/search?{urllib.parse.urlencode(issues_query)}",
+        auth,
+    )
+    return int((issues_payload.get("paging") or {}).get("total") or 0)
+
+
+def _load_quality_gate(args: argparse.Namespace, auth: str) -> str:
+    gate_query = _build_sonar_query(
+        args.project_key,
+        branch=args.branch,
+        pull_request=args.pull_request,
+    )
+    gate_payload = _request_json(
+        f"{SONAR_API_BASE}/api/qualitygates/project_status?{urllib.parse.urlencode(gate_query)}",
+        auth,
+    )
+    return str((gate_payload.get("projectStatus") or {}).get("status") or "UNKNOWN")
+
+
+def _load_sonar_findings(args: argparse.Namespace, auth: str) -> tuple[int, str, list[str]]:
+    open_issues = _load_open_issues(args, auth)
+    quality_gate = _load_quality_gate(args, auth)
+    findings: list[str] = []
+    if open_issues != 0:
+        findings.append(f"Sonar reports {open_issues} open issues (expected 0).")
+    if quality_gate != "OK":
+        findings.append(f"Sonar quality gate status is {quality_gate} (expected OK).")
+    return open_issues, quality_gate, findings
+
+
+def _is_scoped_analysis(args: argparse.Namespace) -> bool:
+    return bool(getattr(args, "branch", "").strip() or getattr(args, "pull_request", "").strip())
+
+
+def load_sonar_findings_with_retry(
+    args: argparse.Namespace,
+    auth: str,
+    *,
+    fetch_fn=_load_sonar_findings,
+    attempts: int = 4,
+    sleep_seconds: float = 5.0,
+) -> tuple[int, str, list[str]]:
+    retry_budget = max(1, int(attempts))
+    open_issues = 0
+    quality_gate = "UNKNOWN"
+    findings: list[str] = []
+    for attempt in range(retry_budget):
+        open_issues, quality_gate, findings = fetch_fn(args, auth)
+        if not findings or not _is_scoped_analysis(args):
+            return open_issues, quality_gate, findings
+        if attempt != retry_budget - 1:
+            time.sleep(max(0.0, float(sleep_seconds)))
+    return open_issues, quality_gate, findings
+
+
 def main() -> int:
     args = _parse_args()
     token = (args.token or os.environ.get("SONAR_TOKEN", "")).strip()
@@ -80,36 +154,9 @@ def main() -> int:
     else:
         try:
             auth = _auth_header(token)
-            issues_query = {
-                "componentKeys": args.project_key,
-                "resolved": "false",
-                "ps": "1",
-            }
-            if args.branch:
-                issues_query["branch"] = args.branch
-            if args.pull_request:
-                issues_query["pullRequest"] = args.pull_request
-            issues_payload = _request_json(
-                f"{SONAR_API_BASE}/api/issues/search?{urllib.parse.urlencode(issues_query)}",
-                auth,
-            )
-            open_issues = int((issues_payload.get("paging") or {}).get("total") or 0)
-            gate_query = {"projectKey": args.project_key}
-            if args.branch:
-                gate_query["branch"] = args.branch
-            if args.pull_request:
-                gate_query["pullRequest"] = args.pull_request
-            gate_payload = _request_json(
-                f"{SONAR_API_BASE}/api/qualitygates/project_status?{urllib.parse.urlencode(gate_query)}",
-                auth,
-            )
-            quality_gate = str((gate_payload.get("projectStatus") or {}).get("status") or "UNKNOWN")
-            if open_issues != 0:
-                findings.append(f"Sonar reports {open_issues} open issues (expected 0).")
-            if quality_gate != "OK":
-                findings.append(f"Sonar quality gate status is {quality_gate} (expected OK).")
+            open_issues, quality_gate, findings = load_sonar_findings_with_retry(args, auth)
             status = "pass" if not findings else "fail"
-        except Exception as exc:  # pragma: no cover
+        except (OSError, RuntimeError, ValueError) as exc:  # pragma: no cover
             findings.append(f"Sonar API request failed: {exc}")
             status = "fail"
 

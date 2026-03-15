@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -85,7 +85,25 @@ def _load_stack(inventory: dict[str, Any], stack_id: str, seen: set[str] | None 
 def _normalize_required_contexts(raw: dict[str, Any]) -> dict[str, list[str]]:
     always = dedupe_strings(raw.get("always", []))
     pull_request_only = [item for item in dedupe_strings(raw.get("pull_request_only", [])) if item not in always]
-    return {"always": always, "pull_request_only": pull_request_only}
+    required_now = dedupe_strings(raw.get("required_now", []) or [*always, *pull_request_only])
+    target = dedupe_strings(raw.get("target", []) or [*required_now])
+    return {
+        "always": always,
+        "pull_request_only": pull_request_only,
+        "required_now": required_now,
+        "target": target,
+    }
+
+
+def _merge_required_contexts(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, list[str]]:
+    return _normalize_required_contexts(
+        {
+            "always": [*base.get("always", []), *overlay.get("always", [])],
+            "pull_request_only": [*base.get("pull_request_only", []), *overlay.get("pull_request_only", [])],
+            "required_now": [*base.get("required_now", []), *overlay.get("required_now", [])],
+            "target": [*base.get("target", []), *overlay.get("target", [])],
+        }
+    )
 
 
 def _normalize_coverage_inputs(raw_inputs: Any) -> list[dict[str, str]]:
@@ -105,91 +123,164 @@ def _normalize_coverage_inputs(raw_inputs: Any) -> list[dict[str, str]]:
     return normalized
 
 
-def _normalize_coverage(raw: dict[str, Any]) -> dict[str, Any]:
-    coverage = deepcopy(raw or {})
+def _infer_coverage_inputs(coverage: dict[str, Any]) -> list[dict[str, str]]:
     inputs = _normalize_coverage_inputs(coverage.get("inputs", []))
-
     legacy_path = str(coverage.get("artifact_path", "")).strip()
-    if not inputs and legacy_path:
-        inferred = "xml" if legacy_path.endswith(".xml") else "lcov"
-        inputs = [{"format": inferred, "name": "default", "path": legacy_path}]
+    if inputs or not legacy_path:
+        return inputs
 
-    raw_setup = coverage.get("setup", {})
-    setup = deepcopy(raw_setup) if isinstance(raw_setup, dict) else {}
-    raw_java = setup.get("java", {})
+    inferred = "xml" if legacy_path.endswith(".xml") else "lcov"
+    return [{"format": inferred, "name": "default", "path": legacy_path}]
+
+
+def _normalize_java_setup(raw_java: Any) -> dict[str, Any]:
     if isinstance(raw_java, str):
         raw_java = {"distribution": "temurin", "version": raw_java}
     java = deepcopy(raw_java) if isinstance(raw_java, dict) else {}
+    return {
+        "distribution": str(java.get("distribution", "")).strip(),
+        "version": str(java.get("version", "")).strip(),
+    }
 
-    raw_assert_mode = coverage.get("assert_mode", {})
-    if isinstance(raw_assert_mode, str):
-        raw_assert_mode = {"default": raw_assert_mode}
-    assert_mode = {"default": "enforce"}
-    if isinstance(raw_assert_mode, dict):
-        for key, value in raw_assert_mode.items():
-            text = str(value or "").strip()
-            if text:
-                assert_mode[str(key)] = text
 
-    coverage["runner"] = str(coverage.get("runner", "ubuntu-latest")).strip() or "ubuntu-latest"
-    coverage["shell"] = str(coverage.get("shell", "bash")).strip() or "bash"
-    coverage["command"] = str(coverage.get("command", "")).strip()
-    coverage["inputs"] = inputs
-    coverage["require_sources"] = dedupe_strings(coverage.get("require_sources", []))
-    coverage["min_percent"] = float(coverage.get("min_percent", 100.0))
-    coverage["assert_mode"] = assert_mode
-    coverage["evidence_note"] = str(coverage.get("evidence_note", "")).strip()
-    coverage["setup"] = {
+def _normalize_coverage_setup(raw_setup: Any) -> dict[str, Any]:
+    setup = deepcopy(raw_setup) if isinstance(raw_setup, dict) else {}
+    return {
         "python": str(setup.get("python", "")).strip(),
         "node": str(setup.get("node", "")).strip(),
         "go": str(setup.get("go", "")).strip(),
         "dotnet": str(setup.get("dotnet", "")).strip(),
         "rust": bool(setup.get("rust", False)),
         "system_packages": dedupe_strings(setup.get("system_packages", [])),
-        "java": {
-            "distribution": str(java.get("distribution", "")).strip(),
-            "version": str(java.get("version", "")).strip(),
-        },
+        "java": _normalize_java_setup(setup.get("java", {})),
     }
+
+
+def _normalize_coverage_assert_mode(raw_assert_mode: Any) -> dict[str, str]:
+    if isinstance(raw_assert_mode, str):
+        raw_assert_mode = {"default": raw_assert_mode}
+
+    assert_mode = {"default": "enforce"}
+    if isinstance(raw_assert_mode, dict):
+        for key, value in raw_assert_mode.items():
+            text = str(value or "").strip()
+            if text:
+                assert_mode[str(key)] = text
+    return assert_mode
+
+
+def _normalize_coverage(raw: dict[str, Any]) -> dict[str, Any]:
+    coverage = deepcopy(raw or {})
+    inputs = _infer_coverage_inputs(coverage)
+    coverage["runner"] = str(coverage.get("runner", "ubuntu-latest")).strip() or "ubuntu-latest"
+    coverage["shell"] = str(coverage.get("shell", "bash")).strip() or "bash"
+    coverage["command"] = str(coverage.get("command", "")).strip()
+    coverage["inputs"] = inputs
+    coverage["require_sources"] = dedupe_strings(coverage.get("require_sources", []))
+    coverage["min_percent"] = float(coverage.get("min_percent", 100.0))
+    coverage["assert_mode"] = _normalize_coverage_assert_mode(coverage.get("assert_mode", {}))
+    coverage["evidence_note"] = str(coverage.get("evidence_note", "")).strip()
+    coverage["setup"] = _normalize_coverage_setup(coverage.get("setup", {}))
     return coverage
+
+
+def _normalize_codex_environment(raw: dict[str, Any], *, verify_command: str) -> dict[str, Any]:
+    payload = deepcopy(raw or {})
+    return {
+        "mode": str(payload.get("mode", "automatic")).strip() or "automatic",
+        "verify_command": str(payload.get("verify_command", verify_command)).strip() or verify_command,
+        "auth_file": str(payload.get("auth_file", "~/.codex/auth.json")).strip() or "~/.codex/auth.json",
+        "network_profile": str(payload.get("network_profile", "unrestricted")).strip() or "unrestricted",
+        "methods": str(payload.get("methods", "all")).strip() or "all",
+        "runner_labels": dedupe_strings(payload.get("runner_labels", ["self-hosted", "codex-trusted"])),
+    }
+
+
+def _normalize_visual_lane(raw: dict[str, Any]) -> dict[str, str]:
+    payload = deepcopy(raw or {})
+    return {
+        "kind": str(payload.get("kind", "none")).strip() or "none",
+    }
+
+
+def _ensure_vendor_url(
+    vendor: dict[str, Any],
+    key: str,
+    url: str,
+    *,
+    allowed_host_suffixes: set[str],
+) -> None:
+    if not vendor.get(key):
+        vendor[key] = normalize_https_url(url, allowed_host_suffixes=allowed_host_suffixes)
+
+
+def _finalize_sonar_vendor(vendors: dict[str, Any]) -> None:
+    sonar = vendors.setdefault("sonar", {})
+    project_key = str(sonar.get("project_key", "")).strip()
+    if project_key:
+        _ensure_vendor_url(
+            sonar,
+            "dashboard_url",
+            f"https://sonarcloud.io/project/overview?id={quote(project_key, safe='')}",
+            allowed_host_suffixes={"sonarcloud.io"},
+        )
+
+
+def _finalize_codacy_vendor(vendors: dict[str, Any], *, owner: str, repo_name: str) -> None:
+    codacy = vendors.setdefault("codacy", {})
+    codacy.setdefault("provider", "gh")
+    codacy.setdefault("owner", owner)
+    codacy.setdefault("repo", repo_name)
+    _ensure_vendor_url(
+        codacy,
+        "dashboard_url",
+        f"https://app.codacy.com/gh/{quote(owner, safe='')}/{quote(repo_name, safe='')}/dashboard",
+        allowed_host_suffixes={"codacy.com"},
+    )
+
+
+def _finalize_codecov_vendor(vendors: dict[str, Any], *, owner: str, repo_name: str) -> None:
+    _ensure_vendor_url(
+        vendors.setdefault("codecov", {}),
+        "dashboard_url",
+        f"https://app.codecov.io/gh/{quote(owner, safe='')}/{quote(repo_name, safe='')}",
+        allowed_host_suffixes={"codecov.io"},
+    )
+
+
+def _finalize_qlty_vendor(vendors: dict[str, Any], *, owner: str, repo_name: str) -> None:
+    qlty = vendors.setdefault("qlty", {})
+    qlty.setdefault("gate_context", "Qlty Gate")
+    qlty.setdefault("coverage_context", "Qlty Coverage")
+    qlty.setdefault("diff_coverage_context", "Qlty Diff Coverage")
+    _ensure_vendor_url(
+        qlty,
+        "dashboard_url",
+        f"https://qlty.sh/gh/{quote(owner, safe='')}/projects/{quote(repo_name, safe='')}",
+        allowed_host_suffixes={"qlty.sh"},
+    )
+
+
+def _finalize_passthrough_vendors(vendors: dict[str, Any]) -> None:
+    vendors.setdefault("deepscan", {}).setdefault("open_issues_url_var", "DEEPSCAN_OPEN_ISSUES_URL")
+    sentry = vendors.setdefault("sentry", {})
+    sentry.setdefault("org_var", "SENTRY_ORG")
+    sentry.setdefault("project_vars", ["SENTRY_PROJECT"])
+    vendors.setdefault("chromatic", {}).setdefault("status_context", "Chromatic Playwright")
+    vendors.setdefault("applitools", {}).setdefault("status_context", "Applitools Visual")
 
 
 def _finalize_vendors(profile: dict[str, Any]) -> dict[str, Any]:
     owner = profile["owner"]
     repo_name = profile["repo_name"]
-    vendors = deepcopy(profile.get("vendors", {}))
+    vendor_source = _deep_merge(profile.get("vendors", {}), profile.get("providers", {}))
+    vendors = deepcopy(vendor_source)
 
-    sonar = vendors.setdefault("sonar", {})
-    project_key = str(sonar.get("project_key", "")).strip()
-    if project_key and not sonar.get("dashboard_url"):
-        sonar["dashboard_url"] = normalize_https_url(
-            f"https://sonarcloud.io/project/overview?id={quote(project_key, safe='')}",
-            allowed_host_suffixes={"sonarcloud.io"},
-        )
-
-    codacy = vendors.setdefault("codacy", {})
-    codacy.setdefault("provider", "gh")
-    codacy.setdefault("owner", owner)
-    codacy.setdefault("repo", repo_name)
-    if not codacy.get("dashboard_url"):
-        codacy["dashboard_url"] = normalize_https_url(
-            f"https://app.codacy.com/gh/{quote(owner, safe='')}/{quote(repo_name, safe='')}/dashboard",
-            allowed_host_suffixes={"codacy.com"},
-        )
-
-    codecov = vendors.setdefault("codecov", {})
-    if not codecov.get("dashboard_url"):
-        codecov["dashboard_url"] = normalize_https_url(
-            f"https://app.codecov.io/gh/{quote(owner, safe='')}/{quote(repo_name, safe='')}",
-            allowed_host_suffixes={"codecov.io"},
-        )
-
-    deepscan = vendors.setdefault("deepscan", {})
-    deepscan.setdefault("open_issues_url_var", "DEEPSCAN_OPEN_ISSUES_URL")
-
-    sentry = vendors.setdefault("sentry", {})
-    sentry.setdefault("org_var", "SENTRY_ORG")
-    sentry.setdefault("project_vars", ["SENTRY_PROJECT"])
+    _finalize_sonar_vendor(vendors)
+    _finalize_codacy_vendor(vendors, owner=owner, repo_name=repo_name)
+    _finalize_codecov_vendor(vendors, owner=owner, repo_name=repo_name)
+    _finalize_qlty_vendor(vendors, owner=owner, repo_name=repo_name)
+    _finalize_passthrough_vendors(vendors)
 
     github = vendors.setdefault("github", {})
     github["repo_url"] = normalize_https_url(
@@ -200,7 +291,7 @@ def _finalize_vendors(profile: dict[str, Any]) -> dict[str, Any]:
     return vendors
 
 
-def load_repo_profile(inventory: dict[str, Any], repo_slug: str) -> dict[str, Any]:
+def _resolve_repo_sources(inventory: dict[str, Any], repo_slug: str) -> tuple[dict[str, Any], str, dict[str, Any], str, dict[str, Any]]:
     repo_entry = next((item for item in inventory["repos"] if item.get("slug") == repo_slug), None)
     if repo_entry is None:
         raise KeyError(f"Repo {repo_slug} not found in inventory")
@@ -213,9 +304,41 @@ def load_repo_profile(inventory: dict[str, Any], repo_slug: str) -> dict[str, An
     repo_profile = _load_yaml(profile_path)
     stack_id = str(repo_profile.get("stack", "")).strip()
     stack_profile = _load_stack(inventory, stack_id)
+    return repo_entry, profile_id, repo_profile, stack_id, stack_profile
 
+
+def _merge_repo_profile(stack_profile: dict[str, Any], repo_profile: dict[str, Any]) -> tuple[dict[str, Any], str]:
     merged = _deep_merge(stack_profile, repo_profile)
-    merged = _deep_merge(
+    required_contexts_mode = str(repo_profile.get("required_contexts_mode", "merge")).strip() or "merge"
+    if required_contexts_mode == "replace":
+        merged["required_contexts"] = _normalize_required_contexts(repo_profile.get("required_contexts", {}))
+    else:
+        merged["required_contexts"] = _merge_required_contexts(
+            stack_profile.get("required_contexts", {}),
+            repo_profile.get("required_contexts", {}),
+        )
+    merged["required_secrets"] = dedupe_strings(
+        [*stack_profile.get("required_secrets", []), *repo_profile.get("required_secrets", [])]
+    )
+    merged["conditional_secrets"] = dedupe_strings(
+        [*stack_profile.get("conditional_secrets", []), *repo_profile.get("conditional_secrets", [])]
+    )
+    merged["required_vars"] = dedupe_strings([*stack_profile.get("required_vars", []), *repo_profile.get("required_vars", [])])
+    merged["providers"] = _deep_merge(stack_profile.get("providers", {}), repo_profile.get("providers", {}))
+    merged["vendors"] = _deep_merge(stack_profile.get("vendors", {}), repo_profile.get("vendors", {}))
+    return merged, required_contexts_mode
+
+
+def _apply_inventory_overrides(
+    merged: dict[str, Any],
+    *,
+    repo_entry: dict[str, Any],
+    repo_slug: str,
+    profile_id: str,
+    stack_id: str,
+    required_contexts_mode: str,
+) -> dict[str, Any]:
+    return _deep_merge(
         merged,
         {
             "slug": repo_slug,
@@ -224,29 +347,62 @@ def load_repo_profile(inventory: dict[str, Any], repo_slug: str) -> dict[str, An
             "rollout_notes": repo_entry.get("notes", ""),
             "profile_id": profile_id,
             "stack": stack_id,
+            "required_contexts_mode": required_contexts_mode,
         },
     )
 
+
+def _finalize_repo_profile(merged: dict[str, Any], repo_slug: str) -> dict[str, Any]:
     owner, repo_name = repo_slug.split("/", 1)
     merged["owner"] = owner
     merged["repo_name"] = repo_name
     merged["verify_command"] = str(merged.get("verify_command", "bash scripts/verify")).strip()
-    merged["codex_setup_command"] = str(merged.get("codex_setup_command", "")).strip()
+    merged["github_mutation_lane"] = (
+        str(merged.get("github_mutation_lane", "codex-private-runner")).strip() or "codex-private-runner"
+    )
+    merged["codex_auth_lane"] = str(merged.get("codex_auth_lane", "chatgpt-account")).strip() or "chatgpt-account"
+    merged["provider_ui_mode"] = str(merged.get("provider_ui_mode", "playwright-manual-login")).strip() or "playwright-manual-login"
     merged["required_secrets"] = dedupe_strings(merged.get("required_secrets", []))
+    merged["conditional_secrets"] = dedupe_strings(merged.get("conditional_secrets", []))
     merged["required_vars"] = dedupe_strings(merged.get("required_vars", []))
     merged["required_contexts"] = _normalize_required_contexts(merged.get("required_contexts", {}))
     merged["enabled_scanners"] = merged.get("enabled_scanners", {})
     merged["coverage"] = _normalize_coverage(merged.get("coverage", {}))
+    merged["codex_environment"] = _normalize_codex_environment(
+        merged.get("codex_environment", {}),
+        verify_command=merged["verify_command"],
+    )
+    merged["visual_pair_required"] = bool(merged.get("visual_pair_required", False))
+    merged["visual_lane"] = _normalize_visual_lane(merged.get("visual_lane", {}))
     merged["ruleset_mode"] = str(merged.get("ruleset_mode", "strict-zero-phase1")).strip()
     merged["preserve_public_check_names"] = bool(merged.get("preserve_public_check_names", True))
     merged["vendors"] = _finalize_vendors(merged)
+    merged["providers"] = deepcopy(merged["vendors"])
     return merged
 
 
+def load_repo_profile(inventory: dict[str, Any], repo_slug: str) -> dict[str, Any]:
+    repo_entry, profile_id, repo_profile, stack_id, stack_profile = _resolve_repo_sources(inventory, repo_slug)
+    merged, required_contexts_mode = _merge_repo_profile(stack_profile, repo_profile)
+    merged = _apply_inventory_overrides(
+        merged,
+        repo_entry=repo_entry,
+        repo_slug=repo_slug,
+        profile_id=profile_id,
+        stack_id=stack_id,
+        required_contexts_mode=required_contexts_mode,
+    )
+    return _finalize_repo_profile(merged, repo_slug)
+
+
 def active_required_contexts(profile: dict[str, Any], *, event_name: str) -> list[str]:
-    required = list(profile["required_contexts"]["always"])
-    if event_name in {"pull_request", "pull_request_target", "ruleset"}:
-        required.extend(profile["required_contexts"]["pull_request_only"])
+    required_contexts = profile["required_contexts"]
+    if event_name == "ruleset":
+        return dedupe_strings(required_contexts.get("required_now", []))
+
+    required = list(required_contexts["always"])
+    if event_name in {"pull_request", "pull_request_target"}:
+        required.extend(required_contexts["pull_request_only"])
     return dedupe_strings(required)
 
 
@@ -290,26 +446,111 @@ def build_ruleset_payload(profile: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def validate_profile(profile: dict[str, Any]) -> list[str]:
+def _validate_codex_environment(profile: dict[str, Any], codex_environment: dict[str, Any]) -> list[str]:
+    findings: list[str] = []
+    if codex_environment.get("mode") != "automatic":
+        findings.append(f"{profile['slug']}: codex_environment.mode must be automatic")
+    if not codex_environment.get("verify_command"):
+        findings.append(f"{profile['slug']}: codex_environment.verify_command is required")
+    if not codex_environment.get("auth_file"):
+        findings.append(f"{profile['slug']}: codex_environment.auth_file is required")
+    if codex_environment.get("network_profile") != "unrestricted":
+        findings.append(f"{profile['slug']}: codex_environment.network_profile must be unrestricted")
+    if codex_environment.get("methods") != "all":
+        findings.append(f"{profile['slug']}: codex_environment.methods must be all")
+    runner_labels = codex_environment.get("runner_labels", [])
+    if not runner_labels:
+        findings.append(f"{profile['slug']}: codex_environment.runner_labels is required")
+    elif "self-hosted" not in runner_labels:
+        findings.append(f"{profile['slug']}: codex_environment.runner_labels must include self-hosted")
+    return findings
+
+
+def _validate_control_plane_lanes(profile: dict[str, Any]) -> list[str]:
     findings: list[str] = []
     if not profile.get("verify_command"):
         findings.append(f"{profile['slug']}: verify_command is required")
-    if not profile.get("codex_setup_command"):
-        findings.append(f"{profile['slug']}: codex_setup_command is required")
+    if profile.get("github_mutation_lane") != "codex-private-runner":
+        findings.append(f"{profile['slug']}: github_mutation_lane must be codex-private-runner")
+    if profile.get("codex_auth_lane") != "chatgpt-account":
+        findings.append(f"{profile['slug']}: codex_auth_lane must be chatgpt-account")
+    if profile.get("provider_ui_mode") != "playwright-manual-login":
+        findings.append(f"{profile['slug']}: provider_ui_mode must be playwright-manual-login")
+
+    findings.extend(_validate_codex_environment(profile, profile.get("codex_environment", {})))
+    return findings
+
+
+def _validate_required_context_sets(profile: dict[str, Any]) -> list[str]:
+    findings: list[str] = []
     if not active_required_contexts(profile, event_name="ruleset"):
         findings.append(f"{profile['slug']}: at least one required context is required")
-    coverage = profile.get("coverage", {})
-    if profile.get("enabled_scanners", {}).get("coverage", False):
-        if not coverage.get("command"):
-            findings.append(f"{profile['slug']}: coverage.command is required")
-        if not coverage.get("inputs"):
-            findings.append(f"{profile['slug']}: coverage.inputs must declare at least one report")
-        if coverage.get("shell") not in {"bash", "pwsh"}:
-            findings.append(f"{profile['slug']}: coverage.shell must be bash or pwsh")
-        for mode_name, mode_value in coverage.get("assert_mode", {}).items():
-            if mode_value not in {"enforce", "evidence_only"}:
-                findings.append(f"{profile['slug']}: coverage.assert_mode.{mode_name} must be enforce or evidence_only")
+    pr_contexts = dedupe_strings(
+        [*profile["required_contexts"].get("always", []), *profile["required_contexts"].get("pull_request_only", [])]
+    )
+    required_now = set(profile["required_contexts"].get("required_now", []))
+    missing_required_now = [name for name in pr_contexts if name not in required_now]
+    if missing_required_now:
+        findings.append(
+            f"{profile['slug']}: required_contexts.required_now is missing {', '.join(missing_required_now)}"
+        )
+    target_contexts = set(profile["required_contexts"].get("target", []))
+    missing_target = [name for name in required_now if name not in target_contexts]
+    if missing_target:
+        findings.append(
+            f"{profile['slug']}: required_contexts.target is missing {', '.join(missing_target)}"
+        )
+    return findings
 
+
+def _validate_secret_contract(profile: dict[str, Any]) -> list[str]:
+    findings: list[str] = []
+    duplicate_conditional = [name for name in profile.get("conditional_secrets", []) if name in profile.get("required_secrets", [])]
+    if duplicate_conditional:
+        findings.append(
+            f"{profile['slug']}: conditional_secrets duplicates required_secrets for {', '.join(duplicate_conditional)}"
+        )
+    if "OPENAI_API_KEY" in profile.get("required_secrets", []):
+        findings.append(f"{profile['slug']}: OPENAI_API_KEY must not be part of required_secrets")
+    return findings
+
+
+def _validate_visual_pair_contract(profile: dict[str, Any]) -> list[str]:
+    if not profile.get("visual_pair_required"):
+        return []
+
+    findings: list[str] = []
+    chromatic = profile["vendors"]["chromatic"]["status_context"]
+    applitools = profile["vendors"]["applitools"]["status_context"]
+    ruleset_contexts = set(active_required_contexts(profile, event_name="ruleset"))
+    target_contexts = set(profile["required_contexts"].get("target", []))
+    if (chromatic in ruleset_contexts) != (applitools in ruleset_contexts):
+        findings.append(f"{profile['slug']}: visual_pair_required needs both Chromatic and Applitools contexts in required_now")
+    if (chromatic in target_contexts) != (applitools in target_contexts):
+        findings.append(f"{profile['slug']}: visual_pair_required needs both Chromatic and Applitools contexts in target")
+    return findings
+
+
+def _validate_coverage_contract(profile: dict[str, Any]) -> list[str]:
+    findings: list[str] = []
+    coverage = profile.get("coverage", {})
+    if not profile.get("enabled_scanners", {}).get("coverage", False):
+        return findings
+
+    if not coverage.get("command"):
+        findings.append(f"{profile['slug']}: coverage.command is required")
+    if not coverage.get("inputs"):
+        findings.append(f"{profile['slug']}: coverage.inputs must declare at least one report")
+    if coverage.get("shell") not in {"bash", "pwsh"}:
+        findings.append(f"{profile['slug']}: coverage.shell must be bash or pwsh")
+    for mode_name, mode_value in coverage.get("assert_mode", {}).items():
+        if mode_value not in {"enforce", "evidence_only"}:
+            findings.append(f"{profile['slug']}: coverage.assert_mode.{mode_name} must be enforce or evidence_only")
+    return findings
+
+
+def _validate_vendor_urls(profile: dict[str, Any]) -> list[str]:
+    findings: list[str] = []
     for vendor_name, vendor_payload in profile["vendors"].items():
         if not isinstance(vendor_payload, dict):
             continue
@@ -319,6 +560,20 @@ def validate_profile(profile: dict[str, Any]) -> list[str]:
                     normalize_https_url(str(value))
                 except ValueError as exc:
                     findings.append(f"{profile['slug']}: invalid {vendor_name}.{key}: {exc}")
+    return findings
+
+
+def validate_profile(profile: dict[str, Any]) -> list[str]:
+    findings: list[str] = []
+    for validator in (
+        _validate_control_plane_lanes,
+        _validate_required_context_sets,
+        _validate_secret_contract,
+        _validate_visual_pair_contract,
+        _validate_coverage_contract,
+        _validate_vendor_urls,
+    ):
+        findings.extend(validator(profile))
     return findings
 
 

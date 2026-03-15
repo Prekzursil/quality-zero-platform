@@ -80,18 +80,6 @@
             "integration_id": null
           },
           {
-            "context": "Percy Visual",
-            "integration_id": null
-          },
-          {
-            "context": "Applitools Visual",
-            "integration_id": null
-          },
-          {
-            "context": "BrowserStack E2E",
-            "integration_id": null
-          },
-          {
             "context": "CodeQL",
             "integration_id": null
           },

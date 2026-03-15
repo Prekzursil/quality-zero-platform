@@ -1,5 +1,7 @@
 name: Reusable Remediation Loop
 
+permissions: {}
+
 on:
   workflow_call:
     inputs:
@@ -26,15 +28,86 @@ on:
         type: string
         required: false
         default: main
+    secrets:
+      CODEX_AUTH_JSON:
+        required: false
 
 jobs:
-  remediate:
-    name: Codex Remediation Loop
+  resolve-profile:
+    name: Resolve Remediation Profile
     runs-on: ubuntu-latest
+    outputs:
+      verify_command: ${{ steps.profile.outputs.verify_command }}
+      github_mutation_lane: ${{ steps.profile.outputs.github_mutation_lane }}
+      codex_auth_lane: ${{ steps.profile.outputs.codex_auth_lane }}
+      provider_ui_mode: ${{ steps.profile.outputs.provider_ui_mode }}
+      codex_auth_file: ${{ steps.profile.outputs.codex_auth_file }}
+      codex_runner_labels_json: ${{ steps.profile.outputs.codex_runner_labels_json }}
+      branch: ${{ steps.naming.outputs.branch }}
+      title: ${{ steps.naming.outputs.title }}
+      short_sha: ${{ steps.naming.outputs.short_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.platform_repository }}
+          ref: ${{ inputs.platform_ref }}
+          path: platform
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install platform dependencies
+        run: python -m pip install -r platform/requirements-dev.txt
+      - name: Export resolved profile
+        id: profile
+        env:
+          REPO_SLUG: ${{ inputs.repo_slug }}
+        run: |
+          python platform/scripts/quality/export_profile.py \
+            --repo-slug "$REPO_SLUG" \
+            --event-name pull_request \
+            --out-json "$RUNNER_TEMP/profile.json" \
+            --github-output "$GITHUB_OUTPUT"
+      - name: Compute remediation refs
+        id: naming
+        env:
+          FAILURE_CONTEXT: ${{ inputs.failure_context }}
+          HEAD_SHA: ${{ inputs.sha || github.sha }}
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          context = (os.environ.get("FAILURE_CONTEXT") or "quality-zero-gate").strip()
+          raw_sha = (os.environ.get("HEAD_SHA") or "unknown").strip()
+          short_sha = raw_sha[:7] if raw_sha else "unknown"
+          slug = re.sub(r"[^a-z0-9]+", "-", context.lower()).strip("-") or "quality-zero-gate"
+          branch = f"codex/fix/{slug}/{short_sha}"
+          title = f"[codex] Remediate: {context}"
+
+          github_output = Path(os.environ["GITHUB_OUTPUT"])
+          with github_output.open("a", encoding="utf-8") as handle:
+              handle.write(f"branch={branch}\n")
+              handle.write(f"title={title}\n")
+              handle.write(f"short_sha={short_sha}\n")
+          PY
+
+  remediate:
+    name: Codex Remediation
+    needs: resolve-profile
+    if: ${{ needs.resolve-profile.outputs.github_mutation_lane == 'codex-private-runner' }}
+    runs-on: ${{ fromJSON(needs.resolve-profile.outputs.codex_runner_labels_json) }}
     permissions:
       contents: write
       pull-requests: write
     steps:
+      - name: Guard retry budget
+        if: ${{ github.run_attempt > inputs.max_attempts }}
+        env:
+          MAX_ATTEMPTS: ${{ inputs.max_attempts }}
+        run: |
+          echo "Retry budget exhausted on run attempt ${GITHUB_RUN_ATTEMPT} (max ${MAX_ATTEMPTS})." >&2
+          exit 1
       - uses: actions/checkout@v4
         with:
           path: repo
@@ -48,60 +121,74 @@ jobs:
           python-version: "3.12"
       - name: Install platform dependencies
         run: python -m pip install -r platform/requirements-dev.txt
+      - name: Verify Codex CLI
+        run: codex --version
       - name: Export resolved profile
+        env:
+          REPO_SLUG: ${{ inputs.repo_slug }}
         run: |
           python platform/scripts/quality/export_profile.py \
-            --repo-slug "${{ inputs.repo_slug }}" \
+            --repo-slug "$REPO_SLUG" \
             --event-name pull_request \
             --out-json "$RUNNER_TEMP/profile.json"
-      - name: Compute remediation branch
-        id: branch
-        shell: bash
+      - name: Ensure Codex account auth
+        env:
+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
         run: |
-          SHA_VALUE="${{ inputs.sha }}"
-          if [ -z "$SHA_VALUE" ]; then
-            SHA_VALUE="${GITHUB_SHA}"
-          fi
-          SHORT_SHA="$(printf '%s' "$SHA_VALUE" | cut -c1-8)"
-          SAFE_CONTEXT="$(printf '%s' "${{ inputs.failure_context }}" | tr '[:upper:] ' '[:lower:]-' | tr -cd 'a-z0-9-')"
-          echo "branch=codex/fix/${SAFE_CONTEXT}/${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-      - name: Render Codex prompt
+          python platform/scripts/quality/ensure_codex_auth.py \
+            --auth-file "${{ needs.resolve-profile.outputs.codex_auth_file }}" \
+            --bootstrap-env-var CODEX_AUTH_JSON \
+            --out-json "$RUNNER_TEMP/codex-auth.json"
+      - name: Render remediation prompt
+        env:
+          REPO_SLUG: ${{ inputs.repo_slug }}
+          FAILURE_CONTEXT: ${{ inputs.failure_context }}
+          TARGET_SHA: ${{ inputs.sha || github.sha }}
+          ACTIONS_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           python platform/scripts/quality/render_codex_prompt.py \
-            --repo-slug "${{ inputs.repo_slug }}" \
+            --repo-slug "$REPO_SLUG" \
             --lane remediation \
-            --failure-context "${{ inputs.failure_context }}" \
+            --event-name pull_request \
+            --failure-context "$FAILURE_CONTEXT" \
+            --artifact "Actions run: $ACTIONS_RUN_URL" \
+            --artifact "Target SHA: $TARGET_SHA" \
             --output "$RUNNER_TEMP/remediation-prompt.md"
-      - name: Run Codex
-        uses: openai/codex-action@v1
+      - name: Run Codex on the trusted private runner
+        run: |
+          python platform/scripts/quality/run_codex_exec.py \
+            --repo-dir repo \
+            --prompt-file "$RUNNER_TEMP/remediation-prompt.md" \
+            --output-last-message "$RUNNER_TEMP/codex-last-message.txt" \
+            --json-log "$RUNNER_TEMP/codex-events.jsonl"
+      - name: Upload Codex execution artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          prompt-file: ${{ runner.temp }}/remediation-prompt.md
-          sandbox: workspace-write
-          model: gpt-5-codex
-      - name: Create remediation pull request
-        uses: peter-evans/create-pull-request@v6
+          name: codex-remediation-artifacts
+          path: |
+            ${{ runner.temp }}/codex-auth.json
+            ${{ runner.temp }}/codex-last-message.txt
+            ${{ runner.temp }}/codex-events.jsonl
+            ${{ runner.temp }}/remediation-prompt.md
+      - name: Create or update remediation pull request
+        uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c
         with:
           path: repo
-          branch: ${{ steps.branch.outputs.branch }}
-          title: "[codex] Fix ${{ inputs.failure_context }}"
+          branch: ${{ needs.resolve-profile.outputs.branch }}
+          title: ${{ needs.resolve-profile.outputs.title }}
+          delete-branch: false
           commit-message: |
-            chore: remediate ${{ inputs.failure_context }}
+            fix: remediate ${{ inputs.failure_context }}
 
             Co-authored-by: Codex <noreply@openai.com>
           body: |
-            Automated remediation for `${{ inputs.failure_context }}`.
+            Automated remediation for `${{ inputs.failure_context }}` on `${{ inputs.repo_slug }}`.
 
-            - Branch: `${{ steps.branch.outputs.branch }}`
             - Source SHA: `${{ inputs.sha || github.sha }}`
-            - Verify command: `bash scripts/verify`
-      - name: Escalate final attempt
-        if: ${{ github.run_attempt >= inputs.max_attempts }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          gh pr list --head "${{ steps.branch.outputs.branch }}" --state open --json number --jq '.[0].number' > pr.txt
-          if [ -s pr.txt ]; then
-            gh pr edit "$(cat pr.txt)" --add-label "manual:codex-remediation"
-          fi
+            - Branch: `${{ needs.resolve-profile.outputs.branch }}`
+            - Verify command: `${{ needs.resolve-profile.outputs.verify_command }}`
+            - Mutation lane: `${{ needs.resolve-profile.outputs.github_mutation_lane }}`
+            - Auth lane: `${{ needs.resolve-profile.outputs.codex_auth_lane }}`
+            - Provider UI mode: `${{ needs.resolve-profile.outputs.provider_ui_mode }}`
+            - Trusted runner labels: `${{ needs.resolve-profile.outputs.codex_runner_labels_json }}`

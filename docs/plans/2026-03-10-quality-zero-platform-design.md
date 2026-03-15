@@ -9,7 +9,7 @@ Replace `fleet-baseline-lite-v2` with a strict-zero control plane that owns reus
 - strict-zero is the only first-class purpose
 - phase 1 covers the nine repos already using `Quality Zero Gate`
 - existing public check names stay stable during phase 1
-- GitHub Actions plus `openai/codex-action` is the enforcement and remediation engine
+- GitHub Actions on a trusted private runner plus `codex exec` account auth is the enforcement and remediation engine
 - Codex Web remains a secondary, repo-connected backlog and review lane
 
 ## Control Plane

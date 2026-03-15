@@ -1,10 +1,24 @@
 default_branch: main
 verify_command: bash scripts/verify
+github_mutation_lane: codex-private-runner
+codex_auth_lane: chatgpt-account
+provider_ui_mode: playwright-manual-login
+codex_environment:
+  mode: automatic
+  auth_file: ~/.codex/auth.json
+  network_profile: unrestricted
+  methods: all
+  runner_labels:
+    - self-hosted
+    - codex-trusted
 required_secrets:
   - SONAR_TOKEN
   - CODACY_API_TOKEN
-  - CODECOV_TOKEN
+  - DEEPSCAN_API_TOKEN
   - SENTRY_AUTH_TOKEN
+conditional_secrets:
+  - CODECOV_TOKEN
+  - CODEX_AUTH_JSON
 required_vars:
   - SENTRY_ORG
   - SENTRY_PROJECT
@@ -16,6 +30,7 @@ enabled_scanners:
   semgrep: true
   sentry: true
   deepscan: true
+  qlty: true
 required_contexts:
   always:
     - Coverage 100 Gate
@@ -29,6 +44,20 @@ required_contexts:
     - Codacy Static Code Analysis
     - DeepScan
   pull_request_only: []
+  target:
+    - Coverage 100 Gate
+    - Codecov Analytics
+    - Qlty Gate
+    - Qlty Coverage
+    - Qlty Diff Coverage
+    - Sonar Zero
+    - Codacy Zero
+    - Semgrep Zero
+    - Sentry Zero
+    - DeepScan Zero
+    - SonarCloud Code Analysis
+    - Codacy Static Code Analysis
+    - DeepScan
 coverage:
   runner: ubuntu-latest
   shell: bash
@@ -47,6 +76,10 @@ vendors:
     provider: gh
   codecov:
     status_context: Codecov Analytics
+  qlty:
+    gate_context: Qlty Gate
+    coverage_context: Qlty Coverage
+    diff_coverage_context: Qlty Diff Coverage
   deepscan:
     open_issues_url_var: DEEPSCAN_OPEN_ISSUES_URL
   sentry:

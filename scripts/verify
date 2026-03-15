@@ -13,5 +13,8 @@ else
 fi
 
 "${PYTHON_CMD[@]}" -m unittest discover -s tests -p 'test_*.py'
+if command -v node >/dev/null 2>&1; then
+  node --test scripts/provider_ui/*.test.mjs
+fi
 "${PYTHON_CMD[@]}" scripts/quality/validate_control_plane.py --write-generated generated/rulesets
 "${PYTHON_CMD[@]}" scripts/quality/generate_ruleset_payload.py --output-dir build/rulesets >/dev/null

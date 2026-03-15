@@ -1,12 +1,14 @@
 name: Reusable Backlog Sweep
 
+permissions: {}
+
 on:
   workflow_call:
     inputs:
       repo_slug:
         type: string
         required: true
-      tool:
+      lane:
         type: string
         required: true
       platform_repository:
@@ -17,11 +19,48 @@ on:
         type: string
         required: false
         default: main
+    secrets:
+      CODEX_AUTH_JSON:
+        required: false
 
 jobs:
+  resolve-profile:
+    name: Resolve Backlog Profile
+    runs-on: ubuntu-latest
+    outputs:
+      verify_command: ${{ steps.profile.outputs.verify_command }}
+      github_mutation_lane: ${{ steps.profile.outputs.github_mutation_lane }}
+      codex_auth_lane: ${{ steps.profile.outputs.codex_auth_lane }}
+      provider_ui_mode: ${{ steps.profile.outputs.provider_ui_mode }}
+      codex_auth_file: ${{ steps.profile.outputs.codex_auth_file }}
+      codex_runner_labels_json: ${{ steps.profile.outputs.codex_runner_labels_json }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.platform_repository }}
+          ref: ${{ inputs.platform_ref }}
+          path: platform
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install platform dependencies
+        run: python -m pip install -r platform/requirements-dev.txt
+      - name: Export resolved profile
+        id: profile
+        env:
+          REPO_SLUG: ${{ inputs.repo_slug }}
+        run: |
+          python platform/scripts/quality/export_profile.py \
+            --repo-slug "$REPO_SLUG" \
+            --event-name pull_request \
+            --out-json "$RUNNER_TEMP/profile.json" \
+            --github-output "$GITHUB_OUTPUT"
+
   backlog:
     name: Codex Backlog Sweep
-    runs-on: ubuntu-latest
+    needs: resolve-profile
+    if: ${{ needs.resolve-profile.outputs.github_mutation_lane == 'codex-private-runner' }}
+    runs-on: ${{ fromJSON(needs.resolve-profile.outputs.codex_runner_labels_json) }}
     permissions:
       contents: write
       pull-requests: write
@@ -39,32 +78,61 @@ jobs:
           python-version: "3.12"
       - name: Install platform dependencies
         run: python -m pip install -r platform/requirements-dev.txt
+      - name: Verify Codex CLI
+        run: codex --version
+      - name: Ensure Codex account auth
+        env:
+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+        run: |
+          python platform/scripts/quality/ensure_codex_auth.py \
+            --auth-file "${{ needs.resolve-profile.outputs.codex_auth_file }}" \
+            --bootstrap-env-var CODEX_AUTH_JSON \
+            --out-json "$RUNNER_TEMP/codex-auth.json"
       - name: Render backlog prompt
+        env:
+          REPO_SLUG: ${{ inputs.repo_slug }}
+          BACKLOG_LANE: ${{ inputs.lane }}
+          ACTIONS_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           python platform/scripts/quality/render_codex_prompt.py \
-            --repo-slug "${{ inputs.repo_slug }}" \
+            --repo-slug "$REPO_SLUG" \
             --lane backlog \
-            --failure-context "${{ inputs.tool }}" \
+            --failure-context "$BACKLOG_LANE" \
+            --artifact "Actions run: $ACTIONS_RUN_URL" \
             --output "$RUNNER_TEMP/backlog-prompt.md"
-      - name: Run Codex
-        uses: openai/codex-action@v1
+      - name: Run Codex on the trusted private runner
+        run: |
+          python platform/scripts/quality/run_codex_exec.py \
+            --repo-dir repo \
+            --prompt-file "$RUNNER_TEMP/backlog-prompt.md" \
+            --output-last-message "$RUNNER_TEMP/codex-last-message.txt" \
+            --json-log "$RUNNER_TEMP/codex-events.jsonl"
+      - name: Upload Codex execution artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          prompt-file: ${{ runner.temp }}/backlog-prompt.md
-          sandbox: workspace-write
-          model: gpt-5-codex
+          name: codex-backlog-artifacts
+          path: |
+            ${{ runner.temp }}/codex-auth.json
+            ${{ runner.temp }}/codex-last-message.txt
+            ${{ runner.temp }}/codex-events.jsonl
+            ${{ runner.temp }}/backlog-prompt.md
       - name: Create or update backlog pull request
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c
         with:
           path: repo
-          branch: codex/backlog/${{ inputs.tool }}
-          title: "[codex] Backlog sweep: ${{ inputs.tool }}"
+          branch: codex/backlog/${{ inputs.lane }}
+          title: "[codex] Backlog sweep: ${{ inputs.lane }}"
+          delete-branch: false
           commit-message: |
-            chore: backlog sweep ${{ inputs.tool }}
+            chore: backlog sweep ${{ inputs.lane }}
 
             Co-authored-by: Codex <noreply@openai.com>
           body: |
-            Automated backlog sweep for `${{ inputs.tool }}`.
+            Automated backlog sweep for `${{ inputs.lane }}` on `${{ inputs.repo_slug }}`.
 
-            - Branch: `codex/backlog/${{ inputs.tool }}`
-            - Verify command: `bash scripts/verify`
+            - Branch: `codex/backlog/${{ inputs.lane }}`
+            - Verify command: `${{ needs.resolve-profile.outputs.verify_command }}`
+            - Mutation lane: `${{ needs.resolve-profile.outputs.github_mutation_lane }}`
+            - Auth lane: `${{ needs.resolve-profile.outputs.codex_auth_lane }}`
+            - Provider UI mode: `${{ needs.resolve-profile.outputs.provider_ui_mode }}`

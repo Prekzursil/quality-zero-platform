@@ -1,7 +1,9 @@
 slug: Prekzursil/TanksFlashMobile
 stack: node-frontend
 verify_command: make verify
-codex_setup_command: npm ci
+required_secrets:
+  - CHROMATIC_PROJECT_TOKEN
+  - APPLITOOLS_API_KEY
 coverage:
   command: |
     npm ci
@@ -11,6 +13,18 @@ coverage:
     - format: lcov
       name: web
       path: apps/web/coverage/lcov.info
+required_contexts:
+  target:
+    - Chromatic Playwright
+    - Applitools Visual
+visual_pair_required: true
+visual_lane:
+  kind: web
+providers:
+  chromatic:
+    status_context: Chromatic Playwright
+  applitools:
+    status_context: Applitools Visual
 vendors:
   sonar:
     project_key: Prekzursil_TanksFlashMobile

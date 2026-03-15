@@ -5,6 +5,11 @@ repos:
     rollout: fixture
     default_branch: main
     notes: Dry-run fixture and portability source for strict-zero scripts.
+  - slug: Prekzursil/quality-zero-platform
+    profile: quality-zero-platform
+    rollout: phase2-wave0
+    default_branch: main
+    notes: Self-governed control-plane repo with wrapper parity and provider baseline checks.
   - slug: Prekzursil/Airline-Reservations-System
     profile: airline-reservations-system
     rollout: phase1-wave4
@@ -15,11 +20,21 @@ repos:
     rollout: phase1-wave2
     default_branch: main
     notes: Common template cohort.
+  - slug: Prekzursil/event-link
+    profile: event-link
+    rollout: phase2-wave1
+    default_branch: main
+    notes: Fullstack overlay with backend-plus-ui verify wrapper and quality-only gate set.
   - slug: Prekzursil/Personal-Finance-Management
     profile: personal-finance-management
     rollout: phase1-wave2
     default_branch: main
     notes: Common template cohort.
+  - slug: Prekzursil/momentstudio
+    profile: momentstudio
+    rollout: phase2-wave2
+    default_branch: main
+    notes: Web visual repo with Chromatic plus Applitools pairing and Percy retirement.
   - slug: Prekzursil/Reframe
     profile: reframe
     rollout: phase1-wave5

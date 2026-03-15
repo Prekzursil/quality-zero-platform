@@ -1,5 +1,7 @@
 name: Reusable Scanner Matrix
 
+permissions: {}
+
 on:
   workflow_call:
     inputs:
@@ -22,11 +24,25 @@ on:
         type: string
         required: false
         default: main
+    secrets:
+      SONAR_TOKEN:
+        required: false
+      CODACY_API_TOKEN:
+        required: false
+      CODECOV_TOKEN:
+        required: false
+      SENTRY_AUTH_TOKEN:
+        required: false
+      DEEPSCAN_API_TOKEN:
+        required: false
 
 jobs:
   scanner:
     name: ${{ matrix.job_name }}
     runs-on: ${{ inputs.repo_slug == 'Prekzursil/SWFOC-Mod-Menu' && 'windows-latest' || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -61,10 +77,13 @@ jobs:
         run: python -m pip install -r platform/requirements-dev.txt
       - name: Export resolved profile
         id: profile
+        env:
+          REPO_SLUG: ${{ inputs.repo_slug }}
+          EVENT_NAME_INPUT: ${{ inputs.event_name }}
         run: |
           python platform/scripts/quality/export_profile.py \
-            --repo-slug "${{ inputs.repo_slug }}" \
-            --event-name "${{ inputs.event_name }}" \
+            --repo-slug "$REPO_SLUG" \
+            --event-name "$EVENT_NAME_INPUT" \
             --out-json "$RUNNER_TEMP/profile.json" \
             --github-output "$GITHUB_OUTPUT"
       - name: Install coverage system packages
@@ -105,11 +124,24 @@ jobs:
           dotnet-version: ${{ steps.profile.outputs.coverage_dotnet_version }}
       - name: Set up Rust
         if: matrix.lane == 'coverage' && steps.profile.outputs.coverage_needs_rust == 'true'
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7
       - name: Run selected lane
         env:
           LANE: ${{ matrix.lane }}
           EVENT_NAME: ${{ inputs.event_name }}
+          GITHUB_TOKEN: ${{ github.token }}
+          REPO_SLUG: ${{ inputs.repo_slug }}
+          TARGET_SHA: ${{ inputs.sha != '' && inputs.sha || github.sha }}
+          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || '' }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          CODACY_API_TOKEN: ${{ secrets.CODACY_API_TOKEN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          DEEPSCAN_API_TOKEN: ${{ secrets.DEEPSCAN_API_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+          DEEPSCAN_POLICY_MODE: ${{ vars.DEEPSCAN_POLICY_MODE }}
+          DEEPSCAN_OPEN_ISSUES_URL: ${{ vars.DEEPSCAN_OPEN_ISSUES_URL }}
         run: |
           python - <<'PY'
           import json
@@ -122,6 +154,8 @@ jobs:
           root = Path.cwd()
           profile = json.loads((Path(os.environ["RUNNER_TEMP"]) / "profile.json").read_text(encoding="utf-8"))
           lane = os.environ["LANE"]
+          branch_name = os.environ.get("BRANCH_NAME", "").strip()
+          pull_request_number = os.environ.get("PULL_REQUEST_NUMBER", "").strip()
           repo_dir = root / "repo"
           platform_dir = root / "platform"
 
@@ -139,6 +173,8 @@ jobs:
             ]
             for name in profile["required_secrets"]:
               cmd.extend(["--required-secret", name])
+            for name in profile.get("conditional_secrets", []):
+              cmd.extend(["--conditional-secret", name])
             for name in profile["required_vars"]:
               cmd.extend(["--required-var", name])
             run(cmd, cwd=repo_dir)
@@ -168,6 +204,10 @@ jobs:
               "--out-md",
               "sonar-zero/sonar.md",
             ]
+            if pull_request_number:
+              cmd.extend(["--pull-request", pull_request_number])
+            elif branch_name:
+              cmd.extend(["--branch", branch_name])
             run(cmd, cwd=repo_dir)
           elif lane == "codacy":
             codacy = profile["vendors"]["codacy"]
@@ -185,10 +225,12 @@ jobs:
               "--out-md",
               "codacy-zero/codacy.md",
             ]
+            if pull_request_number:
+              cmd.extend(["--pull-request", pull_request_number])
             run(cmd, cwd=repo_dir)
           elif lane == "semgrep":
             run([sys.executable, "-m", "pip", "install", "semgrep"], cwd=repo_dir)
-            run(["semgrep", "ci", "--error"], cwd=repo_dir)
+            run(["semgrep", "ci"], cwd=repo_dir)
           elif lane == "sentry":
             sentry = profile["vendors"]["sentry"]
             cmd = [
@@ -219,6 +261,51 @@ jobs:
           else:
             raise SystemExit(f"Unsupported lane: {lane}")
           PY
+      - name: Install Qlty CLI
+        if: matrix.lane == 'coverage' && steps.profile.outputs.qlty_enabled == 'true' && steps.profile.outputs.qlty_coverage_files != ''
+        uses: qltysh/qlty-action/install@a19242102d17e497f437d7466aa01b528537e899
+      - name: Publish Codecov coverage
+        if: matrix.lane == 'coverage' && steps.profile.outputs.codecov_enabled == 'true' && steps.profile.outputs.coverage_input_files != ''
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de
+        with:
+          files: ${{ steps.profile.outputs.coverage_input_files }}
+          fail_ci_if_error: true
+          use_oidc: ${{ secrets.CODECOV_TOKEN == '' }}
+          token: ${{ secrets.CODECOV_TOKEN }}
+          verbose: true
+      - name: Publish Qlty coverage
+        if: matrix.lane == 'coverage' && steps.profile.outputs.qlty_enabled == 'true' && steps.profile.outputs.qlty_coverage_files != ''
+        shell: bash
+        working-directory: repo
+        env:
+          QLTY_COVERAGE_FILES: ${{ steps.profile.outputs.qlty_coverage_files }}
+          TARGET_SHA: ${{ inputs.sha != '' && inputs.sha || github.sha }}
+          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+        run: |
+          OIDC_RESPONSE="$(curl -sSf -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https%3A%2F%2Fqlty.sh")"
+          export QLTY_COVERAGE_TOKEN="$(python -c "import json,sys; print(json.load(sys.stdin)['value'])" <<<"$OIDC_RESPONSE")"
+          python - <<'PY' > "$RUNNER_TEMP/qlty-coverage-files.txt"
+          import os
+
+          raw = os.environ["QLTY_COVERAGE_FILES"]
+          items = []
+          for chunk in raw.replace(",", "\n").splitlines():
+              item = chunk.strip()
+              if not item:
+                  continue
+              if item.startswith("repo/"):
+                  item = item[len("repo/") :]
+              items.append(item)
+          print("\n".join(items))
+          PY
+
+          mapfile -t qlty_files < "$RUNNER_TEMP/qlty-coverage-files.txt"
+          qlty coverage publish \
+            --override-commit-sha "$TARGET_SHA" \
+            --override-branch "$BRANCH_NAME" \
+            --validate \
+            --output-dir "$RUNNER_TEMP" \
+            "${qlty_files[@]}"
       - name: Upload lane artifacts
         if: always()
         uses: actions/upload-artifact@v4

@@ -259,6 +259,17 @@ jobs:
           else:
             raise SystemExit(f"Unsupported lane: {lane}")
           PY
+      - name: Prepare git metadata for Qlty coverage
+        if: matrix.lane == 'coverage' && steps.profile.outputs.qlty_enabled == 'true' && steps.profile.outputs.qlty_coverage_files != ''
+        shell: bash
+        run: |
+          if [ -d .git ] || [ -f .git ]; then
+            rm -rf .git
+          fi
+
+          mv repo/.git .git
+          git --git-dir "$PWD/.git" config core.worktree "$PWD/repo"
+          git rev-parse --show-toplevel
       - name: Publish Qlty coverage
         if: matrix.lane == 'coverage' && steps.profile.outputs.qlty_enabled == 'true' && steps.profile.outputs.qlty_coverage_files != ''
         uses: qltysh/qlty-action/coverage@a19242102d17e497f437d7466aa01b528537e899

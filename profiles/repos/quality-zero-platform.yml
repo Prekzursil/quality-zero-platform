@@ -18,9 +18,9 @@ required_contexts:
   target:
     - Coverage 100 Gate
     - Codecov Analytics
-    - Qlty Gate
-    - Qlty Coverage
-    - Qlty Diff Coverage
+    - qlty check
+    - qlty coverage
+    - qlty coverage diff
     - Sonar Zero
     - Codacy Zero
     - Semgrep Zero

@@ -60,9 +60,9 @@ required_contexts:
   target:
     - Coverage 100 Gate
     - Codecov Analytics
-    - Qlty Gate
-    - Qlty Coverage
-    - Qlty Diff Coverage
+    - qlty check
+    - qlty coverage
+    - qlty coverage diff
     - Sonar Zero
     - Codacy Zero
     - Semgrep Zero
@@ -85,8 +85,12 @@ visual_lane:
 providers:
   chromatic:
     status_context: Chromatic Playwright
+    project_name: Reframe
+    token_secret: CHROMATIC_PROJECT_TOKEN
+    local_env_var: CHROMATIC_PROJECT_TOKEN_REFRAME
   applitools:
     status_context: Applitools Visual
+    project_name: Reframe
 vendors:
   sonar:
     project_key: Prekzursil_Reframe

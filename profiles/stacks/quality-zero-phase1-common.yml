@@ -47,9 +47,9 @@ required_contexts:
   target:
     - Coverage 100 Gate
     - Codecov Analytics
-    - Qlty Gate
-    - Qlty Coverage
-    - Qlty Diff Coverage
+    - qlty check
+    - qlty coverage
+    - qlty coverage diff
     - Sonar Zero
     - Codacy Zero
     - Semgrep Zero
@@ -74,12 +74,19 @@ preserve_public_check_names: true
 vendors:
   codacy:
     provider: gh
+    profile_mode: defaults_all_languages
   codecov:
     status_context: Codecov Analytics
   qlty:
-    gate_context: Qlty Gate
-    coverage_context: Qlty Coverage
-    diff_coverage_context: Qlty Diff Coverage
+    gate_context: qlty check
+    coverage_context: qlty coverage
+    diff_coverage_context: qlty coverage diff
+    check_names_actual:
+      - qlty check
+      - qlty coverage
+      - qlty coverage diff
+    diff_coverage_percent: 100
+    total_coverage_policy: fail_on_any_drop
   deepscan:
     open_issues_url_var: DEEPSCAN_OPEN_ISSUES_URL
   sentry:

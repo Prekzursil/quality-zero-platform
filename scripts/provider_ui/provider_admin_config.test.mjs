@@ -44,7 +44,15 @@ test('provider targets can derive repo-specific URLs when supported', () => {
   assert.equal(codecov.targetUrl, 'https://app.codecov.io/gh/Prekzursil/quality-zero-platform');
 
   const qlty = resolveProviderTarget('qlty', { repo: 'quality-zero-platform' });
-  assert.equal(qlty.targetUrl, 'https://app.qlty.sh/projects');
+  assert.equal(qlty.targetUrl, 'https://qlty.sh/gh/Prekzursil/projects/quality-zero-platform');
+
+  const chromatic = resolveProviderTarget('chromatic', { repo: 'momentstudio' });
+  assert.equal(chromatic.targetUrl, 'https://www.chromatic.com/start');
+});
+
+test('provider home URLs stay aligned with live provider entrypoints', () => {
+  assert.equal(resolveProviderTarget('deepscan').targetUrl, 'https://deepscan.io/dashboard');
+  assert.equal(resolveProviderTarget('applitools').targetUrl, 'https://auth.applitools.com/users/login');
 });
 
 test('argument parsing defaults to external persistent profile paths', () => {

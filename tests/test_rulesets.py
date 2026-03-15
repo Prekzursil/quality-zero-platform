@@ -39,9 +39,9 @@ class RulesetPayloadTests(unittest.TestCase):
         self.assertIn("Codacy Static Code Analysis", contexts)
         self.assertNotIn("Chromatic Playwright", contexts)
         self.assertNotIn("Applitools Visual", contexts)
-        self.assertNotIn("Qlty Gate", contexts)
+        self.assertNotIn("qlty check", contexts)
         self.assertIn("Chromatic Playwright", profile["required_contexts"]["target"])
-        self.assertIn("Qlty Gate", profile["required_contexts"]["target"])
+        self.assertIn("qlty check", profile["required_contexts"]["target"])
 
     def test_quality_zero_platform_self_ruleset_defers_qlty_until_emitted(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
@@ -50,10 +50,10 @@ class RulesetPayloadTests(unittest.TestCase):
 
         contexts = [entry["context"] for entry in payload["rules"][1]["parameters"]["required_status_checks"]]
 
-        self.assertNotIn("Qlty Gate", contexts)
-        self.assertNotIn("Qlty Coverage", contexts)
-        self.assertNotIn("Qlty Diff Coverage", contexts)
-        self.assertIn("Qlty Gate", profile["required_contexts"]["target"])
-        self.assertIn("Qlty Coverage", profile["required_contexts"]["target"])
-        self.assertIn("Qlty Diff Coverage", profile["required_contexts"]["target"])
+        self.assertNotIn("qlty check", contexts)
+        self.assertNotIn("qlty coverage", contexts)
+        self.assertNotIn("qlty coverage diff", contexts)
+        self.assertIn("qlty check", profile["required_contexts"]["target"])
+        self.assertIn("qlty coverage", profile["required_contexts"]["target"])
+        self.assertIn("qlty coverage diff", profile["required_contexts"]["target"])
 

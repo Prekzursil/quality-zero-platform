@@ -30,6 +30,7 @@ class ControlPlaneTests(unittest.TestCase):
     def test_common_phase1_template_contexts_resolve(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
+        pbinfo = load_repo_profile(inventory, "Prekzursil/pbinfo-get-unsolved")
 
         self.assertEqual(profile["stack"], "node-frontend")
         self.assertEqual(
@@ -47,7 +48,7 @@ class ControlPlaneTests(unittest.TestCase):
                 "DeepScan",
             ],
         )
-        self.assertTrue({"Qlty Gate", "Qlty Coverage", "Qlty Diff Coverage"}.issubset(profile["required_contexts"]["target"]))
+        self.assertTrue({"qlty check", "qlty coverage", "qlty coverage diff"}.issubset(pbinfo["required_contexts"]["target"]))
         self.assertTrue({"Chromatic Playwright", "Applitools Visual"}.issubset(profile["required_contexts"]["target"]))
 
     def test_phase1_repo_verify_commands_follow_repo_contracts(self) -> None:
@@ -99,9 +100,9 @@ class ControlPlaneTests(unittest.TestCase):
         ):
             self.assertIn(name, pr_contexts)
         for name in (
-            "Qlty Gate",
-            "Qlty Coverage",
-            "Qlty Diff Coverage",
+            "qlty check",
+            "qlty coverage",
+            "qlty coverage diff",
             "Chromatic Playwright",
             "Applitools Visual",
         ):
@@ -152,6 +153,32 @@ class ControlPlaneTests(unittest.TestCase):
 
         self.assertNotIn("Codecov Analytics", pr_contexts)
         self.assertIn("Codecov Analytics", target_contexts)
+
+    def test_provider_metadata_tracks_real_qlty_names_and_visual_repo_tokens(self) -> None:
+        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
+
+        quality_zero_platform = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
+        reframe = load_repo_profile(inventory, "Prekzursil/Reframe")
+        webcoder = load_repo_profile(inventory, "Prekzursil/WebCoder")
+        swfoc = load_repo_profile(inventory, "Prekzursil/SWFOC-Mod-Menu")
+
+        self.assertEqual(
+            quality_zero_platform["vendors"]["qlty"]["check_names_actual"],
+            ["qlty check", "qlty coverage", "qlty coverage diff"],
+        )
+        self.assertEqual(quality_zero_platform["vendors"]["qlty"]["gate_context"], "qlty check")
+        self.assertEqual(quality_zero_platform["vendors"]["qlty"]["coverage_context"], "qlty coverage")
+        self.assertEqual(quality_zero_platform["vendors"]["qlty"]["diff_coverage_context"], "qlty coverage diff")
+        self.assertEqual(quality_zero_platform["vendors"]["qlty"]["diff_coverage_percent"], 100)
+        self.assertEqual(quality_zero_platform["vendors"]["qlty"]["total_coverage_policy"], "fail_on_any_drop")
+        self.assertEqual(quality_zero_platform["vendors"]["codacy"]["profile_mode"], "defaults_all_languages")
+
+        self.assertEqual(reframe["vendors"]["chromatic"]["project_name"], "Reframe")
+        self.assertEqual(reframe["vendors"]["chromatic"]["token_secret"], "CHROMATIC_PROJECT_TOKEN")
+        self.assertEqual(reframe["vendors"]["chromatic"]["local_env_var"], "CHROMATIC_PROJECT_TOKEN_REFRAME")
+        self.assertEqual(reframe["vendors"]["applitools"]["project_name"], "Reframe")
+        self.assertEqual(webcoder["vendors"]["chromatic"]["local_env_var"], "CHROMATIC_PROJECT_TOKEN_WEBCODER")
+        self.assertEqual(swfoc["vendors"]["chromatic"]["local_env_var"], "CHROMATIC_PROJECT_TOKEN_SWFOC_MOD_MENU")
 
     def test_visual_pair_validation_flags_single_context(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")

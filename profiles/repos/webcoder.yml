@@ -29,8 +29,12 @@ visual_lane:
 providers:
   chromatic:
     status_context: Chromatic Playwright
+    project_name: WebCoder
+    token_secret: CHROMATIC_PROJECT_TOKEN
+    local_env_var: CHROMATIC_PROJECT_TOKEN_WEBCODER
   applitools:
     status_context: Applitools Visual
+    project_name: WebCoder
 vendors:
   sonar:
     project_key: Prekzursil_WebCoder

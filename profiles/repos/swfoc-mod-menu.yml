@@ -42,8 +42,12 @@ visual_lane:
 providers:
   chromatic:
     status_context: Chromatic Playwright
+    project_name: SWFOC-Mod-Menu
+    token_secret: CHROMATIC_PROJECT_TOKEN
+    local_env_var: CHROMATIC_PROJECT_TOKEN_SWFOC_MOD_MENU
   applitools:
     status_context: Applitools Visual
+    project_name: SWFOC-Mod-Menu
 vendors:
   sonar:
     project_key: Prekzursil_SWFOC-Mod-Menu

@@ -13,21 +13,22 @@ export const PROVIDERS = Object.freeze({
   qlty: Object.freeze({
     key: 'qlty',
     label: 'Qlty',
-    homeUrl: 'https://app.qlty.sh/projects',
-    supportsRepoTarget: false,
+    homeUrl: 'https://qlty.sh/gh',
+    supportsRepoTarget: true,
+    repoUrl: (slug) => `https://qlty.sh/gh/${slug.replace('/', '/projects/')}`,
     loginHint: 'Open the Projects dashboard and verify the GitHub binding, default branch, and quality-gate or coverage statuses.'
   }),
   chromatic: Object.freeze({
     key: 'chromatic',
     label: 'Chromatic',
-    homeUrl: 'https://www.chromatic.com/apps',
+    homeUrl: 'https://www.chromatic.com/start',
     supportsRepoTarget: false,
     loginHint: 'Confirm the GitHub app binding and project token for the target repository.'
   }),
   applitools: Object.freeze({
     key: 'applitools',
     label: 'Applitools',
-    homeUrl: 'https://eyes.applitools.com/app/manager',
+    homeUrl: 'https://auth.applitools.com/users/login',
     supportsRepoTarget: false,
     loginHint: 'Confirm the project exists, the API key works, and the expected batch or baseline settings are available.'
   }),
@@ -48,7 +49,7 @@ export const PROVIDERS = Object.freeze({
   deepscan: Object.freeze({
     key: 'deepscan',
     label: 'DeepScan',
-    homeUrl: 'https://deepscan.io/projects',
+    homeUrl: 'https://deepscan.io/dashboard',
     supportsRepoTarget: false,
     loginHint: 'Verify the repository project exists and that the GitHub check integration is healthy.'
   }),

@@ -231,6 +231,7 @@ def _finalize_codacy_vendor(vendors: dict[str, Any], *, owner: str, repo_name: s
     codacy.setdefault("provider", "gh")
     codacy.setdefault("owner", owner)
     codacy.setdefault("repo", repo_name)
+    codacy.setdefault("profile_mode", "defaults_all_languages")
     _ensure_vendor_url(
         codacy,
         "dashboard_url",
@@ -250,15 +251,55 @@ def _finalize_codecov_vendor(vendors: dict[str, Any], *, owner: str, repo_name: 
 
 def _finalize_qlty_vendor(vendors: dict[str, Any], *, owner: str, repo_name: str) -> None:
     qlty = vendors.setdefault("qlty", {})
-    qlty.setdefault("gate_context", "Qlty Gate")
-    qlty.setdefault("coverage_context", "Qlty Coverage")
-    qlty.setdefault("diff_coverage_context", "Qlty Diff Coverage")
+    qlty.setdefault("project_slug", f"{owner}/{repo_name}")
+    qlty.setdefault("gate_context", "qlty check")
+    qlty.setdefault("coverage_context", "qlty coverage")
+    qlty.setdefault("diff_coverage_context", "qlty coverage diff")
+    qlty.setdefault(
+        "check_names_actual",
+        [
+            qlty["gate_context"],
+            qlty["coverage_context"],
+            qlty["diff_coverage_context"],
+        ],
+    )
+    qlty.setdefault("diff_coverage_percent", 100)
+    qlty.setdefault("total_coverage_policy", "fail_on_any_drop")
     _ensure_vendor_url(
         qlty,
         "dashboard_url",
         f"https://qlty.sh/gh/{quote(owner, safe='')}/projects/{quote(repo_name, safe='')}",
         allowed_host_suffixes={"qlty.sh"},
     )
+
+
+def _provider_env_suffix(repo_name: str) -> str:
+    suffix = []
+    previous_was_separator = False
+    for char in repo_name:
+        if char.isalnum():
+            suffix.append(char.upper())
+            previous_was_separator = False
+            continue
+        if not previous_was_separator:
+            suffix.append("_")
+            previous_was_separator = True
+    normalized = "".join(suffix).strip("_")
+    return normalized or "REPO"
+
+
+def _finalize_visual_vendors(profile: dict[str, Any], vendors: dict[str, Any]) -> None:
+    if not profile.get("visual_pair_required"):
+        return
+
+    repo_name = profile["repo_name"]
+    chromatic = vendors.setdefault("chromatic", {})
+    chromatic.setdefault("project_name", repo_name)
+    chromatic.setdefault("token_secret", "CHROMATIC_PROJECT_TOKEN")
+    chromatic.setdefault("local_env_var", f"CHROMATIC_PROJECT_TOKEN_{_provider_env_suffix(repo_name)}")
+
+    applitools = vendors.setdefault("applitools", {})
+    applitools.setdefault("project_name", repo_name)
 
 
 def _finalize_passthrough_vendors(vendors: dict[str, Any]) -> None:
@@ -281,6 +322,7 @@ def _finalize_vendors(profile: dict[str, Any]) -> dict[str, Any]:
     _finalize_codecov_vendor(vendors, owner=owner, repo_name=repo_name)
     _finalize_qlty_vendor(vendors, owner=owner, repo_name=repo_name)
     _finalize_passthrough_vendors(vendors)
+    _finalize_visual_vendors(profile, vendors)
 
     github = vendors.setdefault("github", {})
     github["repo_url"] = normalize_https_url(
@@ -528,6 +570,14 @@ def _validate_visual_pair_contract(profile: dict[str, Any]) -> list[str]:
         findings.append(f"{profile['slug']}: visual_pair_required needs both Chromatic and Applitools contexts in required_now")
     if (chromatic in target_contexts) != (applitools in target_contexts):
         findings.append(f"{profile['slug']}: visual_pair_required needs both Chromatic and Applitools contexts in target")
+    if not profile["vendors"]["chromatic"].get("project_name"):
+        findings.append(f"{profile['slug']}: visual_pair_required requires chromatic.project_name")
+    if not profile["vendors"]["chromatic"].get("token_secret"):
+        findings.append(f"{profile['slug']}: visual_pair_required requires chromatic.token_secret")
+    if not profile["vendors"]["chromatic"].get("local_env_var"):
+        findings.append(f"{profile['slug']}: visual_pair_required requires chromatic.local_env_var")
+    if not profile["vendors"]["applitools"].get("project_name"):
+        findings.append(f"{profile['slug']}: visual_pair_required requires applitools.project_name")
     return findings
 
 

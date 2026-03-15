@@ -23,8 +23,12 @@ visual_lane:
 providers:
   chromatic:
     status_context: Chromatic Playwright
+    project_name: TanksFlashMobile
+    token_secret: CHROMATIC_PROJECT_TOKEN
+    local_env_var: CHROMATIC_PROJECT_TOKEN_TANKSFLASHMOBILE
   applitools:
     status_context: Applitools Visual
+    project_name: TanksFlashMobile
 vendors:
   sonar:
     project_key: Prekzursil_TanksFlashMobile

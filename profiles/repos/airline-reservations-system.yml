@@ -34,15 +34,26 @@ required_contexts:
   always:
     - Coverage 100 Gate
     - Codecov Analytics
-    - Qlty Gate
-    - Qlty Coverage
-    - Qlty Diff Coverage
     - Sonar Zero
     - Codacy Zero
     - Semgrep Zero
     - Sentry Zero
     - SonarCloud Code Analysis
     - Codacy Static Code Analysis
+  target:
+    - Coverage 100 Gate
+    - Codecov Analytics
+    - qlty check
+    - qlty coverage
+    - qlty coverage diff
+    - Sonar Zero
+    - Codacy Zero
+    - Semgrep Zero
+    - Sentry Zero
+    - DeepScan Zero
+    - SonarCloud Code Analysis
+    - Codacy Static Code Analysis
+    - DeepScan
   pull_request_only:
     - DeepScan Zero
     - DeepScan

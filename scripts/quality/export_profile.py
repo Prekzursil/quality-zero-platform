@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import sys
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
@@ -29,7 +29,10 @@ def _write_github_output(path: Path, profile: dict, event_name: str) -> None:
     codex_environment = profile.get("codex_environment", {})
     setup = coverage.get("setup", {})
     java = setup.get("java", {})
-    qlty_files = ",".join(item["path"] for item in coverage.get("inputs", []))
+    qlty_files = ",".join(
+        str(PurePosixPath("repo") / PurePosixPath(str(item["path"]).replace("\\", "/")))
+        for item in coverage.get("inputs", [])
+    )
     payload_lines = [
         f"verify_command={profile['verify_command']}",
         f"default_branch={profile['default_branch']}",

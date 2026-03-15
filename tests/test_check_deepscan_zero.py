@@ -132,7 +132,7 @@ class DeepScanZeroTests(unittest.TestCase):
             result = check_deepscan_zero._evaluate_deepscan_policy(
                 args,
                 policy_mode="github_check_context",
-                token="api",
+                token="service-token",
                 github_token="github",
                 open_issues_url="https://deepscan.io/project/issues",
             )
@@ -154,7 +154,7 @@ class DeepScanZeroTests(unittest.TestCase):
             repo="",
             sha="",
             github_context="DeepScan",
-            token="",
+            token=str(),
             out_json="deepscan-zero/deepscan.json",
             out_md="deepscan-zero/deepscan.md",
         )

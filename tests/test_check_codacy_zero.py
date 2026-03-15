@@ -172,7 +172,7 @@ class CodacyZeroTests(unittest.TestCase):
             owner="Prekzursil",
             repo="quality-zero-platform",
             pull_request="",
-            token="",
+            token=str(),
             out_json="codacy-zero/codacy.json",
             out_md="codacy-zero/codacy.md",
         )

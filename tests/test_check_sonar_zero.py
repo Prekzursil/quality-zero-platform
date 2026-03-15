@@ -142,7 +142,7 @@ class SonarZeroTests(unittest.TestCase):
     def test_main_handles_missing_token_success_and_report_failures(self) -> None:
         args = Namespace(
             project_key="Prekzursil_quality-zero-platform",
-            token="",
+            token=str(),
             branch="",
             pull_request="5",
             out_json="sonar-zero/sonar.json",

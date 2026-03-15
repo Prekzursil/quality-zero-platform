@@ -17,10 +17,10 @@ test('runCommand dispatches bootstrap requests through provider normalization', 
       listProviders: async () => {
         calls.push(['list']);
       },
-      openOrInspect: async (_args, _options) => {
+      openOrInspect: async () => {
         calls.push(['openOrInspect']);
       },
-      log: (_message) => {
+      log: () => {
         calls.push(['log']);
       },
       renderHelp: () => 'help'

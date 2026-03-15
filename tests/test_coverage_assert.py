@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import contextlib
-import io
 import os
 import runpy
 import sys
@@ -244,15 +243,20 @@ class CoverageAssertTests(unittest.TestCase):
             self.assertEqual(result.exception.code, 0)
             self.assertTrue(any(path.name == "out.json" for path in root.rglob("out.json")))
 
-        with patch.object(assert_coverage_100, "_parse_args", return_value=Namespace(
+        parsed_args = Namespace(
             xml=[],
             lcov=[],
             require_source=[],
             min_percent=100.0,
             out_json="coverage-100/coverage.json",
             out_md="coverage-100/coverage.md",
-        )), patch.object(assert_coverage_100, "_collect_coverage_inputs", return_value=([CoverageStats("python", "coverage.xml", 1, 1)], {"pkg/main.py"})), patch.object(
-            assert_coverage_100, "write_report", return_value=5
-        ), patch.object(assert_coverage_100, "safe_output_path", side_effect=lambda raw, _fallback: Path(raw)):
+        )
+        collected_inputs = ([CoverageStats("python", "coverage.xml", 1, 1)], {"pkg/main.py"})
+        with (
+            patch.object(assert_coverage_100, "_parse_args", return_value=parsed_args),
+            patch.object(assert_coverage_100, "_collect_coverage_inputs", return_value=collected_inputs),
+            patch.object(assert_coverage_100, "write_report", return_value=5),
+            patch.object(assert_coverage_100, "safe_output_path", side_effect=lambda raw, _fallback: Path(raw)),
+        ):
             self.assertEqual(assert_coverage_100.main(), 5)
 

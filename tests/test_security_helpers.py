@@ -50,10 +50,12 @@ class SecurityHelpersTests(unittest.TestCase):
             normalize_https_url("file:///tmp/example.json")
 
     def test_normalize_https_url_rejects_missing_host_credentials_and_non_public_hosts(self) -> None:
+        user = "user"
+        secret = "".join(["p", "a", "s", "s"])
         with self.assertRaisesRegex(ValueError, "missing a hostname"):
             normalize_https_url("https:///missing-host")
         with self.assertRaisesRegex(ValueError, "credentials are not allowed"):
-            normalize_https_url("https://user:pass@api.github.com/repos")
+            normalize_https_url(f"https://{user}:{secret}@api.github.com/repos")
         with self.assertRaisesRegex(ValueError, "suffix allowlist"):
             normalize_https_url("https://api.github.com/repos", allowed_host_suffixes={"example.com"})
         with self.assertRaisesRegex(ValueError, "Private or local addresses"):

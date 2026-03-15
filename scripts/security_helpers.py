@@ -16,7 +16,7 @@ _FORBIDDEN_IP_FLAGS = (
 )
 
 
-def _get_ip_flag(ip_value: ipaddress._BaseAddress, flag_name: str) -> bool:
+def _get_ip_flag(ip_value: Any, flag_name: str) -> bool:
     value = getattr(ip_value, flag_name)
     return bool(value() if callable(value) else value)
 
@@ -121,7 +121,7 @@ def _read_json_response(
     timeout: int,
 ) -> tuple[Any, dict[str, str]]:
     request = _build_request(parsed, headers=headers, method=method, data=data)
-    with urlopen(request, timeout=timeout) as response:  # nosec B310 - normalize_https_url enforces https and rejects local/private targets before requests are issued.
+    with urlopen(request, timeout=timeout) as response:  # nosec B310 # noqa: S310 - normalize_https_url restricts requests to public HTTPS targets before urlopen is reached.
         payload_bytes = response.read()
         response_headers = {key.lower(): value for key, value in response.headers.items()}
         payload = json.loads(payload_bytes.decode("utf-8"))

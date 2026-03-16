@@ -113,8 +113,8 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("token: ${{ secrets.CODECOV_TOKEN }}", reusable_text)
         self.assertIn("files: ${{ steps.profile.outputs.coverage_input_files }}", reusable_text)
         self.assertEqual(reusable_text.count("persist-credentials: false"), 2)
-        self.assertIn('COVERAGE_COMMAND: ${{ steps.profile.outputs.coverage_command }}', reusable_text)
-        self.assertIn('COVERAGE_SHELL: ${{ steps.profile.outputs.coverage_shell }}', reusable_text)
+        self.assertIn('profile_path = Path(os.environ["RUNNER_TEMP"]) / "profile.json"', reusable_text)
+        self.assertIn('coverage = json.loads(profile_path.read_text(encoding="utf-8")).get("coverage", {})', reusable_text)
 
     def test_scanner_matrix_exports_provider_credentials_to_lane_runtime(self) -> None:
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")

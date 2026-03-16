@@ -55,11 +55,11 @@ required_contexts:
     - Codacy Static Code Analysis
     - DeepScan
   pull_request_only:
+    - DeepScan
     - qlty check
     - qlty coverage
     - qlty coverage diff
     - DeepScan Zero
-    - DeepScan
 vendors:
   sonar:
     project_key: Prekzursil_Airline-Reservations-System

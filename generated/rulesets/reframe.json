@@ -60,10 +60,6 @@
             "integration_id": null
           },
           {
-            "context": "DeepScan",
-            "integration_id": null
-          },
-          {
             "context": "Python API & worker checks",
             "integration_id": null
           },
@@ -77,6 +73,10 @@
           },
           {
             "context": "Analyze (typescript)",
+            "integration_id": null
+          },
+          {
+            "context": "DeepScan",
             "integration_id": null
           },
           {

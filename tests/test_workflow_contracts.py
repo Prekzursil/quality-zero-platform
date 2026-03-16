@@ -1,4 +1,4 @@
-from __future__ import annotations
+from __future__ import annotations, division
 
 import unittest
 from pathlib import Path
@@ -50,6 +50,29 @@ class WorkflowContractTests(unittest.TestCase):
             self.assertIn("@d3aabc77c858e27cb7ade824e9fbf3dd9203f256", text, path.name)
             self.assertIn("platform_repository: Prekzursil/quality-zero-platform", text, path.name)
             self.assertIn("platform_ref: main", text, path.name)
+
+    def test_repo_template_parity_wrappers_set_explicit_top_level_permissions(self) -> None:
+        workflow_expectations = {
+            "quality-zero-platform.yml": [
+                "permissions:",
+                "  contents: read",
+                "  id-token: write",
+            ],
+            "quality-zero-gate.yml": [
+                "permissions:",
+                "  contents: read",
+            ],
+            "codecov-analytics.yml": [
+                "permissions:",
+                "  contents: read",
+                "  id-token: write",
+            ],
+        }
+
+        for name, expected_lines in workflow_expectations.items():
+            text = (ROOT / "templates" / "repo" / ".github" / "workflows" / name).read_text(encoding="utf-8")
+            for expected in expected_lines:
+                self.assertIn(expected, text, name)
 
     def test_self_wrapper_workflows_use_current_ref_for_platform_checkout(self) -> None:
         workflow_expectations = {

@@ -9,11 +9,12 @@ on:
 
 jobs:
   aggregate-gate:
-    uses: Prekzursil/quality-zero-platform/.github/workflows/reusable-quality-zero-gate.yml@main
+    permissions:
+      contents: read
+    uses: Prekzursil/quality-zero-platform/.github/workflows/reusable-quality-zero-gate.yml@d3aabc77c858e27cb7ade824e9fbf3dd9203f256
     with:
       repo_slug: ${{ github.repository }}
       event_name: ${{ github.event_name }}
       sha: ${{ github.event.pull_request.head.sha || github.sha }}
       platform_repository: Prekzursil/quality-zero-platform
       platform_ref: main
-    secrets: inherit

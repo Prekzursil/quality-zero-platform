@@ -37,6 +37,20 @@ class WorkflowContractTests(unittest.TestCase):
             if path.name in {"quality-zero-platform.yml", "quality-zero-gate.yml"}:
                 self.assertIn("platform_repository: ${{ github.repository }}", text, path.name)
 
+    def test_repo_template_parity_wrappers_pin_controller_and_do_not_inherit_all_secrets(self) -> None:
+        workflow_paths = [
+            ROOT / "templates" / "repo" / ".github" / "workflows" / "quality-zero-platform.yml",
+            ROOT / "templates" / "repo" / ".github" / "workflows" / "quality-zero-gate.yml",
+            ROOT / "templates" / "repo" / ".github" / "workflows" / "codecov-analytics.yml",
+        ]
+
+        for path in workflow_paths:
+            text = path.read_text(encoding="utf-8")
+            self.assertNotIn("secrets: inherit", text, path.name)
+            self.assertIn("@d3aabc77c858e27cb7ade824e9fbf3dd9203f256", text, path.name)
+            self.assertIn("platform_repository: Prekzursil/quality-zero-platform", text, path.name)
+            self.assertIn("platform_ref: main", text, path.name)
+
     def test_self_wrapper_workflows_use_current_ref_for_platform_checkout(self) -> None:
         workflow_expectations = {
             "quality-zero-platform.yml": "platform_ref: ${{ github.event.pull_request.head.sha || github.sha }}",

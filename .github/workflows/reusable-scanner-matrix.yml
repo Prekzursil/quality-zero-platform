@@ -12,6 +12,22 @@ on:
         type: string
         required: false
         default: pull_request
+      branch_name:
+        type: string
+        required: false
+        default: ""
+      pull_request_number:
+        type: string
+        required: false
+        default: ""
+      pull_request_author:
+        type: string
+        required: false
+        default: ""
+      pull_request_head_ref:
+        type: string
+        required: false
+        default: ""
       sha:
         type: string
         required: false
@@ -141,11 +157,11 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           REPO_SLUG: ${{ inputs.repo_slug }}
           TARGET_SHA: ${{ inputs.sha != '' && inputs.sha || github.sha }}
-          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
-          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || '' }}
+          BRANCH_NAME: ${{ inputs.branch_name != '' && inputs.branch_name || github.head_ref || github.ref_name }}
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_request_number }}
           GITHUB_ACTOR_NAME: ${{ github.actor }}
-          PULL_REQUEST_AUTHOR: ${{ github.event.pull_request.user.login || '' }}
-          PULL_REQUEST_HEAD_REF: ${{ github.event.pull_request.head.ref || github.head_ref || '' }}
+          PULL_REQUEST_AUTHOR: ${{ inputs.pull_request_author }}
+          PULL_REQUEST_HEAD_REF: ${{ inputs.pull_request_head_ref != '' && inputs.pull_request_head_ref || github.head_ref || '' }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           CODACY_API_TOKEN: ${{ secrets.CODACY_API_TOKEN }}
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

@@ -20,6 +20,10 @@ jobs:
     with:
       repo_slug: ${{ github.repository }}
       event_name: ${{ github.event_name }}
+      branch_name: ${{ github.head_ref || github.ref_name }}
+      pull_request_number: ${{ github.event.pull_request.number || '' }}
+      pull_request_author: ${{ github.event.pull_request.user.login || '' }}
+      pull_request_head_ref: ${{ github.event.pull_request.head.ref || github.head_ref || '' }}
       sha: ${{ github.event.pull_request.head.sha || github.sha }}
       platform_repository: Prekzursil/quality-zero-platform
       platform_ref: main

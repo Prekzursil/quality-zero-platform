@@ -31,6 +31,7 @@ class ControlPlaneTests(unittest.TestCase):
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
         pbinfo = load_repo_profile(inventory, "Prekzursil/pbinfo-get-unsolved")
+        pr_contexts = active_required_contexts(profile, event_name="pull_request")
 
         self.assertEqual(profile["stack"], "node-frontend")
         self.assertEqual(
@@ -48,6 +49,7 @@ class ControlPlaneTests(unittest.TestCase):
                 "DeepScan",
             ],
         )
+        self.assertTrue({"qlty check", "qlty coverage", "qlty coverage diff"}.issubset(pr_contexts))
         self.assertTrue({"qlty check", "qlty coverage", "qlty coverage diff"}.issubset(pbinfo["required_contexts"]["target"]))
         self.assertTrue({"Chromatic Playwright", "Applitools Visual"}.issubset(profile["required_contexts"]["target"]))
 
@@ -80,8 +82,14 @@ class ControlPlaneTests(unittest.TestCase):
 
         self.assertNotIn("DeepScan Zero", push_contexts)
         self.assertNotIn("DeepScan", push_contexts)
+        self.assertNotIn("qlty check", push_contexts)
+        self.assertNotIn("qlty coverage", push_contexts)
+        self.assertNotIn("qlty coverage diff", push_contexts)
         self.assertIn("DeepScan Zero", pr_contexts)
         self.assertIn("DeepScan", pr_contexts)
+        self.assertIn("qlty check", pr_contexts)
+        self.assertIn("qlty coverage", pr_contexts)
+        self.assertIn("qlty coverage diff", pr_contexts)
 
     def test_reframe_overlay_adds_visual_and_platform_contexts_to_target(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")

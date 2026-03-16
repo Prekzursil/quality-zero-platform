@@ -43,6 +43,30 @@ class RulesetPayloadTests(unittest.TestCase):
         self.assertIn("Chromatic Playwright", profile["required_contexts"]["target"])
         self.assertIn("qlty check", profile["required_contexts"]["target"])
 
+    def test_env_inspector_ruleset_payload_requires_qlty_contexts(self) -> None:
+        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
+        profile = load_repo_profile(inventory, "Prekzursil/env-inspector")
+        payload = build_ruleset_payload(profile)
+
+        required = payload["rules"][1]["parameters"]["required_status_checks"]
+        contexts = [entry["context"] for entry in required]
+
+        self.assertIn("qlty check", contexts)
+        self.assertIn("qlty coverage", contexts)
+        self.assertIn("qlty coverage diff", contexts)
+
+    def test_airline_ruleset_payload_requires_qlty_contexts(self) -> None:
+        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
+        profile = load_repo_profile(inventory, "Prekzursil/Airline-Reservations-System")
+        payload = build_ruleset_payload(profile)
+
+        required = payload["rules"][1]["parameters"]["required_status_checks"]
+        contexts = [entry["context"] for entry in required]
+
+        self.assertIn("qlty check", contexts)
+        self.assertIn("qlty coverage", contexts)
+        self.assertIn("qlty coverage diff", contexts)
+
     def test_quality_zero_platform_self_ruleset_defers_qlty_until_emitted(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")

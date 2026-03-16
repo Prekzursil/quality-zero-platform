@@ -55,6 +55,9 @@ required_contexts:
     - Codacy Static Code Analysis
     - DeepScan
   pull_request_only:
+    - qlty check
+    - qlty coverage
+    - qlty coverage diff
     - DeepScan Zero
     - DeepScan
 vendors:

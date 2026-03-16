@@ -60,6 +60,18 @@
             "integration_id": null
           },
           {
+            "context": "qlty check",
+            "integration_id": null
+          },
+          {
+            "context": "qlty coverage",
+            "integration_id": null
+          },
+          {
+            "context": "qlty coverage diff",
+            "integration_id": null
+          },
+          {
             "context": "DeepScan Zero",
             "integration_id": null
           },

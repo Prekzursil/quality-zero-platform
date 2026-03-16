@@ -1,4 +1,4 @@
-from __future__ import annotations
+from __future__ import annotations, division
 
 import unittest
 from pathlib import Path
@@ -26,6 +26,7 @@ class WorkflowContractTests(unittest.TestCase):
         workflow_paths = [
             ROOT / ".github" / "workflows" / "quality-zero-platform.yml",
             ROOT / ".github" / "workflows" / "quality-zero-gate.yml",
+            ROOT / ".github" / "workflows" / "codecov-analytics.yml",
             ROOT / ".github" / "workflows" / "quality-zero-remediation.yml",
             ROOT / ".github" / "workflows" / "quality-zero-backlog.yml",
         ]
@@ -33,12 +34,51 @@ class WorkflowContractTests(unittest.TestCase):
         for path in workflow_paths:
             text = path.read_text(encoding="utf-8")
             self.assertNotIn("secrets: inherit", text, path.name)
-            self.assertIn("platform_repository: ${{ github.repository }}", text, path.name)
+            if path.name in {"quality-zero-platform.yml", "quality-zero-gate.yml"}:
+                self.assertIn("platform_repository: ${{ github.repository }}", text, path.name)
+
+    def test_repo_template_parity_wrappers_pin_controller_and_do_not_inherit_all_secrets(self) -> None:
+        workflow_paths = [
+            ROOT / "templates" / "repo" / ".github" / "workflows" / "quality-zero-platform.yml",
+            ROOT / "templates" / "repo" / ".github" / "workflows" / "quality-zero-gate.yml",
+            ROOT / "templates" / "repo" / ".github" / "workflows" / "codecov-analytics.yml",
+        ]
+
+        for path in workflow_paths:
+            text = path.read_text(encoding="utf-8")
+            self.assertNotIn("secrets: inherit", text, path.name)
+            self.assertIn("@d3aabc77c858e27cb7ade824e9fbf3dd9203f256", text, path.name)
+            self.assertIn("platform_repository: Prekzursil/quality-zero-platform", text, path.name)
+            self.assertIn("platform_ref: main", text, path.name)
+
+    def test_repo_template_parity_wrappers_set_explicit_top_level_permissions(self) -> None:
+        workflow_expectations = {
+            "quality-zero-platform.yml": [
+                "permissions:",
+                "  contents: read",
+                "  id-token: write",
+            ],
+            "quality-zero-gate.yml": [
+                "permissions:",
+                "  contents: read",
+            ],
+            "codecov-analytics.yml": [
+                "permissions:",
+                "  contents: read",
+                "  id-token: write",
+            ],
+        }
+
+        for name, expected_lines in workflow_expectations.items():
+            text = (ROOT / "templates" / "repo" / ".github" / "workflows" / name).read_text(encoding="utf-8")
+            for expected in expected_lines:
+                self.assertIn(expected, text, name)
 
     def test_self_wrapper_workflows_use_current_ref_for_platform_checkout(self) -> None:
         workflow_expectations = {
             "quality-zero-platform.yml": "platform_ref: ${{ github.event.pull_request.head.sha || github.sha }}",
             "quality-zero-gate.yml": "platform_ref: ${{ github.event.pull_request.head.sha || github.sha }}",
+            "codecov-analytics.yml": "platform_ref: ${{ github.event.pull_request.head.sha || github.sha }}",
             "quality-zero-remediation.yml": "platform_ref: ${{ github.event.workflow_run.head_sha || github.sha }}",
             "quality-zero-backlog.yml": "platform_ref: ${{ github.sha }}",
         }
@@ -100,6 +140,19 @@ class WorkflowContractTests(unittest.TestCase):
         wrapper_text = (ROOT / ".github" / "workflows" / "quality-zero-platform.yml").read_text(encoding="utf-8")
         self.assertIn("CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}", wrapper_text)
 
+        analytics_text = (ROOT / ".github" / "workflows" / "codecov-analytics.yml").read_text(encoding="utf-8")
+        self.assertIn("CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}", analytics_text)
+
+        reusable_text = (ROOT / ".github" / "workflows" / "reusable-codecov-analytics.yml").read_text(encoding="utf-8")
+        self.assertIn("required: false", reusable_text)
+        self.assertIn("codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de", reusable_text)
+        self.assertIn("use_oidc: ${{ secrets.CODECOV_TOKEN == '' }}", reusable_text)
+        self.assertIn("token: ${{ secrets.CODECOV_TOKEN }}", reusable_text)
+        self.assertIn("files: ${{ steps.profile.outputs.coverage_input_files }}", reusable_text)
+        self.assertEqual(reusable_text.count("persist-credentials: false"), 2)
+        self.assertIn('profile_path = Path(os.environ["RUNNER_TEMP"]) / "profile.json"', reusable_text)
+        self.assertIn('coverage = json.loads(profile_path.read_text(encoding="utf-8")).get("coverage", {})', reusable_text)
+
     def test_scanner_matrix_exports_provider_credentials_to_lane_runtime(self) -> None:
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
         for expected in [
@@ -138,6 +191,10 @@ class WorkflowContractTests(unittest.TestCase):
 
     def test_reusable_workflows_do_not_inline_inputs_inside_run_blocks(self) -> None:
         workflow_expectations = {
+            "reusable-codecov-analytics.yml": [
+                '--repo-slug "${{ inputs.repo_slug }}"',
+                '--event-name "${{ inputs.event_name }}"',
+            ],
             "reusable-quality-zero-gate.yml": [
                 '--repo-slug "${{ inputs.repo_slug }}"',
                 '--event-name "${{ inputs.event_name }}"',
@@ -160,4 +217,21 @@ class WorkflowContractTests(unittest.TestCase):
     def test_quality_zero_gate_exports_github_token_to_required_check_probe(self) -> None:
         text = (ROOT / ".github" / "workflows" / "reusable-quality-zero-gate.yml").read_text(encoding="utf-8")
         self.assertIn("GITHUB_TOKEN: ${{ github.token }}", text)
+
+    def test_parity_wrappers_list_push_pull_request_and_manual_triggers(self) -> None:
+        workflow_paths = [
+            ROOT / ".github" / "workflows" / "quality-zero-platform.yml",
+            ROOT / ".github" / "workflows" / "quality-zero-gate.yml",
+            ROOT / ".github" / "workflows" / "codecov-analytics.yml",
+            ROOT / "templates" / "repo" / ".github" / "workflows" / "quality-zero-platform.yml",
+            ROOT / "templates" / "repo" / ".github" / "workflows" / "quality-zero-gate.yml",
+            ROOT / "templates" / "repo" / ".github" / "workflows" / "codecov-analytics.yml",
+        ]
+
+        for path in workflow_paths:
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("push:", text, path.name)
+            self.assertIn("pull_request:", text, path.name)
+            self.assertIn("workflow_dispatch:", text, path.name)
+            self.assertIn("branches: [main, master]", text, path.name)
 

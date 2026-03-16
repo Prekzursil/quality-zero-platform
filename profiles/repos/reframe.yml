@@ -48,12 +48,12 @@ required_contexts:
     - Sentry Zero
     - DeepScan Zero
     - SonarCloud Code Analysis
-    - DeepScan
     - Python API & worker checks
     - Web build
     - Analyze (python)
     - Analyze (typescript)
   pull_request_only:
+    - DeepScan
     - CodeQL
     - CodeRabbit
     - Codacy Static Code Analysis

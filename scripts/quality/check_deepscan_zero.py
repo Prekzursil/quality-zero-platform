@@ -31,6 +31,10 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _event_name() -> str:
+    return os.environ.get("EVENT_NAME", "").strip()
+
+
 def _nested_payload_values(payload: Any) -> list[Any]:
     if isinstance(payload, dict):
         return list(payload.values())
@@ -183,6 +187,8 @@ def _evaluate_github_check_context(args: argparse.Namespace, token: str) -> tupl
     payload = _github_status_payload(_github_repo(args), _github_sha(args), token)
     context = str(getattr(args, "github_context", DEEPSCAN_STATUS_CONTEXT) or DEEPSCAN_STATUS_CONTEXT)
     status = _find_github_status(payload, context)
+    if status is None and _event_name() in {"push", "workflow_dispatch"}:
+        return 0, "", []
     findings = _status_findings(status, context)
     open_issues = 0 if not findings else None
     return open_issues, _status_target_url(status), findings

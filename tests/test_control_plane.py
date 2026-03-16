@@ -46,7 +46,6 @@ class ControlPlaneTests(unittest.TestCase):
                 "DeepScan Zero",
                 "SonarCloud Code Analysis",
                 "Codacy Static Code Analysis",
-                "DeepScan",
             ],
         )
         self.assertTrue({"qlty check", "qlty coverage", "qlty coverage diff"}.issubset(pr_contexts))

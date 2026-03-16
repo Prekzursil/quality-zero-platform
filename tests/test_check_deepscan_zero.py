@@ -43,6 +43,21 @@ class DeepScanZeroTests(unittest.TestCase):
         self.assertEqual(source_url, "")
         self.assertIn("DeepScan GitHub status context is missing.", findings)
 
+    def test_github_check_context_mode_allows_missing_status_on_push_main(self) -> None:
+        args = Namespace(repo="Prekzursil/quality-zero-platform", sha="abc123")
+        api_token = _placeholder_token("api")
+
+        with patch.dict("os.environ", {"EVENT_NAME": "push"}, clear=False), patch.object(
+            check_deepscan_zero,
+            "_github_status_payload",
+            return_value={"statuses": []},
+        ):
+            open_issues, source_url, findings = check_deepscan_zero._evaluate_github_check_context(args, token=api_token)
+
+        self.assertEqual(open_issues, 0)
+        self.assertEqual(source_url, "")
+        self.assertEqual(findings, [])
+
     def test_validate_deepscan_inputs_accepts_github_check_context_mode(self) -> None:
         api_token = _placeholder_token("api")
         findings = check_deepscan_zero._validate_deepscan_inputs(

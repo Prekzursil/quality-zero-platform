@@ -1,4 +1,4 @@
-name: Quality Zero Platform
+name: Codecov Analytics
 
 on:
   push:
@@ -8,8 +8,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  shared-scanner-matrix:
-    uses: Prekzursil/quality-zero-platform/.github/workflows/reusable-scanner-matrix.yml@main
+  shared-codecov-analytics:
+    uses: Prekzursil/quality-zero-platform/.github/workflows/reusable-codecov-analytics.yml@main
     with:
       repo_slug: ${{ github.repository }}
       event_name: ${{ github.event_name }}

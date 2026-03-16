@@ -20,10 +20,18 @@
 Each governed repo should converge on:
 
 - `.github/workflows/quality-zero-platform.yml`
+- `.github/workflows/quality-zero-gate.yml`
+- `.github/workflows/codecov-analytics.yml`
 - `.github/workflows/quality-zero-backlog.yml`
 - `.github/workflows/quality-zero-remediation.yml`
 - `bash scripts/verify`
 - a repo-local `AGENTS.md` that points back to strict-zero verification
+
+The scanner, gate, and Codecov wrappers must run on:
+
+- `pull_request` targeting `main` / `master`
+- `push` targeting `main` / `master`
+- `workflow_dispatch`
 
 ## Safety Checks
 

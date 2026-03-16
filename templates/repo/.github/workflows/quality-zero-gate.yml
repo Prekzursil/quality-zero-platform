@@ -2,9 +2,9 @@ name: Quality Zero Gate
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
-    branches: [main]
+    branches: [main, master]
   workflow_dispatch:
 
 jobs:
@@ -14,4 +14,6 @@ jobs:
       repo_slug: ${{ github.repository }}
       event_name: ${{ github.event_name }}
       sha: ${{ github.event.pull_request.head.sha || github.sha }}
+      platform_repository: Prekzursil/quality-zero-platform
+      platform_ref: main
     secrets: inherit

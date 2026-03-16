@@ -10,7 +10,7 @@ It replaces the old queue/template baseline with reusable workflows, shared qual
 - `profiles/repos/*.yml`: repo-specific overrides
 - `scripts/quality/`: shared strict-zero policy, provider checks, ruleset generation, and remediation prompt rendering
 - `scripts/provider_ui/`: Playwright-based provider-admin bootstrap scripts that persist browser state outside the repo
-- `.github/workflows/`: reusable workflows called by governed repos
+- `.github/workflows/`: reusable workflows called by governed repos, including push-parity scanner, gate, and Codecov analytics lanes
 - `templates/repo/`: thin wrapper contract for governed repos
 - `generated/rulesets/`: committed ruleset payloads for review and drift detection
 
@@ -36,7 +36,7 @@ Phase-1 compatibility still preserves the established public check names for the
 
 ## Control-Plane Flow
 
-1. Wrapper repos call the reusable scanner and gate workflows from this repo.
+1. Wrapper repos call the reusable scanner, gate, and Codecov analytics workflows from this repo on both pull requests and protected-branch pushes.
 2. Shared Python utilities resolve the repo profile, compute required contexts, validate provider inputs, and emit artifacts.
 3. Ruleset payloads are generated from the same repo profile data that powers the gate.
 4. Failed pull requests enter the trusted-runner Codex remediation loop and write only to `codex/fix/<context>/<shortsha>`.

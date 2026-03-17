@@ -42,17 +42,55 @@ def _coverage_mode(coverage: Dict[str, Any], event_name: str) -> str:
 def _run_shell(command: str, *, shell_name: str, cwd: Path) -> None:
     if not command.strip():
         return
-    shell_argv = ["pwsh", "-NoLogo", "-Command", "-"] if shell_name == "pwsh" else ["bash", "-s"]
     # Safe-by-construction: the interpreter argv is static, shell=False prevents interpolation,
     # and the repo-owned profile command is passed via stdin instead of becoming dynamic argv.
-    subprocess.run(  # nosec B603
-        shell_argv,
-        cwd=cwd,
-        input=command,
-        text=True,
-        shell=False,
-        check=True,
-    )
+    if shell_name == "pwsh":
+        if _path_exists(r"C:\Program Files\PowerShell\7\pwsh.exe"):
+            subprocess.run(  # nosec B603
+                [r"C:\Program Files\PowerShell\7\pwsh.exe", "-NoLogo", "-Command", "-"],
+                cwd=cwd,
+                input=command,
+                text=True,
+                shell=False,
+                check=True,
+            )
+            return
+        if _path_exists("/usr/bin/pwsh"):
+            subprocess.run(  # nosec B603
+                ["/usr/bin/pwsh", "-NoLogo", "-Command", "-"],
+                cwd=cwd,
+                input=command,
+                text=True,
+                shell=False,
+                check=True,
+            )
+            return
+        raise FileNotFoundError("Unable to locate required shell executable: pwsh")
+    if _path_exists("/usr/bin/bash"):
+        subprocess.run(  # nosec B603
+            ["/usr/bin/bash", "-s"],
+            cwd=cwd,
+            input=command,
+            text=True,
+            shell=False,
+            check=True,
+        )
+        return
+    if _path_exists("/bin/bash"):
+        subprocess.run(  # nosec B603
+            ["/bin/bash", "-s"],
+            cwd=cwd,
+            input=command,
+            text=True,
+            shell=False,
+            check=True,
+        )
+        return
+    raise FileNotFoundError("Unable to locate required shell executable: bash")
+
+
+def _path_exists(raw_path: str) -> bool:
+    return Path(raw_path).exists()
 
 
 def _build_assert_coverage_argv(coverage: Dict[str, Any], platform_dir: Path) -> List[str]:
@@ -75,6 +113,8 @@ def _working_directory(path: Path):
         yield
     finally:
         os.chdir(previous)
+
+
 def _run_assert_coverage_100(coverage: Dict[str, Any], *, repo_dir: Path, platform_dir: Path) -> int:
     argv = _build_assert_coverage_argv(coverage, platform_dir)
     previous_argv = sys.argv

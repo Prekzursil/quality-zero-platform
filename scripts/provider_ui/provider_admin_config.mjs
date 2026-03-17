@@ -155,59 +155,47 @@ function setNumericValue(args, key, tokens, option) {
   args[key] = Number(shiftRequiredValue(tokens, option));
 }
 
-const ARGUMENT_HANDLERS = Object.freeze({
-  '--provider': (args, tokens) => {
-    args.provider = shiftRequiredValue(tokens, '--provider');
-  },
-  '-p': (args, tokens) => {
-    args.provider = shiftRequiredValue(tokens, '--provider');
-  },
-  '--repo': (args, tokens) => {
-    args.repo = shiftRequiredValue(tokens, '--repo');
-  },
-  '-r': (args, tokens) => {
-    args.repo = shiftRequiredValue(tokens, '--repo');
-  },
-  '--owner': (args, tokens) => {
-    args.owner = shiftRequiredValue(tokens, '--owner');
-  },
-  '--state-root': (args, tokens) => {
-    setResolvedPath(args, 'stateRoot', tokens, '--state-root');
-  },
-  '--profile-dir': (args, tokens) => {
-    setResolvedPath(args, 'profileDir', tokens, '--profile-dir');
-  },
-  '--timeout-ms': (args, tokens) => {
-    setNumericValue(args, 'timeoutMs', tokens, '--timeout-ms');
-  },
-  '--headless': (args) => {
-    args.headless = true;
-  },
-  '--headed': (args) => {
-    args.headless = false;
-  },
-  '--keep-open': (args) => {
-    args.keepOpen = true;
-  },
-  '--slow-mo-ms': (args, tokens) => {
-    setNumericValue(args, 'slowMoMs', tokens, '--slow-mo-ms');
-  },
-  '--help': (args) => {
-    args.command = 'help';
-  },
-  '-h': (args) => {
-    args.command = 'help';
-  }
-});
-
 function applyArgumentToken(args, tokens, token) {
-  const handler = ARGUMENT_HANDLERS[token];
-  if (handler) {
-    handler(args, tokens, token);
-    return;
+  switch (token) {
+    case '--provider':
+    case '-p':
+      args.provider = shiftRequiredValue(tokens, '--provider');
+      return;
+    case '--repo':
+    case '-r':
+      args.repo = shiftRequiredValue(tokens, '--repo');
+      return;
+    case '--owner':
+      args.owner = shiftRequiredValue(tokens, '--owner');
+      return;
+    case '--state-root':
+      setResolvedPath(args, 'stateRoot', tokens, '--state-root');
+      return;
+    case '--profile-dir':
+      setResolvedPath(args, 'profileDir', tokens, '--profile-dir');
+      return;
+    case '--timeout-ms':
+      setNumericValue(args, 'timeoutMs', tokens, '--timeout-ms');
+      return;
+    case '--headless':
+      args.headless = true;
+      return;
+    case '--headed':
+      args.headless = false;
+      return;
+    case '--keep-open':
+      args.keepOpen = true;
+      return;
+    case '--slow-mo-ms':
+      setNumericValue(args, 'slowMoMs', tokens, '--slow-mo-ms');
+      return;
+    case '--help':
+    case '-h':
+      args.command = 'help';
+      return;
+    default:
+      throw new Error(`Unknown argument: ${token}`);
   }
-
-  throw new Error(`Unknown argument: ${token}`);
 }
 
 function validateNumericArgs(args) {

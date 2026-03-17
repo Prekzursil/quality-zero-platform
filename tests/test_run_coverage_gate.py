@@ -15,7 +15,10 @@ from scripts.quality import run_coverage_gate
 class RunCoverageGateTests(unittest.TestCase):
     def test_coverage_mode_prefers_event_specific_override(self) -> None:
         self.assertEqual(
-            run_coverage_gate._coverage_mode({'assert_mode': {'default': 'enforce', 'pull_request': 'evidence_only'}}, 'pull_request'),
+            run_coverage_gate._coverage_mode(
+                {'assert_mode': {'default': 'enforce', 'pull_request': 'evidence_only'}},
+                'pull_request',
+            ),
             'evidence_only',
         )
 
@@ -28,17 +31,104 @@ class RunCoverageGateTests(unittest.TestCase):
     def test_run_shell_passes_repo_command_via_stdin_to_static_shell_argv(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             cwd = Path(temp_dir)
-            with patch('scripts.quality.run_coverage_gate.subprocess.run', return_value=object()) as mock_run:
+            with (
+                patch(
+                    'scripts.quality.run_coverage_gate._path_exists',
+                    side_effect=lambda raw_path: raw_path == '/usr/bin/pwsh',
+                ),
+                patch('scripts.quality.run_coverage_gate.subprocess.run', return_value=object()) as mock_run,
+            ):
                 run_coverage_gate._run_shell('echo coverage', shell_name='pwsh', cwd=cwd)
 
         mock_run.assert_called_once_with(
-            ['pwsh', '-NoLogo', '-Command', '-'],
+            ['/usr/bin/pwsh', '-NoLogo', '-Command', '-'],
             cwd=cwd,
             input='echo coverage',
             text=True,
             shell=False,
             check=True,
         )
+
+    def test_run_shell_prefers_windows_powershell_path_when_available(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cwd = Path(temp_dir)
+            with (
+                patch(
+                    'scripts.quality.run_coverage_gate._path_exists',
+                    side_effect=lambda raw_path: raw_path == r'C:\Program Files\PowerShell\7\pwsh.exe',
+                ),
+                patch('scripts.quality.run_coverage_gate.subprocess.run', return_value=object()) as mock_run,
+            ):
+                run_coverage_gate._run_shell('echo coverage', shell_name='pwsh', cwd=cwd)
+
+        mock_run.assert_called_once_with(
+            [r'C:\Program Files\PowerShell\7\pwsh.exe', '-NoLogo', '-Command', '-'],
+            cwd=cwd,
+            input='echo coverage',
+            text=True,
+            shell=False,
+            check=True,
+        )
+
+    def test_run_shell_supports_bash_with_static_shell_argv(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cwd = Path(temp_dir)
+            with (
+                patch(
+                    'scripts.quality.run_coverage_gate._path_exists',
+                    side_effect=lambda raw_path: raw_path == '/usr/bin/bash',
+                ),
+                patch('scripts.quality.run_coverage_gate.subprocess.run', return_value=object()) as mock_run,
+            ):
+                run_coverage_gate._run_shell('echo coverage', shell_name='bash', cwd=cwd)
+
+        mock_run.assert_called_once_with(
+            ['/usr/bin/bash', '-s'],
+            cwd=cwd,
+            input='echo coverage',
+            text=True,
+            shell=False,
+            check=True,
+        )
+
+    def test_run_shell_supports_bin_bash_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cwd = Path(temp_dir)
+            with (
+                patch(
+                    'scripts.quality.run_coverage_gate._path_exists',
+                    side_effect=lambda raw_path: raw_path == '/bin/bash',
+                ),
+                patch('scripts.quality.run_coverage_gate.subprocess.run', return_value=object()) as mock_run,
+            ):
+                run_coverage_gate._run_shell('echo coverage', shell_name='bash', cwd=cwd)
+
+        mock_run.assert_called_once_with(
+            ['/bin/bash', '-s'],
+            cwd=cwd,
+            input='echo coverage',
+            text=True,
+            shell=False,
+            check=True,
+        )
+
+    def test_run_shell_requires_resolved_shell_executable(self) -> None:
+        with patch('scripts.quality.run_coverage_gate._path_exists', return_value=False):
+            with self.assertRaisesRegex(FileNotFoundError, 'Unable to locate required shell executable: bash'):
+                run_coverage_gate._run_shell('echo coverage', shell_name='bash', cwd=Path.cwd())
+
+    def test_run_shell_requires_resolved_powershell_executable(self) -> None:
+        with patch('scripts.quality.run_coverage_gate._path_exists', return_value=False):
+            with self.assertRaisesRegex(FileNotFoundError, 'Unable to locate required shell executable: pwsh'):
+                run_coverage_gate._run_shell('echo coverage', shell_name='pwsh', cwd=Path.cwd())
+
+    def test_path_exists_reports_real_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target = Path(temp_dir) / 'exists.txt'
+            target.write_text('ok', encoding='utf-8')
+
+            self.assertTrue(run_coverage_gate._path_exists(str(target)))
+            self.assertFalse(run_coverage_gate._path_exists(str(target.with_name('missing.txt'))))
 
     def test_run_assert_coverage_invokes_module_in_repo_cwd(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -49,7 +139,11 @@ class RunCoverageGateTests(unittest.TestCase):
             coverage_dir = repo_dir / 'coverage'
             coverage_dir.mkdir()
             (coverage_dir / 'platform-coverage.xml').write_text(
-                '<coverage lines-valid="1" lines-covered="1"><packages><package><classes><class filename="src/app.py"><lines><line number="1" hits="1" /></lines></class></classes></package></packages></coverage>',
+                (
+                    '<coverage lines-valid="1" lines-covered="1"><packages><package><classes>'
+                    '<class filename="src/app.py"><lines><line number="1" hits="1" />'
+                    '</lines></class></classes></package></packages></coverage>'
+                ),
                 encoding='utf-8',
             )
 
@@ -60,11 +154,13 @@ class RunCoverageGateTests(unittest.TestCase):
                 'require_sources': ['src/app.py'],
                 'min_percent': 100.0,
             }
-            observed = {}
+            observed_cwd = None
+            observed_argv = None
 
             def fake_main() -> int:
-                observed['cwd'] = Path.cwd()
-                observed['argv'] = list(sys.argv)
+                nonlocal observed_cwd, observed_argv
+                observed_cwd = Path.cwd()
+                observed_argv = list(sys.argv)
                 return 17
 
             with patch('scripts.quality.run_coverage_gate.assert_coverage_100.main', side_effect=fake_main):
@@ -75,9 +171,9 @@ class RunCoverageGateTests(unittest.TestCase):
                 )
 
         self.assertEqual(result, 17)
-        self.assertEqual(observed['cwd'], repo_dir)
+        self.assertEqual(observed_cwd, repo_dir)
         self.assertEqual(
-            observed['argv'],
+            observed_argv,
             [
                 str(platform_dir / 'scripts' / 'quality' / 'assert_coverage_100.py'),
                 '--xml',

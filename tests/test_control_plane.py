@@ -248,7 +248,7 @@ class ControlPlaneTests(unittest.TestCase):
     def test_validate_profile_flags_invalid_vendor_url(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
-        profile["vendors"]["codacy"]["dashboard_url"] = "http://insecure.example.com"
+        profile["vendors"]["codacy"]["dashboard_url"] = "invalid.example.com"
 
         findings = validate_profile(profile)
 

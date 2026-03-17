@@ -81,4 +81,3 @@ Codex Web is used for backlog sweeps and manual review, not for merge-gate autho
 Provider-admin browser work lives under `scripts/provider_ui/` and `docs/provider-browser-bootstrap.md`. The bootstrap uses a dedicated persistent Playwright profile outside the repository tree so manual login can be completed once and later reused for authenticated provider checks.
 
 See also: `docs/codex-private-runner-auth.md`
-

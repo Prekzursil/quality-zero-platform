@@ -79,12 +79,20 @@ class WorkflowContractTests(unittest.TestCase):
         workflow_expectations = {
             "quality-zero-backlog.yml": [
                 MUTATION_TEMPLATE_REF,
-                "lane: ${{ inputs.tool || 'coverage' }}",
+                "permissions:",
+                "  contents: write",
+                "  pull-requests: write",
+                "workflow_dispatch:",
+                "lane: quality",
                 "CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}",
             ],
             "quality-zero-remediation.yml": [
                 MUTATION_TEMPLATE_REF,
-                "failure_context: ${{ inputs.failure_context || 'Quality Zero Gate' }}",
+                "permissions:",
+                "  contents: write",
+                "  pull-requests: write",
+                "workflow_dispatch:",
+                "failure_context: Quality Zero Gate",
                 "CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}",
                 "workflow_run: # zizmor: ignore[dangerous-triggers]",
             ],
@@ -93,6 +101,9 @@ class WorkflowContractTests(unittest.TestCase):
         for name, expected_lines in workflow_expectations.items():
             text = (ROOT / "templates" / "repo" / ".github" / "workflows" / name).read_text(encoding="utf-8")
             self.assertNotIn("secrets: inherit", text, name)
+            self.assertNotIn("workflow_dispatch:\n    inputs:", text, name)
+            self.assertNotIn("inputs.tool", text, name)
+            self.assertNotIn("inputs.failure_context", text, name)
             for expected in expected_lines:
                 self.assertIn(expected, text, name)
 

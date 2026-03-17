@@ -155,47 +155,101 @@ function setNumericValue(args, key, tokens, option) {
   args[key] = Number(shiftRequiredValue(tokens, option));
 }
 
-function applyArgumentToken(args, tokens, token) {
+function applyStringValueArgument(args, tokens, token) {
   switch (token) {
     case '--provider':
     case '-p':
       args.provider = shiftRequiredValue(tokens, '--provider');
-      return;
+      return true;
     case '--repo':
     case '-r':
       args.repo = shiftRequiredValue(tokens, '--repo');
-      return;
+      return true;
     case '--owner':
       args.owner = shiftRequiredValue(tokens, '--owner');
-      return;
+      return true;
+    default:
+      return false;
+  }
+}
+
+function applyPathValueArgument(args, tokens, token) {
+  switch (token) {
     case '--state-root':
       setResolvedPath(args, 'stateRoot', tokens, '--state-root');
-      return;
+      return true;
     case '--profile-dir':
       setResolvedPath(args, 'profileDir', tokens, '--profile-dir');
-      return;
+      return true;
+    default:
+      return false;
+  }
+}
+
+function applyNumericValueArgument(args, tokens, token) {
+  switch (token) {
     case '--timeout-ms':
       setNumericValue(args, 'timeoutMs', tokens, '--timeout-ms');
-      return;
-    case '--headless':
-      args.headless = true;
-      return;
-    case '--headed':
-      args.headless = false;
-      return;
-    case '--keep-open':
-      args.keepOpen = true;
-      return;
+      return true;
     case '--slow-mo-ms':
       setNumericValue(args, 'slowMoMs', tokens, '--slow-mo-ms');
-      return;
+      return true;
+    default:
+      return false;
+  }
+}
+
+function applyValueArgument(args, tokens, token) {
+  if (applyStringValueArgument(args, tokens, token)) {
+    return true;
+  }
+  if (applyPathValueArgument(args, tokens, token)) {
+    return true;
+  }
+  if (applyNumericValueArgument(args, tokens, token)) {
+    return true;
+  }
+  return false;
+}
+
+function applyToggleArgument(args, token) {
+  switch (token) {
+    case '--headless':
+      args.headless = true;
+      return true;
+    case '--headed':
+      args.headless = false;
+      return true;
+    case '--keep-open':
+      args.keepOpen = true;
+      return true;
+    default:
+      return false;
+  }
+}
+
+function applyHelpArgument(args, token) {
+  switch (token) {
     case '--help':
     case '-h':
       args.command = 'help';
-      return;
+      return true;
     default:
-      throw new Error(`Unknown argument: ${token}`);
+      return false;
   }
+}
+
+function applyArgumentToken(args, tokens, token) {
+  if (applyValueArgument(args, tokens, token)) {
+    return;
+  }
+  if (applyToggleArgument(args, token)) {
+    return;
+  }
+  if (applyHelpArgument(args, token)) {
+    return;
+  }
+  throw new Error(`Unknown argument: ${token}`);
 }
 
 function validateNumericArgs(args) {

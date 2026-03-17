@@ -3,6 +3,7 @@ from __future__ import absolute_import
 
 import argparse
 import re
+import shutil
 import subprocess  # nosec B404
 import sys
 from pathlib import Path
@@ -32,6 +33,13 @@ def _validate_cli_token(value: str, *, flag_name: str) -> str:
     if not _TOKEN_PATTERN.fullmatch(value):
         raise ValueError(f"{flag_name} contains unsupported characters")
     return value
+
+
+def _resolved_codex_executable() -> str:
+    codex_executable = shutil.which("codex")
+    if not codex_executable:
+        raise FileNotFoundError("Unable to locate required executable: codex")
+    return codex_executable
 
 
 def _resolved_repo_dir(args: argparse.Namespace) -> str:
@@ -68,7 +76,7 @@ def _validated_config_args(args: argparse.Namespace) -> List[str]:
 def build_codex_command(args: argparse.Namespace) -> List[str]:
     """Build the fixed codex argv list from resolved, validated inputs."""
     cmd = [
-        "codex",
+        _resolved_codex_executable(),
         "exec",
         "--full-auto",
         "-C",
@@ -91,12 +99,11 @@ def _run_codex_exec(args: argparse.Namespace, prompt_text: str) -> subprocess.Co
     profile_args = _validated_profile_args(args)
     model_args = _validated_model_args(args)
     config_args = _validated_config_args(args)
-    # Safe-by-construction: the executable name and core argv are literal strings, shell=False
-    # prevents interpolation, validated tokens remain plain arguments, and prompt content only
-    # flows through stdin instead of becoming command text.
+    # Safe-by-construction: explicit argv, shell=False, an absolute executable path,
+    # validated tokens as plain arguments, and prompt content flowing only through stdin.
     return subprocess.run(  # nosec B603
         [
-            "codex",
+            _resolved_codex_executable(),
             "exec",
             "--full-auto",
             "-C",

@@ -40,6 +40,8 @@ class RunCodexExecTests(unittest.TestCase):
     def _run_main_with_patched_subprocess(args: Namespace, completed: SimpleNamespace):
         json_log = Path(args.json_log)
         with patch('scripts.quality.run_codex_exec._parse_args', return_value=args), patch(
+            'scripts.quality.run_codex_exec.shutil.which', return_value=r'C:\\Tools\\codex.exe'
+        ), patch(
             'scripts.quality.run_codex_exec.subprocess.run', return_value=completed
         ) as mock_run, patch('sys.stdout', new=io.StringIO()) as stdout, patch('sys.stderr', new=io.StringIO()) as stderr:
             exit_code = main()
@@ -100,7 +102,7 @@ class RunCodexExecTests(unittest.TestCase):
 
         command = build_codex_command(args)
 
-        self.assertEqual(command[:4], ["codex", "exec", "--full-auto", "-C"])
+        self.assertEqual(command[:4], [r'C:\\Tools\\codex.exe', "exec", "--full-auto", "-C"])
         self.assertEqual(command[4], str(Path(args.repo_dir).resolve()))
         self.assertEqual(command[5:8], ["-s", "workspace-write", "--json"])
         self.assertEqual(command[8], "-o")
@@ -122,7 +124,7 @@ class RunCodexExecTests(unittest.TestCase):
         command = build_codex_command(args)
 
         self.assertEqual(command, [
-            "codex",
+            r'C:\\Tools\\codex.exe',
             "exec",
             "--full-auto",
             "-C",
@@ -169,7 +171,9 @@ class RunCodexExecTests(unittest.TestCase):
 
         completed = SimpleNamespace(stdout='{"ok":true}', stderr='warn', returncode=7)
 
-        with patch('scripts.quality.run_codex_exec.subprocess.run', return_value=completed) as mock_run:
+        with patch('scripts.quality.run_codex_exec.shutil.which', return_value=r'C:\\Tools\\codex.exe'), patch(
+            'scripts.quality.run_codex_exec.subprocess.run', return_value=completed
+        ) as mock_run:
             result = _run_codex_exec(args, 'hello codex')
 
         self.assertIs(result, completed)
@@ -261,7 +265,9 @@ class RunCodexExecTests(unittest.TestCase):
                 str(output_last_message),
             ]
 
-            with patch('subprocess.run', return_value=completed) as mock_run, patch(
+            with patch('shutil.which', return_value=r'C:\\Tools\\codex.exe'), patch(
+                'subprocess.run', return_value=completed
+            ) as mock_run, patch(
                 'sys.argv', argv
             ), patch('sys.stdout', new=io.StringIO()) as stdout:
                 with self.assertRaises(SystemExit) as result:

@@ -40,7 +40,7 @@ class RunCodexExecTests(unittest.TestCase):
     def _run_main_with_patched_subprocess(args: Namespace, completed: SimpleNamespace):
         json_log = Path(args.json_log)
         with patch('scripts.quality.run_codex_exec._parse_args', return_value=args), patch(
-            'scripts.quality.run_codex_exec.shutil.which', return_value=r'C:\\Tools\\codex.exe'
+            'scripts.quality.run_codex_exec.shutil.which', return_value=r'C:\Tools\codex.exe'
         ), patch(
             'scripts.quality.run_codex_exec.subprocess.run', return_value=completed
         ) as mock_run, patch('sys.stdout', new=io.StringIO()) as stdout, patch('sys.stderr', new=io.StringIO()) as stderr:
@@ -91,50 +91,52 @@ class RunCodexExecTests(unittest.TestCase):
 
     def test_build_codex_command_uses_resolved_paths_and_optional_flags(self):
         args = Namespace(
-            repo_dir=r".\repo",
-            prompt_file=r".\prompt.txt",
-            output_last_message=r".\out\message.txt",
-            sandbox="workspace-write",
-            profile="trusted-profile",
-            model="gpt-5.4",
-            config=["a=b", "c=d"],
+            repo_dir=r'.\repo',
+            prompt_file=r'.\prompt.txt',
+            output_last_message=r'.\out\message.txt',
+            sandbox='workspace-write',
+            profile='trusted-profile',
+            model='gpt-5.4',
+            config=['a=b', 'c=d'],
         )
 
-        command = build_codex_command(args)
+        with patch('scripts.quality.run_codex_exec.shutil.which', return_value=r'C:\Tools\codex.exe'):
+            command = build_codex_command(args)
 
-        self.assertEqual(command[:4], [r'C:\\Tools\\codex.exe', "exec", "--full-auto", "-C"])
+        self.assertEqual(command[:4], [r'C:\Tools\codex.exe', 'exec', '--full-auto', '-C'])
         self.assertEqual(command[4], str(Path(args.repo_dir).resolve()))
-        self.assertEqual(command[5:8], ["-s", "workspace-write", "--json"])
-        self.assertEqual(command[8], "-o")
+        self.assertEqual(command[5:8], ['-s', 'workspace-write', '--json'])
+        self.assertEqual(command[8], '-o')
         self.assertEqual(command[9], str(Path(args.output_last_message).resolve()))
-        self.assertEqual(command[10], "-")
-        self.assertEqual(command[11:], ["-p", "trusted-profile", "-m", "gpt-5.4", "-c", "a=b", "-c", "c=d"])
+        self.assertEqual(command[10], '-')
+        self.assertEqual(command[11:], ['-p', 'trusted-profile', '-m', 'gpt-5.4', '-c', 'a=b', '-c', 'c=d'])
 
     def test_build_codex_command_omits_optional_flags_when_not_set(self):
         args = Namespace(
-            repo_dir=r".\repo",
-            prompt_file=r".\prompt.txt",
-            output_last_message=r".\out\message.txt",
-            sandbox="workspace-write",
-            profile="",
-            model="",
+            repo_dir=r'.\repo',
+            prompt_file=r'.\prompt.txt',
+            output_last_message=r'.\out\message.txt',
+            sandbox='workspace-write',
+            profile='',
+            model='',
             config=[],
         )
 
-        command = build_codex_command(args)
+        with patch('scripts.quality.run_codex_exec.shutil.which', return_value=r'C:\Tools\codex.exe'):
+            command = build_codex_command(args)
 
         self.assertEqual(command, [
-            r'C:\\Tools\\codex.exe',
-            "exec",
-            "--full-auto",
-            "-C",
+            r'C:\Tools\codex.exe',
+            'exec',
+            '--full-auto',
+            '-C',
             str(Path(args.repo_dir).resolve()),
-            "-s",
-            "workspace-write",
-            "--json",
-            "-o",
+            '-s',
+            'workspace-write',
+            '--json',
+            '-o',
             str(Path(args.output_last_message).resolve()),
-            "-",
+            '-',
         ])
 
     def test_validate_cli_token_rejects_control_characters(self):
@@ -147,31 +149,47 @@ class RunCodexExecTests(unittest.TestCase):
 
     def test_build_codex_command_rejects_unsupported_profile_characters(self):
         args = Namespace(
-            repo_dir=r".\repo",
-            prompt_file=r".\prompt.txt",
-            output_last_message=r".\out\message.txt",
-            sandbox="workspace-write",
-            profile="trusted profile",
-            model="",
+            repo_dir=r'.\repo',
+            prompt_file=r'.\prompt.txt',
+            output_last_message=r'.\out\message.txt',
+            sandbox='workspace-write',
+            profile='trusted profile',
+            model='',
             config=[],
         )
 
-        with self.assertRaisesRegex(ValueError, '--profile contains unsupported characters'):
-            build_codex_command(args)
+        with patch('scripts.quality.run_codex_exec.shutil.which', return_value=r'C:\Tools\codex.exe'):
+            with self.assertRaisesRegex(ValueError, '--profile contains unsupported characters'):
+                build_codex_command(args)
+
+    def test_build_codex_command_requires_codex_executable_on_path(self):
+        args = Namespace(
+            repo_dir=r'.\repo',
+            prompt_file=r'.\prompt.txt',
+            output_last_message=r'.\out\message.txt',
+            sandbox='workspace-write',
+            profile='',
+            model='',
+            config=[],
+        )
+
+        with patch('scripts.quality.run_codex_exec.shutil.which', return_value=None):
+            with self.assertRaisesRegex(FileNotFoundError, 'Unable to locate required executable: codex'):
+                build_codex_command(args)
 
     def test_run_codex_exec_invokes_subprocess_with_shell_false_and_stdin_prompt(self):
         args = Namespace(
-            repo_dir=r".\repo",
-            output_last_message=r".\out\message.txt",
-            sandbox="workspace-write",
-            profile="trusted-profile",
-            model="gpt-5.4",
-            config=["a=b"],
+            repo_dir=r'.\repo',
+            output_last_message=r'.\out\message.txt',
+            sandbox='workspace-write',
+            profile='trusted-profile',
+            model='gpt-5.4',
+            config=['a=b'],
         )
 
         completed = SimpleNamespace(stdout='{"ok":true}', stderr='warn', returncode=7)
 
-        with patch('scripts.quality.run_codex_exec.shutil.which', return_value=r'C:\\Tools\\codex.exe'), patch(
+        with patch('scripts.quality.run_codex_exec.shutil.which', return_value=r'C:\Tools\codex.exe'), patch(
             'scripts.quality.run_codex_exec.subprocess.run', return_value=completed
         ) as mock_run:
             result = _run_codex_exec(args, 'hello codex')
@@ -179,7 +197,7 @@ class RunCodexExecTests(unittest.TestCase):
         self.assertIs(result, completed)
         mock_run.assert_called_once_with(
             [
-                'codex',
+                r'C:\Tools\codex.exe',
                 'exec',
                 '--full-auto',
                 '-C',
@@ -217,7 +235,7 @@ class RunCodexExecTests(unittest.TestCase):
             self.assertEqual(
                 called_args[0],
                 [
-                    'codex',
+                    r'C:\Tools\codex.exe',
                     'exec',
                     '--full-auto',
                     '-C',
@@ -265,11 +283,9 @@ class RunCodexExecTests(unittest.TestCase):
                 str(output_last_message),
             ]
 
-            with patch('shutil.which', return_value=r'C:\\Tools\\codex.exe'), patch(
+            with patch('shutil.which', return_value=r'C:\Tools\codex.exe'), patch(
                 'subprocess.run', return_value=completed
-            ) as mock_run, patch(
-                'sys.argv', argv
-            ), patch('sys.stdout', new=io.StringIO()) as stdout:
+            ) as mock_run, patch('sys.argv', argv), patch('sys.stdout', new=io.StringIO()) as stdout:
                 with self.assertRaises(SystemExit) as result:
                     runpy.run_path(str(script_path), run_name='__main__')
 

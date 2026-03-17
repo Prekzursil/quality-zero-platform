@@ -45,7 +45,6 @@ class ControlPlaneTests(unittest.TestCase):
                 "Sentry Zero",
                 "DeepScan Zero",
                 "SonarCloud Code Analysis",
-                "Codacy Static Code Analysis",
             ],
         )
         self.assertTrue({"qlty check", "qlty coverage", "qlty coverage diff"}.issubset(pr_contexts))
@@ -81,14 +80,26 @@ class ControlPlaneTests(unittest.TestCase):
 
         self.assertNotIn("DeepScan Zero", push_contexts)
         self.assertNotIn("DeepScan", push_contexts)
+        self.assertNotIn("Codacy Static Code Analysis", push_contexts)
         self.assertNotIn("qlty check", push_contexts)
         self.assertNotIn("qlty coverage", push_contexts)
         self.assertNotIn("qlty coverage diff", push_contexts)
         self.assertIn("DeepScan Zero", pr_contexts)
         self.assertIn("DeepScan", pr_contexts)
+        self.assertIn("Codacy Static Code Analysis", pr_contexts)
         self.assertIn("qlty check", pr_contexts)
         self.assertIn("qlty coverage", pr_contexts)
         self.assertIn("qlty coverage diff", pr_contexts)
+
+    def test_quality_zero_platform_keeps_codacy_native_context_pr_only(self) -> None:
+        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
+        profile = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
+
+        push_contexts = active_required_contexts(profile, event_name="push")
+        pr_contexts = active_required_contexts(profile, event_name="pull_request")
+
+        self.assertNotIn("Codacy Static Code Analysis", push_contexts)
+        self.assertIn("Codacy Static Code Analysis", pr_contexts)
 
     def test_reframe_overlay_adds_visual_and_platform_contexts_to_target(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")

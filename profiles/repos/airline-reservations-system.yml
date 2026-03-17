@@ -39,7 +39,6 @@ required_contexts:
     - Semgrep Zero
     - Sentry Zero
     - SonarCloud Code Analysis
-    - Codacy Static Code Analysis
   target:
     - Coverage 100 Gate
     - Codecov Analytics
@@ -55,6 +54,7 @@ required_contexts:
     - Codacy Static Code Analysis
     - DeepScan
   pull_request_only:
+    - Codacy Static Code Analysis
     - DeepScan
     - qlty check
     - qlty coverage

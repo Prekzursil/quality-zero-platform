@@ -7,7 +7,6 @@ export const PROVIDERS = Object.freeze({
     label: 'Codecov',
     homeUrl: 'https://app.codecov.io/gh',
     supportsRepoTarget: true,
-    repoUrl: (slug) => `https://app.codecov.io/gh/${slug}`,
     loginHint: 'Sign in with GitHub and confirm the repository binding plus default branch.'
   }),
   qlty: Object.freeze({
@@ -15,7 +14,6 @@ export const PROVIDERS = Object.freeze({
     label: 'Qlty',
     homeUrl: 'https://qlty.sh/gh',
     supportsRepoTarget: true,
-    repoUrl: (slug) => `https://qlty.sh/gh/${slug.replace('/', '/projects/')}`,
     loginHint: 'Open the Projects dashboard and verify the GitHub binding, default branch, and quality-gate or coverage statuses.'
   }),
   chromatic: Object.freeze({
@@ -63,6 +61,17 @@ export const PROVIDERS = Object.freeze({
 });
 
 export const PROVIDER_KEYS = Object.freeze(Object.keys(PROVIDERS));
+
+function buildRepoTargetUrl(providerKey, repoSlug) {
+  switch (providerKey) {
+    case 'codecov':
+      return `https://app.codecov.io/gh/${repoSlug}`;
+    case 'qlty':
+      return `https://qlty.sh/gh/${repoSlug.replace('/', '/projects/')}`;
+    default:
+      return null;
+  }
+}
 
 function resolveStateBaseDir(env = process.env) {
   return env.LOCALAPPDATA
@@ -121,7 +130,7 @@ export function resolveProviderTarget(provider, { repo = null, owner = 'Prekzurs
   const providerKey = normalizeProvider(provider);
   const definition = PROVIDERS[providerKey];
   const repoSlug = normalizeRepoSlug(repo, owner);
-  const targetUrl = definition.supportsRepoTarget && repoSlug ? definition.repoUrl(repoSlug) : definition.homeUrl;
+  const targetUrl = definition.supportsRepoTarget && repoSlug ? buildRepoTargetUrl(providerKey, repoSlug) : definition.homeUrl;
 
   return {
     ...definition,
@@ -146,43 +155,47 @@ function setNumericValue(args, key, tokens, option) {
   args[key] = Number(shiftRequiredValue(tokens, option));
 }
 
-const ARGUMENT_HANDLERS = Object.freeze({
-  '--provider': (args, tokens) => {
-    args.provider = shiftRequiredValue(tokens, '--provider');
-  },
-  '-p': (args, tokens) => ARGUMENT_HANDLERS['--provider'](args, tokens),
-  '--repo': (args, tokens) => {
-    args.repo = shiftRequiredValue(tokens, '--repo');
-  },
-  '-r': (args, tokens) => ARGUMENT_HANDLERS['--repo'](args, tokens),
-  '--owner': (args, tokens) => {
-    args.owner = shiftRequiredValue(tokens, '--owner');
-  },
-  '--state-root': (args, tokens) => setResolvedPath(args, 'stateRoot', tokens, '--state-root'),
-  '--profile-dir': (args, tokens) => setResolvedPath(args, 'profileDir', tokens, '--profile-dir'),
-  '--timeout-ms': (args, tokens) => setNumericValue(args, 'timeoutMs', tokens, '--timeout-ms'),
-  '--headless': (args) => {
-    args.headless = true;
-  },
-  '--headed': (args) => {
-    args.headless = false;
-  },
-  '--keep-open': (args) => {
-    args.keepOpen = true;
-  },
-  '--slow-mo-ms': (args, tokens) => setNumericValue(args, 'slowMoMs', tokens, '--slow-mo-ms'),
-  '--help': (args) => {
-    args.command = 'help';
-  },
-  '-h': (args, tokens) => ARGUMENT_HANDLERS['--help'](args, tokens)
-});
-
 function applyArgumentToken(args, tokens, token) {
-  const handler = ARGUMENT_HANDLERS[token];
-  if (!handler) {
-    throw new Error(`Unknown argument: ${token}`);
+  switch (token) {
+    case '--provider':
+    case '-p':
+      args.provider = shiftRequiredValue(tokens, '--provider');
+      return;
+    case '--repo':
+    case '-r':
+      args.repo = shiftRequiredValue(tokens, '--repo');
+      return;
+    case '--owner':
+      args.owner = shiftRequiredValue(tokens, '--owner');
+      return;
+    case '--state-root':
+      setResolvedPath(args, 'stateRoot', tokens, '--state-root');
+      return;
+    case '--profile-dir':
+      setResolvedPath(args, 'profileDir', tokens, '--profile-dir');
+      return;
+    case '--timeout-ms':
+      setNumericValue(args, 'timeoutMs', tokens, '--timeout-ms');
+      return;
+    case '--headless':
+      args.headless = true;
+      return;
+    case '--headed':
+      args.headless = false;
+      return;
+    case '--keep-open':
+      args.keepOpen = true;
+      return;
+    case '--slow-mo-ms':
+      setNumericValue(args, 'slowMoMs', tokens, '--slow-mo-ms');
+      return;
+    case '--help':
+    case '-h':
+      args.command = 'help';
+      return;
+    default:
+      throw new Error(`Unknown argument: ${token}`);
   }
-  handler(args, tokens);
 }
 
 function validateNumericArgs(args) {

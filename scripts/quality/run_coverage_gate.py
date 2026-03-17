@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from __future__ import annotations
+from __future__ import absolute_import
 
 import argparse
 import json
@@ -10,7 +10,13 @@ from pathlib import Path
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.quality.common import utc_timestamp, write_report
+from scripts.quality.common import (
+    DEFAULT_COVERAGE_JSON,
+    DEFAULT_COVERAGE_MD,
+    NONE_BULLET,
+    utc_timestamp,
+    write_report,
+)
 
 
 def _parse_args() -> argparse.Namespace:
@@ -49,7 +55,7 @@ def _render_evidence_md(payload: dict) -> str:
         f"- Timestamp (UTC): `{payload['timestamp_utc']}`",
         "",
         "## Findings",
-        "- None",
+        NONE_BULLET,
     ]
     return "\n".join(lines) + "\n"
 
@@ -63,10 +69,10 @@ def _write_evidence_only_report(note: str) -> int:
     }
     return write_report(
         payload,
-        out_json="coverage-100/coverage.json",
-        out_md="coverage-100/coverage.md",
-        default_json="coverage-100/coverage.json",
-        default_md="coverage-100/coverage.md",
+        out_json=DEFAULT_COVERAGE_JSON,
+        out_md=DEFAULT_COVERAGE_MD,
+        default_json=DEFAULT_COVERAGE_JSON,
+        default_md=DEFAULT_COVERAGE_MD,
         render_md=_render_evidence_md,
     )
 
@@ -92,7 +98,7 @@ def main() -> int:
     for item in coverage.get("require_sources", []):
         cmd.extend(["--require-source", str(item)])
     cmd.extend(["--min-percent", str(coverage.get("min_percent", 100.0))])
-    cmd.extend(["--out-json", "coverage-100/coverage.json", "--out-md", "coverage-100/coverage.md"])
+    cmd.extend(["--out-json", DEFAULT_COVERAGE_JSON, "--out-md", DEFAULT_COVERAGE_MD])
     subprocess.run(cmd, cwd=repo_dir, check=True)
     return 0
 

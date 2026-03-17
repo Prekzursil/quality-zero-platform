@@ -1,17 +1,24 @@
 #!/usr/bin/env python3
-from __future__ import annotations
+from __future__ import absolute_import
 
 import argparse
 import re
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Dict, List, Mapping, Set, Tuple
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.quality.common import safe_output_path, utc_timestamp, write_report
+from scripts.quality.common import (
+    DEFAULT_COVERAGE_JSON,
+    DEFAULT_COVERAGE_MD,
+    NONE_BULLET,
+    safe_output_path,
+    utc_timestamp,
+    write_report,
+)
 
 
 @dataclass
@@ -33,8 +40,6 @@ _XML_LINES_VALID_RE = re.compile(r'lines-valid="(\d+(?:\.\d+)?)"')
 _XML_LINES_COVERED_RE = re.compile(r'lines-covered="(\d+(?:\.\d+)?)"')
 _XML_LINE_HITS_RE = re.compile(r"<line\b[^>]*\bhits=\"(\d+(?:\.\d+)?)\"")
 _XML_FILENAME_RE = re.compile(r"""<[^>]+\bfilename=(?P<quote>["'])(?P<value>.*?)(?P=quote)""")
-
-
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Assert minimum coverage for all declared components.")
     parser.add_argument("--xml", action="append", default=[], help="Coverage XML input: name=path")
@@ -51,12 +56,12 @@ def _parse_args() -> argparse.Namespace:
         default=100.0,
         help="Minimum required coverage percentage for each component and the combined summary.",
     )
-    parser.add_argument("--out-json", default="coverage-100/coverage.json")
-    parser.add_argument("--out-md", default="coverage-100/coverage.md")
+    parser.add_argument("--out-json", default=DEFAULT_COVERAGE_JSON)
+    parser.add_argument("--out-md", default=DEFAULT_COVERAGE_MD)
     return parser.parse_args()
 
 
-def parse_named_path(value: str) -> tuple[str, Path]:
+def parse_named_path(value: str) -> Tuple[str, Path]:
     match = _PAIR_RE.match(value.strip())
     if not match:
         raise ValueError(f"Invalid input '{value}'. Expected format: name=path")
@@ -107,9 +112,9 @@ def _normalize_source_path(raw_path: str) -> str:
     return text.lstrip("./")
 
 
-def coverage_sources_from_xml(path: Path) -> set[str]:
+def coverage_sources_from_xml(path: Path) -> Set[str]:
     text = path.read_text(encoding="utf-8")
-    covered_sources: set[str] = set()
+    covered_sources: Set[str] = set()
     for match in _XML_FILENAME_RE.finditer(text):
         filename = _normalize_source_path(match.group("value"))
         if filename:
@@ -117,8 +122,8 @@ def coverage_sources_from_xml(path: Path) -> set[str]:
     return covered_sources
 
 
-def coverage_sources_from_lcov(path: Path) -> set[str]:
-    covered_sources: set[str] = set()
+def coverage_sources_from_lcov(path: Path) -> Set[str]:
+    covered_sources: Set[str] = set()
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if not line.startswith("SF:"):
@@ -136,8 +141,8 @@ def _matches_required_source(source_path: str, required_source: str) -> bool:
     return source_path == normalized_required or source_path.startswith(f"{normalized_required}/")
 
 
-def _find_missing_required_sources(reported_sources: set[str], required_sources: list[str]) -> list[str]:
-    missing: list[str] = []
+def _find_missing_required_sources(reported_sources: Set[str], required_sources: List[str]) -> List[str]:
+    missing: List[str] = []
     for required_source in required_sources:
         normalized_required = _normalize_source_path(required_source).rstrip("/")
         if not normalized_required:
@@ -148,14 +153,14 @@ def _find_missing_required_sources(reported_sources: set[str], required_sources:
     return missing
 
 
-def _is_tests_only_report(reported_sources: set[str]) -> bool:
+def _is_tests_only_report(reported_sources: Set[str]) -> bool:
     return bool(reported_sources) and all(
         source_path == "tests" or source_path.startswith("tests/") for source_path in reported_sources
     )
 
 
-def _coverage_threshold_findings(stats: list[CoverageStats], min_percent: float) -> list[str]:
-    findings: list[str] = []
+def _coverage_threshold_findings(stats: List[CoverageStats], min_percent: float) -> List[str]:
+    findings: List[str] = []
     for item in stats:
         if item.percent < min_percent:
             findings.append(
@@ -172,8 +177,8 @@ def _coverage_threshold_findings(stats: list[CoverageStats], min_percent: float)
     return findings
 
 
-def _required_source_findings(reported_sources: set[str], required_sources: list[str]) -> list[str]:
-    findings: list[str] = []
+def _required_source_findings(reported_sources: Set[str], required_sources: List[str]) -> List[str]:
+    findings: List[str] = []
     if _is_tests_only_report(reported_sources):
         findings.append("coverage inputs only reference tests/ paths; first-party sources are missing.")
     findings.extend(
@@ -184,12 +189,12 @@ def _required_source_findings(reported_sources: set[str], required_sources: list
 
 
 def evaluate(
-    stats: list[CoverageStats],
+    stats: List[CoverageStats],
     min_percent: float,
     *,
-    required_sources: list[str] | None = None,
-    reported_sources: set[str] | None = None,
-) -> tuple[str, list[str]]:
+    required_sources: List[str] | None = None,
+    reported_sources: Set[str] | None = None,
+) -> Tuple[str, List[str]]:
     normalized_sources = reported_sources or set()
     findings = _coverage_threshold_findings(stats, min_percent)
     findings.extend(_required_source_findings(normalized_sources, list(required_sources or [])))
@@ -213,7 +218,7 @@ def _render_md(payload: Mapping[str, Any]) -> str:
                 f"- `{item['name']}`: `{item['percent']:.2f}%` ({item['covered']}/{item['total']}) from `{item['path']}`"
             )
     else:
-        lines.append("- None")
+        lines.append(NONE_BULLET)
 
     lines.extend(["", "## Covered sources"])
     sources = payload.get("covered_sources", [])
@@ -221,16 +226,16 @@ def _render_md(payload: Mapping[str, Any]) -> str:
         for source_path in sources:
             lines.append(f"- `{source_path}`")
     else:
-        lines.append("- None")
+        lines.append(NONE_BULLET)
 
     lines.extend(["", "## Findings"])
-    lines.extend([f"- {finding}" for finding in payload.get("findings", [])] or ["- None"])
+    lines.extend([f"- {finding}" for finding in payload.get("findings", [])] or [NONE_BULLET])
     return "\n".join(lines) + "\n"
 
 
-def _collect_coverage_inputs(args: argparse.Namespace) -> tuple[list[CoverageStats], set[str]]:
-    stats: list[CoverageStats] = []
-    covered_sources: set[str] = set()
+def _collect_coverage_inputs(args: argparse.Namespace) -> Tuple[List[CoverageStats], Set[str]]:
+    stats: List[CoverageStats] = []
+    covered_sources: Set[str] = set()
     for item in args.xml:
         name, path = parse_named_path(item)
         stats.append(parse_coverage_xml(name, path))
@@ -244,12 +249,12 @@ def _collect_coverage_inputs(args: argparse.Namespace) -> tuple[list[CoverageSta
 
 def _build_payload(
     *,
-    stats: list[CoverageStats],
-    covered_sources: set[str],
+    stats: List[CoverageStats],
+    covered_sources: Set[str],
     min_percent: float,
     status: str,
-    findings: list[str],
-) -> dict[str, Any]:
+    findings: List[str],
+) -> Dict[str, Any]:
     return {
         "status": status,
         "timestamp_utc": utc_timestamp(),
@@ -280,14 +285,14 @@ def main() -> int:
         status=status,
         findings=findings,
     )
-    out_json = str(safe_output_path(args.out_json, "coverage-100/coverage.json"))
-    out_md = str(safe_output_path(args.out_md, "coverage-100/coverage.md"))
+    out_json = str(safe_output_path(args.out_json, DEFAULT_COVERAGE_JSON))
+    out_md = str(safe_output_path(args.out_md, DEFAULT_COVERAGE_MD))
     return_code = write_report(
         payload,
         out_json=out_json,
         out_md=out_md,
-        default_json="coverage-100/coverage.json",
-        default_md="coverage-100/coverage.md",
+        default_json=DEFAULT_COVERAGE_JSON,
+        default_md=DEFAULT_COVERAGE_MD,
         render_md=_render_md,
     )
     if return_code != 0:

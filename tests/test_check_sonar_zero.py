@@ -1,4 +1,4 @@
-from __future__ import annotations
+from __future__ import absolute_import
 
 import argparse
 import os
@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from scripts.quality import check_sonar_zero
 from scripts.quality.check_sonar_zero import load_sonar_findings_with_retry
+from typing import List
 
 
 class SonarZeroTests(unittest.TestCase):
@@ -38,7 +39,7 @@ class SonarZeroTests(unittest.TestCase):
             {"paging": {"total": 1}},
             {"projectStatus": {"status": "ERROR"}},
         ]
-        captured_urls: list[str] = []
+        captured_urls: List[str] = []
 
         def fake_request(url: str, auth_header: str):
             captured_urls.append(url)
@@ -52,7 +53,7 @@ class SonarZeroTests(unittest.TestCase):
         self.assertIn("pullRequest=5", captured_urls[0])
         self.assertIn("pullRequest=5", captured_urls[1])
 
-        branch_urls: list[str] = []
+        branch_urls: List[str] = []
 
         def fake_branch_request(url: str, auth_header: str):
             branch_urls.append(url)
@@ -84,7 +85,7 @@ class SonarZeroTests(unittest.TestCase):
             (1, "OK", ["Sonar reports 1 open issues (expected 0)."]),
             (0, "OK", []),
         ]
-        attempts: list[int] = []
+        attempts: List[int] = []
 
         def fake_loader(current_args, auth):
             attempts.append(len(attempts) + 1)
@@ -103,7 +104,7 @@ class SonarZeroTests(unittest.TestCase):
 
     def test_retry_skips_unscoped_queries(self) -> None:
         args = argparse.Namespace(branch="", pull_request="")
-        attempts: list[int] = []
+        attempts: List[int] = []
 
         def fake_loader(current_args, auth):
             attempts.append(len(attempts) + 1)
@@ -122,7 +123,7 @@ class SonarZeroTests(unittest.TestCase):
 
     def test_retry_returns_last_scoped_result_after_retry_budget_is_exhausted(self) -> None:
         args = argparse.Namespace(branch="", pull_request="5")
-        attempts: list[int] = []
+        attempts: List[int] = []
 
         def fake_loader(current_args, auth):
             attempts.append(len(attempts) + 1)
@@ -141,7 +142,7 @@ class SonarZeroTests(unittest.TestCase):
 
     def test_retry_default_budget_handles_transient_none_quality_gate_for_prs(self) -> None:
         args = argparse.Namespace(branch="", pull_request="13")
-        attempts: list[int] = []
+        attempts: List[int] = []
         responses = [
             (0, "NONE", ["Sonar quality gate status is NONE (expected OK)."]),
             (0, "NONE", ["Sonar quality gate status is NONE (expected OK)."]),

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-from __future__ import annotations
+from __future__ import absolute_import
 
 import argparse
 import os
 import sys
 import urllib.parse
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Dict, List, Mapping, Tuple
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -28,7 +28,7 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _request_json(url: str, token: str) -> tuple[Any, dict[str, str]]:
+def _request_json(url: str, token: str) -> Tuple[Any, Dict[str, str]]:
     return load_json_https(
         url,
         allowed_host_suffixes={"sentry.io"},
@@ -40,7 +40,7 @@ def _request_json(url: str, token: str) -> tuple[Any, dict[str, str]]:
     )
 
 
-def _hits_from_headers(headers: dict[str, str]) -> int | None:
+def _hits_from_headers(headers: Dict[str, str]) -> int | None:
     raw = headers.get("x-hits")
     if not raw:
         return None
@@ -50,7 +50,7 @@ def _hits_from_headers(headers: dict[str, str]) -> int | None:
         return None
 
 
-def _collect_projects(args_projects: list[str]) -> list[str]:
+def _collect_projects(args_projects: List[str]) -> List[str]:
     inputs = list(args_projects)
     for env_name in ("SENTRY_PROJECT", "SENTRY_PROJECT_BACKEND", "SENTRY_PROJECT_WEB"):
         value = str(os.environ.get(env_name, "")).strip()
@@ -86,8 +86,8 @@ def _issues_url(org: str, project_slug: str) -> str:
     return f"{SENTRY_API_BASE}/projects/{org_slug}/{project_param}/issues/?{query}"
 
 
-def _validate_sentry_inputs(token: str, org: str, projects: list[str]) -> list[str]:
-    findings: list[str] = []
+def _validate_sentry_inputs(token: str, org: str, projects: List[str]) -> List[str]:
+    findings: List[str] = []
     if not token:
         findings.append("SENTRY_AUTH_TOKEN is missing.")
     if not org:
@@ -97,9 +97,9 @@ def _validate_sentry_inputs(token: str, org: str, projects: list[str]) -> list[s
     return findings
 
 
-def _collect_project_results(org: str, projects: list[str], token: str) -> tuple[list[dict[str, Any]], list[str]]:
-    findings: list[str] = []
-    project_results: list[dict[str, Any]] = []
+def _collect_project_results(org: str, projects: List[str], token: str) -> Tuple[List[Dict[str, Any]], List[str]]:
+    findings: List[str] = []
+    project_results: List[Dict[str, Any]] = []
     for project in projects:
         payload, headers = _request_json(_issues_url(org, project), token)
         if not isinstance(payload, list):
@@ -119,7 +119,7 @@ def main() -> int:
     org = (args.org or os.environ.get("SENTRY_ORG", "")).strip()
     projects = _collect_projects(args.project)
     findings = _validate_sentry_inputs(token, org, projects)
-    project_results: list[dict[str, Any]] = []
+    project_results: List[Dict[str, Any]] = []
 
     status = "fail"
     if not findings:

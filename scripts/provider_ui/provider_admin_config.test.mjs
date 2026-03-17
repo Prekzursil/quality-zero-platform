@@ -64,3 +64,12 @@ test('argument parsing defaults to external persistent profile paths', () => {
   assert.equal(args.headless, null);
   assert.equal(args.timeoutMs, 90000);
 });
+
+
+test('argument parsing accepts short aliases without changing command semantics', () => {
+  const args = parseArgs(['inspect', '-p', 'codacy', '-r', 'quality-zero-platform', '-h']);
+  assert.equal(args.command, 'help');
+  assert.equal(args.provider, 'codacy');
+  assert.equal(args.repo, 'quality-zero-platform');
+  assert.equal(args.headless, null);
+});

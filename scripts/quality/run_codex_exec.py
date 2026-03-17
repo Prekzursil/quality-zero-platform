@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-from __future__ import annotations
+from __future__ import absolute_import
 
 import argparse
-import subprocess
+import subprocess  # nosec B404
 import sys
 from pathlib import Path
+from typing import List
 
 
 def _parse_args() -> argparse.Namespace:
@@ -20,10 +21,8 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> int:
-    args = _parse_args()
-    prompt_text = Path(args.prompt_file).read_text(encoding="utf-8")
-
+def build_codex_command(args: argparse.Namespace) -> List[str]:
+    """Build the fixed codex argv list from resolved, validated inputs."""
     cmd = [
         "codex",
         "exec",
@@ -43,12 +42,20 @@ def main() -> int:
         cmd.extend(["-m", args.model])
     for item in args.config:
         cmd.extend(["-c", item])
+    return cmd
 
+
+def main() -> int:
+    args = _parse_args()
+    prompt_text = Path(args.prompt_file).read_text(encoding="utf-8")
+
+    # Safe-by-construction: explicit argv, resolved paths, and shell=False keep this subprocess call non-interpolating.
     completed = subprocess.run(
-        cmd,
+        build_codex_command(args),  # nosec B603
         input=prompt_text,
         text=True,
         capture_output=True,
+        shell=False,
         check=False,
     )
     if args.json_log:

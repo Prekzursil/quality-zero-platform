@@ -1,0 +1,2 @@
+*.sh text eol=lf
+scripts/verify text eol=lf

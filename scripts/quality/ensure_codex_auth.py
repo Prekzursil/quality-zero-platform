@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-from __future__ import annotations
+from __future__ import absolute_import
 
 import argparse
 import json
 import os
 from pathlib import Path
-from typing import Mapping
+from typing import Dict, Mapping
 
 
 def _parse_args() -> argparse.Namespace:
@@ -24,7 +24,7 @@ def _write_payload(path: str, payload: Mapping[str, object]) -> None:
     target.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def _resolve_auth_payload(args: argparse.Namespace) -> dict[str, str]:
+def _resolve_auth_payload(args: argparse.Namespace) -> Dict[str, str]:
     auth_path = Path(args.auth_file).expanduser()
     auth_path.parent.mkdir(parents=True, exist_ok=True)
 

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-from __future__ import annotations
+from __future__ import absolute_import
 
 import argparse
 from pathlib import Path
 import sys
+from typing import List
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -23,7 +24,7 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _render_prompt(profile: dict, *, lane: str, event_name: str, failure_context: str, artifacts: list[str]) -> str:
+def _render_prompt(profile: dict, *, lane: str, event_name: str, failure_context: str, artifacts: List[str]) -> str:
     contexts = active_required_contexts(profile, event_name=event_name)
     artifact_lines = "\n".join(f"- {item}" for item in artifacts) or "- None"
     headline = "PR failure remediation" if lane == "remediation" else "backlog sweep"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from __future__ import annotations
+from __future__ import absolute_import
 
 import argparse
 import json
@@ -9,7 +9,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Dict, List, Mapping, Tuple
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -35,7 +35,7 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _request_json(url: str, token: str, *, method: str = "GET", data: dict[str, Any] | None = None) -> dict[str, Any]:
+def _request_json(url: str, token: str, *, method: str = "GET", data: Dict[str, Any] | None = None) -> Dict[str, Any]:
     body = json.dumps(data).encode("utf-8") if data is not None else None
     payload, _ = load_json_https(
         url.rstrip("/"),
@@ -54,7 +54,7 @@ def _request_json(url: str, token: str, *, method: str = "GET", data: dict[str, 
     return payload
 
 
-def _nested_payload_values(payload: Any) -> list[Any]:
+def _nested_payload_values(payload: Any) -> List[Any]:
     if isinstance(payload, dict):
         return list(payload.values())
     if isinstance(payload, list):
@@ -89,7 +89,7 @@ def _render_md(payload: Mapping[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _provider_candidates(primary_provider: str) -> list[str]:
+def _provider_candidates(primary_provider: str) -> List[str]:
     return list(dict.fromkeys([primary_provider, "gh", "github"]))
 
 
@@ -105,7 +105,7 @@ def build_issues_url(provider: str, owner: str, repo: str, *, pull_request: str 
     return f"{CODACY_API_BASE}/api/v3/analysis/organizations/{provider}/{owner}/repositories/{repo}/issues/search?{query}"
 
 
-def _request_mode(pull_request: str) -> tuple[str, dict[str, Any] | None]:
+def _request_mode(pull_request: str) -> Tuple[str, Dict[str, Any] | None]:
     if pull_request:
         return "GET", None
     return "POST", {}
@@ -118,7 +118,7 @@ def _query_codacy_provider(
     token: str,
     *,
     pull_request: str = "",
-) -> tuple[int | None, list[str]]:
+) -> Tuple[int | None, List[str]]:
     url = build_issues_url(provider, owner, repo, pull_request=pull_request)
     request_method, request_data = _request_mode(pull_request)
     payload = _request_json(url, token, method=request_method, data=request_data)
@@ -135,11 +135,11 @@ def _query_codacy_open_issues(
     owner: str,
     repo: str,
     token: str,
-    provider_candidates: list[str],
+    provider_candidates: List[str],
     *,
     pull_request: str = "",
-) -> tuple[int | None, list[str], Exception | None]:
-    findings: list[str] = []
+) -> Tuple[int | None, List[str], Exception | None]:
+    findings: List[str] = []
     last_exc: Exception | None = None
     for provider in provider_candidates:
         try:
@@ -173,7 +173,7 @@ def main() -> int:
     owner = urllib.parse.quote(args.owner.strip(), safe="")
     repo = urllib.parse.quote(args.repo.strip(), safe="")
     pull_request = str(args.pull_request or "").strip()
-    findings: list[str] = []
+    findings: List[str] = []
     open_issues: int | None = None
     status = "fail"
 

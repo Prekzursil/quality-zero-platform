@@ -1,4 +1,4 @@
-from __future__ import annotations
+from __future__ import absolute_import
 
 import os
 import runpy
@@ -36,7 +36,11 @@ class DeepScanZeroTests(unittest.TestCase):
         args = Namespace(repo="Prekzursil/quality-zero-platform", sha="abc123")
         api_token = _placeholder_token("api")
 
-        with patch.object(check_deepscan_zero, "_github_status_payload", return_value={"statuses": []}):
+        with patch.dict("os.environ", {}, clear=True), patch.object(
+            check_deepscan_zero,
+            "_github_status_payload",
+            return_value={"statuses": []},
+        ):
             open_issues, source_url, findings = check_deepscan_zero._evaluate_github_check_context(args, token=api_token)
 
         self.assertIsNone(open_issues)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from __future__ import annotations
+from __future__ import absolute_import
 
 import argparse
 import base64
@@ -8,7 +8,7 @@ import sys
 import time
 import urllib.parse
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Dict, List, Mapping, Tuple
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -36,7 +36,7 @@ def _auth_header(token: str) -> str:
     return "Basic " + base64.b64encode(f"{token}:".encode("utf-8")).decode("ascii")
 
 
-def _request_json(url: str, auth_header: str) -> dict[str, Any]:
+def _request_json(url: str, auth_header: str) -> Dict[str, Any]:
     payload, _ = load_json_https(
         url.rstrip("/"),
         allowed_host_suffixes={"sonarcloud.io"},
@@ -67,7 +67,7 @@ def _render_md(payload: Mapping[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _build_sonar_query(project_key: str, *, branch: str, pull_request: str) -> dict[str, str]:
+def _build_sonar_query(project_key: str, *, branch: str, pull_request: str) -> Dict[str, str]:
     query = {"projectKey": project_key}
     if branch:
         query["branch"] = branch
@@ -106,10 +106,10 @@ def _load_quality_gate(args: argparse.Namespace, auth: str) -> str:
     return str((gate_payload.get("projectStatus") or {}).get("status") or "UNKNOWN")
 
 
-def _load_sonar_findings(args: argparse.Namespace, auth: str) -> tuple[int, str, list[str]]:
+def _load_sonar_findings(args: argparse.Namespace, auth: str) -> Tuple[int, str, List[str]]:
     open_issues = _load_open_issues(args, auth)
     quality_gate = _load_quality_gate(args, auth)
-    findings: list[str] = []
+    findings: List[str] = []
     if open_issues != 0:
         findings.append(f"Sonar reports {open_issues} open issues (expected 0).")
     if quality_gate != "OK":
@@ -128,11 +128,11 @@ def load_sonar_findings_with_retry(
     fetch_fn=_load_sonar_findings,
     attempts: int = SCOPED_ANALYSIS_RETRY_ATTEMPTS,
     sleep_seconds: float = 5.0,
-) -> tuple[int, str, list[str]]:
+) -> Tuple[int, str, List[str]]:
     retry_budget = max(1, int(attempts))
     open_issues = 0
     quality_gate = "UNKNOWN"
-    findings: list[str] = []
+    findings: List[str] = []
     for attempt in range(retry_budget):
         open_issues, quality_gate, findings = fetch_fn(args, auth)
         if not findings or not _is_scoped_analysis(args):
@@ -145,7 +145,7 @@ def load_sonar_findings_with_retry(
 def main() -> int:
     args = _parse_args()
     token = (args.token or os.environ.get("SONAR_TOKEN", "")).strip()
-    findings: list[str] = []
+    findings: List[str] = []
     open_issues: int | None = None
     quality_gate: str | None = None
 

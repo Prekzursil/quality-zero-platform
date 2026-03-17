@@ -1,12 +1,12 @@
-from __future__ import annotations
+from __future__ import absolute_import
 
 from dataclasses import dataclass
 from http.client import HTTPConnection, HTTPS_PORT
 import ipaddress
 import json
 import ssl
+from typing import Any, cast, Dict, List, Mapping, Set, Tuple
 from urllib.error import HTTPError
-from typing import Any, Mapping, cast
 from urllib.parse import ParseResult, urlparse, urlunparse
 
 
@@ -23,13 +23,13 @@ _FORBIDDEN_IP_FLAGS = (
 class _HttpsRequest:
     full_url: str
     data: bytes | None
-    headers: dict[str, str]
+    headers: Dict[str, str]
     method: str
 
     def get_method(self) -> str:
         return self.method
 
-    def header_items(self) -> list[tuple[str, str]]:
+    def header_items(self) -> List[Tuple[str, str]]:
         return list(self.headers.items())
 
 
@@ -55,17 +55,17 @@ def _normalize_hostname(parsed: ParseResult, raw_url: str) -> str:
     return parsed.hostname.lower().strip(".")
 
 
-def _normalized_allowlist(values: set[str] | None) -> set[str]:
+def _normalized_allowlist(values: Set[str] | None) -> Set[str]:
     return {value.lower().strip(".") for value in (values or set()) if value.strip(".")}
 
 
-def _validate_exact_hostname(hostname: str, allowed_hosts: set[str] | None) -> None:
+def _validate_exact_hostname(hostname: str, allowed_hosts: Set[str] | None) -> None:
     normalized_hosts = _normalized_allowlist(allowed_hosts)
     if normalized_hosts and hostname not in normalized_hosts:
         raise ValueError(f"URL host is not in allowlist: {hostname}")
 
 
-def _validate_hostname_suffixes(hostname: str, allowed_host_suffixes: set[str] | None) -> None:
+def _validate_hostname_suffixes(hostname: str, allowed_host_suffixes: Set[str] | None) -> None:
     suffixes = _normalized_allowlist(allowed_host_suffixes)
     if suffixes and not any(hostname == suffix or hostname.endswith(f".{suffix}") for suffix in suffixes):
         raise ValueError(f"URL host is not in suffix allowlist: {hostname}")
@@ -74,8 +74,8 @@ def _validate_hostname_suffixes(hostname: str, allowed_host_suffixes: set[str] |
 def _validate_allowed_hostname(
     hostname: str,
     *,
-    allowed_hosts: set[str] | None = None,
-    allowed_host_suffixes: set[str] | None = None,
+    allowed_hosts: Set[str] | None = None,
+    allowed_host_suffixes: Set[str] | None = None,
 ) -> None:
     _validate_exact_hostname(hostname, allowed_hosts)
     _validate_hostname_suffixes(hostname, allowed_host_suffixes)
@@ -104,8 +104,8 @@ def _sanitize_url(parsed: ParseResult, *, strip_query: bool) -> str:
 def normalize_https_url(
     raw_url: str,
     *,
-    allowed_hosts: set[str] | None = None,
-    allowed_host_suffixes: set[str] | None = None,
+    allowed_hosts: Set[str] | None = None,
+    allowed_host_suffixes: Set[str] | None = None,
     strip_query: bool = False,
 ) -> str:
     """Validate and normalize external URLs used by control-plane scripts."""
@@ -168,7 +168,7 @@ def _read_json_response(
     method: str,
     data: bytes | None,
     timeout: int,
-) -> tuple[Any, dict[str, str]]:
+) -> Tuple[Any, Dict[str, str]]:
     request = _build_request(parsed, headers=headers, method=method, data=data)
     hostname = _require_request_hostname(parsed)
     connection = _ValidatedTLSConnection(
@@ -200,13 +200,13 @@ def _read_json_response(
 def load_json_https(
     raw_url: str,
     *,
-    allowed_hosts: set[str] | None = None,
-    allowed_host_suffixes: set[str] | None = None,
+    allowed_hosts: Set[str] | None = None,
+    allowed_host_suffixes: Set[str] | None = None,
     headers: Mapping[str, str] | None = None,
     method: str = "GET",
     data: bytes | None = None,
     timeout: int = 30,
-) -> tuple[Any, dict[str, str]]:
+) -> Tuple[Any, Dict[str, str]]:
     safe_url = normalize_https_url(
         raw_url,
         allowed_hosts=allowed_hosts,

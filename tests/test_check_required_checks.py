@@ -1,4 +1,4 @@
-from __future__ import annotations
+from __future__ import absolute_import
 
 import os
 import runpy
@@ -261,7 +261,11 @@ class RequiredChecksTests(unittest.TestCase):
             "failed": [],
             "contexts": {},
         }
-        with patch.object(checks_module, "_collect_payload", return_value=payload), patch.object(checks_module.time, "time", side_effect=[0, 1]):
+        with patch.object(
+            checks_module,
+            "_collect_payload",
+            return_value=payload,
+        ), patch.object(checks_module.time, "time", side_effect=[0, 1]):
             result = checks_module._wait_for_payload(
                 type(
                     "Args",

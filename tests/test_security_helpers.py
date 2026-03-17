@@ -1,4 +1,4 @@
-from __future__ import annotations
+from __future__ import absolute_import
 
 import unittest
 from urllib.parse import urlparse
@@ -6,13 +6,14 @@ from unittest.mock import MagicMock, patch
 
 from scripts import security_helpers
 from scripts.security_helpers import _build_request, _get_ip_flag, load_json_https, normalize_https_url
+from typing import Dict
 
 
 class _FakeHttpResponse:
     def __init__(
         self,
         payload: str,
-        headers: dict[str, str] | None = None,
+        headers: Dict[str, str] | None = None,
         *,
         status: int = 200,
         reason: str = "OK",
@@ -27,7 +28,7 @@ class _FakeHttpResponse:
         return self._payload
 
     @property
-    def headers(self) -> dict[str, str]:
+    def headers(self) -> Dict[str, str]:
         return self._headers
 
     def close(self) -> None:

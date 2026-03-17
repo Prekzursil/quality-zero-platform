@@ -118,6 +118,7 @@ class ControlPlaneTests(unittest.TestCase):
     def test_special_repo_coverage_profiles_capture_existing_behaviors(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
 
+        devextreme = load_repo_profile(inventory, "Prekzursil/DevExtreme-Filter-Go-Language")
         reframe = load_repo_profile(inventory, "Prekzursil/Reframe")
         momentstudio = load_repo_profile(inventory, "Prekzursil/momentstudio")
         env_inspector = load_repo_profile(inventory, "Prekzursil/env-inspector")
@@ -139,6 +140,11 @@ class ControlPlaneTests(unittest.TestCase):
                 ("xml", "backend", "backend/coverage.xml"),
                 ("lcov", "frontend", "frontend/coverage/lcov.info"),
             },
+        )
+        self.assertIn('grep -vE "/ent($|/)"', devextreme["coverage"]["command"])
+        self.assertIn(
+            "go test $packages -coverprofile=coverage/go-coverage.out -covermode=count",
+            devextreme["coverage"]["command"],
         )
         self.assertEqual(env_inspector["coverage"]["min_percent"], 100.0)
         self.assertIn("env_inspector.py", env_inspector["coverage"]["require_sources"])

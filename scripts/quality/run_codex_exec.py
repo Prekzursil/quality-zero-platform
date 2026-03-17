@@ -101,6 +101,7 @@ def _run_codex_exec(args: argparse.Namespace, prompt_text: str) -> subprocess.Co
     config_args = _validated_config_args(args)
     # Safe-by-construction: explicit argv, shell=False, an absolute executable path,
     # validated tokens as plain arguments, and prompt content flowing only through stdin.
+    # nosemgrep
     return subprocess.run(  # nosec B603
         [
             _resolved_codex_executable(),

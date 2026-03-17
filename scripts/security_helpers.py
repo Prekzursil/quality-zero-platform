@@ -5,8 +5,8 @@ from http.client import HTTPConnection, HTTPS_PORT
 import ipaddress
 import json
 import ssl
-from urllib.error import HTTPError
 from typing import Any, Mapping, cast
+from urllib.error import HTTPError
 from urllib.parse import ParseResult, urlparse, urlunparse
 
 

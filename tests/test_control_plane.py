@@ -64,7 +64,11 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(env_inspector["verify_command"], "make verify")
         self.assertEqual(
             swfoc["verify_command"],
-            'dotnet test tests/SwfocTrainer.Tests/SwfocTrainer.Tests.csproj -c Release --no-build --filter "FullyQualifiedName!~SwfocTrainer.Tests.Profiles.Live&FullyQualifiedName!~RuntimeAttachSmokeTests"',
+            (
+                "dotnet test tests/SwfocTrainer.Tests/SwfocTrainer.Tests.csproj -c Release "
+                '--no-build --filter "FullyQualifiedName!~SwfocTrainer.Tests.Profiles.Live'
+                '&FullyQualifiedName!~RuntimeAttachSmokeTests"'
+            ),
         )
         self.assertEqual(reframe["codex_environment"]["mode"], "automatic")
         self.assertEqual(tanks["codex_environment"]["verify_command"], "make verify")

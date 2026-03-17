@@ -100,8 +100,14 @@ class ControlPlaneExtraTests(unittest.TestCase):
             ]
         )
         self.assertEqual(normalized, [{"format": "xml", "name": "platform", "path": "coverage.xml"}])
-        self.assertEqual(_infer_coverage_inputs({"artifact_path": "coverage.xml"}), [{"format": "xml", "name": "default", "path": "coverage.xml"}])
-        self.assertEqual(_infer_coverage_inputs({"artifact_path": "coverage.lcov"}), [{"format": "lcov", "name": "default", "path": "coverage.lcov"}])
+        self.assertEqual(
+            _infer_coverage_inputs({"artifact_path": "coverage.xml"}),
+            [{"format": "xml", "name": "default", "path": "coverage.xml"}],
+        )
+        self.assertEqual(
+            _infer_coverage_inputs({"artifact_path": "coverage.lcov"}),
+            [{"format": "lcov", "name": "default", "path": "coverage.lcov"}],
+        )
 
     def test_normalize_java_setup_and_assert_mode_support_shortcuts(self) -> None:
         self.assertEqual(
@@ -193,7 +199,12 @@ class ControlPlaneExtraTests(unittest.TestCase):
 
         findings = validate_profile(visual_profile)
 
-        self.assertTrue(any("visual_pair_required needs both Chromatic and Applitools contexts in required_now" in item for item in findings))
+        self.assertTrue(
+            any(
+                "visual_pair_required needs both Chromatic and Applitools contexts in required_now" in item
+                for item in findings
+            )
+        )
         non_visual = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
         self.assertEqual([item for item in validate_profile(non_visual) if "visual_pair_required" in item], [])
 

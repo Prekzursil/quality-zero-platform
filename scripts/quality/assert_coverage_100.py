@@ -33,6 +33,9 @@ _XML_LINES_VALID_RE = re.compile(r'lines-valid="(\d+(?:\.\d+)?)"')
 _XML_LINES_COVERED_RE = re.compile(r'lines-covered="(\d+(?:\.\d+)?)"')
 _XML_LINE_HITS_RE = re.compile(r"<line\b[^>]*\bhits=\"(\d+(?:\.\d+)?)\"")
 _XML_FILENAME_RE = re.compile(r"""<[^>]+\bfilename=(?P<quote>["'])(?P<value>.*?)(?P=quote)""")
+DEFAULT_COVERAGE_JSON = "coverage-100/coverage.json"
+DEFAULT_COVERAGE_MD = "coverage-100/coverage.md"
+NONE_BULLET = "- None"
 
 
 def _parse_args() -> argparse.Namespace:
@@ -213,7 +216,7 @@ def _render_md(payload: Mapping[str, Any]) -> str:
                 f"- `{item['name']}`: `{item['percent']:.2f}%` ({item['covered']}/{item['total']}) from `{item['path']}`"
             )
     else:
-        lines.append("- None")
+        lines.append(NONE_BULLET)
 
     lines.extend(["", "## Covered sources"])
     sources = payload.get("covered_sources", [])
@@ -221,10 +224,10 @@ def _render_md(payload: Mapping[str, Any]) -> str:
         for source_path in sources:
             lines.append(f"- `{source_path}`")
     else:
-        lines.append("- None")
+        lines.append(NONE_BULLET)
 
     lines.extend(["", "## Findings"])
-    lines.extend([f"- {finding}" for finding in payload.get("findings", [])] or ["- None"])
+    lines.extend([f"- {finding}" for finding in payload.get("findings", [])] or [NONE_BULLET])
     return "\n".join(lines) + "\n"
 
 
@@ -280,14 +283,14 @@ def main() -> int:
         status=status,
         findings=findings,
     )
-    out_json = str(safe_output_path(args.out_json, "coverage-100/coverage.json"))
-    out_md = str(safe_output_path(args.out_md, "coverage-100/coverage.md"))
+    out_json = str(safe_output_path(args.out_json, DEFAULT_COVERAGE_JSON))
+    out_md = str(safe_output_path(args.out_md, DEFAULT_COVERAGE_MD))
     return_code = write_report(
         payload,
         out_json=out_json,
         out_md=out_md,
-        default_json="coverage-100/coverage.json",
-        default_md="coverage-100/coverage.md",
+        default_json=DEFAULT_COVERAGE_JSON,
+        default_md=DEFAULT_COVERAGE_MD,
         render_md=_render_md,
     )
     if return_code != 0:

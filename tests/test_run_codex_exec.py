@@ -213,7 +213,7 @@ class RunCodexExecTests(unittest.TestCase):
             self.assertEqual(
                 called_args[0],
                 [
-                    r'C:\Tools\codex.exe',
+                    'codex',
                     'exec',
                     '--full-auto',
                     '-C',

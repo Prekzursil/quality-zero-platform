@@ -82,13 +82,13 @@ class QualityCodacyCompatibilityTests(unittest.TestCase):
             missing_import_path = root / "missing_absolute_import.py"
             missing_import_path.write_text("print('missing absolute import')\n", encoding="utf-8")
             builtin_generic_path = root / "builtin_generics.py"
-            builtin_generic_path.write_text(
-                "from __future__ import absolute_import\nvalues: "
-                + "li"
-                + "st"
-                + "[str] = []\n",
-                encoding="utf-8",
-            )
+            builtin_generic_source = "".join([
+                "from __future__ import absolute_import\nvalues: ",
+                "li",
+                "st",
+                "[str] = []\n",
+            ])
+            builtin_generic_path.write_text(builtin_generic_source, encoding="utf-8")
 
             future_annotations, missing_absolute_import = _collect_future_import_issues(
                 [future_annotations_path, missing_import_path]

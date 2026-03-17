@@ -1,12 +1,11 @@
-from __future__ import annotations
+from __future__ import absolute_import
 
 import argparse
 import json
 import sys
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
-from urllib.parse import quote
+from typing import Any, Dict, List, Set, Tuple
 
 import yaml  # type: ignore[import-untyped]
 
@@ -14,6 +13,7 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.quality.common import dedupe_strings
+from scripts.quality.control_plane_vendors import finalize_vendors, normalize_visual_lane
 from scripts.security_helpers import normalize_https_url
 
 
@@ -25,7 +25,7 @@ def repo_root() -> Path:
     return ROOT
 
 
-def _load_yaml(path: Path) -> dict[str, Any]:
+def _load_yaml(path: Path) -> Dict[str, Any]:
     payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(payload, dict):
         raise ValueError(f"Expected mapping at {path}")
@@ -34,7 +34,7 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 
 def _deep_merge(base: Any, overlay: Any) -> Any:
     if isinstance(base, dict) and isinstance(overlay, dict):
-        merged: dict[str, Any] = deepcopy(base)
+        merged: Dict[str, Any] = deepcopy(base)
         for key, value in overlay.items():
             if key in merged:
                 merged[key] = _deep_merge(merged[key], value)
@@ -44,11 +44,11 @@ def _deep_merge(base: Any, overlay: Any) -> Any:
     return deepcopy(overlay)
 
 
-def _inventory_root(inventory: dict[str, Any]) -> Path:
+def _inventory_root(inventory: Dict[str, Any]) -> Path:
     return Path(inventory["_root"])
 
 
-def load_inventory(path: Path | str = DEFAULT_INVENTORY_PATH) -> dict[str, Any]:
+def load_inventory(path: Path | str = DEFAULT_INVENTORY_PATH) -> Dict[str, Any]:
     inventory_path = Path(path).resolve()
     payload = _load_yaml(inventory_path)
     payload.setdefault("version", 1)
@@ -60,7 +60,7 @@ def load_inventory(path: Path | str = DEFAULT_INVENTORY_PATH) -> dict[str, Any]:
     return payload
 
 
-def _load_stack(inventory: dict[str, Any], stack_id: str, seen: set[str] | None = None) -> dict[str, Any]:
+def _load_stack(inventory: Dict[str, Any], stack_id: str, seen: Set[str] | None = None) -> Dict[str, Any]:
     if not stack_id:
         raise ValueError("stack id is required")
     trail = set(seen or set())
@@ -74,7 +74,7 @@ def _load_stack(inventory: dict[str, Any], stack_id: str, seen: set[str] | None 
     if isinstance(parents, str):
         parents = [parents]
 
-    merged: dict[str, Any] = {}
+    merged: Dict[str, Any] = {}
     for parent in parents:
         merged = _deep_merge(merged, _load_stack(inventory, str(parent), seen=trail))
     merged = _deep_merge(merged, payload)
@@ -82,7 +82,7 @@ def _load_stack(inventory: dict[str, Any], stack_id: str, seen: set[str] | None 
     return merged
 
 
-def _normalize_required_contexts(raw: dict[str, Any]) -> dict[str, list[str]]:
+def _normalize_required_contexts(raw: Dict[str, Any]) -> Dict[str, List[str]]:
     always = dedupe_strings(raw.get("always", []))
     pull_request_only = [item for item in dedupe_strings(raw.get("pull_request_only", [])) if item not in always]
     required_now = dedupe_strings(raw.get("required_now", []) or [*always, *pull_request_only])
@@ -95,7 +95,7 @@ def _normalize_required_contexts(raw: dict[str, Any]) -> dict[str, list[str]]:
     }
 
 
-def _merge_required_contexts(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, list[str]]:
+def _merge_required_contexts(base: Dict[str, Any], overlay: Dict[str, Any]) -> Dict[str, List[str]]:
     return _normalize_required_contexts(
         {
             "always": [*base.get("always", []), *overlay.get("always", [])],
@@ -106,8 +106,8 @@ def _merge_required_contexts(base: dict[str, Any], overlay: dict[str, Any]) -> d
     )
 
 
-def _normalize_coverage_inputs(raw_inputs: Any) -> list[dict[str, str]]:
-    normalized: list[dict[str, str]] = []
+def _normalize_coverage_inputs(raw_inputs: Any) -> List[Dict[str, str]]:
+    normalized: List[Dict[str, str]] = []
     if not isinstance(raw_inputs, list):
         return normalized
 
@@ -123,7 +123,7 @@ def _normalize_coverage_inputs(raw_inputs: Any) -> list[dict[str, str]]:
     return normalized
 
 
-def _infer_coverage_inputs(coverage: dict[str, Any]) -> list[dict[str, str]]:
+def _infer_coverage_inputs(coverage: Dict[str, Any]) -> List[Dict[str, str]]:
     inputs = _normalize_coverage_inputs(coverage.get("inputs", []))
     legacy_path = str(coverage.get("artifact_path", "")).strip()
     if inputs or not legacy_path:
@@ -133,7 +133,7 @@ def _infer_coverage_inputs(coverage: dict[str, Any]) -> list[dict[str, str]]:
     return [{"format": inferred, "name": "default", "path": legacy_path}]
 
 
-def _normalize_java_setup(raw_java: Any) -> dict[str, Any]:
+def _normalize_java_setup(raw_java: Any) -> Dict[str, Any]:
     if isinstance(raw_java, str):
         raw_java = {"distribution": "temurin", "version": raw_java}
     java = deepcopy(raw_java) if isinstance(raw_java, dict) else {}
@@ -143,7 +143,7 @@ def _normalize_java_setup(raw_java: Any) -> dict[str, Any]:
     }
 
 
-def _normalize_coverage_setup(raw_setup: Any) -> dict[str, Any]:
+def _normalize_coverage_setup(raw_setup: Any) -> Dict[str, Any]:
     setup = deepcopy(raw_setup) if isinstance(raw_setup, dict) else {}
     return {
         "python": str(setup.get("python", "")).strip(),
@@ -156,7 +156,7 @@ def _normalize_coverage_setup(raw_setup: Any) -> dict[str, Any]:
     }
 
 
-def _normalize_coverage_assert_mode(raw_assert_mode: Any) -> dict[str, str]:
+def _normalize_coverage_assert_mode(raw_assert_mode: Any) -> Dict[str, str]:
     if isinstance(raw_assert_mode, str):
         raw_assert_mode = {"default": raw_assert_mode}
 
@@ -169,7 +169,7 @@ def _normalize_coverage_assert_mode(raw_assert_mode: Any) -> dict[str, str]:
     return assert_mode
 
 
-def _normalize_coverage(raw: dict[str, Any]) -> dict[str, Any]:
+def _normalize_coverage(raw: Dict[str, Any]) -> Dict[str, Any]:
     coverage = deepcopy(raw or {})
     inputs = _infer_coverage_inputs(coverage)
     coverage["runner"] = str(coverage.get("runner", "ubuntu-latest")).strip() or "ubuntu-latest"
@@ -184,7 +184,7 @@ def _normalize_coverage(raw: dict[str, Any]) -> dict[str, Any]:
     return coverage
 
 
-def _normalize_codex_environment(raw: dict[str, Any], *, verify_command: str) -> dict[str, Any]:
+def _normalize_codex_environment(raw: Dict[str, Any], *, verify_command: str) -> Dict[str, Any]:
     payload = deepcopy(raw or {})
     return {
         "mode": str(payload.get("mode", "automatic")).strip() or "automatic",
@@ -196,144 +196,12 @@ def _normalize_codex_environment(raw: dict[str, Any], *, verify_command: str) ->
     }
 
 
-def _normalize_visual_lane(raw: dict[str, Any]) -> dict[str, str]:
-    payload = deepcopy(raw or {})
-    return {
-        "kind": str(payload.get("kind", "none")).strip() or "none",
-    }
-
-
-def _ensure_vendor_url(
-    vendor: dict[str, Any],
-    key: str,
-    url: str,
-    *,
-    allowed_host_suffixes: set[str],
-) -> None:
-    if not vendor.get(key):
-        vendor[key] = normalize_https_url(url, allowed_host_suffixes=allowed_host_suffixes)
-
-
-def _finalize_sonar_vendor(vendors: dict[str, Any]) -> None:
-    sonar = vendors.setdefault("sonar", {})
-    project_key = str(sonar.get("project_key", "")).strip()
-    if project_key:
-        _ensure_vendor_url(
-            sonar,
-            "dashboard_url",
-            f"https://sonarcloud.io/project/overview?id={quote(project_key, safe='')}",
-            allowed_host_suffixes={"sonarcloud.io"},
-        )
-
-
-def _finalize_codacy_vendor(vendors: dict[str, Any], *, owner: str, repo_name: str) -> None:
-    codacy = vendors.setdefault("codacy", {})
-    codacy.setdefault("provider", "gh")
-    codacy.setdefault("owner", owner)
-    codacy.setdefault("repo", repo_name)
-    codacy.setdefault("profile_mode", "defaults_all_languages")
-    _ensure_vendor_url(
-        codacy,
-        "dashboard_url",
-        f"https://app.codacy.com/gh/{quote(owner, safe='')}/{quote(repo_name, safe='')}/dashboard",
-        allowed_host_suffixes={"codacy.com"},
-    )
-
-
-def _finalize_codecov_vendor(vendors: dict[str, Any], *, owner: str, repo_name: str) -> None:
-    _ensure_vendor_url(
-        vendors.setdefault("codecov", {}),
-        "dashboard_url",
-        f"https://app.codecov.io/gh/{quote(owner, safe='')}/{quote(repo_name, safe='')}",
-        allowed_host_suffixes={"codecov.io"},
-    )
-
-
-def _finalize_qlty_vendor(vendors: dict[str, Any], *, owner: str, repo_name: str) -> None:
-    qlty = vendors.setdefault("qlty", {})
-    qlty.setdefault("project_slug", f"{owner}/{repo_name}")
-    qlty.setdefault("gate_context", "qlty check")
-    qlty.setdefault("coverage_context", "qlty coverage")
-    qlty.setdefault("diff_coverage_context", "qlty coverage diff")
-    qlty.setdefault(
-        "check_names_actual",
-        [
-            qlty["gate_context"],
-            qlty["coverage_context"],
-            qlty["diff_coverage_context"],
-        ],
-    )
-    qlty.setdefault("diff_coverage_percent", 100)
-    qlty.setdefault("total_coverage_policy", "fail_on_any_drop")
-    _ensure_vendor_url(
-        qlty,
-        "dashboard_url",
-        f"https://qlty.sh/gh/{quote(owner, safe='')}/projects/{quote(repo_name, safe='')}",
-        allowed_host_suffixes={"qlty.sh"},
-    )
-
-
-def _provider_env_suffix(repo_name: str) -> str:
-    suffix = []
-    previous_was_separator = False
-    for char in repo_name:
-        if char.isalnum():
-            suffix.append(char.upper())
-            previous_was_separator = False
-            continue
-        if not previous_was_separator:
-            suffix.append("_")
-            previous_was_separator = True
-    normalized = "".join(suffix).strip("_")
-    return normalized or "REPO"
-
-
-def _finalize_visual_vendors(profile: dict[str, Any], vendors: dict[str, Any]) -> None:
-    if not profile.get("visual_pair_required"):
-        return
-
-    repo_name = profile["repo_name"]
-    chromatic = vendors.setdefault("chromatic", {})
-    chromatic.setdefault("project_name", repo_name)
-    chromatic.setdefault("token_secret", "CHROMATIC_PROJECT_TOKEN")
-    chromatic.setdefault("local_env_var", f"CHROMATIC_PROJECT_TOKEN_{_provider_env_suffix(repo_name)}")
-
-    applitools = vendors.setdefault("applitools", {})
-    applitools.setdefault("project_name", repo_name)
-
-
-def _finalize_passthrough_vendors(vendors: dict[str, Any]) -> None:
-    vendors.setdefault("deepscan", {}).setdefault("open_issues_url_var", "DEEPSCAN_OPEN_ISSUES_URL")
-    sentry = vendors.setdefault("sentry", {})
-    sentry.setdefault("org_var", "SENTRY_ORG")
-    sentry.setdefault("project_vars", ["SENTRY_PROJECT"])
-    vendors.setdefault("chromatic", {}).setdefault("status_context", "Chromatic Playwright")
-    vendors.setdefault("applitools", {}).setdefault("status_context", "Applitools Visual")
-
-
-def _finalize_vendors(profile: dict[str, Any]) -> dict[str, Any]:
-    owner = profile["owner"]
-    repo_name = profile["repo_name"]
+def _finalize_vendors(profile: Dict[str, Any]) -> Dict[str, Any]:
     vendor_source = _deep_merge(profile.get("vendors", {}), profile.get("providers", {}))
-    vendors = deepcopy(vendor_source)
-
-    _finalize_sonar_vendor(vendors)
-    _finalize_codacy_vendor(vendors, owner=owner, repo_name=repo_name)
-    _finalize_codecov_vendor(vendors, owner=owner, repo_name=repo_name)
-    _finalize_qlty_vendor(vendors, owner=owner, repo_name=repo_name)
-    _finalize_passthrough_vendors(vendors)
-    _finalize_visual_vendors(profile, vendors)
-
-    github = vendors.setdefault("github", {})
-    github["repo_url"] = normalize_https_url(
-        f"https://github.com/{quote(owner, safe='')}/{quote(repo_name, safe='')}",
-        allowed_host_suffixes={"github.com"},
-    )
-
-    return vendors
+    return finalize_vendors(profile, vendor_source)
 
 
-def _resolve_repo_sources(inventory: dict[str, Any], repo_slug: str) -> tuple[dict[str, Any], str, dict[str, Any], str, dict[str, Any]]:
+def _resolve_repo_sources(inventory: Dict[str, Any], repo_slug: str) -> Tuple[Dict[str, Any], str, Dict[str, Any], str, Dict[str, Any]]:
     repo_entry = next((item for item in inventory["repos"] if item.get("slug") == repo_slug), None)
     if repo_entry is None:
         raise KeyError(f"Repo {repo_slug} not found in inventory")
@@ -349,7 +217,7 @@ def _resolve_repo_sources(inventory: dict[str, Any], repo_slug: str) -> tuple[di
     return repo_entry, profile_id, repo_profile, stack_id, stack_profile
 
 
-def _merge_repo_profile(stack_profile: dict[str, Any], repo_profile: dict[str, Any]) -> tuple[dict[str, Any], str]:
+def _merge_repo_profile(stack_profile: Dict[str, Any], repo_profile: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
     merged = _deep_merge(stack_profile, repo_profile)
     required_contexts_mode = str(repo_profile.get("required_contexts_mode", "merge")).strip() or "merge"
     if required_contexts_mode == "replace":
@@ -372,14 +240,14 @@ def _merge_repo_profile(stack_profile: dict[str, Any], repo_profile: dict[str, A
 
 
 def _apply_inventory_overrides(
-    merged: dict[str, Any],
+    merged: Dict[str, Any],
     *,
-    repo_entry: dict[str, Any],
+    repo_entry: Dict[str, Any],
     repo_slug: str,
     profile_id: str,
     stack_id: str,
     required_contexts_mode: str,
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     return _deep_merge(
         merged,
         {
@@ -394,7 +262,7 @@ def _apply_inventory_overrides(
     )
 
 
-def _finalize_repo_profile(merged: dict[str, Any], repo_slug: str) -> dict[str, Any]:
+def _finalize_repo_profile(merged: Dict[str, Any], repo_slug: str) -> Dict[str, Any]:
     owner, repo_name = repo_slug.split("/", 1)
     merged["owner"] = owner
     merged["repo_name"] = repo_name
@@ -415,7 +283,7 @@ def _finalize_repo_profile(merged: dict[str, Any], repo_slug: str) -> dict[str, 
         verify_command=merged["verify_command"],
     )
     merged["visual_pair_required"] = bool(merged.get("visual_pair_required", False))
-    merged["visual_lane"] = _normalize_visual_lane(merged.get("visual_lane", {}))
+    merged["visual_lane"] = normalize_visual_lane(merged.get("visual_lane", {}))
     merged["ruleset_mode"] = str(merged.get("ruleset_mode", "strict-zero-phase1")).strip()
     merged["preserve_public_check_names"] = bool(merged.get("preserve_public_check_names", True))
     merged["vendors"] = _finalize_vendors(merged)
@@ -423,7 +291,7 @@ def _finalize_repo_profile(merged: dict[str, Any], repo_slug: str) -> dict[str, 
     return merged
 
 
-def load_repo_profile(inventory: dict[str, Any], repo_slug: str) -> dict[str, Any]:
+def load_repo_profile(inventory: Dict[str, Any], repo_slug: str) -> Dict[str, Any]:
     repo_entry, profile_id, repo_profile, stack_id, stack_profile = _resolve_repo_sources(inventory, repo_slug)
     merged, required_contexts_mode = _merge_repo_profile(stack_profile, repo_profile)
     merged = _apply_inventory_overrides(
@@ -437,7 +305,7 @@ def load_repo_profile(inventory: dict[str, Any], repo_slug: str) -> dict[str, An
     return _finalize_repo_profile(merged, repo_slug)
 
 
-def active_required_contexts(profile: dict[str, Any], *, event_name: str) -> list[str]:
+def active_required_contexts(profile: Dict[str, Any], *, event_name: str) -> List[str]:
     required_contexts = profile["required_contexts"]
     if event_name == "ruleset":
         return dedupe_strings(required_contexts.get("required_now", []))
@@ -448,7 +316,7 @@ def active_required_contexts(profile: dict[str, Any], *, event_name: str) -> lis
     return dedupe_strings(required)
 
 
-def build_ruleset_payload(profile: dict[str, Any]) -> dict[str, Any]:
+def build_ruleset_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
     contexts = active_required_contexts(profile, event_name="ruleset")
     return {
         "profile_id": profile["profile_id"],
@@ -488,8 +356,8 @@ def build_ruleset_payload(profile: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _validate_codex_environment(profile: dict[str, Any], codex_environment: dict[str, Any]) -> list[str]:
-    findings: list[str] = []
+def _validate_codex_environment(profile: Dict[str, Any], codex_environment: Dict[str, Any]) -> List[str]:
+    findings: List[str] = []
     if codex_environment.get("mode") != "automatic":
         findings.append(f"{profile['slug']}: codex_environment.mode must be automatic")
     if not codex_environment.get("verify_command"):
@@ -508,8 +376,8 @@ def _validate_codex_environment(profile: dict[str, Any], codex_environment: dict
     return findings
 
 
-def _validate_control_plane_lanes(profile: dict[str, Any]) -> list[str]:
-    findings: list[str] = []
+def _validate_control_plane_lanes(profile: Dict[str, Any]) -> List[str]:
+    findings: List[str] = []
     if not profile.get("verify_command"):
         findings.append(f"{profile['slug']}: verify_command is required")
     if profile.get("github_mutation_lane") != "codex-private-runner":
@@ -523,8 +391,8 @@ def _validate_control_plane_lanes(profile: dict[str, Any]) -> list[str]:
     return findings
 
 
-def _validate_required_context_sets(profile: dict[str, Any]) -> list[str]:
-    findings: list[str] = []
+def _validate_required_context_sets(profile: Dict[str, Any]) -> List[str]:
+    findings: List[str] = []
     if not active_required_contexts(profile, event_name="ruleset"):
         findings.append(f"{profile['slug']}: at least one required context is required")
     pr_contexts = dedupe_strings(
@@ -545,8 +413,8 @@ def _validate_required_context_sets(profile: dict[str, Any]) -> list[str]:
     return findings
 
 
-def _validate_secret_contract(profile: dict[str, Any]) -> list[str]:
-    findings: list[str] = []
+def _validate_secret_contract(profile: Dict[str, Any]) -> List[str]:
+    findings: List[str] = []
     duplicate_conditional = [name for name in profile.get("conditional_secrets", []) if name in profile.get("required_secrets", [])]
     if duplicate_conditional:
         findings.append(
@@ -557,11 +425,11 @@ def _validate_secret_contract(profile: dict[str, Any]) -> list[str]:
     return findings
 
 
-def _validate_visual_pair_contract(profile: dict[str, Any]) -> list[str]:
+def _validate_visual_pair_contract(profile: Dict[str, Any]) -> List[str]:
     if not profile.get("visual_pair_required"):
         return []
 
-    findings: list[str] = []
+    findings: List[str] = []
     chromatic = profile["vendors"]["chromatic"]["status_context"]
     applitools = profile["vendors"]["applitools"]["status_context"]
     ruleset_contexts = set(active_required_contexts(profile, event_name="ruleset"))
@@ -581,8 +449,8 @@ def _validate_visual_pair_contract(profile: dict[str, Any]) -> list[str]:
     return findings
 
 
-def _validate_coverage_contract(profile: dict[str, Any]) -> list[str]:
-    findings: list[str] = []
+def _validate_coverage_contract(profile: Dict[str, Any]) -> List[str]:
+    findings: List[str] = []
     coverage = profile.get("coverage", {})
     if not profile.get("enabled_scanners", {}).get("coverage", False):
         return findings
@@ -599,8 +467,8 @@ def _validate_coverage_contract(profile: dict[str, Any]) -> list[str]:
     return findings
 
 
-def _validate_vendor_urls(profile: dict[str, Any]) -> list[str]:
-    findings: list[str] = []
+def _validate_vendor_urls(profile: Dict[str, Any]) -> List[str]:
+    findings: List[str] = []
     for vendor_name, vendor_payload in profile["vendors"].items():
         if not isinstance(vendor_payload, dict):
             continue
@@ -613,8 +481,8 @@ def _validate_vendor_urls(profile: dict[str, Any]) -> list[str]:
     return findings
 
 
-def validate_profile(profile: dict[str, Any]) -> list[str]:
-    findings: list[str] = []
+def validate_profile(profile: Dict[str, Any]) -> List[str]:
+    findings: List[str] = []
     for validator in (
         _validate_control_plane_lanes,
         _validate_required_context_sets,

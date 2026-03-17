@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-from __future__ import annotations
+from __future__ import absolute_import
 
 import argparse
 import json
 from pathlib import Path
 import sys
+from typing import List
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -26,7 +27,7 @@ def main() -> int:
     if generated_dir is not None:
         generated_dir.mkdir(parents=True, exist_ok=True)
 
-    findings: list[str] = []
+    findings: List[str] = []
     for repo_entry in inventory["repos"]:
         profile = load_repo_profile(inventory, repo_entry["slug"])
         findings.extend(validate_profile(profile))

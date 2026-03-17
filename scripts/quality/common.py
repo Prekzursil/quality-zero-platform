@@ -1,19 +1,23 @@
-from __future__ import annotations
+from __future__ import absolute_import
 
 import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping
+from typing import Any, Callable, Iterable, List, Mapping, Set
+
+DEFAULT_COVERAGE_JSON = "coverage-100/coverage.json"
+DEFAULT_COVERAGE_MD = "coverage-100/coverage.md"
+NONE_BULLET = "- None"
 
 
 def utc_timestamp() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def dedupe_strings(items: Iterable[str]) -> list[str]:
-    seen: set[str] = set()
-    out: list[str] = []
+def dedupe_strings(items: Iterable[str]) -> List[str]:
+    seen: Set[str] = set()
+    out: List[str] = []
     for item in items:
         value = str(item or "").strip()
         if not value or value in seen:

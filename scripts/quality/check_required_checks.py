@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-from __future__ import annotations
+from __future__ import absolute_import
 
 import argparse
 import os
 import sys
 import time
-from typing import Any, Mapping
+from typing import Any, Dict, List, Mapping, Tuple
 
 from pathlib import Path
 
@@ -28,7 +28,7 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _api_get(repo: str, path: str, token: str) -> dict[str, Any]:
+def _api_get(repo: str, path: str, token: str) -> Dict[str, Any]:
     payload, _ = load_json_https(
         f"https://api.github.com/repos/{repo}/{path.lstrip('/')}",
         allowed_hosts={"api.github.com"},
@@ -44,7 +44,7 @@ def _api_get(repo: str, path: str, token: str) -> dict[str, Any]:
     return payload
 
 
-def _context_details(state: str, conclusion: str, source: str) -> dict[str, str]:
+def _context_details(state: str, conclusion: str, source: str) -> Dict[str, str]:
     return {
         "state": state,
         "conclusion": conclusion,
@@ -52,8 +52,8 @@ def _context_details(state: str, conclusion: str, source: str) -> dict[str, str]
     }
 
 
-def _collect_check_run_contexts(check_runs_payload: dict[str, Any]) -> dict[str, dict[str, str]]:
-    contexts: dict[str, dict[str, str]] = {}
+def _collect_check_run_contexts(check_runs_payload: Dict[str, Any]) -> Dict[str, Dict[str, str]]:
+    contexts: Dict[str, Dict[str, str]] = {}
     for run in check_runs_payload.get("check_runs", []) or []:
         name = str(run.get("name") or "").strip()
         if not name:
@@ -66,8 +66,8 @@ def _collect_check_run_contexts(check_runs_payload: dict[str, Any]) -> dict[str,
     return contexts
 
 
-def _collect_status_contexts(status_payload: dict[str, Any]) -> dict[str, dict[str, str]]:
-    contexts: dict[str, dict[str, str]] = {}
+def _collect_status_contexts(status_payload: Dict[str, Any]) -> Dict[str, Dict[str, str]]:
+    contexts: Dict[str, Dict[str, str]] = {}
     for status in status_payload.get("statuses", []) or []:
         name = str(status.get("context") or "").strip()
         if not name:
@@ -77,7 +77,7 @@ def _collect_status_contexts(status_payload: dict[str, Any]) -> dict[str, dict[s
     return contexts
 
 
-def _collect_contexts(check_runs_payload: dict[str, Any], status_payload: dict[str, Any]) -> dict[str, dict[str, str]]:
+def _collect_contexts(check_runs_payload: Dict[str, Any], status_payload: Dict[str, Any]) -> Dict[str, Dict[str, str]]:
     contexts = _collect_check_run_contexts(check_runs_payload)
     contexts.update(_collect_status_contexts(status_payload))
     return contexts
@@ -85,8 +85,8 @@ def _collect_contexts(check_runs_payload: dict[str, Any], status_payload: dict[s
 
 def _resolve_observed_context(
     context: str,
-    contexts: Mapping[str, dict[str, str]],
-) -> dict[str, str] | None:
+    contexts: Mapping[str, Dict[str, str]],
+) -> Dict[str, str] | None:
     exact = contexts.get(context)
     if exact:
         return exact
@@ -100,7 +100,7 @@ def _resolve_observed_context(
     return None
 
 
-def _evaluate_observed_context(context: str, observed: dict[str, str] | None) -> str | None:
+def _evaluate_observed_context(context: str, observed: Dict[str, str] | None) -> str | None:
     if not observed:
         return None
     if observed["source"] == "check_run":
@@ -114,7 +114,7 @@ def _evaluate_observed_context(context: str, observed: dict[str, str] | None) ->
     return None
 
 
-def _evaluate(required: list[str], contexts: dict[str, dict[str, str]]) -> tuple[str, list[str], list[str]]:
+def _evaluate(required: List[str], contexts: Dict[str, Dict[str, str]]) -> Tuple[str, List[str], List[str]]:
     missing = [context for context in required if _resolve_observed_context(context, contexts) is None]
     failed = [
         failure
@@ -125,7 +125,7 @@ def _evaluate(required: list[str], contexts: dict[str, dict[str, str]]) -> tuple
     return ("pass" if not missing and not failed else "fail", missing, failed)
 
 
-def _has_in_progress_check_runs(contexts: dict[str, dict[str, str]]) -> bool:
+def _has_in_progress_check_runs(contexts: Dict[str, Dict[str, str]]) -> bool:
     return any(
         details.get("state") != "completed"
         for details in contexts.values()
@@ -133,7 +133,7 @@ def _has_in_progress_check_runs(contexts: dict[str, dict[str, str]]) -> bool:
     )
 
 
-def _collect_payload(repo: str, sha: str, required: list[str], token: str) -> dict[str, Any]:
+def _collect_payload(repo: str, sha: str, required: List[str], token: str) -> Dict[str, Any]:
     check_runs = _api_get(repo, f"commits/{sha}/check-runs?per_page=100", token)
     statuses = _api_get(repo, f"commits/{sha}/status", token)
     contexts = _collect_contexts(check_runs, statuses)
@@ -150,9 +150,9 @@ def _collect_payload(repo: str, sha: str, required: list[str], token: str) -> di
     }
 
 
-def _wait_for_payload(args: argparse.Namespace, required: list[str], token: str) -> dict[str, Any]:
+def _wait_for_payload(args: argparse.Namespace, required: List[str], token: str) -> Dict[str, Any]:
     deadline = time.time() + max(args.timeout_seconds, 1)
-    final_payload: dict[str, Any]
+    final_payload: Dict[str, Any]
     while time.time() <= deadline:
         final_payload = _collect_payload(args.repo, args.sha, required, token)
         if final_payload["status"] == "pass":

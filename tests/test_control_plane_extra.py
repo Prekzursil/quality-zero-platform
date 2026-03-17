@@ -1,4 +1,4 @@
-from __future__ import annotations
+from __future__ import absolute_import
 
 import contextlib
 import io
@@ -8,7 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, cast, Dict, List
 from unittest.mock import patch
 
 from scripts.quality.control_plane import (
@@ -33,7 +33,7 @@ CONTROL_PLANE_PATH = ROOT / "scripts" / "quality" / "control_plane.py"
 
 
 class ControlPlaneExtraTests(unittest.TestCase):
-    def _build_invalid_profile(self) -> dict[str, Any]:
+    def _build_invalid_profile(self) -> Dict[str, Any]:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
         profile["verify_command"] = ""
@@ -63,10 +63,10 @@ class ControlPlaneExtraTests(unittest.TestCase):
             }
         )
         profile["vendors"]["codacy"]["dashboard_url"] = "https://localhost/codacy"
-        return cast(dict[str, Any], profile)
+        return cast(Dict[str, Any], profile)
 
     @staticmethod
-    def _invalid_profile_findings() -> list[str]:
+    def _invalid_profile_findings() -> List[str]:
         return [
             "verify_command is required",
             "github_mutation_lane must be codex-private-runner",
@@ -209,7 +209,7 @@ class ControlPlaneExtraTests(unittest.TestCase):
         self.assertEqual([item for item in validate_profile(non_visual) if "visual_pair_required" in item], [])
 
     def test_main_print_modes_emit_expected_json(self) -> None:
-        outputs: list[Any] = []
+        outputs: List[Any] = []
         for mode in ("profile", "ruleset", "contexts"):
             buffer = io.StringIO()
             with patch.object(
@@ -228,9 +228,9 @@ class ControlPlaneExtraTests(unittest.TestCase):
                 self.assertEqual(main(), 0)
             outputs.append(json.loads(buffer.getvalue()))
 
-        profile_payload = cast(dict[str, Any], outputs[0])
-        ruleset_payload = cast(dict[str, Any], outputs[1])
-        contexts_payload = cast(list[str], outputs[2])
+        profile_payload = cast(Dict[str, Any], outputs[0])
+        ruleset_payload = cast(Dict[str, Any], outputs[1])
+        contexts_payload = cast(List[str], outputs[2])
         self.assertEqual(profile_payload["slug"], "Prekzursil/quality-zero-platform")
         self.assertEqual(ruleset_payload["repo_slug"], "Prekzursil/quality-zero-platform")
         self.assertIn("Coverage 100 Gate", contexts_payload)

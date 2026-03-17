@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from __future__ import annotations
+from __future__ import absolute_import
 
 import argparse
 import json
@@ -10,10 +10,13 @@ from pathlib import Path
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.quality.common import utc_timestamp, write_report
-
-DEFAULT_COVERAGE_JSON = "coverage-100/coverage.json"
-DEFAULT_COVERAGE_MD = "coverage-100/coverage.md"
+from scripts.quality.common import (
+    DEFAULT_COVERAGE_JSON,
+    DEFAULT_COVERAGE_MD,
+    NONE_BULLET,
+    utc_timestamp,
+    write_report,
+)
 
 
 def _parse_args() -> argparse.Namespace:
@@ -52,7 +55,7 @@ def _render_evidence_md(payload: dict) -> str:
         f"- Timestamp (UTC): `{payload['timestamp_utc']}`",
         "",
         "## Findings",
-        "- None",
+        NONE_BULLET,
     ]
     return "\n".join(lines) + "\n"
 

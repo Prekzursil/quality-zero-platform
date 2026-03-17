@@ -1,7 +1,7 @@
 name: Quality Zero Remediation
 
 on:
-  workflow_run:
+  workflow_run: # zizmor: ignore[dangerous-triggers] -- trusted private runner remediation only responds to internal gate failures.
     workflows: ["Quality Zero Gate"]
     types: [completed]
   workflow_dispatch:
@@ -14,9 +14,10 @@ on:
 jobs:
   remediate:
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'failure'
-    uses: Prekzursil/quality-zero-platform/.github/workflows/reusable-remediation-loop.yml@main
+    uses: Prekzursil/quality-zero-platform/.github/workflows/reusable-remediation-loop.yml@7268fee30f1cf796938d97fe460259f27386a8cd
     with:
       repo_slug: ${{ github.repository }}
       failure_context: ${{ inputs.failure_context || 'Quality Zero Gate' }}
       sha: ${{ github.event.workflow_run.head_sha || github.sha }}
-    secrets: inherit
+    secrets:
+      CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}

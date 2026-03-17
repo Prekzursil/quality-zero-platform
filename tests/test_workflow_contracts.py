@@ -1,10 +1,11 @@
-from __future__ import annotations, division
+from __future__ import absolute_import, division
 
 import unittest
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+MUTATION_TEMPLATE_REF = "@7268fee30f1cf796938d97fe460259f27386a8cd"
 
 
 class WorkflowContractTests(unittest.TestCase):
@@ -73,6 +74,31 @@ class WorkflowContractTests(unittest.TestCase):
             text = (ROOT / "templates" / "repo" / ".github" / "workflows" / name).read_text(encoding="utf-8")
             for expected in expected_lines:
                 self.assertIn(expected, text, name)
+
+    def test_repo_template_mutation_wrappers_pin_controller_and_pass_only_required_inputs_and_secrets(self) -> None:
+        workflow_expectations = {
+            "quality-zero-backlog.yml": [
+                MUTATION_TEMPLATE_REF,
+                "lane: ${{ inputs.tool || 'coverage' }}",
+                "CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}",
+            ],
+            "quality-zero-remediation.yml": [
+                MUTATION_TEMPLATE_REF,
+                "failure_context: ${{ inputs.failure_context || 'Quality Zero Gate' }}",
+                "CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}",
+                "workflow_run: # zizmor: ignore[dangerous-triggers]",
+            ],
+        }
+
+        for name, expected_lines in workflow_expectations.items():
+            text = (ROOT / "templates" / "repo" / ".github" / "workflows" / name).read_text(encoding="utf-8")
+            self.assertNotIn("secrets: inherit", text, name)
+            for expected in expected_lines:
+                self.assertIn(expected, text, name)
+
+    def test_self_remediation_wrapper_documents_trusted_workflow_run_trigger(self) -> None:
+        text = (ROOT / ".github" / "workflows" / "quality-zero-remediation.yml").read_text(encoding="utf-8")
+        self.assertIn("workflow_run: # zizmor: ignore[dangerous-triggers]", text)
 
     def test_self_wrapper_workflows_use_current_ref_for_platform_checkout(self) -> None:
         workflow_expectations = {

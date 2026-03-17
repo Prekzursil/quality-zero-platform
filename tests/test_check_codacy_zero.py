@@ -1,4 +1,4 @@
-from __future__ import annotations
+from __future__ import absolute_import
 
 import os
 import unittest
@@ -8,6 +8,7 @@ import runpy
 import sys
 import tempfile
 from pathlib import Path
+from typing import List, Tuple
 from unittest.mock import patch
 
 from scripts.quality import check_codacy_zero
@@ -83,7 +84,7 @@ class CodacyZeroTests(unittest.TestCase):
         self.assertEqual(findings, [])
 
     def test_query_open_issues_uses_pull_request_get_endpoint(self) -> None:
-        captured: list[tuple[str, str, object | None]] = []
+        captured: List[Tuple[str, str, object | None]] = []
 
         def fake_request(url: str, token: str, *, method: str = "GET", data=None):
             captured.append((url, method, data))

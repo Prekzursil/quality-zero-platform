@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-from __future__ import annotations
+from __future__ import absolute_import
 
 import argparse
 import os
 import sys
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Dict, List, Mapping
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -27,7 +27,7 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _append_missing_section(lines: list[str], title: str, items: list[str]) -> None:
+def _append_missing_section(lines: List[str], title: str, items: List[str]) -> None:
     lines.extend(["", title])
     lines.extend([f"- `{item}`" for item in items] or [NONE_BULLET])
 
@@ -54,17 +54,17 @@ def _render_md(payload: Mapping[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _missing_env_names(names: list[str]) -> list[str]:
+def _missing_env_names(names: List[str]) -> List[str]:
     return [name for name in names if not str(os.environ.get(name, "")).strip()]
 
 
 def _build_payload(
     *,
-    required_secrets: list[str],
-    conditional_secrets: list[str],
-    required_vars: list[str],
-    conditional_vars: list[str],
-) -> dict[str, Any]:
+    required_secrets: List[str],
+    conditional_secrets: List[str],
+    required_vars: List[str],
+    conditional_vars: List[str],
+) -> Dict[str, Any]:
     missing_secrets = _missing_env_names(required_secrets)
     missing_conditional_secrets = _missing_env_names(conditional_secrets)
     missing_vars = _missing_env_names(required_vars)

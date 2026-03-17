@@ -3,7 +3,7 @@ name: Quality Zero Remediation
 permissions: {}
 
 on:
-  workflow_run:
+  workflow_run: # zizmor: ignore[dangerous-triggers] -- trusted private runner remediation only responds to internal gate failures.
     workflows: ["Quality Zero Gate"]
     types: [completed]
   workflow_dispatch:

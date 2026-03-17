@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-from __future__ import annotations
+from __future__ import absolute_import
 
 import argparse
 import os
 import sys
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Dict, List, Mapping, Tuple
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -35,7 +35,7 @@ def _event_name() -> str:
     return os.environ.get("EVENT_NAME", "").strip()
 
 
-def _nested_payload_values(payload: Any) -> list[Any]:
+def _nested_payload_values(payload: Any) -> List[Any]:
     if isinstance(payload, dict):
         return list(payload.values())
     if isinstance(payload, list):
@@ -55,7 +55,7 @@ def extract_total_open(payload: Any) -> int | None:
     return None
 
 
-def _request_json(url: str, token: str) -> dict[str, Any]:
+def _request_json(url: str, token: str) -> Dict[str, Any]:
     payload, _ = load_json_https(
         url,
         allowed_host_suffixes={"deepscan.io"},
@@ -70,7 +70,7 @@ def _request_json(url: str, token: str) -> dict[str, Any]:
     return payload
 
 
-def _github_status_payload(repo: str, sha: str, token: str) -> dict[str, Any]:
+def _github_status_payload(repo: str, sha: str, token: str) -> Dict[str, Any]:
     payload, _ = load_json_https(
         f"{GITHUB_API_BASE}/repos/{repo}/commits/{sha}/status",
         allowed_hosts={"api.github.com"},
@@ -113,8 +113,8 @@ def _github_sha(args: argparse.Namespace) -> str:
     return (args.sha or os.environ.get("TARGET_SHA", "") or os.environ.get("GITHUB_SHA", "")).strip()
 
 
-def _validate_github_check_context_inputs(github_token: str, repo: str, sha: str) -> list[str]:
-    findings: list[str] = []
+def _validate_github_check_context_inputs(github_token: str, repo: str, sha: str) -> List[str]:
+    findings: List[str] = []
     if not github_token:
         findings.append("GITHUB_TOKEN is missing for github_check_context mode.")
     if not repo:
@@ -124,8 +124,8 @@ def _validate_github_check_context_inputs(github_token: str, repo: str, sha: str
     return findings
 
 
-def _validate_open_issues_mode_inputs(token: str, open_issues_url: str) -> list[str]:
-    findings: list[str] = []
+def _validate_open_issues_mode_inputs(token: str, open_issues_url: str) -> List[str]:
+    findings: List[str] = []
     if not token:
         findings.append("DEEPSCAN_API_TOKEN is missing.")
     if not open_issues_url:
@@ -141,7 +141,7 @@ def _validate_deepscan_inputs(
     github_token: str,
     repo: str,
     sha: str,
-) -> list[str]:
+) -> List[str]:
     if policy_mode == "github_check_context":
         return _validate_github_check_context_inputs(github_token, repo, sha)
     return _validate_open_issues_mode_inputs(token, open_issues_url)
@@ -151,8 +151,8 @@ def _normalized_open_issues_url(open_issues_url: str) -> str:
     return normalize_https_url(open_issues_url, allowed_host_suffixes={"deepscan.io"})
 
 
-def _evaluate_deepscan_open_issues(open_issues_url: str, token: str) -> tuple[int | None, list[str]]:
-    findings: list[str] = []
+def _evaluate_deepscan_open_issues(open_issues_url: str, token: str) -> Tuple[int | None, List[str]]:
+    findings: List[str] = []
     payload = _request_json(open_issues_url, token)
     open_issues = extract_total_open(payload)
     if open_issues is None:
@@ -162,18 +162,18 @@ def _evaluate_deepscan_open_issues(open_issues_url: str, token: str) -> tuple[in
     return open_issues, findings
 
 
-def _find_github_status(payload: dict[str, Any], context: str) -> dict[str, Any] | None:
+def _find_github_status(payload: Dict[str, Any], context: str) -> Dict[str, Any] | None:
     for item in payload.get("statuses", []) or []:
         if str(item.get("context") or "").strip() == context:
             return item
     return None
 
 
-def _status_target_url(status: dict[str, Any] | None) -> str:
+def _status_target_url(status: Dict[str, Any] | None) -> str:
     return str((status or {}).get("target_url") or "").strip()
 
 
-def _status_findings(status: dict[str, Any] | None, context: str) -> list[str]:
+def _status_findings(status: Dict[str, Any] | None, context: str) -> List[str]:
     if status is None:
         return [f"{context} GitHub status context is missing."]
 
@@ -183,7 +183,7 @@ def _status_findings(status: dict[str, Any] | None, context: str) -> list[str]:
     return [f"{context} GitHub status is {state or 'unknown'} (expected success)."]
 
 
-def _evaluate_github_check_context(args: argparse.Namespace, token: str) -> tuple[int | None, str, list[str]]:
+def _evaluate_github_check_context(args: argparse.Namespace, token: str) -> Tuple[int | None, str, List[str]]:
     payload = _github_status_payload(_github_repo(args), _github_sha(args), token)
     context = str(getattr(args, "github_context", DEEPSCAN_STATUS_CONTEXT) or DEEPSCAN_STATUS_CONTEXT)
     status = _find_github_status(payload, context)
@@ -194,7 +194,7 @@ def _evaluate_github_check_context(args: argparse.Namespace, token: str) -> tupl
     return open_issues, _status_target_url(status), findings
 
 
-def _evaluate_open_issues_mode(open_issues_url: str, token: str) -> tuple[int | None, str, list[str]]:
+def _evaluate_open_issues_mode(open_issues_url: str, token: str) -> Tuple[int | None, str, List[str]]:
     normalized_url = _normalized_open_issues_url(open_issues_url)
     open_issues, findings = _evaluate_deepscan_open_issues(normalized_url, token)
     return open_issues, normalized_url, findings
@@ -207,7 +207,7 @@ def _evaluate_deepscan_policy(
     token: str,
     github_token: str,
     open_issues_url: str,
-) -> tuple[int | None, str, list[str]]:
+) -> Tuple[int | None, str, List[str]]:
     if policy_mode == "github_check_context":
         return _evaluate_github_check_context(args, github_token)
     return _evaluate_open_issues_mode(open_issues_url, token)

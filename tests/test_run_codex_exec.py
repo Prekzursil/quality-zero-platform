@@ -9,7 +9,13 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from scripts.quality.run_codex_exec import _parse_args, build_codex_command, main
+from scripts.quality.run_codex_exec import (
+    _parse_args,
+    _run_codex_exec,
+    _validate_cli_token,
+    build_codex_command,
+    main,
+)
 
 
 class RunCodexExecTests(unittest.TestCase):
@@ -129,6 +135,71 @@ class RunCodexExecTests(unittest.TestCase):
             "-",
         ])
 
+    def test_validate_cli_token_rejects_control_characters(self):
+        with self.assertRaisesRegex(ValueError, '--profile contains unsupported control characters'):
+            _validate_cli_token('trusted\nprofile', flag_name='--profile')
+
+    def test_validate_cli_token_rejects_empty_values(self):
+        with self.assertRaisesRegex(ValueError, '--model cannot be empty'):
+            _validate_cli_token('', flag_name='--model')
+
+    def test_build_codex_command_rejects_unsupported_profile_characters(self):
+        args = Namespace(
+            repo_dir=r".\repo",
+            prompt_file=r".\prompt.txt",
+            output_last_message=r".\out\message.txt",
+            sandbox="workspace-write",
+            profile="trusted profile",
+            model="",
+            config=[],
+        )
+
+        with self.assertRaisesRegex(ValueError, '--profile contains unsupported characters'):
+            build_codex_command(args)
+
+    def test_run_codex_exec_invokes_subprocess_with_shell_false_and_stdin_prompt(self):
+        args = Namespace(
+            repo_dir=r".\repo",
+            output_last_message=r".\out\message.txt",
+            sandbox="workspace-write",
+            profile="trusted-profile",
+            model="gpt-5.4",
+            config=["a=b"],
+        )
+
+        completed = SimpleNamespace(stdout='{"ok":true}', stderr='warn', returncode=7)
+
+        with patch('scripts.quality.run_codex_exec.subprocess.run', return_value=completed) as mock_run:
+            result = _run_codex_exec(args, 'hello codex')
+
+        self.assertIs(result, completed)
+        mock_run.assert_called_once_with(
+            [
+                'codex',
+                'exec',
+                '--full-auto',
+                '-C',
+                str(Path(args.repo_dir).resolve()),
+                '-s',
+                'workspace-write',
+                '--json',
+                '-o',
+                str(Path(args.output_last_message).resolve()),
+                '-',
+                '-p',
+                'trusted-profile',
+                '-m',
+                'gpt-5.4',
+                '-c',
+                'a=b',
+            ],
+            input='hello codex',
+            text=True,
+            capture_output=True,
+            shell=False,
+            check=False,
+        )
+
     def test_main_invokes_subprocess_with_shell_false_and_writes_json_log(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)
@@ -142,7 +213,7 @@ class RunCodexExecTests(unittest.TestCase):
             self.assertEqual(
                 called_args[0],
                 [
-                    'codex',
+                    r'C:\Tools\codex.exe',
                     'exec',
                     '--full-auto',
                     '-C',
@@ -190,9 +261,9 @@ class RunCodexExecTests(unittest.TestCase):
                 str(output_last_message),
             ]
 
-            with patch('subprocess.run', return_value=completed) as mock_run, patch('sys.argv', argv), patch(
-                'sys.stdout', new=io.StringIO()
-            ) as stdout:
+            with patch('subprocess.run', return_value=completed) as mock_run, patch(
+                'sys.argv', argv
+            ), patch('sys.stdout', new=io.StringIO()) as stdout:
                 with self.assertRaises(SystemExit) as result:
                     runpy.run_path(str(script_path), run_name='__main__')
 

@@ -13,6 +13,39 @@ from scripts.quality.run_codex_exec import _parse_args, build_codex_command, mai
 
 
 class RunCodexExecTests(unittest.TestCase):
+    @staticmethod
+    def _build_main_args(tmpdir_path: Path, *, prompt_text: str = 'hello codex') -> Namespace:
+        repo_dir = tmpdir_path / 'repo'
+        repo_dir.mkdir()
+        prompt_file = tmpdir_path / 'prompt.txt'
+        prompt_file.write_text(prompt_text, encoding='utf-8')
+        return Namespace(
+            repo_dir=str(repo_dir),
+            prompt_file=str(prompt_file),
+            output_last_message=str(tmpdir_path / 'message.txt'),
+            sandbox='workspace-write',
+            profile='trusted-profile',
+            model='gpt-5.4',
+            config=['a=b'],
+            json_log=str(tmpdir_path / 'run.json'),
+        )
+
+    @staticmethod
+    def _run_main_with_patched_subprocess(args: Namespace, completed: SimpleNamespace):
+        json_log = Path(args.json_log)
+        with patch('scripts.quality.run_codex_exec._parse_args', return_value=args), patch(
+            'scripts.quality.run_codex_exec.subprocess.run', return_value=completed
+        ) as mock_run, patch('sys.stdout', new=io.StringIO()) as stdout, patch('sys.stderr', new=io.StringIO()) as stderr:
+            exit_code = main()
+        return {
+            'exit_code': exit_code,
+            'stdout': stdout.getvalue(),
+            'stderr': stderr.getvalue(),
+            'json_log': json_log.read_text(encoding='utf-8'),
+            'call_args': mock_run.call_args,
+            'mock_run': mock_run,
+        }
+
     def test_parse_args_accepts_all_supported_flags(self):
         argv = [
             'run_codex_exec.py',
@@ -99,35 +132,13 @@ class RunCodexExecTests(unittest.TestCase):
     def test_main_invokes_subprocess_with_shell_false_and_writes_json_log(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)
-            repo_dir = tmpdir_path / 'repo'
-            repo_dir.mkdir()
-            prompt_file = tmpdir_path / 'prompt.txt'
-            prompt_file.write_text('hello codex', encoding='utf-8')
-            output_last_message = tmpdir_path / 'message.txt'
-            json_log = tmpdir_path / 'run.json'
-            args = Namespace(
-                repo_dir=str(repo_dir),
-                prompt_file=str(prompt_file),
-                output_last_message=str(output_last_message),
-                sandbox='workspace-write',
-                profile='trusted-profile',
-                model='gpt-5.4',
-                config=['a=b'],
-                json_log=str(json_log),
-            )
+            args = self._build_main_args(tmpdir_path)
             completed = SimpleNamespace(stdout='{"ok":true}', stderr='warn', returncode=7)
+            result = self._run_main_with_patched_subprocess(args, completed)
+            called_args, called_kwargs = result['call_args']
 
-            with patch('scripts.quality.run_codex_exec._parse_args', return_value=args), patch(
-                'scripts.quality.run_codex_exec.subprocess.run', return_value=completed
-            ) as mock_run, patch('sys.stdout', new=io.StringIO()) as stdout, patch('sys.stderr', new=io.StringIO()) as stderr:
-                exit_code = main()
-                stdout_value = stdout.getvalue()
-                stderr_value = stderr.getvalue()
-                json_log_value = json_log.read_text(encoding='utf-8')
-                called_args, called_kwargs = mock_run.call_args
-
-            self.assertEqual(exit_code, 7)
-            mock_run.assert_called_once()
+            self.assertEqual(result['exit_code'], 7)
+            result['mock_run'].assert_called_once()
             self.assertEqual(
                 called_args[0],
                 [
@@ -135,12 +146,12 @@ class RunCodexExecTests(unittest.TestCase):
                     'exec',
                     '--full-auto',
                     '-C',
-                    str(repo_dir.resolve()),
+                    str(Path(args.repo_dir).resolve()),
                     '-s',
                     'workspace-write',
                     '--json',
                     '-o',
-                    str(output_last_message.resolve()),
+                    str(Path(args.output_last_message).resolve()),
                     '-',
                     '-p',
                     'trusted-profile',
@@ -155,9 +166,9 @@ class RunCodexExecTests(unittest.TestCase):
             self.assertTrue(called_kwargs['text'])
             self.assertTrue(called_kwargs['capture_output'])
             self.assertFalse(called_kwargs['check'])
-            self.assertEqual(json_log_value, '{"ok":true}')
-            self.assertEqual(stdout_value, '{"ok":true}')
-            self.assertEqual(stderr_value, 'warn')
+            self.assertEqual(result['json_log'], '{"ok":true}')
+            self.assertEqual(result['stdout'], '{"ok":true}')
+            self.assertEqual(result['stderr'], 'warn')
 
     def test_script_entrypoint_executes_main_and_returns_exit_code(self):
         with tempfile.TemporaryDirectory() as tmpdir:

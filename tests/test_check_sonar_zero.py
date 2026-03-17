@@ -139,6 +139,34 @@ class SonarZeroTests(unittest.TestCase):
         self.assertEqual((open_issues, quality_gate, findings), (1, "ERROR", ["Sonar reports 1 open issues (expected 0)."]))
         self.assertEqual(attempts, [1, 2])
 
+    def test_retry_default_budget_handles_transient_none_quality_gate_for_prs(self) -> None:
+        args = argparse.Namespace(branch="", pull_request="13")
+        attempts: list[int] = []
+        responses = [
+            (0, "NONE", ["Sonar quality gate status is NONE (expected OK)."]),
+            (0, "NONE", ["Sonar quality gate status is NONE (expected OK)."]),
+            (0, "NONE", ["Sonar quality gate status is NONE (expected OK)."]),
+            (0, "NONE", ["Sonar quality gate status is NONE (expected OK)."]),
+            (0, "NONE", ["Sonar quality gate status is NONE (expected OK)."]),
+            (0, "NONE", ["Sonar quality gate status is NONE (expected OK)."]),
+            (0, "NONE", ["Sonar quality gate status is NONE (expected OK)."]),
+            (0, "OK", []),
+        ]
+
+        def fake_loader(current_args, auth):
+            attempts.append(len(attempts) + 1)
+            return responses.pop(0)
+
+        open_issues, quality_gate, findings = load_sonar_findings_with_retry(
+            args,
+            "auth",
+            fetch_fn=fake_loader,
+            sleep_seconds=0.0,
+        )
+
+        self.assertEqual((open_issues, quality_gate, findings), (0, "OK", []))
+        self.assertEqual(attempts, [1, 2, 3, 4, 5, 6, 7, 8])
+
     def test_main_handles_missing_token_success_and_report_failures(self) -> None:
         args = Namespace(
             project_key="Prekzursil_quality-zero-platform",

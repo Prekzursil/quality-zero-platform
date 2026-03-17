@@ -18,6 +18,7 @@ from scripts.security_helpers import load_json_https
 
 
 SONAR_API_BASE = "https://sonarcloud.io"
+SCOPED_ANALYSIS_RETRY_ATTEMPTS = 8
 
 
 def _parse_args() -> argparse.Namespace:
@@ -125,7 +126,7 @@ def load_sonar_findings_with_retry(
     auth: str,
     *,
     fetch_fn=_load_sonar_findings,
-    attempts: int = 4,
+    attempts: int = SCOPED_ANALYSIS_RETRY_ATTEMPTS,
     sleep_seconds: float = 5.0,
 ) -> tuple[int, str, list[str]]:
     retry_budget = max(1, int(attempts))

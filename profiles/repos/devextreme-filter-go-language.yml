@@ -4,7 +4,8 @@ verify_command: bash scripts/verify
 coverage:
   command: |
     mkdir -p coverage
-    go test ./... -coverprofile=coverage/go-coverage.out -covermode=count
+    packages="$(go list ./... | grep -vE "/ent($|/)")"
+    go test $packages -coverprofile=coverage/go-coverage.out -covermode=count
     go install github.com/boumenot/gocover-cobertura@latest
     "$(go env GOPATH)/bin/gocover-cobertura" < coverage/go-coverage.out > coverage/go-coverage.xml
   inputs:

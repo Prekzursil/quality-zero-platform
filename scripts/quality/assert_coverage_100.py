@@ -11,19 +11,21 @@ from typing import Any, Dict, List, Mapping, Set, Tuple
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from scripts.quality import coverage_support
 from scripts.quality.common import DEFAULT_COVERAGE_JSON, DEFAULT_COVERAGE_MD, NONE_BULLET, safe_output_path, utc_timestamp, write_report
 from scripts.quality.coverage_support import (
     _coverage_threshold_findings,
-    _find_missing_required_sources,
-    _is_tests_only_report,
-    _matches_required_source,
-    _normalize_source_path,
     _required_source_findings,
     coverage_sources_from_lcov,
     coverage_sources_from_xml,
     parse_coverage_xml,
     parse_lcov,
 )
+
+_find_missing_required_sources = coverage_support._find_missing_required_sources
+_is_tests_only_report = coverage_support._is_tests_only_report
+_matches_required_source = coverage_support._matches_required_source
+_normalize_source_path = coverage_support._normalize_source_path
 
 
 @dataclass

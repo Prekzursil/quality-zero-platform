@@ -113,9 +113,20 @@ def cast_mapping(value: Any) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
 
-def _run_qlty(argv: List[str], repo_dir: Path) -> subprocess.CompletedProcess[str]:
+def _run_qlty_check(repo_dir: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(  # nosec B603
-        argv,
+        ["qlty", "check", "--all", "--fail-level", "note", "--summary"],
+        cwd=repo_dir,
+        shell=False,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _run_qlty_smells(repo_dir: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(  # nosec B603
+        ["qlty", "smells", "--all", "--quiet", "--no-snippets", "--no-duplication"],
         cwd=repo_dir,
         shell=False,
         check=False,
@@ -174,14 +185,13 @@ def _write_payload(payload: Mapping[str, Any], *, out_json: str, out_md: str) ->
 
 
 def _run_checks(repo_dir: Path) -> Tuple[List[Dict[str, Any]], int]:
-    checks: List[Tuple[str, List[str]]] = [
-        ("check", _build_qlty_check_argv()),
-        ("smells", _build_qlty_smells_argv()),
-    ]
     entries: List[Dict[str, Any]] = []
     final_return_code = 0
-    for name, argv in checks:
-        result = _run_qlty(argv, repo_dir)
+    checks: List[Tuple[str, List[str], subprocess.CompletedProcess[str]]] = [
+        ("check", _build_qlty_check_argv(), _run_qlty_check(repo_dir)),
+        ("smells", _build_qlty_smells_argv(), _run_qlty_smells(repo_dir)),
+    ]
+    for name, argv, result in checks:
         entry = _build_check_entry(name, argv, result)
         entries.append(entry)
         if final_return_code == 0 and entry["status"] != "pass":

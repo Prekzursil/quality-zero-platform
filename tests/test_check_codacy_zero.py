@@ -118,6 +118,31 @@ class CodacyZeroTests(unittest.TestCase):
         self.assertEqual(open_issues, 2)
         self.assertEqual(findings, ["Codacy reports 2 open issues (expected 0)."])
 
+    def test_keyword_only_guards_reject_unexpected_arguments(self) -> None:
+        with self.assertRaisesRegex(TypeError, "Unexpected _query_codacy_provider parameters: extra"):
+            _query_codacy_provider(
+                "gh",
+                "Prekzursil",
+                "quality-zero-platform",
+                "token",
+                extra=True,
+            )
+
+        with self.assertRaisesRegex(TypeError, "expects provider, owner, repo, and token"):
+            _query_codacy_provider("gh", "Prekzursil", "quality-zero-platform")
+
+        with self.assertRaisesRegex(TypeError, "Unexpected _query_codacy_open_issues parameters: extra"):
+            _query_codacy_open_issues(
+                "Prekzursil",
+                "quality-zero-platform",
+                "token",
+                ["gh"],
+                extra=True,
+            )
+
+        with self.assertRaisesRegex(TypeError, "expects owner, repo, token, and provider candidates"):
+            _query_codacy_open_issues("Prekzursil", "quality-zero-platform", "token")
+
     def test_query_open_issues_reports_non_404_and_runtime_failures(self) -> None:
         from urllib.error import HTTPError
 

@@ -4,13 +4,15 @@ from __future__ import absolute_import
 import argparse
 import json
 import os
-import subprocess  # nosec B404
 import sys
+from contextlib import contextmanager
 from pathlib import Path, PureWindowsPath
 from typing import Any, Dict, List, cast
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from scripts.quality import check_required_checks
 
 
 def _parse_args() -> argparse.Namespace:
@@ -73,6 +75,26 @@ def _build_argv(profile: Dict[str, Any], sha: str, *args: Any, **kwargs: Any) ->
     return argv
 
 
+@contextmanager
+def _working_directory(path: Path):
+    previous = Path.cwd()
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(previous)
+
+
+def _run_required_checks(argv: List[str], *, repo_dir: Path) -> int:
+    previous_argv = sys.argv
+    sys.argv = argv
+    try:
+        with _working_directory(repo_dir):
+            return check_required_checks.main()
+    finally:
+        sys.argv = previous_argv
+
+
 def main() -> int:
     args = _parse_args()
     profile = json.loads(Path(args.profile_json).read_text(encoding="utf-8"))
@@ -82,8 +104,7 @@ def main() -> int:
     repo_dir = Path(args.repo_dir).resolve()
     platform_dir = Path(args.platform_dir).resolve() if args.platform_dir else Path(__file__).resolve().parents[2]
     argv = _build_argv(cast(Dict[str, Any], profile), sha, platform_dir=platform_dir, out_json=args.out_json, out_md=args.out_md)
-    subprocess.run(argv, cwd=repo_dir, check=True)  # nosec B603
-    return 0
+    return _run_required_checks(argv, repo_dir=repo_dir)
 
 
 if __name__ == "__main__":

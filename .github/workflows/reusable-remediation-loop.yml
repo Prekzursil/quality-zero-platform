@@ -52,6 +52,7 @@ jobs:
           repository: ${{ inputs.platform_repository }}
           ref: ${{ inputs.platform_ref }}
           path: platform
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -111,11 +112,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: repo
+          persist-credentials: false
       - uses: actions/checkout@v4
         with:
           repository: ${{ inputs.platform_repository }}
           ref: ${{ inputs.platform_ref }}
           path: platform
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -133,10 +136,11 @@ jobs:
             --out-json "$RUNNER_TEMP/profile.json"
       - name: Ensure Codex account auth
         env:
+          CODEX_AUTH_FILE: ${{ needs.resolve-profile.outputs.codex_auth_file }}
           CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
         run: |
           python platform/scripts/quality/ensure_codex_auth.py \
-            --auth-file "${{ needs.resolve-profile.outputs.codex_auth_file }}" \
+            --auth-file "$CODEX_AUTH_FILE" \
             --bootstrap-env-var CODEX_AUTH_JSON \
             --out-json "$RUNNER_TEMP/codex-auth.json"
       - name: Render remediation prompt

@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from scripts.quality.control_plane import (
     active_required_contexts,
+    build_ruleset_payload,
     load_inventory,
     load_repo_profile,
     validate_profile,
@@ -39,6 +40,7 @@ class ControlPlaneTests(unittest.TestCase):
             [
                 "Coverage 100 Gate",
                 "Codecov Analytics",
+                "QLTY Zero",
                 "Sonar Zero",
                 "Codacy Zero",
                 "Semgrep Zero",
@@ -47,8 +49,11 @@ class ControlPlaneTests(unittest.TestCase):
                 "SonarCloud Code Analysis",
             ],
         )
+        self.assertIn("QLTY Zero", pr_contexts)
         self.assertTrue({"qlty check", "qlty coverage", "qlty coverage diff"}.issubset(pr_contexts))
-        self.assertTrue({"qlty check", "qlty coverage", "qlty coverage diff"}.issubset(pbinfo["required_contexts"]["target"]))
+        self.assertTrue(
+            {"QLTY Zero", "qlty check", "qlty coverage", "qlty coverage diff"}.issubset(pbinfo["required_contexts"]["target"])
+        )
         self.assertTrue({"Chromatic Playwright", "Applitools Visual"}.issubset(profile["required_contexts"]["target"]))
 
     def test_phase1_repo_verify_commands_follow_repo_contracts(self) -> None:
@@ -104,6 +109,31 @@ class ControlPlaneTests(unittest.TestCase):
 
         self.assertNotIn("Codacy Static Code Analysis", push_contexts)
         self.assertIn("Codacy Static Code Analysis", pr_contexts)
+
+    def test_quality_zero_platform_requires_controller_qlty_zero_context_on_push_and_ruleset(self) -> None:
+        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
+        profile = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
+
+        push_contexts = active_required_contexts(profile, event_name="push")
+        ruleset_contexts = active_required_contexts(profile, event_name="ruleset")
+        payload = build_ruleset_payload(profile)
+
+        self.assertIn("QLTY Zero", push_contexts)
+        self.assertIn("QLTY Zero", profile["required_contexts"]["target"])
+        self.assertIn("QLTY Zero", ruleset_contexts)
+        self.assertIn("QLTY Zero", [item["context"] for item in payload["rules"][1]["parameters"]["required_status_checks"]])
+
+    def test_quality_zero_platform_requires_qlty_zero(self) -> None:
+        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
+        profile = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
+
+        push_contexts = active_required_contexts(profile, event_name="push")
+        pr_contexts = active_required_contexts(profile, event_name="pull_request")
+        target_contexts = set(profile["required_contexts"]["target"])
+
+        self.assertIn("QLTY Zero", push_contexts)
+        self.assertIn("QLTY Zero", pr_contexts)
+        self.assertIn("QLTY Zero", target_contexts)
 
     def test_reframe_overlay_adds_visual_and_platform_contexts_to_target(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")

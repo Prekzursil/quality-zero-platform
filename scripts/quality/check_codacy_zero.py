@@ -111,14 +111,13 @@ def _request_mode(pull_request: str) -> Tuple[str, Dict[str, Any] | None]:
     return "POST", {}
 
 
-def _query_codacy_provider(
-    provider: str,
-    owner: str,
-    repo: str,
-    token: str,
-    *,
-    pull_request: str = "",
-) -> Tuple[int | None, List[str]]:
+def _query_codacy_provider(*args: Any, **kwargs: Any) -> Tuple[int | None, List[str]]:
+    pull_request = str(kwargs.pop("pull_request", "")).strip()
+    if kwargs:
+        raise TypeError(f"Unexpected _query_codacy_provider parameters: {', '.join(sorted(kwargs))}")
+    if len(args) != 4:
+        raise TypeError("_query_codacy_provider expects provider, owner, repo, and token")
+    provider, owner, repo, token = (str(item) for item in args)
     url = build_issues_url(provider, owner, repo, pull_request=pull_request)
     request_method, request_data = _request_mode(pull_request)
     payload = _request_json(url, token, method=request_method, data=request_data)
@@ -131,25 +130,18 @@ def _query_codacy_provider(
     return open_issues, []
 
 
-def _query_codacy_open_issues(
-    owner: str,
-    repo: str,
-    token: str,
-    provider_candidates: List[str],
-    *,
-    pull_request: str = "",
-) -> Tuple[int | None, List[str], Exception | None]:
+def _query_codacy_open_issues(*args: Any, **kwargs: Any) -> Tuple[int | None, List[str], Exception | None]:
+    pull_request = str(kwargs.pop("pull_request", "")).strip()
+    if kwargs:
+        raise TypeError(f"Unexpected _query_codacy_open_issues parameters: {', '.join(sorted(kwargs))}")
+    if len(args) != 4:
+        raise TypeError("_query_codacy_open_issues expects owner, repo, token, and provider candidates")
+    owner, repo, token, provider_candidates = args
     findings: List[str] = []
     last_exc: Exception | None = None
     for provider in provider_candidates:
         try:
-            open_issues, findings = _query_codacy_provider(
-                provider,
-                owner,
-                repo,
-                token,
-                pull_request=pull_request,
-            )
+            open_issues, findings = _query_codacy_provider(provider, owner, repo, token, pull_request=pull_request)
         except urllib.error.HTTPError as exc:
             last_exc = exc
             if exc.code == 404:

@@ -103,15 +103,16 @@ def _resolve_observed_context(
 def _evaluate_observed_context(context: str, observed: Dict[str, str] | None) -> str | None:
     if not observed:
         return None
+
+    failure: str | None = None
     if observed["source"] == "check_run":
         if observed["state"] != "completed":
-            return f"{context}: status={observed['state']}"
-        if observed["conclusion"] != "success":
-            return f"{context}: conclusion={observed['conclusion']}"
-        return None
-    if observed["conclusion"] != "success":
-        return f"{context}: state={observed['conclusion']}"
-    return None
+            failure = f"{context}: status={observed['state']}"
+        elif observed["conclusion"] != "success":
+            failure = f"{context}: conclusion={observed['conclusion']}"
+    elif observed["conclusion"] != "success":
+        failure = f"{context}: state={observed['conclusion']}"
+    return failure
 
 
 def _evaluate(required: List[str], contexts: Dict[str, Dict[str, str]]) -> Tuple[str, List[str], List[str]]:

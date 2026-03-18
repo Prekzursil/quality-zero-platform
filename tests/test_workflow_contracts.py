@@ -158,6 +158,9 @@ class WorkflowContractTests(unittest.TestCase):
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
         self.assertIn("qltysh/qlty-action/install@a19242102d17e497f437d7466aa01b528537e899", text)
         self.assertIn("qlty coverage publish \\", text)
+        self.assertIn("job_name: QLTY Zero", text)
+        self.assertIn("lane: qlty_zero", text)
+        self.assertIn("run_qlty_zero.py", text)
         self.assertIn("dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7", text)
 
         backlog_text = (ROOT / ".github" / "workflows" / "reusable-backlog-sweep.yml").read_text(encoding="utf-8")
@@ -263,6 +266,7 @@ class WorkflowContractTests(unittest.TestCase):
             "reusable-ruleset-sync.yml": [
                 '--repo-slug "${{ inputs.repo_slug }}"',
                 'f"repos/${{ inputs.repo_slug }}/rulesets"',
+                'Path("${{ runner.temp }}/generated")',
             ],
             "reusable-scanner-matrix.yml": [
                 '--repo-slug "${{ inputs.repo_slug }}"',
@@ -278,6 +282,37 @@ class WorkflowContractTests(unittest.TestCase):
     def test_quality_zero_gate_exports_github_token_to_required_check_probe(self) -> None:
         text = (ROOT / ".github" / "workflows" / "reusable-quality-zero-gate.yml").read_text(encoding="utf-8")
         self.assertIn("GITHUB_TOKEN: ${{ github.token }}", text)
+        self.assertIn("run_quality_zero_gate.py", text)
+        self.assertNotIn("python - <<'PY'", text)
+
+    def test_all_flagged_checkout_steps_disable_persisted_credentials(self) -> None:
+        workflow_paths = [
+            ROOT / ".github" / "workflows" / "reusable-backlog-sweep.yml",
+            ROOT / ".github" / "workflows" / "reusable-remediation-loop.yml",
+            ROOT / ".github" / "workflows" / "reusable-quality-zero-gate.yml",
+            ROOT / ".github" / "workflows" / "reusable-ruleset-sync.yml",
+            ROOT / ".github" / "workflows" / "verify.yml",
+        ]
+
+        for path in workflow_paths:
+            text = path.read_text(encoding="utf-8")
+            self.assertEqual(
+                text.count("persist-credentials: false"),
+                text.count("- uses: actions/checkout@v4"),
+                path.name,
+            )
+
+    def test_mutation_workflows_use_env_indirection_for_codex_auth_file(self) -> None:
+        workflow_paths = [
+            ROOT / ".github" / "workflows" / "reusable-backlog-sweep.yml",
+            ROOT / ".github" / "workflows" / "reusable-remediation-loop.yml",
+        ]
+
+        for path in workflow_paths:
+            text = path.read_text(encoding="utf-8")
+            self.assertNotIn('--auth-file "${{ needs.resolve-profile.outputs.codex_auth_file }}"', text, path.name)
+            self.assertIn("CODEX_AUTH_FILE: ${{ needs.resolve-profile.outputs.codex_auth_file }}", text, path.name)
+            self.assertIn('--auth-file "$CODEX_AUTH_FILE"', text, path.name)
 
     def test_parity_wrappers_list_push_pull_request_and_manual_triggers(self) -> None:
         workflow_paths = [

@@ -161,14 +161,15 @@ class _ValidatedTLSConnection(HTTPConnection):
         self.sock = _build_tls_context().wrap_socket(self.sock, server_hostname=self.host)
 
 
-def _read_json_response(
-    parsed: ParseResult,
-    *,
-    headers: Mapping[str, str] | None,
-    method: str,
-    data: bytes | None,
-    timeout: int,
-) -> Tuple[Any, Dict[str, str]]:
+def _read_json_response(parsed: ParseResult, *args: Any, **kwargs: Any) -> Tuple[Any, Dict[str, str]]:
+    if args:
+        raise TypeError("_read_json_response expects keyword arguments only")
+    headers = kwargs.pop("headers", None)
+    method = str(kwargs.pop("method"))
+    data = kwargs.pop("data", None)
+    timeout = int(kwargs.pop("timeout"))
+    if kwargs:
+        raise TypeError(f"Unexpected _read_json_response parameters: {', '.join(sorted(kwargs))}")
     request = _build_request(parsed, headers=headers, method=method, data=data)
     hostname = _require_request_hostname(parsed)
     connection = _ValidatedTLSConnection(
@@ -197,16 +198,17 @@ def _read_json_response(
     return payload, response_headers
 
 
-def load_json_https(
-    raw_url: str,
-    *,
-    allowed_hosts: Set[str] | None = None,
-    allowed_host_suffixes: Set[str] | None = None,
-    headers: Mapping[str, str] | None = None,
-    method: str = "GET",
-    data: bytes | None = None,
-    timeout: int = 30,
-) -> Tuple[Any, Dict[str, str]]:
+def load_json_https(raw_url: str, *args: Any, **kwargs: Any) -> Tuple[Any, Dict[str, str]]:
+    if args:
+        raise TypeError("load_json_https expects keyword arguments only")
+    allowed_hosts = kwargs.pop("allowed_hosts", None)
+    allowed_host_suffixes = kwargs.pop("allowed_host_suffixes", None)
+    headers = kwargs.pop("headers", None)
+    method = str(kwargs.pop("method", "GET"))
+    data = kwargs.pop("data", None)
+    timeout = int(kwargs.pop("timeout", 30))
+    if kwargs:
+        raise TypeError(f"Unexpected load_json_https parameters: {', '.join(sorted(kwargs))}")
     safe_url = normalize_https_url(
         raw_url,
         allowed_hosts=allowed_hosts,

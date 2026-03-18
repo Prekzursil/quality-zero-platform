@@ -24,7 +24,21 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _render_prompt(profile: dict, *, lane: str, event_name: str, failure_context: str, artifacts: List[str]) -> str:
+def _render_prompt(*args: object, **kwargs: object) -> str:
+    if len(args) != 1:
+        raise TypeError("_render_prompt expects a single profile mapping positional argument")
+    profile = args[0]
+    if not isinstance(profile, dict):
+        raise TypeError("_render_prompt expects profile to be a mapping")
+    try:
+        lane = str(kwargs.pop("lane"))
+        event_name = str(kwargs.pop("event_name"))
+        failure_context = str(kwargs.pop("failure_context"))
+        artifacts = list(kwargs.pop("artifacts"))
+    except KeyError as exc:  # pragma: no cover - defensive contract guard
+        raise TypeError(f"Missing required prompt field: {exc.args[0]}") from exc
+    if kwargs:
+        raise TypeError(f"Unexpected _render_prompt parameters: {', '.join(sorted(kwargs))}")
     contexts = active_required_contexts(profile, event_name=event_name)
     artifact_lines = "\n".join(f"- {item}" for item in artifacts) or "- None"
     headline = "PR failure remediation" if lane == "remediation" else "backlog sweep"

@@ -133,15 +133,20 @@ def _validate_open_issues_mode_inputs(token: str, open_issues_url: str) -> List[
     return findings
 
 
-def _validate_deepscan_inputs(
-    *,
-    token: str,
-    policy_mode: str,
-    open_issues_url: str,
-    github_token: str,
-    repo: str,
-    sha: str,
-) -> List[str]:
+def _validate_deepscan_inputs(*args: Any, **kwargs: Any) -> List[str]:
+    if args:
+        raise TypeError("_validate_deepscan_inputs expects keyword arguments only")
+    try:
+        token = str(kwargs.pop("token"))
+        policy_mode = str(kwargs.pop("policy_mode"))
+        open_issues_url = str(kwargs.pop("open_issues_url"))
+        github_token = str(kwargs.pop("github_token"))
+        repo = str(kwargs.pop("repo"))
+        sha = str(kwargs.pop("sha"))
+    except KeyError as exc:  # pragma: no cover - defensive contract guard
+        raise TypeError(f"Missing required DeepScan parameter: {exc.args[0]}") from exc
+    if kwargs:
+        raise TypeError(f"Unexpected _validate_deepscan_inputs parameters: {', '.join(sorted(kwargs))}")
     if policy_mode == "github_check_context":
         return _validate_github_check_context_inputs(github_token, repo, sha)
     return _validate_open_issues_mode_inputs(token, open_issues_url)
@@ -200,14 +205,18 @@ def _evaluate_open_issues_mode(open_issues_url: str, token: str) -> Tuple[int | 
     return open_issues, normalized_url, findings
 
 
-def _evaluate_deepscan_policy(
-    args: argparse.Namespace,
-    *,
-    policy_mode: str,
-    token: str,
-    github_token: str,
-    open_issues_url: str,
-) -> Tuple[int | None, str, List[str]]:
+def _evaluate_deepscan_policy(args: argparse.Namespace, *call_args: Any, **kwargs: Any) -> Tuple[int | None, str, List[str]]:
+    if call_args:
+        raise TypeError("_evaluate_deepscan_policy expects keyword arguments only")
+    try:
+        policy_mode = str(kwargs.pop("policy_mode"))
+        token = str(kwargs.pop("token"))
+        github_token = str(kwargs.pop("github_token"))
+        open_issues_url = str(kwargs.pop("open_issues_url"))
+    except KeyError as exc:  # pragma: no cover - defensive contract guard
+        raise TypeError(f"Missing required DeepScan policy field: {exc.args[0]}") from exc
+    if kwargs:
+        raise TypeError(f"Unexpected _evaluate_deepscan_policy parameters: {', '.join(sorted(kwargs))}")
     if policy_mode == "github_check_context":
         return _evaluate_github_check_context(args, github_token)
     return _evaluate_open_issues_mode(open_issues_url, token)

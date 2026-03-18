@@ -126,7 +126,7 @@ class ControlPlaneExtraTests(unittest.TestCase):
             {"default": "evidence_only"},
         )
 
-    def test_normalization_wrappers_and_inventory_override_dict_conversion_cover_helper_paths(self) -> None:
+    def test_required_context_normalization_wrappers_cover_helper_paths(self) -> None:
         self.assertEqual(
             _normalize_required_contexts({"always": ["Coverage 100 Gate"], "pull_request_only": ["QLTY Zero"]}),
             {
@@ -145,6 +145,8 @@ class ControlPlaneExtraTests(unittest.TestCase):
                 "target": ["Coverage 100 Gate", "QLTY Zero"],
             },
         )
+
+    def test_coverage_and_inventory_override_wrappers_cover_helper_paths(self) -> None:
         self.assertEqual(
             _normalize_coverage_setup({"python": " 3.12 "}),
             {

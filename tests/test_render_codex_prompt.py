@@ -1,12 +1,13 @@
 from __future__ import absolute_import
 
 import io
-import json
+import os
 import runpy
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any, Dict
 from unittest.mock import patch
 
 from scripts.quality import render_codex_prompt
@@ -80,6 +81,15 @@ class RenderCodexPromptTests(unittest.TestCase):
 
         with self.assertRaises(TypeError):
             _render_prompt(
+                {"slug": "x", "verify_command": "y", "default_branch": "main", "preserve_public_check_names": True},
+                lane="remediation",
+                event_name="pull_request",
+                failure_context="",
+                artifacts=object(),
+            )
+
+        with self.assertRaises(TypeError):
+            _render_prompt(
                 ["not", "a", "mapping"],
                 lane="remediation",
                 event_name="pull_request",
@@ -141,7 +151,7 @@ class RenderCodexPromptTests(unittest.TestCase):
         script_path = Path("scripts/quality/render_codex_prompt.py").resolve()
         root_text = str(Path.cwd().resolve())
         trimmed_sys_path = [item for item in sys.path if item != root_text]
-        fake_inventory = {"repos": []}
+        fake_inventory: Dict[str, Any] = {"repos": []}
         fake_profile = {
             "slug": "Prekzursil/quality-zero-platform",
             "verify_command": "bash scripts/verify",
@@ -167,7 +177,6 @@ class RenderCodexPromptTests(unittest.TestCase):
             cwd = Path(tmpdir)
             previous = Path.cwd()
             try:
-                os = __import__("os")
                 os.chdir(cwd)
                 with self.assertRaises(SystemExit) as result:
                     runpy.run_path(str(script_path), run_name="__main__")

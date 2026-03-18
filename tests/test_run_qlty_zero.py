@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 import sys
-from typing import List, Tuple
+from typing import Any, Sequence, Tuple
 from unittest.mock import patch
 
 import scripts.quality.run_qlty_zero as run_qlty_zero
@@ -15,8 +15,8 @@ import scripts.quality.run_qlty_zero as run_qlty_zero
 class RunQltyZeroTests(unittest.TestCase):
     def _run_main_with_completed_processes(
         self,
-        *completed_processes: object,
-    ) -> Tuple[int, Path, str, str, List[object]]:
+        *completed_processes: Any,
+    ) -> Tuple[int, Path, str, str, Sequence[Any]]:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_dir = Path(temp_dir) / "repo"
             repo_dir.mkdir()

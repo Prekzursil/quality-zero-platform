@@ -228,7 +228,7 @@ class QualityCommonTests(unittest.TestCase):
             [{"format": "lcov", "name": "default", "path": "coverage/lcov.info"}],
         )
 
-    def test_normalize_setup_and_report_helpers_cover_string_inputs_and_merges(self) -> None:
+    def test_normalize_setup_helpers_cover_string_inputs(self) -> None:
         self.assertEqual(normalize_java_setup("21"), {"distribution": "temurin", "version": "21"})
         self.assertEqual(normalize_java_setup(None), {"distribution": "", "version": ""})
         self.assertEqual(
@@ -260,6 +260,8 @@ class QualityCommonTests(unittest.TestCase):
             normalize_coverage_assert_mode({"default": "", "python": " warn ", "javascript": " "}),
             {"default": "enforce", "python": "warn"},
         )
+
+    def test_normalize_coverage_and_codex_environment_helpers_cover_string_inputs(self) -> None:
         self.assertEqual(
             normalize_coverage(
                 {
@@ -334,6 +336,8 @@ class QualityCommonTests(unittest.TestCase):
                 "runner_labels": ["self-hosted", "codex-trusted"],
             },
         )
+
+    def test_finalize_vendors_and_deep_merge_cover_string_inputs(self) -> None:
         self.assertEqual(
             finalize_vendors(
                 {

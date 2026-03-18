@@ -4,7 +4,7 @@ from __future__ import absolute_import
 import argparse
 from pathlib import Path
 import sys
-from typing import List
+from typing import Iterable, List, cast
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -67,9 +67,12 @@ def _render_prompt(*args: object, **kwargs: object) -> str:
         lane = str(kwargs.pop("lane"))
         event_name = str(kwargs.pop("event_name"))
         failure_context = str(kwargs.pop("failure_context"))
-        artifacts = list(kwargs.pop("artifacts"))
+        artifacts_value = kwargs.pop("artifacts")
     except KeyError as exc:  # pragma: no cover - defensive contract guard
         raise TypeError(f"Missing required prompt field: {exc.args[0]}") from exc
+    if not isinstance(artifacts_value, Iterable):
+        raise TypeError("_render_prompt expects artifacts to be iterable")
+    artifacts = list(cast(Iterable[object], artifacts_value))
     if kwargs:
         raise TypeError(f"Unexpected _render_prompt parameters: {', '.join(sorted(kwargs))}")
     headline = "PR failure remediation" if lane == "remediation" else "backlog sweep"

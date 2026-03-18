@@ -147,56 +147,60 @@ function shiftRequiredValue(tokens, option) {
   return value;
 }
 
-function setResolvedPath(args, key, tokens, option) {
-  args[key] = path.resolve(shiftRequiredValue(tokens, option));
-}
+const STRING_ARGUMENTS = Object.freeze({
+  '--provider': ['provider', '--provider'],
+  '-p': ['provider', '--provider'],
+  '--repo': ['repo', '--repo'],
+  '-r': ['repo', '--repo'],
+  '--owner': ['owner', '--owner']
+});
 
-function setNumericValue(args, key, tokens, option) {
-  args[key] = Number(shiftRequiredValue(tokens, option));
-}
+const PATH_ARGUMENTS = Object.freeze({
+  '--state-root': ['stateRoot', '--state-root'],
+  '--profile-dir': ['profileDir', '--profile-dir']
+});
+
+const NUMERIC_ARGUMENTS = Object.freeze({
+  '--timeout-ms': ['timeoutMs', '--timeout-ms'],
+  '--slow-mo-ms': ['slowMoMs', '--slow-mo-ms']
+});
+
+const TOGGLE_ARGUMENTS = Object.freeze({
+  '--headless': ['headless', true],
+  '--headed': ['headless', false],
+  '--keep-open': ['keepOpen', true]
+});
+
+const HELP_ARGUMENTS = Object.freeze(new Set(['--help', '-h']));
 
 function applyStringValueArgument(args, tokens, token) {
-  switch (token) {
-    case '--provider':
-    case '-p':
-      args.provider = shiftRequiredValue(tokens, '--provider');
-      return true;
-    case '--repo':
-    case '-r':
-      args.repo = shiftRequiredValue(tokens, '--repo');
-      return true;
-    case '--owner':
-      args.owner = shiftRequiredValue(tokens, '--owner');
-      return true;
-    default:
-      return false;
+  const handler = STRING_ARGUMENTS[token];
+  if (!handler) {
+    return false;
   }
+  const [key, option] = handler;
+  args[key] = shiftRequiredValue(tokens, option);
+  return true;
 }
 
 function applyPathValueArgument(args, tokens, token) {
-  switch (token) {
-    case '--state-root':
-      setResolvedPath(args, 'stateRoot', tokens, '--state-root');
-      return true;
-    case '--profile-dir':
-      setResolvedPath(args, 'profileDir', tokens, '--profile-dir');
-      return true;
-    default:
-      return false;
+  const handler = PATH_ARGUMENTS[token];
+  if (!handler) {
+    return false;
   }
+  const [key, option] = handler;
+  args[key] = path.resolve(shiftRequiredValue(tokens, option));
+  return true;
 }
 
 function applyNumericValueArgument(args, tokens, token) {
-  switch (token) {
-    case '--timeout-ms':
-      setNumericValue(args, 'timeoutMs', tokens, '--timeout-ms');
-      return true;
-    case '--slow-mo-ms':
-      setNumericValue(args, 'slowMoMs', tokens, '--slow-mo-ms');
-      return true;
-    default:
-      return false;
+  const handler = NUMERIC_ARGUMENTS[token];
+  if (!handler) {
+    return false;
   }
+  const [key, option] = handler;
+  args[key] = Number(shiftRequiredValue(tokens, option));
+  return true;
 }
 
 function applyValueArgument(args, tokens, token) {
@@ -213,30 +217,21 @@ function applyValueArgument(args, tokens, token) {
 }
 
 function applyToggleArgument(args, token) {
-  switch (token) {
-    case '--headless':
-      args.headless = true;
-      return true;
-    case '--headed':
-      args.headless = false;
-      return true;
-    case '--keep-open':
-      args.keepOpen = true;
-      return true;
-    default:
-      return false;
+  const handler = TOGGLE_ARGUMENTS[token];
+  if (!handler) {
+    return false;
   }
+  const [key, value] = handler;
+  args[key] = value;
+  return true;
 }
 
 function applyHelpArgument(args, token) {
-  switch (token) {
-    case '--help':
-    case '-h':
-      args.command = 'help';
-      return true;
-    default:
-      return false;
+  if (!HELP_ARGUMENTS.has(token)) {
+    return false;
   }
+  args.command = 'help';
+  return true;
 }
 
 function applyArgumentToken(args, tokens, token) {

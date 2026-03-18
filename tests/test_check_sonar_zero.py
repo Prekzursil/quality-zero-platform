@@ -102,6 +102,20 @@ class SonarZeroTests(unittest.TestCase):
         self.assertEqual((open_issues, quality_gate, findings), (0, "OK", []))
         self.assertEqual(attempts, [1, 2])
 
+    def test_retry_keyword_only_guards_reject_invalid_invocations(self) -> None:
+        args = argparse.Namespace(branch="", pull_request="5")
+
+        with self.assertRaisesRegex(TypeError, "expects argparse namespace and auth header"):
+            load_sonar_findings_with_retry(args)
+
+        with self.assertRaisesRegex(TypeError, "Unexpected load_sonar_findings_with_retry parameters: extra"):
+            load_sonar_findings_with_retry(
+                args,
+                "auth",
+                fetch_fn=lambda _args, _auth: (0, "OK", []),
+                extra=True,
+            )
+
     def test_retry_skips_unscoped_queries(self) -> None:
         args = argparse.Namespace(branch="", pull_request="")
         attempts: List[int] = []

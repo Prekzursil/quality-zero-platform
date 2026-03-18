@@ -4,21 +4,53 @@ import argparse
 import json
 import sys
 from copy import deepcopy
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, List, Set, Tuple, cast
 
 import yaml  # type: ignore[import-untyped]
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.quality.common import dedupe_strings
+from scripts.quality.common import (
+    _deep_merge as common_deep_merge,
+    dedupe_strings,
+)
 from scripts.quality.control_plane_vendors import finalize_vendors, normalize_visual_lane
+from scripts.quality.profile_normalization import (
+    infer_coverage_inputs as common_infer_coverage_inputs,
+    merge_required_contexts as common_merge_required_contexts,
+    normalize_codex_environment as common_normalize_codex_environment,
+    normalize_coverage as common_normalize_coverage,
+    normalize_coverage_assert_mode as common_normalize_coverage_assert_mode,
+    normalize_coverage_inputs as common_normalize_coverage_inputs,
+    normalize_java_setup as common_normalize_java_setup,
+    normalize_required_contexts as common_normalize_required_contexts,
+)
 from scripts.security_helpers import normalize_https_url
 
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_INVENTORY_PATH = ROOT / "inventory" / "repos.yml"
+
+
+@dataclass(frozen=True)
+class RepoSources:
+    repo_entry: Dict[str, Any]
+    profile_id: str
+    repo_profile: Dict[str, Any]
+    stack_id: str
+    stack_profile: Dict[str, Any]
+
+
+@dataclass(frozen=True)
+class InventoryOverrides:
+    repo_entry: Dict[str, Any]
+    repo_slug: str
+    profile_id: str
+    stack_id: str
+    required_contexts_mode: str
 
 
 def repo_root() -> Path:
@@ -33,15 +65,7 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
 
 
 def _deep_merge(base: Any, overlay: Any) -> Any:
-    if isinstance(base, dict) and isinstance(overlay, dict):
-        merged: Dict[str, Any] = deepcopy(base)
-        for key, value in overlay.items():
-            if key in merged:
-                merged[key] = _deep_merge(merged[key], value)
-            else:
-                merged[key] = deepcopy(value)
-        return merged
-    return deepcopy(overlay)
+    return common_deep_merge(base, overlay)
 
 
 def _inventory_root(inventory: Dict[str, Any]) -> Path:
@@ -83,125 +107,44 @@ def _load_stack(inventory: Dict[str, Any], stack_id: str, seen: Set[str] | None 
 
 
 def _normalize_required_contexts(raw: Dict[str, Any]) -> Dict[str, List[str]]:
-    always = dedupe_strings(raw.get("always", []))
-    pull_request_only = [item for item in dedupe_strings(raw.get("pull_request_only", [])) if item not in always]
-    required_now = dedupe_strings(raw.get("required_now", []) or [*always, *pull_request_only])
-    target = dedupe_strings(raw.get("target", []) or [*required_now])
-    return {
-        "always": always,
-        "pull_request_only": pull_request_only,
-        "required_now": required_now,
-        "target": target,
-    }
+    return common_normalize_required_contexts(raw)
 
 
 def _merge_required_contexts(base: Dict[str, Any], overlay: Dict[str, Any]) -> Dict[str, List[str]]:
-    return _normalize_required_contexts(
-        {
-            "always": [*base.get("always", []), *overlay.get("always", [])],
-            "pull_request_only": [*base.get("pull_request_only", []), *overlay.get("pull_request_only", [])],
-            "required_now": [*base.get("required_now", []), *overlay.get("required_now", [])],
-            "target": [*base.get("target", []), *overlay.get("target", [])],
-        }
-    )
+    return common_merge_required_contexts(base, overlay)
 
 
 def _normalize_coverage_inputs(raw_inputs: Any) -> List[Dict[str, str]]:
-    normalized: List[Dict[str, str]] = []
-    if not isinstance(raw_inputs, list):
-        return normalized
-
-    for item in raw_inputs:
-        if not isinstance(item, dict):
-            continue
-        fmt = str(item.get("format", "")).strip().lower()
-        name = str(item.get("name", "")).strip()
-        path = str(item.get("path", "")).strip()
-        if fmt not in {"xml", "lcov"} or not name or not path:
-            continue
-        normalized.append({"format": fmt, "name": name, "path": path})
-    return normalized
+    return common_normalize_coverage_inputs(raw_inputs)
 
 
 def _infer_coverage_inputs(coverage: Dict[str, Any]) -> List[Dict[str, str]]:
-    inputs = _normalize_coverage_inputs(coverage.get("inputs", []))
-    legacy_path = str(coverage.get("artifact_path", "")).strip()
-    if inputs or not legacy_path:
-        return inputs
-
-    inferred = "xml" if legacy_path.endswith(".xml") else "lcov"
-    return [{"format": inferred, "name": "default", "path": legacy_path}]
+    return common_infer_coverage_inputs(coverage)
 
 
 def _normalize_java_setup(raw_java: Any) -> Dict[str, Any]:
-    if isinstance(raw_java, str):
-        raw_java = {"distribution": "temurin", "version": raw_java}
-    java = deepcopy(raw_java) if isinstance(raw_java, dict) else {}
-    return {
-        "distribution": str(java.get("distribution", "")).strip(),
-        "version": str(java.get("version", "")).strip(),
-    }
+    return common_normalize_java_setup(raw_java)
 
 
 def _normalize_coverage_setup(raw_setup: Any) -> Dict[str, Any]:
-    setup = deepcopy(raw_setup) if isinstance(raw_setup, dict) else {}
-    return {
-        "python": str(setup.get("python", "")).strip(),
-        "node": str(setup.get("node", "")).strip(),
-        "go": str(setup.get("go", "")).strip(),
-        "dotnet": str(setup.get("dotnet", "")).strip(),
-        "rust": bool(setup.get("rust", False)),
-        "system_packages": dedupe_strings(setup.get("system_packages", [])),
-        "java": _normalize_java_setup(setup.get("java", {})),
-    }
+    coverage = common_normalize_coverage({"setup": raw_setup})
+    return cast(Dict[str, Any], coverage["setup"])
 
 
 def _normalize_coverage_assert_mode(raw_assert_mode: Any) -> Dict[str, str]:
-    if isinstance(raw_assert_mode, str):
-        raw_assert_mode = {"default": raw_assert_mode}
-
-    assert_mode = {"default": "enforce"}
-    if isinstance(raw_assert_mode, dict):
-        for key, value in raw_assert_mode.items():
-            text = str(value or "").strip()
-            if text:
-                assert_mode[str(key)] = text
-    return assert_mode
+    return common_normalize_coverage_assert_mode(raw_assert_mode)
 
 
 def _normalize_coverage(raw: Dict[str, Any]) -> Dict[str, Any]:
-    coverage = deepcopy(raw or {})
-    inputs = _infer_coverage_inputs(coverage)
-    coverage["runner"] = str(coverage.get("runner", "ubuntu-latest")).strip() or "ubuntu-latest"
-    coverage["shell"] = str(coverage.get("shell", "bash")).strip() or "bash"
-    coverage["command"] = str(coverage.get("command", "")).strip()
-    coverage["inputs"] = inputs
-    coverage["require_sources"] = dedupe_strings(coverage.get("require_sources", []))
-    coverage["min_percent"] = float(coverage.get("min_percent", 100.0))
-    coverage["assert_mode"] = _normalize_coverage_assert_mode(coverage.get("assert_mode", {}))
-    coverage["evidence_note"] = str(coverage.get("evidence_note", "")).strip()
-    coverage["setup"] = _normalize_coverage_setup(coverage.get("setup", {}))
-    return coverage
+    return common_normalize_coverage(raw)
 
 
 def _normalize_codex_environment(raw: Dict[str, Any], *, verify_command: str) -> Dict[str, Any]:
-    payload = deepcopy(raw or {})
-    return {
-        "mode": str(payload.get("mode", "automatic")).strip() or "automatic",
-        "verify_command": str(payload.get("verify_command", verify_command)).strip() or verify_command,
-        "auth_file": str(payload.get("auth_file", "~/.codex/auth.json")).strip() or "~/.codex/auth.json",
-        "network_profile": str(payload.get("network_profile", "unrestricted")).strip() or "unrestricted",
-        "methods": str(payload.get("methods", "all")).strip() or "all",
-        "runner_labels": dedupe_strings(payload.get("runner_labels", ["self-hosted", "codex-trusted"])),
-    }
+    return common_normalize_codex_environment(raw, verify_command=verify_command)
 
 
-def _finalize_vendors(profile: Dict[str, Any]) -> Dict[str, Any]:
-    vendor_source = _deep_merge(profile.get("vendors", {}), profile.get("providers", {}))
-    return finalize_vendors(profile, vendor_source)
 
-
-def _resolve_repo_sources(inventory: Dict[str, Any], repo_slug: str) -> Tuple[Dict[str, Any], str, Dict[str, Any], str, Dict[str, Any]]:
+def _resolve_repo_sources(inventory: Dict[str, Any], repo_slug: str) -> RepoSources:
     repo_entry = next((item for item in inventory["repos"] if item.get("slug") == repo_slug), None)
     if repo_entry is None:
         raise KeyError(f"Repo {repo_slug} not found in inventory")
@@ -214,16 +157,16 @@ def _resolve_repo_sources(inventory: Dict[str, Any], repo_slug: str) -> Tuple[Di
     repo_profile = _load_yaml(profile_path)
     stack_id = str(repo_profile.get("stack", "")).strip()
     stack_profile = _load_stack(inventory, stack_id)
-    return repo_entry, profile_id, repo_profile, stack_id, stack_profile
+    return RepoSources(repo_entry, profile_id, repo_profile, stack_id, stack_profile)
 
 
 def _merge_repo_profile(stack_profile: Dict[str, Any], repo_profile: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
     merged = _deep_merge(stack_profile, repo_profile)
     required_contexts_mode = str(repo_profile.get("required_contexts_mode", "merge")).strip() or "merge"
     if required_contexts_mode == "replace":
-        merged["required_contexts"] = _normalize_required_contexts(repo_profile.get("required_contexts", {}))
+        merged["required_contexts"] = common_normalize_required_contexts(repo_profile.get("required_contexts", {}))
     else:
-        merged["required_contexts"] = _merge_required_contexts(
+        merged["required_contexts"] = common_merge_required_contexts(
             stack_profile.get("required_contexts", {}),
             repo_profile.get("required_contexts", {}),
         )
@@ -239,25 +182,26 @@ def _merge_repo_profile(stack_profile: Dict[str, Any], repo_profile: Dict[str, A
     return merged, required_contexts_mode
 
 
-def _apply_inventory_overrides(
-    merged: Dict[str, Any],
-    *,
-    repo_entry: Dict[str, Any],
-    repo_slug: str,
-    profile_id: str,
-    stack_id: str,
-    required_contexts_mode: str,
-) -> Dict[str, Any]:
+def _apply_inventory_overrides(merged: Dict[str, Any], overrides: InventoryOverrides | Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(overrides, InventoryOverrides):
+        overrides = InventoryOverrides(
+            repo_entry=cast(Dict[str, Any], overrides["repo_entry"]),
+            repo_slug=str(overrides["repo_slug"]),
+            profile_id=str(overrides["profile_id"]),
+            stack_id=str(overrides["stack_id"]),
+            required_contexts_mode=str(overrides["required_contexts_mode"]),
+        )
+
     return _deep_merge(
         merged,
         {
-            "slug": repo_slug,
-            "default_branch": repo_entry.get("default_branch", merged.get("default_branch", "main")),
-            "rollout": repo_entry.get("rollout", merged.get("rollout", "")),
-            "rollout_notes": repo_entry.get("notes", ""),
-            "profile_id": profile_id,
-            "stack": stack_id,
-            "required_contexts_mode": required_contexts_mode,
+            "slug": overrides.repo_slug,
+            "default_branch": overrides.repo_entry.get("default_branch", merged.get("default_branch", "main")),
+            "rollout": overrides.repo_entry.get("rollout", merged.get("rollout", "")),
+            "rollout_notes": overrides.repo_entry.get("notes", ""),
+            "profile_id": overrides.profile_id,
+            "stack": overrides.stack_id,
+            "required_contexts_mode": overrides.required_contexts_mode,
         },
     )
 
@@ -275,10 +219,10 @@ def _finalize_repo_profile(merged: Dict[str, Any], repo_slug: str) -> Dict[str, 
     merged["required_secrets"] = dedupe_strings(merged.get("required_secrets", []))
     merged["conditional_secrets"] = dedupe_strings(merged.get("conditional_secrets", []))
     merged["required_vars"] = dedupe_strings(merged.get("required_vars", []))
-    merged["required_contexts"] = _normalize_required_contexts(merged.get("required_contexts", {}))
+    merged["required_contexts"] = common_normalize_required_contexts(merged.get("required_contexts", {}))
     merged["enabled_scanners"] = merged.get("enabled_scanners", {})
-    merged["coverage"] = _normalize_coverage(merged.get("coverage", {}))
-    merged["codex_environment"] = _normalize_codex_environment(
+    merged["coverage"] = common_normalize_coverage(merged.get("coverage", {}))
+    merged["codex_environment"] = common_normalize_codex_environment(
         merged.get("codex_environment", {}),
         verify_command=merged["verify_command"],
     )
@@ -286,21 +230,29 @@ def _finalize_repo_profile(merged: Dict[str, Any], repo_slug: str) -> Dict[str, 
     merged["visual_lane"] = normalize_visual_lane(merged.get("visual_lane", {}))
     merged["ruleset_mode"] = str(merged.get("ruleset_mode", "strict-zero-phase1")).strip()
     merged["preserve_public_check_names"] = bool(merged.get("preserve_public_check_names", True))
-    merged["vendors"] = _finalize_vendors(merged)
+    vendor_source = _deep_merge(merged.get("vendors", {}), merged.get("providers", {}))
+    merged["vendors"] = finalize_vendors(merged, vendor_source)
     merged["providers"] = deepcopy(merged["vendors"])
     return merged
 
 
 def load_repo_profile(inventory: Dict[str, Any], repo_slug: str) -> Dict[str, Any]:
-    repo_entry, profile_id, repo_profile, stack_id, stack_profile = _resolve_repo_sources(inventory, repo_slug)
+    repo_sources = _resolve_repo_sources(inventory, repo_slug)
+    repo_entry = repo_sources.repo_entry
+    profile_id = repo_sources.profile_id
+    repo_profile = repo_sources.repo_profile
+    stack_id = repo_sources.stack_id
+    stack_profile = repo_sources.stack_profile
     merged, required_contexts_mode = _merge_repo_profile(stack_profile, repo_profile)
     merged = _apply_inventory_overrides(
         merged,
-        repo_entry=repo_entry,
-        repo_slug=repo_slug,
-        profile_id=profile_id,
-        stack_id=stack_id,
-        required_contexts_mode=required_contexts_mode,
+        InventoryOverrides(
+            repo_entry=repo_entry,
+            repo_slug=repo_slug,
+            profile_id=profile_id,
+            stack_id=stack_id,
+            required_contexts_mode=required_contexts_mode,
+        ),
     )
     return _finalize_repo_profile(merged, repo_slug)
 
@@ -356,37 +308,53 @@ def build_ruleset_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _require_values(slug: str, required_values: List[Tuple[str, Any]]) -> List[str]:
+    return [f"{slug}: {field_name} is required" for field_name, value in required_values if not value]
+
+
+def _require_expected_values(slug: str, expected_values: List[Tuple[str, Any, Any]]) -> List[str]:
+    return [f"{slug}: {field_name} must be {expected}" for field_name, actual, expected in expected_values if actual != expected]
+
+
 def _validate_codex_environment(profile: Dict[str, Any], codex_environment: Dict[str, Any]) -> List[str]:
-    findings: List[str] = []
-    if codex_environment.get("mode") != "automatic":
-        findings.append(f"{profile['slug']}: codex_environment.mode must be automatic")
-    if not codex_environment.get("verify_command"):
-        findings.append(f"{profile['slug']}: codex_environment.verify_command is required")
-    if not codex_environment.get("auth_file"):
-        findings.append(f"{profile['slug']}: codex_environment.auth_file is required")
-    if codex_environment.get("network_profile") != "unrestricted":
-        findings.append(f"{profile['slug']}: codex_environment.network_profile must be unrestricted")
-    if codex_environment.get("methods") != "all":
-        findings.append(f"{profile['slug']}: codex_environment.methods must be all")
+    slug = profile["slug"]
+    findings = _require_expected_values(
+        slug,
+        [
+            ("codex_environment.mode", codex_environment.get("mode"), "automatic"),
+            ("codex_environment.network_profile", codex_environment.get("network_profile"), "unrestricted"),
+            ("codex_environment.methods", codex_environment.get("methods"), "all"),
+        ],
+    )
+    findings.extend(
+        _require_values(
+            slug,
+            [
+                ("codex_environment.verify_command", codex_environment.get("verify_command")),
+                ("codex_environment.auth_file", codex_environment.get("auth_file")),
+                ("codex_environment.runner_labels", codex_environment.get("runner_labels", [])),
+            ],
+        )
+    )
     runner_labels = codex_environment.get("runner_labels", [])
-    if not runner_labels:
-        findings.append(f"{profile['slug']}: codex_environment.runner_labels is required")
-    elif "self-hosted" not in runner_labels:
-        findings.append(f"{profile['slug']}: codex_environment.runner_labels must include self-hosted")
+    if runner_labels and "self-hosted" not in runner_labels:
+        findings.append(f"{slug}: codex_environment.runner_labels must include self-hosted")
     return findings
 
 
 def _validate_control_plane_lanes(profile: Dict[str, Any]) -> List[str]:
-    findings: List[str] = []
-    if not profile.get("verify_command"):
-        findings.append(f"{profile['slug']}: verify_command is required")
-    if profile.get("github_mutation_lane") != "codex-private-runner":
-        findings.append(f"{profile['slug']}: github_mutation_lane must be codex-private-runner")
-    if profile.get("codex_auth_lane") != "chatgpt-account":
-        findings.append(f"{profile['slug']}: codex_auth_lane must be chatgpt-account")
-    if profile.get("provider_ui_mode") != "playwright-manual-login":
-        findings.append(f"{profile['slug']}: provider_ui_mode must be playwright-manual-login")
-
+    slug = profile["slug"]
+    findings = _require_values(slug, [("verify_command", profile.get("verify_command"))])
+    findings.extend(
+        _require_expected_values(
+            slug,
+            [
+                ("github_mutation_lane", profile.get("github_mutation_lane"), "codex-private-runner"),
+                ("codex_auth_lane", profile.get("codex_auth_lane"), "chatgpt-account"),
+                ("provider_ui_mode", profile.get("provider_ui_mode"), "playwright-manual-login"),
+            ],
+        )
+    )
     findings.extend(_validate_codex_environment(profile, profile.get("codex_environment", {})))
     return findings
 
@@ -420,8 +388,11 @@ def _validate_secret_contract(profile: Dict[str, Any]) -> List[str]:
         findings.append(
             f"{profile['slug']}: conditional_secrets duplicates required_secrets for {', '.join(duplicate_conditional)}"
         )
-    if "OPENAI_API_KEY" in profile.get("required_secrets", []):
-        findings.append(f"{profile['slug']}: OPENAI_API_KEY must not be part of required_secrets")
+    findings.extend(
+        f"{profile['slug']}: {secret_name} must not be part of required_secrets"
+        for secret_name in ["OPENAI_API_KEY"]
+        if secret_name in profile.get("required_secrets", [])
+    )
     return findings
 
 
@@ -430,40 +401,48 @@ def _validate_visual_pair_contract(profile: Dict[str, Any]) -> List[str]:
         return []
 
     findings: List[str] = []
-    chromatic = profile["vendors"]["chromatic"]["status_context"]
-    applitools = profile["vendors"]["applitools"]["status_context"]
+    vendors = profile["vendors"]
+    chromatic = vendors["chromatic"]["status_context"]
+    applitools = vendors["applitools"]["status_context"]
     ruleset_contexts = set(active_required_contexts(profile, event_name="ruleset"))
     target_contexts = set(profile["required_contexts"].get("target", []))
-    if (chromatic in ruleset_contexts) != (applitools in ruleset_contexts):
-        findings.append(f"{profile['slug']}: visual_pair_required needs both Chromatic and Applitools contexts in required_now")
-    if (chromatic in target_contexts) != (applitools in target_contexts):
-        findings.append(f"{profile['slug']}: visual_pair_required needs both Chromatic and Applitools contexts in target")
-    if not profile["vendors"]["chromatic"].get("project_name"):
-        findings.append(f"{profile['slug']}: visual_pair_required requires chromatic.project_name")
-    if not profile["vendors"]["chromatic"].get("token_secret"):
-        findings.append(f"{profile['slug']}: visual_pair_required requires chromatic.token_secret")
-    if not profile["vendors"]["chromatic"].get("local_env_var"):
-        findings.append(f"{profile['slug']}: visual_pair_required requires chromatic.local_env_var")
-    if not profile["vendors"]["applitools"].get("project_name"):
-        findings.append(f"{profile['slug']}: visual_pair_required requires applitools.project_name")
+    paired_contexts = [
+        (ruleset_contexts, "required_now"),
+        (target_contexts, "target"),
+    ]
+    findings.extend(
+        f"{profile['slug']}: visual_pair_required needs both Chromatic and Applitools contexts in {label}"
+        for contexts, label in paired_contexts
+        if (chromatic in contexts) != (applitools in contexts)
+    )
+    findings.extend(
+        f"{profile['slug']}: visual_pair_required requires {vendor_name}.{field_name}"
+        for vendor_name, field_name in [
+            ("chromatic", "project_name"),
+            ("chromatic", "token_secret"),
+            ("chromatic", "local_env_var"),
+            ("applitools", "project_name"),
+        ]
+        if not vendors[vendor_name].get(field_name)
+    )
     return findings
 
 
 def _validate_coverage_contract(profile: Dict[str, Any]) -> List[str]:
-    findings: List[str] = []
     coverage = profile.get("coverage", {})
     if not profile.get("enabled_scanners", {}).get("coverage", False):
-        return findings
+        return []
 
-    if not coverage.get("command"):
-        findings.append(f"{profile['slug']}: coverage.command is required")
+    findings = _require_values(profile["slug"], [("coverage.command", coverage.get("command"))])
     if not coverage.get("inputs"):
         findings.append(f"{profile['slug']}: coverage.inputs must declare at least one report")
     if coverage.get("shell") not in {"bash", "pwsh"}:
         findings.append(f"{profile['slug']}: coverage.shell must be bash or pwsh")
-    for mode_name, mode_value in coverage.get("assert_mode", {}).items():
-        if mode_value not in {"enforce", "evidence_only"}:
-            findings.append(f"{profile['slug']}: coverage.assert_mode.{mode_name} must be enforce or evidence_only")
+    findings.extend(
+        f"{profile['slug']}: coverage.assert_mode.{mode_name} must be enforce or evidence_only"
+        for mode_name, mode_value in coverage.get("assert_mode", {}).items()
+        if mode_value not in {"enforce", "evidence_only"}
+    )
     return findings
 
 

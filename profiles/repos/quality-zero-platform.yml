@@ -7,6 +7,7 @@ required_vars:
 required_contexts:
   always:
     - Coverage 100 Gate
+    - QLTY Zero
     - Sonar Zero
     - Codacy Zero
     - Semgrep Zero
@@ -19,6 +20,7 @@ required_contexts:
   target:
     - Coverage 100 Gate
     - Codecov Analytics
+    - QLTY Zero
     - qlty check
     - qlty coverage
     - qlty coverage diff

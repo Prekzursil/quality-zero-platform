@@ -172,6 +172,20 @@ class CoverageAssertTests(unittest.TestCase):
         self.assertIn("pkg/main.py", markdown)
         self.assertIn("web/app.ts", markdown)
 
+    def test_build_payload_rejects_positional_and_unexpected_keyword_arguments(self) -> None:
+        with self.assertRaisesRegex(TypeError, "keyword arguments only"):
+            _build_payload("unexpected")
+
+        with self.assertRaisesRegex(TypeError, "Unexpected _build_payload parameters: extra"):
+            _build_payload(
+                stats=[],
+                covered_sources=set(),
+                min_percent=100.0,
+                status="pass",
+                findings=[],
+                extra=True,
+            )
+
     def test_main_requires_inputs_and_clamps_threshold(self) -> None:
         with patch.object(assert_coverage_100, "_parse_args", return_value=Namespace(
             xml=[],

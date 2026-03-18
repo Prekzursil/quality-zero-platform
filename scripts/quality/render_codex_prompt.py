@@ -4,7 +4,7 @@ from __future__ import absolute_import
 import argparse
 from pathlib import Path
 import sys
-from typing import List
+from typing import Iterable, List, cast
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -24,43 +24,77 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _render_prompt(profile: dict, *, lane: str, event_name: str, failure_context: str, artifacts: List[str]) -> str:
-    contexts = active_required_contexts(profile, event_name=event_name)
-    artifact_lines = "\n".join(f"- {item}" for item in artifacts) or "- None"
-    headline = "PR failure remediation" if lane == "remediation" else "backlog sweep"
+def _artifact_lines(artifacts: List[object]) -> str:
+    return "\n".join(f"- {item}" for item in artifacts) or "- None"
+
+
+def _repo_contract_lines(profile: dict) -> List[str]:
     codex_environment = profile.get("codex_environment", {})
-    return f"""# Codex {headline}
+    return [
+        "## Repo contract",
+        "",
+        f"- Verify command: `{profile['verify_command']}`",
+        f"- GitHub mutation lane: `{profile.get('github_mutation_lane', 'codex-private-runner')}`",
+        f"- Codex auth lane: `{profile.get('codex_auth_lane', 'chatgpt-account')}`",
+        f"- Provider UI mode: `{profile.get('provider_ui_mode', 'playwright-manual-login')}`",
+        f"- Codex environment mode: `{codex_environment.get('mode', 'automatic')}`",
+        f"- Codex environment verify command: `{codex_environment.get('verify_command', profile['verify_command'])}`",
+        f"- Codex auth file: `{codex_environment.get('auth_file', '~/.codex/auth.json')}`",
+        f"- Codex environment network profile: `{codex_environment.get('network_profile', 'unrestricted')}`",
+        f"- Codex environment methods: `{codex_environment.get('methods', 'all')}`",
+        f"- Codex runner labels: `{', '.join(codex_environment.get('runner_labels', []))}`",
+        f"- Default branch: `{profile['default_branch']}`",
+        f"- Preserve public check names: `{profile['preserve_public_check_names']}`",
+    ]
 
-Repo: {profile['slug']}
-Lane: {lane}
-Failure context: {failure_context or 'n/a'}
 
-Treat missing external statuses as policy drift, provider drift, or secret drift before changing code.
-Never push to the default branch. Use `codex/fix/<context>/<shortsha>` for remediation and `codex/backlog/<tool>` for backlog work.
+def _required_contexts_lines(profile: dict, *, event_name: str) -> List[str]:
+    contexts = active_required_contexts(profile, event_name=event_name)
+    return [
+        f"## Required contexts for {event_name}",
+        "",
+        *[f"- `{name}`" for name in contexts],
+    ]
 
-## Repo contract
 
-- Verify command: `{profile['verify_command']}`
-- GitHub mutation lane: `{profile.get('github_mutation_lane', 'codex-private-runner')}`
-- Codex auth lane: `{profile.get('codex_auth_lane', 'chatgpt-account')}`
-- Provider UI mode: `{profile.get('provider_ui_mode', 'playwright-manual-login')}`
-- Codex environment mode: `{codex_environment.get('mode', 'automatic')}`
-- Codex environment verify command: `{codex_environment.get('verify_command', profile['verify_command'])}`
-- Codex auth file: `{codex_environment.get('auth_file', '~/.codex/auth.json')}`
-- Codex environment network profile: `{codex_environment.get('network_profile', 'unrestricted')}`
-- Codex environment methods: `{codex_environment.get('methods', 'all')}`
-- Codex runner labels: `{", ".join(codex_environment.get('runner_labels', []))}`
-- Default branch: `{profile['default_branch']}`
-- Preserve public check names: `{profile['preserve_public_check_names']}`
-
-## Required contexts for {event_name}
-
-{chr(10).join(f'- `{name}`' for name in contexts)}
-
-## Artifacts
-
-{artifact_lines}
-"""
+def _render_prompt(*args: object, **kwargs: object) -> str:
+    if len(args) != 1:
+        raise TypeError("_render_prompt expects a single profile mapping positional argument")
+    profile = args[0]
+    if not isinstance(profile, dict):
+        raise TypeError("_render_prompt expects profile to be a mapping")
+    try:
+        lane = str(kwargs.pop("lane"))
+        event_name = str(kwargs.pop("event_name"))
+        failure_context = str(kwargs.pop("failure_context"))
+        artifacts_value = kwargs.pop("artifacts")
+    except KeyError as exc:  # pragma: no cover - defensive contract guard
+        raise TypeError(f"Missing required prompt field: {exc.args[0]}") from exc
+    if not isinstance(artifacts_value, Iterable):
+        raise TypeError("_render_prompt expects artifacts to be iterable")
+    artifacts = list(cast(Iterable[object], artifacts_value))
+    if kwargs:
+        raise TypeError(f"Unexpected _render_prompt parameters: {', '.join(sorted(kwargs))}")
+    headline = "PR failure remediation" if lane == "remediation" else "backlog sweep"
+    sections = [
+        f"# Codex {headline}",
+        "",
+        f"Repo: {profile['slug']}",
+        f"Lane: {lane}",
+        f"Failure context: {failure_context or 'n/a'}",
+        "",
+        "Treat missing external statuses as policy drift, provider drift, or secret drift before changing code.",
+        "Never push to the default branch. Use `codex/fix/<context>/<shortsha>` for remediation and `codex/backlog/<tool>` for backlog work.",
+        "",
+        *_repo_contract_lines(profile),
+        "",
+        *_required_contexts_lines(profile, event_name=event_name),
+        "",
+        "## Artifacts",
+        "",
+        _artifact_lines(artifacts),
+    ]
+    return "\n".join(sections) + "\n"
 
 
 def main() -> int:

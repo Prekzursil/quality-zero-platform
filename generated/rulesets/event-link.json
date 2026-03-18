@@ -36,6 +36,10 @@
             "integration_id": null
           },
           {
+            "context": "QLTY Zero",
+            "integration_id": null
+          },
+          {
             "context": "Sonar Zero",
             "integration_id": null
           },

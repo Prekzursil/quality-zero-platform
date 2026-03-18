@@ -12,12 +12,19 @@ from typing import Any, cast, Dict, List
 from unittest.mock import patch
 
 from scripts.quality.control_plane import (
+    InventoryOverrides,
+    _apply_inventory_overrides,
     _load_yaml,
     _infer_coverage_inputs,
     _load_stack,
+    _merge_required_contexts,
+    _normalize_codex_environment,
+    _normalize_coverage,
     _normalize_coverage_assert_mode,
+    _normalize_coverage_setup,
     _normalize_coverage_inputs,
     _normalize_java_setup,
+    _normalize_required_contexts,
     _validate_coverage_contract,
     _validate_vendor_urls,
     load_inventory,
@@ -118,6 +125,70 @@ class ControlPlaneExtraTests(unittest.TestCase):
             _normalize_coverage_assert_mode("evidence_only"),
             {"default": "evidence_only"},
         )
+
+    def test_required_context_normalization_wrappers_cover_helper_paths(self) -> None:
+        self.assertEqual(
+            _normalize_required_contexts({"always": ["Coverage 100 Gate"], "pull_request_only": ["QLTY Zero"]}),
+            {
+                "always": ["Coverage 100 Gate"],
+                "pull_request_only": ["QLTY Zero"],
+                "required_now": ["Coverage 100 Gate", "QLTY Zero"],
+                "target": ["Coverage 100 Gate", "QLTY Zero"],
+            },
+        )
+        self.assertEqual(
+            _merge_required_contexts({"always": ["Coverage 100 Gate"]}, {"pull_request_only": ["QLTY Zero"]}),
+            {
+                "always": ["Coverage 100 Gate"],
+                "pull_request_only": ["QLTY Zero"],
+                "required_now": ["Coverage 100 Gate", "QLTY Zero"],
+                "target": ["Coverage 100 Gate", "QLTY Zero"],
+            },
+        )
+
+    def test_coverage_and_inventory_override_wrappers_cover_helper_paths(self) -> None:
+        self.assertEqual(
+            _normalize_coverage_setup({"python": " 3.12 "}),
+            {
+                "python": "3.12",
+                "node": "",
+                "go": "",
+                "dotnet": "",
+                "rust": False,
+                "system_packages": [],
+                "java": {"distribution": "", "version": ""},
+            },
+        )
+        self.assertEqual(
+            _normalize_coverage({"runner": "", "shell": "", "setup": {"python": "3.12"}})["setup"]["python"],
+            "3.12",
+        )
+        self.assertEqual(
+            _normalize_codex_environment({}, verify_command="bash scripts/verify")["verify_command"],
+            "bash scripts/verify",
+        )
+
+        merged = _apply_inventory_overrides(
+            {"verify_command": "bash scripts/verify"},
+            {
+                "repo_entry": {"default_branch": "main", "rollout": "phase1", "notes": "inventory note"},
+                "repo_slug": "Prekzursil/quality-zero-platform",
+                "profile_id": "quality-zero-platform",
+                "stack_id": "python-web",
+                "required_contexts_mode": "replace",
+            },
+        )
+        expected = InventoryOverrides(
+            repo_entry={"default_branch": "main", "rollout": "phase1", "notes": "inventory note"},
+            repo_slug="Prekzursil/quality-zero-platform",
+            profile_id="quality-zero-platform",
+            stack_id="python-web",
+            required_contexts_mode="replace",
+        )
+        self.assertEqual(merged["slug"], expected.repo_slug)
+        self.assertEqual(merged["profile_id"], expected.profile_id)
+        self.assertEqual(merged["stack"], expected.stack_id)
+        self.assertEqual(merged["required_contexts_mode"], expected.required_contexts_mode)
 
     def test_load_stack_and_profile_resolution_raise_on_invalid_inventory_entries(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

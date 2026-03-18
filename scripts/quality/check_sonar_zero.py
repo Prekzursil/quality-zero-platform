@@ -121,24 +121,25 @@ def _is_scoped_analysis(args: argparse.Namespace) -> bool:
     return bool(getattr(args, "branch", "").strip() or getattr(args, "pull_request", "").strip())
 
 
-def load_sonar_findings_with_retry(
-    args: argparse.Namespace,
-    auth: str,
-    *,
-    fetch_fn=_load_sonar_findings,
-    attempts: int = SCOPED_ANALYSIS_RETRY_ATTEMPTS,
-    sleep_seconds: float = 5.0,
-) -> Tuple[int, str, List[str]]:
-    retry_budget = max(1, int(attempts))
+def load_sonar_findings_with_retry(*args: Any, **kwargs: Any) -> Tuple[int, str, List[str]]:
+    if len(args) != 2:
+        raise TypeError("load_sonar_findings_with_retry expects argparse namespace and auth header")
+    namespace, auth = args
+    fetch_fn = kwargs.pop("fetch_fn", _load_sonar_findings)
+    attempts = int(kwargs.pop("attempts", SCOPED_ANALYSIS_RETRY_ATTEMPTS))
+    sleep_seconds = float(kwargs.pop("sleep_seconds", 5.0))
+    if kwargs:
+        raise TypeError(f"Unexpected load_sonar_findings_with_retry parameters: {', '.join(sorted(kwargs))}")
+    retry_budget = max(1, attempts)
     open_issues = 0
     quality_gate = "UNKNOWN"
     findings: List[str] = []
     for attempt in range(retry_budget):
-        open_issues, quality_gate, findings = fetch_fn(args, auth)
-        if not findings or not _is_scoped_analysis(args):
+        open_issues, quality_gate, findings = fetch_fn(namespace, auth)
+        if not findings or not _is_scoped_analysis(namespace):
             return open_issues, quality_gate, findings
         if attempt != retry_budget - 1:
-            time.sleep(max(0.0, float(sleep_seconds)))
+            time.sleep(max(0.0, sleep_seconds))
     return open_issues, quality_gate, findings
 
 

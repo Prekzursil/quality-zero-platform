@@ -137,3 +137,29 @@ class SecurityHelpersTests(unittest.TestCase):
                 load_json_https("https://api.github.com/repos/Prekzursil/quality-zero-platform/status")
         self.assertTrue(response.closed)
         connection.close.assert_called_once()
+
+    def test_keyword_only_guards_reject_positional_and_unexpected_arguments(self) -> None:
+        parsed = urlparse("https://api.github.com/repos/Prekzursil/quality-zero-platform/status")
+
+        with self.assertRaisesRegex(TypeError, "expects keyword arguments only"):
+            security_helpers._read_json_response(parsed, "unexpected")
+
+        with self.assertRaisesRegex(TypeError, "Unexpected _read_json_response parameters: extra"):
+            security_helpers._read_json_response(
+                parsed,
+                headers={"Accept": "application/json"},
+                method="GET",
+                data=None,
+                timeout=15,
+                extra=True,
+            )
+
+        with self.assertRaisesRegex(TypeError, "expects keyword arguments only"):
+            load_json_https("https://api.github.com/repos/Prekzursil/quality-zero-platform/status", "unexpected")
+
+        with self.assertRaisesRegex(TypeError, "Unexpected load_json_https parameters: extra"):
+            load_json_https(
+                "https://api.github.com/repos/Prekzursil/quality-zero-platform/status",
+                headers={"Accept": "application/json"},
+                extra=True,
+            )

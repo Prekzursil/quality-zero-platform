@@ -138,6 +138,35 @@ class DeepScanZeroTests(unittest.TestCase):
         self.assertIsNone(open_issues)
         self.assertEqual(findings, ["DeepScan response did not include a parseable total issue count."])
 
+    def test_keyword_only_guards_reject_positional_and_unexpected_arguments(self) -> None:
+        with self.assertRaisesRegex(TypeError, "expects keyword arguments only"):
+            check_deepscan_zero._validate_deepscan_inputs("unexpected")
+
+        with self.assertRaisesRegex(TypeError, "Unexpected _validate_deepscan_inputs parameters: extra"):
+            check_deepscan_zero._validate_deepscan_inputs(
+                token=_placeholder_token("api"),
+                policy_mode="open_issues_url",
+                open_issues_url="https://deepscan.io/project/issues",
+                github_token=_placeholder_token("github"),
+                repo="Prekzursil/quality-zero-platform",
+                sha="abc123",
+                extra=True,
+            )
+
+        args = Namespace(policy_mode="", repo="Prekzursil/quality-zero-platform", sha="abc123", github_context="DeepScan")
+        with self.assertRaisesRegex(TypeError, "expects keyword arguments only"):
+            check_deepscan_zero._evaluate_deepscan_policy(args, "unexpected")
+
+        with self.assertRaisesRegex(TypeError, "Unexpected _evaluate_deepscan_policy parameters: extra"):
+            check_deepscan_zero._evaluate_deepscan_policy(
+                args,
+                policy_mode="open_issues_url",
+                token=_placeholder_token("api"),
+                github_token=_placeholder_token("github"),
+                open_issues_url="https://deepscan.io/project/issues",
+                extra=True,
+            )
+
     def test_status_helpers_and_policy_dispatch_cover_failure_branches(self) -> None:
         payload = {"statuses": [{"context": "DeepScan", "state": "failure", "target_url": "https://deepscan.io"}]}
         status = check_deepscan_zero._find_github_status(payload, "DeepScan")

@@ -73,6 +73,8 @@ jobs:
             lane: secrets
           - job_name: Coverage 100 Gate
             lane: coverage
+          - job_name: QLTY Zero
+            lane: qlty_zero
           - job_name: Sonar Zero
             lane: sonar
           - job_name: Codacy Zero
@@ -150,6 +152,9 @@ jobs:
       - name: Set up Rust
         if: matrix.lane == 'coverage' && steps.profile.outputs.coverage_needs_rust == 'true'
         uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7
+      - name: Install Qlty CLI
+        if: steps.profile.outputs.qlty_enabled == 'true' && ((matrix.lane == 'coverage' && steps.profile.outputs.qlty_coverage_files != '') || matrix.lane == 'qlty_zero')
+        uses: qltysh/qlty-action/install@a19242102d17e497f437d7466aa01b528537e899
       - name: Run selected lane
         env:
           LANE: ${{ matrix.lane }}
@@ -162,6 +167,7 @@ jobs:
           GITHUB_ACTOR_NAME: ${{ github.actor }}
           PULL_REQUEST_AUTHOR: ${{ inputs.pull_request_author }}
           PULL_REQUEST_HEAD_REF: ${{ inputs.pull_request_head_ref != '' && inputs.pull_request_head_ref || github.head_ref || '' }}
+          QLTY_ENABLED: ${{ steps.profile.outputs.qlty_enabled }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           CODACY_API_TOKEN: ${{ secrets.CODACY_API_TOKEN }}
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
@@ -230,6 +236,21 @@ jobs:
               str(repo_dir),
               "--platform-dir",
               str(platform_dir),
+            ]
+            run(cmd, cwd=repo_dir)
+          elif lane == "qlty_zero":
+            if os.environ.get("QLTY_ENABLED") != "true":
+              print("QLTY is disabled for this profile; skipping QLTY Zero.")
+              sys.exit(0)
+            cmd = [
+              sys.executable,
+              str(platform_dir / "scripts/quality/run_qlty_zero.py"),
+              "--repo-dir",
+              str(repo_dir),
+              "--out-json",
+              "qlty-zero/qlty-zero.json",
+              "--out-md",
+              "qlty-zero/qlty-zero.md",
             ]
             run(cmd, cwd=repo_dir)
           elif lane == "sonar":
@@ -301,9 +322,6 @@ jobs:
           else:
             raise SystemExit(f"Unsupported lane: {lane}")
           PY
-      - name: Install Qlty CLI
-        if: matrix.lane == 'coverage' && steps.profile.outputs.qlty_enabled == 'true' && steps.profile.outputs.qlty_coverage_files != ''
-        uses: qltysh/qlty-action/install@a19242102d17e497f437d7466aa01b528537e899
       - name: Publish Codecov coverage
         if: matrix.lane == 'coverage' && steps.profile.outputs.codecov_enabled == 'true' && steps.profile.outputs.coverage_input_files != ''
         uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de
@@ -354,6 +372,7 @@ jobs:
           path: |
             repo/quality-secrets
             repo/coverage-100
+            repo/qlty-zero
             repo/sonar-zero
             repo/codacy-zero
             repo/sentry-zero

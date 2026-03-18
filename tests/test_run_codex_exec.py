@@ -86,6 +86,7 @@ class RunCodexExecTests(unittest.TestCase):
     ) -> None:
         called_args, called_kwargs = call_args
         self.assertEqual(called_args[0], self._expected_codex_command(args))
+        self.assertEqual(called_kwargs['executable'], r'C:\Tools\codex.exe')
         self.assertFalse(called_kwargs['shell'])
         self.assertEqual(called_kwargs['input'], prompt_text)
         self.assertTrue(called_kwargs['text'])
@@ -121,7 +122,7 @@ class RunCodexExecTests(unittest.TestCase):
         with patch('scripts.quality.run_codex_exec.shutil.which', return_value=r'C:\Tools\codex.exe'):
             command = build_codex_command(args)
 
-        self.assertEqual(command[:4], [r'C:\Tools\codex.exe', 'exec', '--full-auto', '-C'])
+        self.assertEqual(command[:4], ['codex', 'exec', '--full-auto', '-C'])
         self.assertEqual(command[4], str(Path(args.repo_dir).resolve()))
         self.assertEqual(command[5:8], ['-s', 'workspace-write', '--json'])
         self.assertEqual(command[8], '-o')
@@ -144,7 +145,7 @@ class RunCodexExecTests(unittest.TestCase):
             command = build_codex_command(args)
 
         self.assertEqual(command, [
-            r'C:\Tools\codex.exe',
+            'codex',
             'exec',
             '--full-auto',
             '-C',

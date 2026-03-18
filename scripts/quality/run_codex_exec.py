@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import List
 
 _TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9._:/=-]+$")
+_CODEX_EXECUTABLE = "codex"
 
 
 def _parse_args() -> argparse.Namespace:
@@ -35,10 +36,10 @@ def _validate_cli_token(value: str, *, flag_name: str) -> str:
     return value
 
 
-def _resolved_codex_executable() -> str:
-    codex_executable = shutil.which("codex")
+def _resolved_codex_executable_path() -> str:
+    codex_executable = shutil.which(_CODEX_EXECUTABLE)
     if not codex_executable:
-        raise FileNotFoundError("Unable to locate required executable: codex")
+        raise FileNotFoundError(f"Unable to locate required executable: {_CODEX_EXECUTABLE}")
     return codex_executable
 
 
@@ -75,8 +76,9 @@ def _validated_config_args(args: argparse.Namespace) -> List[str]:
 
 def build_codex_command(args: argparse.Namespace) -> List[str]:
     """Build the fixed codex argv list from resolved, validated inputs."""
+    _resolved_codex_executable_path()
     cmd = [
-        _resolved_codex_executable(),
+        _CODEX_EXECUTABLE,
         "exec",
         "--full-auto",
         "-C",
@@ -96,29 +98,13 @@ def build_codex_command(args: argparse.Namespace) -> List[str]:
 
 def _run_codex_exec(args: argparse.Namespace, prompt_text: str) -> subprocess.CompletedProcess:
     """Run codex with a static literal argv list and prompt text passed via stdin."""
-    profile_args = _validated_profile_args(args)
-    model_args = _validated_model_args(args)
-    config_args = _validated_config_args(args)
-    # Safe-by-construction: explicit argv, shell=False, an absolute executable path,
+    executable_path = _resolved_codex_executable_path()
+    command = build_codex_command(args)
+    # Safe-by-construction: a fixed literal executable name, explicit argv, shell=False,
     # validated tokens as plain arguments, and prompt content flowing only through stdin.
-    # nosemgrep
-    return subprocess.run(  # nosec B603
-        [
-            _resolved_codex_executable(),
-            "exec",
-            "--full-auto",
-            "-C",
-            _resolved_repo_dir(args),
-            "-s",
-            _validated_sandbox(args),
-            "--json",
-            "-o",
-            _resolved_output_path(args),
-            "-",
-            *profile_args,
-            *model_args,
-            *config_args,
-        ],
+    return subprocess.run(  # nosec B603  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
+        command,
+        executable=executable_path,
         input=prompt_text,
         text=True,
         capture_output=True,

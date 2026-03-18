@@ -96,7 +96,6 @@ class RunQltyZeroTests(unittest.TestCase):
                 "--all",
                 "--quiet",
                 "--no-snippets",
-                "--no-duplication",
             ],
         )
 
@@ -125,7 +124,7 @@ class RunQltyZeroTests(unittest.TestCase):
         )
         self.assertEqual(
             call_args[1].args[0],
-            ["qlty", "smells", "--all", "--quiet", "--no-snippets", "--no-duplication"],
+            ["qlty", "smells", "--all", "--quiet", "--no-snippets"],
         )
         for call in call_args:
             self.assertEqual(Path(call.kwargs["cwd"]).resolve(), repo_dir.resolve())
@@ -159,7 +158,7 @@ class RunQltyZeroTests(unittest.TestCase):
             payload["commands"],
             [
                 ["qlty", "check", "--all", "--fail-level", "note", "--summary"],
-                ["qlty", "smells", "--all", "--quiet", "--no-snippets", "--no-duplication"],
+                ["qlty", "smells", "--all", "--quiet", "--no-snippets"],
             ],
         )
         self.assertEqual(payload["checks"][0]["name"], "check")

@@ -47,7 +47,6 @@ def _build_qlty_smells_argv() -> List[str]:
         "--all",
         "--quiet",
         "--no-snippets",
-        "--no-duplication",
     ]
 
 
@@ -126,7 +125,7 @@ def _run_qlty_check(repo_dir: Path) -> subprocess.CompletedProcess[str]:
 
 def _run_qlty_smells(repo_dir: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(  # nosec B603
-        ["qlty", "smells", "--all", "--quiet", "--no-snippets", "--no-duplication"],
+        ["qlty", "smells", "--all", "--quiet", "--no-snippets"],
         cwd=repo_dir,
         shell=False,
         check=False,

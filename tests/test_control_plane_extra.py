@@ -40,6 +40,28 @@ CONTROL_PLANE_PATH = ROOT / "scripts" / "quality" / "control_plane.py"
 
 
 class ControlPlaneExtraTests(unittest.TestCase):
+    _INVALID_PROFILE_FINDINGS_BLOCK = """\
+verify_command is required
+github_mutation_lane must be codex-private-runner
+codex_auth_lane must be chatgpt-account
+provider_ui_mode must be playwright-manual-login
+codex_environment.mode must be automatic
+codex_environment.verify_command is required
+codex_environment.auth_file is required
+codex_environment.network_profile must be unrestricted
+codex_environment.methods must be all
+codex_environment.runner_labels is required
+at least one required context is required
+required_contexts.required_now is missing
+OPENAI_API_KEY must not be part of required_secrets
+conditional_secrets duplicates required_secrets
+coverage.command is required
+coverage.inputs must declare at least one report
+coverage.shell must be bash or pwsh
+coverage.assert_mode.default must be enforce or evidence_only
+invalid codacy.dashboard_url
+"""
+
     def _build_invalid_profile(self) -> Dict[str, Any]:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
@@ -74,27 +96,7 @@ class ControlPlaneExtraTests(unittest.TestCase):
 
     @staticmethod
     def _invalid_profile_findings() -> List[str]:
-        return [
-            "verify_command is required",
-            "github_mutation_lane must be codex-private-runner",
-            "codex_auth_lane must be chatgpt-account",
-            "provider_ui_mode must be playwright-manual-login",
-            "codex_environment.mode must be automatic",
-            "codex_environment.verify_command is required",
-            "codex_environment.auth_file is required",
-            "codex_environment.network_profile must be unrestricted",
-            "codex_environment.methods must be all",
-            "codex_environment.runner_labels is required",
-            "at least one required context is required",
-            "required_contexts.required_now is missing",
-            "OPENAI_API_KEY must not be part of required_secrets",
-            "conditional_secrets duplicates required_secrets",
-            "coverage.command is required",
-            "coverage.inputs must declare at least one report",
-            "coverage.shell must be bash or pwsh",
-            "coverage.assert_mode.default must be enforce or evidence_only",
-            "invalid codacy.dashboard_url",
-        ]
+        return ControlPlaneExtraTests._INVALID_PROFILE_FINDINGS_BLOCK.strip().splitlines()
 
     def test_normalize_coverage_helpers_filter_invalid_entries_and_support_legacy_path(self) -> None:
         self.assertEqual(repo_root(), ROOT)

@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import List
 from unittest.mock import patch
 
 from scripts.quality.common import DEFAULT_COVERAGE_JSON, DEFAULT_COVERAGE_MD
@@ -13,6 +14,33 @@ from scripts.quality import run_coverage_gate
 
 
 class RunCoverageGateTests(unittest.TestCase):
+    def _assert_run_shell_invocation(
+        self,
+        *,
+        shell_name: str,
+        resolved_path: str,
+        expected_argv: List[str],
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cwd = Path(temp_dir)
+            with (
+                patch(
+                    'scripts.quality.run_coverage_gate._path_exists',
+                    side_effect=lambda raw_path: raw_path == resolved_path,
+                ),
+                patch('scripts.quality.run_coverage_gate.subprocess.run', return_value=object()) as mock_run,
+            ):
+                run_coverage_gate._run_shell('echo coverage', shell_name=shell_name, cwd=cwd)
+
+        mock_run.assert_called_once_with(
+            expected_argv,
+            cwd=cwd,
+            input='echo coverage',
+            text=True,
+            shell=False,
+            check=True,
+        )
+
     def test_coverage_mode_prefers_event_specific_override(self) -> None:
         self.assertEqual(
             run_coverage_gate._coverage_mode(
@@ -29,87 +57,31 @@ class RunCoverageGateTests(unittest.TestCase):
         mock_run.assert_not_called()
 
     def test_run_shell_passes_repo_command_via_stdin_to_static_shell_argv(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            cwd = Path(temp_dir)
-            with (
-                patch(
-                    'scripts.quality.run_coverage_gate._path_exists',
-                    side_effect=lambda raw_path: raw_path == '/usr/bin/pwsh',
-                ),
-                patch('scripts.quality.run_coverage_gate.subprocess.run', return_value=object()) as mock_run,
-            ):
-                run_coverage_gate._run_shell('echo coverage', shell_name='pwsh', cwd=cwd)
-
-        mock_run.assert_called_once_with(
-            ['/usr/bin/pwsh', '-NoLogo', '-Command', '-'],
-            cwd=cwd,
-            input='echo coverage',
-            text=True,
-            shell=False,
-            check=True,
+        self._assert_run_shell_invocation(
+            shell_name='pwsh',
+            resolved_path='/usr/bin/pwsh',
+            expected_argv=['/usr/bin/pwsh', '-NoLogo', '-Command', '-'],
         )
 
     def test_run_shell_prefers_windows_powershell_path_when_available(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            cwd = Path(temp_dir)
-            with (
-                patch(
-                    'scripts.quality.run_coverage_gate._path_exists',
-                    side_effect=lambda raw_path: raw_path == r'C:\Program Files\PowerShell\7\pwsh.exe',
-                ),
-                patch('scripts.quality.run_coverage_gate.subprocess.run', return_value=object()) as mock_run,
-            ):
-                run_coverage_gate._run_shell('echo coverage', shell_name='pwsh', cwd=cwd)
-
-        mock_run.assert_called_once_with(
-            [r'C:\Program Files\PowerShell\7\pwsh.exe', '-NoLogo', '-Command', '-'],
-            cwd=cwd,
-            input='echo coverage',
-            text=True,
-            shell=False,
-            check=True,
+        self._assert_run_shell_invocation(
+            shell_name='pwsh',
+            resolved_path=r'C:\Program Files\PowerShell\7\pwsh.exe',
+            expected_argv=[r'C:\Program Files\PowerShell\7\pwsh.exe', '-NoLogo', '-Command', '-'],
         )
 
     def test_run_shell_supports_bash_with_static_shell_argv(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            cwd = Path(temp_dir)
-            with (
-                patch(
-                    'scripts.quality.run_coverage_gate._path_exists',
-                    side_effect=lambda raw_path: raw_path == '/usr/bin/bash',
-                ),
-                patch('scripts.quality.run_coverage_gate.subprocess.run', return_value=object()) as mock_run,
-            ):
-                run_coverage_gate._run_shell('echo coverage', shell_name='bash', cwd=cwd)
-
-        mock_run.assert_called_once_with(
-            ['/usr/bin/bash', '-s'],
-            cwd=cwd,
-            input='echo coverage',
-            text=True,
-            shell=False,
-            check=True,
+        self._assert_run_shell_invocation(
+            shell_name='bash',
+            resolved_path='/usr/bin/bash',
+            expected_argv=['/usr/bin/bash', '-s'],
         )
 
     def test_run_shell_supports_bin_bash_fallback(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            cwd = Path(temp_dir)
-            with (
-                patch(
-                    'scripts.quality.run_coverage_gate._path_exists',
-                    side_effect=lambda raw_path: raw_path == '/bin/bash',
-                ),
-                patch('scripts.quality.run_coverage_gate.subprocess.run', return_value=object()) as mock_run,
-            ):
-                run_coverage_gate._run_shell('echo coverage', shell_name='bash', cwd=cwd)
-
-        mock_run.assert_called_once_with(
-            ['/bin/bash', '-s'],
-            cwd=cwd,
-            input='echo coverage',
-            text=True,
-            shell=False,
-            check=True,
+        self._assert_run_shell_invocation(
+            shell_name='bash',
+            resolved_path='/bin/bash',
+            expected_argv=['/bin/bash', '-s'],
         )
 
     def test_run_shell_requires_resolved_shell_executable(self) -> None:

@@ -3,6 +3,7 @@ from __future__ import absolute_import
 
 import argparse
 import os
+import shutil
 import subprocess  # nosec B404
 import sys
 from contextlib import contextmanager
@@ -17,6 +18,7 @@ from scripts.quality.common import utc_timestamp, write_report
 
 DEFAULT_JSON = "qlty-zero/qlty-zero.json"
 DEFAULT_MD = "qlty-zero/qlty-zero.md"
+_QLTY_EXECUTABLE = "qlty"
 
 
 def _parse_args() -> argparse.Namespace:
@@ -48,6 +50,13 @@ def _build_qlty_smells_argv() -> List[str]:
         "--quiet",
         "--no-snippets",
     ]
+
+
+def _resolved_qlty_executable_path() -> str:
+    qlty_executable = shutil.which(_QLTY_EXECUTABLE)
+    if not qlty_executable:
+        raise FileNotFoundError(f"Unable to locate required executable: {_QLTY_EXECUTABLE}")
+    return qlty_executable
 
 
 def _tail_lines(text: str, *, limit: int = 200) -> str:
@@ -113,8 +122,10 @@ def cast_mapping(value: Any) -> Mapping[str, Any]:
 
 
 def _run_qlty_check(repo_dir: Path) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(  # nosec B603
-        ["qlty", "check", "--all", "--fail-level", "note", "--summary"],
+    command = _build_qlty_check_argv()
+    command[0] = _resolved_qlty_executable_path()
+    return subprocess.run(  # nosec B603,B607
+        command,
         cwd=repo_dir,
         shell=False,
         check=False,
@@ -124,8 +135,10 @@ def _run_qlty_check(repo_dir: Path) -> subprocess.CompletedProcess[str]:
 
 
 def _run_qlty_smells(repo_dir: Path) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(  # nosec B603
-        ["qlty", "smells", "--all", "--quiet", "--no-snippets"],
+    command = _build_qlty_smells_argv()
+    command[0] = _resolved_qlty_executable_path()
+    return subprocess.run(  # nosec B603,B607
+        command,
         cwd=repo_dir,
         shell=False,
         check=False,

@@ -28,6 +28,10 @@ class RunQltyZeroTests(unittest.TestCase):
                     "scripts.quality.run_qlty_zero.subprocess.run",
                     side_effect=list(completed_processes),
                 ) as mock_run,
+                patch(
+                    "scripts.quality.run_qlty_zero.shutil.which",
+                    return_value=r"C:\Tools\qlty.exe",
+                ),
                 patch("scripts.quality.run_qlty_zero.sys.argv", [
                     "run_qlty_zero.py",
                     "--repo-dir",
@@ -120,11 +124,11 @@ class RunQltyZeroTests(unittest.TestCase):
         self.assertEqual(len(call_args), 2)
         self.assertEqual(
             call_args[0].args[0],
-            ["qlty", "check", "--all", "--fail-level", "note", "--summary"],
+            [r"C:\Tools\qlty.exe", "check", "--all", "--fail-level", "note", "--summary"],
         )
         self.assertEqual(
             call_args[1].args[0],
-            ["qlty", "smells", "--all", "--quiet", "--no-snippets"],
+            [r"C:\Tools\qlty.exe", "smells", "--all", "--quiet", "--no-snippets"],
         )
         for call in call_args:
             self.assertEqual(Path(call.kwargs["cwd"]).resolve(), repo_dir.resolve())
@@ -177,7 +181,7 @@ class RunQltyZeroTests(unittest.TestCase):
             md_path = repo_dir / "qlty-zero" / "qlty-zero.md"
 
             with (
-                patch("scripts.quality.run_qlty_zero.subprocess.run", side_effect=FileNotFoundError()),
+                patch("scripts.quality.run_qlty_zero.shutil.which", return_value=None),
                 patch("scripts.quality.run_qlty_zero._write_payload", return_value=0) as mock_write,
                 patch(
                     "scripts.quality.run_qlty_zero.sys.argv",
@@ -255,6 +259,10 @@ class RunQltyZeroTests(unittest.TestCase):
                     "scripts.quality.run_qlty_zero.subprocess.run",
                     side_effect=[completed_check, completed_smells],
                 ),
+                patch(
+                    "scripts.quality.run_qlty_zero.shutil.which",
+                    return_value=r"C:\Tools\qlty.exe",
+                ),
                 patch("scripts.quality.run_qlty_zero.sys.argv", [
                     "run_qlty_zero.py",
                     "--repo-dir",
@@ -287,6 +295,10 @@ class RunQltyZeroTests(unittest.TestCase):
                 patch(
                     "scripts.quality.run_qlty_zero.subprocess.run",
                     side_effect=[completed_check, completed_smells],
+                ),
+                patch(
+                    "scripts.quality.run_qlty_zero.shutil.which",
+                    return_value=r"C:\Tools\qlty.exe",
                 ),
                 patch("scripts.quality.run_qlty_zero.sys.argv", [
                     "run_qlty_zero.py",

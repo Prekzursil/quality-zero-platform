@@ -144,10 +144,10 @@ class DeepScanZeroTests(unittest.TestCase):
 
         with self.assertRaisesRegex(TypeError, "Unexpected _validate_deepscan_inputs parameters: extra"):
             check_deepscan_zero._validate_deepscan_inputs(
-                token="sample-auth",
+                token=_placeholder_token("api"),
                 policy_mode="open_issues_url",
                 open_issues_url="https://deepscan.io/project/issues",
-                github_token="sample-github-auth",
+                github_token=_placeholder_token("github"),
                 repo="Prekzursil/quality-zero-platform",
                 sha="abc123",
                 extra=True,
@@ -161,8 +161,8 @@ class DeepScanZeroTests(unittest.TestCase):
             check_deepscan_zero._evaluate_deepscan_policy(
                 args,
                 policy_mode="open_issues_url",
-                token="sample-auth",
-                github_token="sample-github-auth",
+                token=_placeholder_token("api"),
+                github_token=_placeholder_token("github"),
                 open_issues_url="https://deepscan.io/project/issues",
                 extra=True,
             )

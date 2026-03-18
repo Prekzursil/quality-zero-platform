@@ -178,8 +178,8 @@ class RunQualityZeroGateTests(unittest.TestCase):
         self.assertEqual(str(exc.exception), "TARGET_SHA or GITHUB_SHA is required")
 
     def test_module_execution_as_main_inserts_repo_root_and_exits_cleanly(self) -> None:
-        module_path = importlib.import_module("scripts.quality.run_quality_zero_gate").__file__
-        assert module_path is not None
+        module_path = importlib.import_module("scripts.quality.run_quality_zero_gate").__file__ or ""
+        self.assertTrue(module_path)
         repo_root = str(Path(module_path).resolve().parents[2])
         original_sys_path = list(sys.path)
         try:

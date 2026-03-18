@@ -261,7 +261,7 @@ class QualityCommonTests(unittest.TestCase):
             {"default": "enforce", "python": "warn"},
         )
 
-    def test_normalize_coverage_and_codex_environment_helpers_cover_string_inputs(self) -> None:
+    def test_normalize_coverage_helper_covers_string_inputs(self) -> None:
         self.assertEqual(
             normalize_coverage(
                 {
@@ -304,6 +304,8 @@ class QualityCommonTests(unittest.TestCase):
                 },
             },
         )
+
+    def test_normalize_codex_environment_helper_covers_string_inputs(self) -> None:
         self.assertEqual(
             normalize_codex_environment(None, verify_command="bash scripts/verify"),
             {

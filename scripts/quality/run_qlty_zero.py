@@ -122,10 +122,13 @@ def cast_mapping(value: Any) -> Mapping[str, Any]:
 
 
 def _run_qlty_check(repo_dir: Path) -> subprocess.CompletedProcess[str]:
+    executable_path = _resolved_qlty_executable_path()
     command = _build_qlty_check_argv()
-    command[0] = _resolved_qlty_executable_path()
-    return subprocess.run(  # nosec B603,B607
+    # Safe-by-construction: a fixed literal executable name, explicit argv,
+    # shell=False, and an absolute executable path supplied separately.
+    return subprocess.run(  # nosec B603  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
         command,
+        executable=executable_path,
         cwd=repo_dir,
         shell=False,
         check=False,
@@ -135,10 +138,13 @@ def _run_qlty_check(repo_dir: Path) -> subprocess.CompletedProcess[str]:
 
 
 def _run_qlty_smells(repo_dir: Path) -> subprocess.CompletedProcess[str]:
+    executable_path = _resolved_qlty_executable_path()
     command = _build_qlty_smells_argv()
-    command[0] = _resolved_qlty_executable_path()
-    return subprocess.run(  # nosec B603,B607
+    # Safe-by-construction: a fixed literal executable name, explicit argv,
+    # shell=False, and an absolute executable path supplied separately.
+    return subprocess.run(  # nosec B603  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
         command,
+        executable=executable_path,
         cwd=repo_dir,
         shell=False,
         check=False,

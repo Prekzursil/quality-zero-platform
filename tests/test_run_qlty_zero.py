@@ -124,12 +124,14 @@ class RunQltyZeroTests(unittest.TestCase):
         self.assertEqual(len(call_args), 2)
         self.assertEqual(
             call_args[0].args[0],
-            [r"C:\Tools\qlty.exe", "check", "--all", "--fail-level", "note", "--summary"],
+            ["qlty", "check", "--all", "--fail-level", "note", "--summary"],
         )
         self.assertEqual(
             call_args[1].args[0],
-            [r"C:\Tools\qlty.exe", "smells", "--all", "--quiet", "--no-snippets"],
+            ["qlty", "smells", "--all", "--quiet", "--no-snippets"],
         )
+        self.assertEqual(call_args[0].kwargs["executable"], r"C:\Tools\qlty.exe")
+        self.assertEqual(call_args[1].kwargs["executable"], r"C:\Tools\qlty.exe")
         for call in call_args:
             self.assertEqual(Path(call.kwargs["cwd"]).resolve(), repo_dir.resolve())
             self.assertFalse(call.kwargs.get("shell", False))

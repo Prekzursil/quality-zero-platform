@@ -28,6 +28,10 @@ class RunQltyZeroTests(unittest.TestCase):
                     "scripts.quality.run_qlty_zero.subprocess.run",
                     side_effect=list(completed_processes),
                 ) as mock_run,
+                patch(
+                    "scripts.quality.run_qlty_zero.shutil.which",
+                    return_value=r"C:\Tools\qlty.exe",
+                ),
                 patch("scripts.quality.run_qlty_zero.sys.argv", [
                     "run_qlty_zero.py",
                     "--repo-dir",
@@ -126,6 +130,8 @@ class RunQltyZeroTests(unittest.TestCase):
             call_args[1].args[0],
             ["qlty", "smells", "--all", "--quiet", "--no-snippets"],
         )
+        self.assertEqual(call_args[0].kwargs["executable"], r"C:\Tools\qlty.exe")
+        self.assertEqual(call_args[1].kwargs["executable"], r"C:\Tools\qlty.exe")
         for call in call_args:
             self.assertEqual(Path(call.kwargs["cwd"]).resolve(), repo_dir.resolve())
             self.assertFalse(call.kwargs.get("shell", False))
@@ -177,7 +183,7 @@ class RunQltyZeroTests(unittest.TestCase):
             md_path = repo_dir / "qlty-zero" / "qlty-zero.md"
 
             with (
-                patch("scripts.quality.run_qlty_zero.subprocess.run", side_effect=FileNotFoundError()),
+                patch("scripts.quality.run_qlty_zero.shutil.which", return_value=None),
                 patch("scripts.quality.run_qlty_zero._write_payload", return_value=0) as mock_write,
                 patch(
                     "scripts.quality.run_qlty_zero.sys.argv",
@@ -242,70 +248,34 @@ class RunQltyZeroTests(unittest.TestCase):
             self.assertEqual(result, 7)
 
     def test_smells_output_marks_run_as_failed_even_when_cli_exit_code_is_zero(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            repo_dir = Path(temp_dir) / "repo"
-            repo_dir.mkdir()
-            json_path = repo_dir / "qlty-zero" / "qlty-zero.json"
-            md_path = repo_dir / "qlty-zero" / "qlty-zero.md"
-            completed_check = type("Completed", (), {"returncode": 0, "stdout": "clean\n", "stderr": ""})()
-            completed_smells = type("Completed", (), {"returncode": 0, "stdout": "one smell\n", "stderr": ""})()
+        completed_check = type("Completed", (), {"returncode": 0, "stdout": "clean\n", "stderr": ""})()
+        completed_smells = type("Completed", (), {"returncode": 0, "stdout": "one smell\n", "stderr": ""})()
+        result, _repo_dir, json_text, _markdown, _call_args = self._run_main_with_completed_processes(
+            completed_check,
+            completed_smells,
+        )
 
-            with (
-                patch(
-                    "scripts.quality.run_qlty_zero.subprocess.run",
-                    side_effect=[completed_check, completed_smells],
-                ),
-                patch("scripts.quality.run_qlty_zero.sys.argv", [
-                    "run_qlty_zero.py",
-                    "--repo-dir",
-                    str(repo_dir),
-                    "--out-json",
-                    str(json_path),
-                    "--out-md",
-                    str(md_path),
-                ]),
-            ):
-                result = run_qlty_zero.main()
-
-            self.assertEqual(result, 1)
-            payload = json.loads(json_path.read_text(encoding="utf-8"))
-            self.assertEqual(payload["status"], "fail")
-            self.assertEqual(payload["return_code"], 1)
-            self.assertEqual(payload["checks"][1]["status"], "fail")
-            self.assertIn("one smell", payload["checks"][1]["output_tail"])
+        self.assertEqual(result, 1)
+        payload = json.loads(json_text)
+        self.assertEqual(payload["status"], "fail")
+        self.assertEqual(payload["return_code"], 1)
+        self.assertEqual(payload["checks"][1]["status"], "fail")
+        self.assertIn("one smell", payload["checks"][1]["output_tail"])
 
     def test_main_returns_success_and_still_writes_artifacts_for_clean_check(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            repo_dir = Path(temp_dir) / "repo"
-            repo_dir.mkdir()
-            json_path = repo_dir / "qlty-zero" / "qlty-zero.json"
-            md_path = repo_dir / "qlty-zero" / "qlty-zero.md"
-            completed_check = type("Completed", (), {"returncode": 0, "stdout": "clean\n", "stderr": ""})()
-            completed_smells = type("Completed", (), {"returncode": 0, "stdout": "no smells\n", "stderr": ""})()
+        completed_check = type("Completed", (), {"returncode": 0, "stdout": "clean\n", "stderr": ""})()
+        completed_smells = type("Completed", (), {"returncode": 0, "stdout": "no smells\n", "stderr": ""})()
+        result, _repo_dir, json_text, markdown, _call_args = self._run_main_with_completed_processes(
+            completed_check,
+            completed_smells,
+        )
 
-            with (
-                patch(
-                    "scripts.quality.run_qlty_zero.subprocess.run",
-                    side_effect=[completed_check, completed_smells],
-                ),
-                patch("scripts.quality.run_qlty_zero.sys.argv", [
-                    "run_qlty_zero.py",
-                    "--repo-dir",
-                    str(repo_dir),
-                    "--out-json",
-                    str(json_path),
-                    "--out-md",
-                    str(md_path),
-                ]),
-            ):
-                result = run_qlty_zero.main()
-
-            self.assertEqual(result, 0)
-            payload = json.loads(json_path.read_text(encoding="utf-8"))
-            self.assertEqual(payload["status"], "pass")
-            self.assertEqual(payload["return_code"], 0)
-            self.assertEqual(len(payload["checks"]), 2)
-            self.assertEqual(md_path.read_text(encoding="utf-8").count("QLTY Zero"), 1)
+        self.assertEqual(result, 0)
+        payload = json.loads(json_text)
+        self.assertEqual(payload["status"], "pass")
+        self.assertEqual(payload["return_code"], 0)
+        self.assertEqual(len(payload["checks"]), 2)
+        self.assertEqual(markdown.count("QLTY Zero"), 1)
 
     def test_reloading_the_module_without_the_repo_root_reinserts_the_import_path(self) -> None:
         repo_root = str(Path(run_qlty_zero.__file__).resolve().parents[2])

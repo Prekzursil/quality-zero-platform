@@ -7,6 +7,7 @@ import unittest
 from argparse import Namespace
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Dict, List, Tuple
 from unittest.mock import patch
 
 from scripts.quality.run_codex_exec import (
@@ -19,6 +20,23 @@ from scripts.quality.run_codex_exec import (
 
 
 class RunCodexExecTests(unittest.TestCase):
+    @staticmethod
+    def _build_parse_args_argv() -> List[str]:
+        argv = ['run_codex_exec.py']
+        for flag, value in (
+            ('--repo-dir', 'repo'),
+            ('--prompt-file', 'prompt.md'),
+            ('--output-last-message', 'last.txt'),
+            ('--json-log', 'codex.jsonl'),
+            ('--sandbox', 'danger-full-access'),
+            ('--config', 'a=b'),
+            ('--config', 'c=d'),
+            ('--profile', 'trusted-profile'),
+            ('--model', 'gpt-5.4'),
+        ):
+            argv.extend([flag, value])
+        return argv
+
     @staticmethod
     def _build_main_args(tmpdir_path: Path, *, prompt_text: str = 'hello codex') -> Namespace:
         repo_dir = tmpdir_path / 'repo'
@@ -35,6 +53,11 @@ class RunCodexExecTests(unittest.TestCase):
             config=['a=b'],
             json_log=str(tmpdir_path / 'run.json'),
         )
+
+    @staticmethod
+    def _expected_codex_command(args: Namespace) -> List[str]:
+        with patch('scripts.quality.run_codex_exec.shutil.which', return_value=r'C:\Tools\codex.exe'):
+            return build_codex_command(args)
 
     @staticmethod
     def _run_main_with_patched_subprocess(args: Namespace, completed: SimpleNamespace):
@@ -54,28 +77,23 @@ class RunCodexExecTests(unittest.TestCase):
             'mock_run': mock_run,
         }
 
+    def _assert_subprocess_call_matches_args(
+        self,
+        call_args: Tuple[Tuple[object, ...], Dict[str, object]],
+        *,
+        args: Namespace,
+        prompt_text: str,
+    ) -> None:
+        called_args, called_kwargs = call_args
+        self.assertEqual(called_args[0], self._expected_codex_command(args))
+        self.assertFalse(called_kwargs['shell'])
+        self.assertEqual(called_kwargs['input'], prompt_text)
+        self.assertTrue(called_kwargs['text'])
+        self.assertTrue(called_kwargs['capture_output'])
+        self.assertFalse(called_kwargs['check'])
+
     def test_parse_args_accepts_all_supported_flags(self):
-        argv = [
-            'run_codex_exec.py',
-            '--repo-dir',
-            'repo',
-            '--prompt-file',
-            'prompt.md',
-            '--output-last-message',
-            'last.txt',
-            '--json-log',
-            'codex.jsonl',
-            '--sandbox',
-            'danger-full-access',
-            '--config',
-            'a=b',
-            '--config',
-            'c=d',
-            '--profile',
-            'trusted-profile',
-            '--model',
-            'gpt-5.4',
-        ]
+        argv = self._build_parse_args_argv()
 
         with patch('sys.argv', argv):
             args = _parse_args()
@@ -195,31 +213,11 @@ class RunCodexExecTests(unittest.TestCase):
             result = _run_codex_exec(args, 'hello codex')
 
         self.assertIs(result, completed)
-        mock_run.assert_called_once_with(
-            [
-                r'C:\Tools\codex.exe',
-                'exec',
-                '--full-auto',
-                '-C',
-                str(Path(args.repo_dir).resolve()),
-                '-s',
-                'workspace-write',
-                '--json',
-                '-o',
-                str(Path(args.output_last_message).resolve()),
-                '-',
-                '-p',
-                'trusted-profile',
-                '-m',
-                'gpt-5.4',
-                '-c',
-                'a=b',
-            ],
-            input='hello codex',
-            text=True,
-            capture_output=True,
-            shell=False,
-            check=False,
+        mock_run.assert_called_once()
+        self._assert_subprocess_call_matches_args(
+            mock_run.call_args,
+            args=args,
+            prompt_text='hello codex',
         )
 
     def test_main_invokes_subprocess_with_shell_false_and_writes_json_log(self):
@@ -228,37 +226,14 @@ class RunCodexExecTests(unittest.TestCase):
             args = self._build_main_args(tmpdir_path)
             completed = SimpleNamespace(stdout='{"ok":true}', stderr='warn', returncode=7)
             result = self._run_main_with_patched_subprocess(args, completed)
-            called_args, called_kwargs = result['call_args']
 
             self.assertEqual(result['exit_code'], 7)
             result['mock_run'].assert_called_once()
-            self.assertEqual(
-                called_args[0],
-                [
-                    r'C:\Tools\codex.exe',
-                    'exec',
-                    '--full-auto',
-                    '-C',
-                    str(Path(args.repo_dir).resolve()),
-                    '-s',
-                    'workspace-write',
-                    '--json',
-                    '-o',
-                    str(Path(args.output_last_message).resolve()),
-                    '-',
-                    '-p',
-                    'trusted-profile',
-                    '-m',
-                    'gpt-5.4',
-                    '-c',
-                    'a=b',
-                ],
+            self._assert_subprocess_call_matches_args(
+                result['call_args'],
+                args=args,
+                prompt_text='hello codex',
             )
-            self.assertFalse(called_kwargs['shell'])
-            self.assertEqual(called_kwargs['input'], 'hello codex')
-            self.assertTrue(called_kwargs['text'])
-            self.assertTrue(called_kwargs['capture_output'])
-            self.assertFalse(called_kwargs['check'])
             self.assertEqual(result['json_log'], '{"ok":true}')
             self.assertEqual(result['stdout'], '{"ok":true}')
             self.assertEqual(result['stderr'], 'warn')

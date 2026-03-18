@@ -6,12 +6,41 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Dict, Tuple
 from unittest.mock import patch
 
 from scripts.quality import check_required_checks as checks_module
 
 
 class RequiredChecksTests(unittest.TestCase):
+    def _run_main_with_payload(
+        self,
+        *,
+        payload: Dict[str, object],
+        write_report_result: int = 0,
+    ) -> Tuple[int, object]:
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            sys,
+            "argv",
+            [
+                "check_required_checks.py",
+                "--repo",
+                "Prekzursil/quality-zero-platform",
+                "--sha",
+                "abc123",
+                "--required-context",
+                "Coverage 100 Gate",
+                "--out-json",
+                str(Path(tmpdir) / "required-checks.json"),
+                "--out-md",
+                str(Path(tmpdir) / "required-checks.md"),
+            ],
+        ), patch.dict(os.environ, {"GH_TOKEN": "token-123"}, clear=False), patch.object(
+            checks_module, "_wait_for_payload", return_value=payload
+        ), patch.object(checks_module, "write_report", return_value=write_report_result) as writer:
+            result = checks_module.main()
+        return result, writer
+
     def test_parse_args_supports_defaults(self) -> None:
         with patch.object(
             sys,
@@ -359,26 +388,7 @@ class RequiredChecksTests(unittest.TestCase):
             "missing": [],
             "failed": [],
         }
-        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
-            sys,
-            "argv",
-            [
-                "check_required_checks.py",
-                "--repo",
-                "Prekzursil/quality-zero-platform",
-                "--sha",
-                "abc123",
-                "--required-context",
-                "Coverage 100 Gate",
-                "--out-json",
-                str(Path(tmpdir) / "required-checks.json"),
-                "--out-md",
-                str(Path(tmpdir) / "required-checks.md"),
-            ],
-        ), patch.dict(os.environ, {"GH_TOKEN": "token-123"}, clear=False), patch.object(
-            checks_module, "_wait_for_payload", return_value=payload
-        ), patch.object(checks_module, "write_report", return_value=0) as writer:
-            result = checks_module.main()
+        result, writer = self._run_main_with_payload(payload=payload)
 
         self.assertEqual(result, 0)
         writer.assert_called_once()
@@ -392,26 +402,7 @@ class RequiredChecksTests(unittest.TestCase):
             "missing": ["Coverage 100 Gate"],
             "failed": [],
         }
-        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
-            sys,
-            "argv",
-            [
-                "check_required_checks.py",
-                "--repo",
-                "Prekzursil/quality-zero-platform",
-                "--sha",
-                "abc123",
-                "--required-context",
-                "Coverage 100 Gate",
-                "--out-json",
-                str(Path(tmpdir) / "required-checks.json"),
-                "--out-md",
-                str(Path(tmpdir) / "required-checks.md"),
-            ],
-        ), patch.dict(os.environ, {"GH_TOKEN": "token-123"}, clear=False), patch.object(
-            checks_module, "_wait_for_payload", return_value=payload
-        ), patch.object(checks_module, "write_report", return_value=0):
-            result = checks_module.main()
+        result, _writer = self._run_main_with_payload(payload=payload)
 
         self.assertEqual(result, 1)
 
@@ -424,25 +415,9 @@ class RequiredChecksTests(unittest.TestCase):
             "missing": [],
             "failed": [],
         }
-        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
-            sys,
-            "argv",
-            [
-                "check_required_checks.py",
-                "--repo",
-                "Prekzursil/quality-zero-platform",
-                "--sha",
-                "abc123",
-                "--required-context",
-                "Coverage 100 Gate",
-                "--out-json",
-                str(Path(tmpdir) / "required-checks.json"),
-                "--out-md",
-                str(Path(tmpdir) / "required-checks.md"),
-            ],
-        ), patch.dict(os.environ, {"GH_TOKEN": "token-123"}, clear=False), patch.object(
-            checks_module, "_wait_for_payload", return_value=payload
-        ), patch.object(checks_module, "write_report", return_value=7):
-            result = checks_module.main()
+        result, _writer = self._run_main_with_payload(
+            payload=payload,
+            write_report_result=7,
+        )
 
         self.assertEqual(result, 7)

@@ -196,6 +196,23 @@ class ControlPlaneTests(unittest.TestCase):
         )
         self.assertEqual(env_inspector["coverage"]["min_percent"], 100.0)
         self.assertIn("env_inspector.py", env_inspector["coverage"]["require_sources"])
+        airline_inputs = {(item["format"], item["name"], item["path"]) for item in airline["coverage"]["inputs"]}
+        self.assertEqual(
+            airline_inputs,
+            {
+                ("xml", "scripts", "coverage/python/coverage.xml"),
+                ("lcov", "node", "airline-gui/coverage/lcov.info"),
+                ("lcov", "cpp", "coverage/cpp/lcov.info"),
+            },
+        )
+        self.assertIn(
+            "python -m pytest -q tests/test_quality_security_scripts.py tests/test_quality_script_coverage.py",
+            airline["coverage"]["command"],
+        )
+        self.assertEqual(
+            airline["coverage"]["require_sources"],
+            ["scripts/", "src/", "airline-gui/src/"],
+        )
         self.assertIn("--filter '.*/src/.*'", airline["coverage"]["command"])
         self.assertIn(
             "--exclude '.*/build/_deps/.*'",
@@ -357,6 +374,40 @@ class ControlPlaneTests(unittest.TestCase):
             self.assertIn("codecov_enabled=true", output)
             self.assertIn("coverage_input_files=repo/coverage/platform-coverage.xml", output)
             self.assertIn("qlty_coverage_files=repo/coverage/platform-coverage.xml", output)
+
+    def test_export_profile_emits_all_airline_coverage_inputs_for_codecov_and_qlty_uploads(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "github-output.txt"
+            with patch.object(
+                sys,
+                "argv",
+                [
+                    "export_profile.py",
+                    "--repo-slug",
+                    "Prekzursil/Airline-Reservations-System",
+                    "--github-output",
+                    str(output_path),
+                    "--out-json",
+                    str(Path(tmpdir) / "profile.json"),
+                ],
+            ):
+                self.assertEqual(export_profile_module.main(), 0)
+
+            output = output_path.read_text(encoding="utf-8")
+            expected_files = (
+                "coverage_input_files="
+                "repo/coverage/python/coverage.xml,"
+                "repo/airline-gui/coverage/lcov.info,"
+                "repo/coverage/cpp/lcov.info"
+            )
+            self.assertIn(expected_files, output)
+            self.assertIn(
+                "qlty_coverage_files="
+                "repo/coverage/python/coverage.xml,"
+                "repo/airline-gui/coverage/lcov.info,"
+                "repo/coverage/cpp/lcov.info",
+                output,
+            )
 
     def test_export_profile_script_prints_json_when_output_path_is_not_requested(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

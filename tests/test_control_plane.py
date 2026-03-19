@@ -212,6 +212,43 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertNotIn("Codecov Analytics", pr_contexts)
         self.assertIn("Codecov Analytics", target_contexts)
 
+    def test_env_inspector_overlay_aligns_push_required_contexts_to_emitted_surface(self) -> None:
+        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
+        profile = load_repo_profile(inventory, "Prekzursil/env-inspector")
+
+        push_contexts = active_required_contexts(profile, event_name="push")
+        pr_contexts = active_required_contexts(profile, event_name="pull_request")
+        target_contexts = set(profile["required_contexts"]["target"])
+
+        self.assertEqual(
+            push_contexts,
+            [
+                "Coverage 100 Gate",
+                "Sonar Zero",
+                "Codacy Zero",
+                "Semgrep Zero",
+                "Sentry Zero",
+                "DeepScan Zero",
+            ],
+        )
+        self.assertTrue(
+            {
+                "Coverage 100 Gate",
+                "Sonar Zero",
+                "Codacy Zero",
+                "Semgrep Zero",
+                "Sentry Zero",
+                "DeepScan Zero",
+                "SonarCloud Code Analysis",
+                "Codacy Static Code Analysis",
+                "DeepScan",
+                "qlty check",
+            }.issubset(pr_contexts)
+        )
+        for unexpected in ("Codecov Analytics", "QLTY Zero", "qlty coverage", "qlty coverage diff"):
+            self.assertNotIn(unexpected, push_contexts)
+            self.assertNotIn(unexpected, target_contexts)
+
     def test_provider_metadata_tracks_real_qlty_names_and_visual_repo_tokens(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
 

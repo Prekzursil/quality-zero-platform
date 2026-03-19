@@ -1,6 +1,7 @@
 slug: Prekzursil/env-inspector
 stack: python-desktop
 verify_command: make verify
+required_contexts_mode: replace
 coverage:
   command: |
     mkdir -p coverage
@@ -38,6 +39,30 @@ coverage:
 trigger:
   mode: pr-focused
   pr_head_sha: true
+required_contexts:
+  always:
+    - Coverage 100 Gate
+    - Sonar Zero
+    - Codacy Zero
+    - Semgrep Zero
+    - Sentry Zero
+    - DeepScan Zero
+  target:
+    - Coverage 100 Gate
+    - Sonar Zero
+    - Codacy Zero
+    - Semgrep Zero
+    - Sentry Zero
+    - DeepScan Zero
+    - SonarCloud Code Analysis
+    - Codacy Static Code Analysis
+    - DeepScan
+    - qlty check
+  pull_request_only:
+    - SonarCloud Code Analysis
+    - Codacy Static Code Analysis
+    - DeepScan
+    - qlty check
 vendors:
   sonar:
     project_key: Prekzursil_env-inspector

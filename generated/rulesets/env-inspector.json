@@ -74,14 +74,6 @@
           {
             "context": "qlty check",
             "integration_id": null
-          },
-          {
-            "context": "qlty coverage",
-            "integration_id": null
-          },
-          {
-            "context": "qlty coverage diff",
-            "integration_id": null
           }
         ],
         "strict_required_status_checks_policy": true

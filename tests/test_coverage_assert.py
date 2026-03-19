@@ -28,6 +28,7 @@ from scripts.quality.assert_coverage_100 import (
     coverage_sources_from_xml,
     evaluate,
 )
+from scripts.quality.coverage_support import _existing_repo_file_candidate, _should_track_coverage_source
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -71,27 +72,73 @@ class CoverageAssertTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             lcov_path = root / "coverage.lcov"
-            lcov_path.write_text("LF:4\nLH:3\nLF:2\nLH:1\n", encoding="utf-8")
-            stats = parse_lcov("frontend", lcov_path)
+            (root / "src").mkdir()
+            (root / "src" / "main.cpp").write_text("int main() { return 0; }\n", encoding="utf-8")
+            lcov_path.write_text(
+                "\n".join(
+                    [
+                        f"SF:{root.as_posix()}/build/CMakeFiles/app.dir/src/main.cpp",
+                        "LF:4",
+                        "LH:3",
+                        "end_of_record",
+                        f"SF:{root.as_posix()}/build/_deps/googletest-src/googletest/src/gtest.cc",
+                        "LF:2",
+                        "LH:1",
+                        "end_of_record",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            with _temporary_cwd(root):
+                stats = parse_lcov("frontend", lcov_path)
 
-        self.assertEqual((stats.covered, stats.total), (4, 6))
+        self.assertEqual((stats.covered, stats.total), (3, 4))
 
     def test_coverage_sources_from_xml_and_lcov_are_workspace_relative(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
+            (root / "scripts" / "quality").mkdir(parents=True)
+            (root / "scripts" / "quality" / "check_required_checks.py").write_text("print('ok')\n", encoding="utf-8")
+            (root / "src").mkdir()
+            (root / "src" / "app.ts").write_text("export const ok = true;\n", encoding="utf-8")
             xml_path = root / "coverage.xml"
             lcov_path = root / "coverage.lcov"
             xml_path.write_text(
-                '<coverage lines-valid="2" lines-covered="2"><class filename="app/main.py" /></coverage>',
+                (
+                    '<coverage lines-valid="2" lines-covered="2">'
+                    f"<sources><source>{root.as_posix()}/scripts</source></sources>"
+                    '<class filename="quality/check_required_checks.py" />'
+                    "</coverage>"
+                ),
                 encoding="utf-8",
             )
-            lcov_path.write_text("SF:frontend/src/app.ts\nDA:1,1\nLF:1\nLH:1\nend_of_record\n", encoding="utf-8")
+            lcov_path.write_text(
+                "\n".join(
+                    [
+                        f"SF:{root.as_posix()}/build/CMakeFiles/app.dir/src/app.ts",
+                        "DA:1,1",
+                        "LF:1",
+                        "LH:1",
+                        "end_of_record",
+                        f"SF:{root.as_posix()}/build/_deps/googletest-src/googletest/src/gtest.cc",
+                        "DA:1,1",
+                        "LF:1",
+                        "LH:1",
+                        "end_of_record",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
 
-            xml_sources = coverage_sources_from_xml(xml_path)
-            lcov_sources = coverage_sources_from_lcov(lcov_path)
+            with _temporary_cwd(root):
+                xml_sources = coverage_sources_from_xml(xml_path)
+                lcov_sources = coverage_sources_from_lcov(lcov_path)
 
-        self.assertIn("app/main.py", xml_sources)
-        self.assertIn("frontend/src/app.ts", lcov_sources)
+        self.assertIn("scripts/quality/check_required_checks.py", xml_sources)
+        self.assertIn("src/app.ts", lcov_sources)
+        self.assertNotIn("build/_deps/googletest-src/googletest/src/gtest.cc", lcov_sources)
 
     def test_evaluate_flags_missing_required_sources_and_honors_threshold(self) -> None:
         stats = [CoverageStats(name="python", path="coverage.xml", covered=9, total=10)]
@@ -121,12 +168,29 @@ class CoverageAssertTests(unittest.TestCase):
     def test_source_normalization_and_required_source_helpers_cover_edge_cases(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
+            with tempfile.TemporaryDirectory() as external_tmp:
+                external_root = Path(external_tmp)
+                external_file = external_root / "external.py"
+                external_file.write_text("print('external')\n", encoding="utf-8")
+                (root / "src").mkdir(parents=True)
+                (root / "src" / "main.py").write_text("print('main')\n", encoding="utf-8")
+                (root / "node_modules").mkdir()
+                (root / "node_modules" / "shim.js").write_text("export default true;\n", encoding="utf-8")
             with _temporary_cwd(root):
                 workspace_root = Path.cwd().resolve(strict=False).as_posix().rstrip("/")
                 self.assertEqual(_normalize_source_path(f"{workspace_root}/src/main.py"), "src/main.py")
+                self.assertEqual(_normalize_source_path("./"), "")
                 self.assertEqual(_normalize_source_path("./src//main.py"), "src/main.py")
                 self.assertEqual(_normalize_source_path("."), "")
                 self.assertEqual(_normalize_source_path(workspace_root), "")
+                self.assertEqual(
+                    _normalize_source_path(external_file.as_posix()),
+                    external_file.resolve(strict=False).as_posix(),
+                )
+                self.assertEqual(_existing_repo_file_candidate(""), "")
+                self.assertEqual(_existing_repo_file_candidate("repo/src/main.py"), "src/main.py")
+                self.assertFalse(_should_track_coverage_source(""))
+                self.assertFalse(_should_track_coverage_source("node_modules/shim.js"))
                 self.assertFalse(_matches_required_source("src/main.py", ""))
                 self.assertTrue(_matches_required_source("src/main.py", "src"))
                 self.assertEqual(
@@ -145,6 +209,10 @@ class CoverageAssertTests(unittest.TestCase):
     def test_collect_inputs_build_payload_and_render_markdown(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
+            (root / "pkg").mkdir()
+            (root / "pkg" / "main.py").write_text("print('ok')\n", encoding="utf-8")
+            (root / "web").mkdir()
+            (root / "web" / "app.ts").write_text("export const ok = true;\n", encoding="utf-8")
             xml_path = root / "coverage.xml"
             xml_path.write_text(
                 '<coverage lines-valid="2" lines-covered="2"><class filename="pkg/main.py" /></coverage>',

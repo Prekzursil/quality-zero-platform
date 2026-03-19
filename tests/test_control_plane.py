@@ -93,9 +93,11 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertNotIn("qlty check", push_contexts)
         self.assertNotIn("qlty coverage", push_contexts)
         self.assertNotIn("qlty coverage diff", push_contexts)
+        self.assertIn("QLTY Zero", push_contexts)
         self.assertIn("DeepScan Zero", pr_contexts)
         self.assertIn("DeepScan", pr_contexts)
         self.assertIn("Codacy Static Code Analysis", pr_contexts)
+        self.assertIn("QLTY Zero", pr_contexts)
         self.assertIn("qlty check", pr_contexts)
         self.assertIn("qlty coverage", pr_contexts)
         self.assertIn("qlty coverage diff", pr_contexts)
@@ -224,6 +226,8 @@ class ControlPlaneTests(unittest.TestCase):
             push_contexts,
             [
                 "Coverage 100 Gate",
+                "Codecov Analytics",
+                "QLTY Zero",
                 "Sonar Zero",
                 "Codacy Zero",
                 "Semgrep Zero",
@@ -234,6 +238,8 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertTrue(
             {
                 "Coverage 100 Gate",
+                "Codecov Analytics",
+                "QLTY Zero",
                 "Sonar Zero",
                 "Codacy Zero",
                 "Semgrep Zero",
@@ -245,7 +251,9 @@ class ControlPlaneTests(unittest.TestCase):
                 "qlty check",
             }.issubset(pr_contexts)
         )
-        for unexpected in ("Codecov Analytics", "QLTY Zero", "qlty coverage", "qlty coverage diff"):
+        self.assertIn("Codecov Analytics", target_contexts)
+        self.assertIn("QLTY Zero", target_contexts)
+        for unexpected in ("qlty coverage", "qlty coverage diff"):
             self.assertNotIn(unexpected, push_contexts)
             self.assertNotIn(unexpected, target_contexts)
 

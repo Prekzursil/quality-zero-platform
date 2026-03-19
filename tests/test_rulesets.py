@@ -51,11 +51,12 @@ class RulesetPayloadTests(unittest.TestCase):
         required = payload["rules"][1]["parameters"]["required_status_checks"]
         contexts = [entry["context"] for entry in required]
 
+        self.assertIn("Codecov Analytics", contexts)
+        self.assertIn("QLTY Zero", contexts)
         self.assertIn("qlty check", contexts)
         self.assertIn("SonarCloud Code Analysis", contexts)
         self.assertNotIn("qlty coverage", contexts)
         self.assertNotIn("qlty coverage diff", contexts)
-        self.assertNotIn("QLTY Zero", contexts)
 
     def test_airline_ruleset_payload_requires_qlty_contexts(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
@@ -65,6 +66,7 @@ class RulesetPayloadTests(unittest.TestCase):
         required = payload["rules"][1]["parameters"]["required_status_checks"]
         contexts = [entry["context"] for entry in required]
 
+        self.assertIn("QLTY Zero", contexts)
         self.assertIn("qlty check", contexts)
         self.assertIn("qlty coverage", contexts)
         self.assertIn("qlty coverage diff", contexts)

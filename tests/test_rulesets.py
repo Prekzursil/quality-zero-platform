@@ -43,7 +43,7 @@ class RulesetPayloadTests(unittest.TestCase):
         self.assertIn("Chromatic Playwright", profile["required_contexts"]["target"])
         self.assertIn("qlty check", profile["required_contexts"]["target"])
 
-    def test_env_inspector_ruleset_payload_requires_qlty_contexts(self) -> None:
+    def test_env_inspector_ruleset_payload_matches_emitted_required_contexts(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/env-inspector")
         payload = build_ruleset_payload(profile)
@@ -52,8 +52,10 @@ class RulesetPayloadTests(unittest.TestCase):
         contexts = [entry["context"] for entry in required]
 
         self.assertIn("qlty check", contexts)
-        self.assertIn("qlty coverage", contexts)
-        self.assertIn("qlty coverage diff", contexts)
+        self.assertIn("SonarCloud Code Analysis", contexts)
+        self.assertNotIn("qlty coverage", contexts)
+        self.assertNotIn("qlty coverage diff", contexts)
+        self.assertNotIn("QLTY Zero", contexts)
 
     def test_airline_ruleset_payload_requires_qlty_contexts(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")

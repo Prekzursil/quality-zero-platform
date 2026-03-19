@@ -13,8 +13,9 @@ coverage:
     mkdir -p coverage/cpp
     gcovr \
       --root . \
-      --filter 'src' \
+      --filter '.*/src/.*' \
       --exclude 'tests' \
+      --exclude '.*/build/_deps/.*' \
       --object-directory build \
       --merge-mode-functions=merge-use-line-min \
       --gcov-exclude-directory '.*/CMakeFiles/airline_api_server.dir/.*' \

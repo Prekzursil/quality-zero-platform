@@ -169,6 +169,7 @@ class ControlPlaneTests(unittest.TestCase):
         reframe = load_repo_profile(inventory, "Prekzursil/Reframe")
         momentstudio = load_repo_profile(inventory, "Prekzursil/momentstudio")
         env_inspector = load_repo_profile(inventory, "Prekzursil/env-inspector")
+        airline = load_repo_profile(inventory, "Prekzursil/Airline-Reservations-System")
         swfoc = load_repo_profile(inventory, "Prekzursil/SWFOC-Mod-Menu")
         quality_zero_platform = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
 
@@ -195,6 +196,11 @@ class ControlPlaneTests(unittest.TestCase):
         )
         self.assertEqual(env_inspector["coverage"]["min_percent"], 100.0)
         self.assertIn("env_inspector.py", env_inspector["coverage"]["require_sources"])
+        self.assertIn("--filter '.*/src/.*'", airline["coverage"]["command"])
+        self.assertIn(
+            "--exclude '.*/build/_deps/.*'",
+            airline["coverage"]["command"],
+        )
         self.assertEqual(swfoc["coverage"]["assert_mode"]["pull_request"], "evidence_only")
         self.assertEqual(swfoc["coverage"]["runner"], "windows-latest")
         self.assertEqual(swfoc["visual_lane"]["kind"], "desktop-adapter")

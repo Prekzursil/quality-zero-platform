@@ -134,7 +134,7 @@ def _wait_for_contexts(request: ContextWaitRequest) -> Dict[str, Dict[str, str]]
     while time.time() <= deadline:
         final_contexts = load_check_contexts(request.repo, request.sha, request.token)
         statuses = [_status_from_context(context_name, final_contexts) for context_name in request.required_contexts]
-        if "pending" not in statuses:
+        if "pending" not in statuses and "missing" not in statuses:
             break
         time.sleep(max(request.poll_seconds, 0))
     return final_contexts

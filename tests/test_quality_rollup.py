@@ -132,3 +132,24 @@ class QualityRollupTests(unittest.TestCase):
 
         self.assertEqual(contexts["Coverage 100 Gate"]["conclusion"], "success")
         sleep_mock.assert_called_once()
+
+    def test_wait_for_contexts_also_retries_missing_contexts(self) -> None:
+        responses = [
+            {},
+            {"Coverage 100 Gate": {"state": "completed", "conclusion": "success", "source": "check_run"}},
+        ]
+
+        with patch.object(build_quality_rollup, "load_check_contexts", side_effect=responses), patch("scripts.quality.build_quality_rollup.time.sleep") as sleep_mock:
+            contexts = build_quality_rollup._wait_for_contexts(
+                build_quality_rollup.ContextWaitRequest(
+                    repo="owner/repo",
+                    sha="abc123",
+                    token="token",
+                    required_contexts=["Coverage 100 Gate"],
+                    timeout_seconds=2,
+                    poll_seconds=0,
+                )
+            )
+
+        self.assertEqual(contexts["Coverage 100 Gate"]["conclusion"], "success")
+        sleep_mock.assert_called_once()

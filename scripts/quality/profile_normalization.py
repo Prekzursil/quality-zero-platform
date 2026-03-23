@@ -1,9 +1,73 @@
 from __future__ import absolute_import
 
 from copy import deepcopy
+import re
 from typing import Any, Dict, List, Mapping
 
 from scripts.quality.common import dedupe_strings
+
+
+_LCOV_SRC_RE = re.compile(r"(?P<prefix>.+?)/coverage/(?:lcov|lcov\.info|lcov-report).*", re.IGNORECASE)
+_COV_ARG_RE = re.compile(r"--cov(?:=|\s+)(?P<value>[A-Za-z0-9_./-]+)")
+_GCOVR_FILTER_RE = re.compile(r"--filter\s+'\.*/(?P<value>[A-Za-z0-9_./-]+)/\.\*'")
+
+
+def _normalize_source_hint(raw: str) -> str:
+    value = str(raw or "").strip().replace("\\", "/")
+    if not value:
+        return ""
+    if "/" not in value and "." in value:
+        value = value.replace(".", "/") + ".py"
+    if value.endswith((".py", ".js", ".ts", ".tsx", ".jsx")):
+        return value
+    return value.rstrip("/") + "/"
+
+
+def infer_required_sources(raw_coverage: Mapping[str, Any] | None) -> List[str]:
+    coverage = deepcopy(raw_coverage or {}) if isinstance(raw_coverage, dict) else {}
+    command = str(coverage.get("command", "")).strip()
+    inputs = infer_coverage_inputs(coverage)
+    inferred: List[str] = []
+
+    for match in _COV_ARG_RE.finditer(command):
+        hint = _normalize_source_hint(match.group("value"))
+        if hint:
+            inferred.append(hint)
+    for match in _GCOVR_FILTER_RE.finditer(command):
+        hint = _normalize_source_hint(match.group("value"))
+        if hint:
+            inferred.append(hint)
+    if "src/.*" in command or "src/.*'" in command or "src/.*\"" in command:
+        inferred.append("src/")
+    for item in inputs:
+        path = str(item.get("path", "")).replace("\\", "/").strip()
+        lcov_match = _LCOV_SRC_RE.match(path)
+        if lcov_match:
+            inferred.append(_normalize_source_hint(f"{lcov_match.group('prefix')}/src"))
+
+    return dedupe_strings(inferred)
+
+
+def normalize_issue_policy(raw_issue_policy: Mapping[str, Any] | str | None) -> Dict[str, str]:
+    if isinstance(raw_issue_policy, str):
+        mode = str(raw_issue_policy or "").strip() or "ratchet"
+        return {
+            "mode": mode,
+            "pr_behavior": "absolute" if mode == "zero" else "introduced_only",
+            "main_behavior": "absolute",
+        }
+
+    payload = deepcopy(raw_issue_policy or {}) if isinstance(raw_issue_policy, dict) else {}
+    mode = str(payload.get("mode", "ratchet")).strip() or "ratchet"
+    pr_behavior = str(
+        payload.get("pr_behavior", "absolute" if mode == "zero" else "introduced_only")
+    ).strip() or ("absolute" if mode == "zero" else "introduced_only")
+    main_behavior = str(payload.get("main_behavior", "absolute")).strip() or "absolute"
+    return {
+        "mode": mode,
+        "pr_behavior": pr_behavior,
+        "main_behavior": main_behavior,
+    }
 
 
 def normalize_required_contexts(raw: Mapping[str, Any] | None) -> Dict[str, List[str]]:
@@ -102,12 +166,19 @@ def normalize_coverage_assert_mode(raw_assert_mode: Any) -> Dict[str, str]:
 def normalize_coverage(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
     coverage = deepcopy(raw or {}) if isinstance(raw, dict) else {}
     inputs = infer_coverage_inputs(coverage)
+    require_sources = dedupe_strings(coverage.get("require_sources", []))
+    require_sources_mode = "explicit" if require_sources else str(coverage.get("require_sources_mode", "infer")).strip() or "infer"
+    if require_sources_mode == "infer" and not require_sources:
+        require_sources = infer_required_sources(coverage)
     coverage["runner"] = str(coverage.get("runner", "ubuntu-latest")).strip() or "ubuntu-latest"
     coverage["shell"] = str(coverage.get("shell", "bash")).strip() or "bash"
     coverage["command"] = str(coverage.get("command", "")).strip()
     coverage["inputs"] = inputs
-    coverage["require_sources"] = dedupe_strings(coverage.get("require_sources", []))
+    coverage["require_sources"] = require_sources
+    coverage["require_sources_mode"] = require_sources_mode
     coverage["min_percent"] = float(coverage.get("min_percent", 100.0))
+    branch_min_percent = coverage.get("branch_min_percent", None)
+    coverage["branch_min_percent"] = None if branch_min_percent in {"", None} else float(branch_min_percent)
     coverage["assert_mode"] = normalize_coverage_assert_mode(coverage.get("assert_mode", {}))
     coverage["evidence_note"] = str(coverage.get("evidence_note", "")).strip()
     coverage["setup"] = normalize_coverage_setup(coverage.get("setup", {}))

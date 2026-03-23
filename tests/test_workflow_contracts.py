@@ -220,7 +220,7 @@ class WorkflowContractTests(unittest.TestCase):
     def test_scanner_matrix_checks_out_repo_at_requested_sha(self) -> None:
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
         self.assertIn("ref: ${{ inputs.sha != '' && inputs.sha || github.sha }}", text)
-        self.assertEqual(text.count("persist-credentials: false"), 2)
+        self.assertEqual(text.count("persist-credentials: false"), 3)
 
     def test_scanner_matrix_scopes_sonar_and_codacy_zero_to_the_current_pull_request(self) -> None:
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
@@ -330,4 +330,26 @@ class WorkflowContractTests(unittest.TestCase):
             self.assertIn("pull_request:", text, path.name)
             self.assertIn("workflow_dispatch:", text, path.name)
             self.assertIn("branches: [main, master]", text, path.name)
+
+    def test_scanner_matrix_builds_quality_rollup_and_posts_sticky_pr_comment(self) -> None:
+        text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
+        self.assertIn("quality-rollup", text)
+        self.assertIn("build_quality_rollup.py", text)
+        self.assertIn("post_pr_quality_comment.py", text)
+        self.assertIn("actions/download-artifact@v4", text)
+
+    def test_admin_dashboard_and_control_plane_admin_workflows_exist_with_expected_triggers(self) -> None:
+        dashboard_text = (ROOT / ".github" / "workflows" / "publish-admin-dashboard.yml").read_text(encoding="utf-8")
+        self.assertIn("schedule:", dashboard_text)
+        self.assertIn("workflow_dispatch:", dashboard_text)
+        self.assertIn("pages: write", dashboard_text)
+        self.assertIn("id-token: write", dashboard_text)
+        self.assertIn("build_admin_dashboard.py", dashboard_text)
+
+        admin_text = (ROOT / ".github" / "workflows" / "control-plane-admin.yml").read_text(encoding="utf-8")
+        self.assertIn("workflow_dispatch:", admin_text)
+        self.assertIn("repo_slug:", admin_text)
+        self.assertIn("operation:", admin_text)
+        self.assertIn("control_plane_admin.py", admin_text)
+        self.assertIn("create-pull-request", admin_text)
 

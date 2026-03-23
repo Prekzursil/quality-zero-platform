@@ -102,7 +102,7 @@ def _render_md(payload: Mapping[str, Any]) -> str:
 
 
 def _policy_mode(args: argparse.Namespace) -> str:
-    return (args.policy_mode or os.environ.get("DEEPSCAN_POLICY_MODE", "")).strip() or "open_issues_url"
+    return (args.policy_mode or os.environ.get("DEEPSCAN_POLICY_MODE", "")).strip() or "github_check_context"
 
 
 def _github_repo(args: argparse.Namespace) -> str:

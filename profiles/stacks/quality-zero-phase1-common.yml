@@ -31,6 +31,10 @@ enabled_scanners:
   sentry: true
   deepscan: true
   qlty: true
+issue_policy:
+  mode: ratchet
+  pr_behavior: introduced_only
+  main_behavior: absolute
 required_contexts:
   always:
     - Coverage 100 Gate

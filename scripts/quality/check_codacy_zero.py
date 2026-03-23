@@ -28,6 +28,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--provider", default="gh")
     parser.add_argument("--owner", required=True)
     parser.add_argument("--repo", required=True)
+    parser.add_argument("--policy-mode", default="ratchet")
     parser.add_argument("--pull-request", default="")
     parser.add_argument("--token", default="")
     parser.add_argument("--out-json", default="codacy-zero/codacy.json")
@@ -181,6 +182,8 @@ def main() -> int:
             pull_request=pull_request,
         )
         status = "pass" if not findings else "fail"
+        if getattr(args, "policy_mode", "ratchet") == "audit":
+            status = "pass"
 
     payload = {
         "status": status,

@@ -2,8 +2,6 @@ slug: Prekzursil/quality-zero-platform
 stack: python-web
 verify_command: bash scripts/verify
 required_contexts_mode: replace
-required_vars:
-  - DEEPSCAN_POLICY_MODE
 required_contexts:
   always:
     - Coverage 100 Gate
@@ -17,6 +15,9 @@ required_contexts:
   pull_request_only:
     - Codacy Static Code Analysis
     - DeepScan
+    - qlty check
+    - qlty coverage
+    - qlty coverage diff
   target:
     - Coverage 100 Gate
     - Codecov Analytics
@@ -42,6 +43,8 @@ coverage:
     - format: xml
       name: platform
       path: coverage/platform-coverage.xml
+  require_sources:
+    - scripts/
 vendors:
   sonar:
     project_key: Prekzursil_quality-zero-platform

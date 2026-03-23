@@ -25,6 +25,7 @@ from scripts.quality.profile_normalization import (
     normalize_coverage as common_normalize_coverage,
     normalize_coverage_assert_mode as common_normalize_coverage_assert_mode,
     normalize_coverage_inputs as common_normalize_coverage_inputs,
+    normalize_issue_policy as common_normalize_issue_policy,
     normalize_java_setup as common_normalize_java_setup,
     normalize_required_contexts as common_normalize_required_contexts,
 )
@@ -143,6 +144,10 @@ def _normalize_codex_environment(raw: Dict[str, Any], *, verify_command: str) ->
     return common_normalize_codex_environment(raw, verify_command=verify_command)
 
 
+def _normalize_issue_policy(raw: Dict[str, Any]) -> Dict[str, str]:
+    return common_normalize_issue_policy(raw)
+
+
 
 def _resolve_repo_sources(inventory: Dict[str, Any], repo_slug: str) -> RepoSources:
     repo_entry = next((item for item in inventory["repos"] if item.get("slug") == repo_slug), None)
@@ -221,6 +226,7 @@ def _finalize_repo_profile(merged: Dict[str, Any], repo_slug: str) -> Dict[str, 
     merged["required_vars"] = dedupe_strings(merged.get("required_vars", []))
     merged["required_contexts"] = common_normalize_required_contexts(merged.get("required_contexts", {}))
     merged["enabled_scanners"] = merged.get("enabled_scanners", {})
+    merged["issue_policy"] = common_normalize_issue_policy(merged.get("issue_policy", {}))
     merged["coverage"] = common_normalize_coverage(merged.get("coverage", {}))
     merged["codex_environment"] = common_normalize_codex_environment(
         merged.get("codex_environment", {}),
@@ -396,6 +402,18 @@ def _validate_secret_contract(profile: Dict[str, Any]) -> List[str]:
     return findings
 
 
+def _validate_issue_policy_contract(profile: Dict[str, Any]) -> List[str]:
+    issue_policy = profile.get("issue_policy", {})
+    findings: List[str] = []
+    if issue_policy.get("mode") not in {"zero", "ratchet", "audit"}:
+        findings.append(f"{profile['slug']}: issue_policy.mode must be zero, ratchet, or audit")
+    if issue_policy.get("pr_behavior") not in {"introduced_only", "absolute"}:
+        findings.append(f"{profile['slug']}: issue_policy.pr_behavior must be introduced_only or absolute")
+    if issue_policy.get("main_behavior") != "absolute":
+        findings.append(f"{profile['slug']}: issue_policy.main_behavior must be absolute")
+    return findings
+
+
 def _validate_visual_pair_contract(profile: Dict[str, Any]) -> List[str]:
     if not profile.get("visual_pair_required"):
         return []
@@ -443,6 +461,8 @@ def _validate_coverage_contract(profile: Dict[str, Any]) -> List[str]:
         for mode_name, mode_value in coverage.get("assert_mode", {}).items()
         if mode_value not in {"enforce", "evidence_only"}
     )
+    if coverage.get("require_sources_mode") not in {"explicit", "infer", "disabled"}:
+        findings.append(f"{profile['slug']}: coverage.require_sources_mode must be explicit, infer, or disabled")
     return findings
 
 
@@ -466,6 +486,7 @@ def validate_profile(profile: Dict[str, Any]) -> List[str]:
         _validate_control_plane_lanes,
         _validate_required_context_sets,
         _validate_secret_contract,
+        _validate_issue_policy_contract,
         _validate_visual_pair_contract,
         _validate_coverage_contract,
         _validate_vendor_urls,

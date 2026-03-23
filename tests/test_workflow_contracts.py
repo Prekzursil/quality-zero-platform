@@ -271,6 +271,8 @@ class WorkflowContractTests(unittest.TestCase):
             "reusable-scanner-matrix.yml": [
                 '--repo-slug "${{ inputs.repo_slug }}"',
                 '--event-name "${{ inputs.event_name }}"',
+                '--repo "${{ inputs.repo_slug }}"',
+                '--pull-request "${{ inputs.pull_request_number }}"',
             ],
         }
 

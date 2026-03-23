@@ -447,11 +447,13 @@ jobs:
       - name: Build quality rollup
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          ROLLUP_REPO_SLUG: ${{ inputs.repo_slug }}
+          ROLLUP_SHA: ${{ inputs.sha != '' && inputs.sha || github.sha }}
         run: |
           python platform/scripts/quality/build_quality_rollup.py \
             --profile-json "$RUNNER_TEMP/profile.json" \
-            --repo "${{ inputs.repo_slug }}" \
-            --sha "${{ inputs.sha != '' && inputs.sha || github.sha }}" \
+            --repo "$ROLLUP_REPO_SLUG" \
+            --sha "$ROLLUP_SHA" \
             --artifacts-dir artifacts \
             --out-json quality-rollup/summary.json \
             --out-md quality-rollup/summary.md
@@ -464,8 +466,10 @@ jobs:
         if: ${{ inputs.pull_request_number != '' }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          ROLLUP_REPO_SLUG: ${{ inputs.repo_slug }}
+          ROLLUP_PULL_REQUEST: ${{ inputs.pull_request_number }}
         run: |
           python platform/scripts/quality/post_pr_quality_comment.py \
-            --repo "${{ inputs.repo_slug }}" \
-            --pull-request "${{ inputs.pull_request_number }}" \
+            --repo "$ROLLUP_REPO_SLUG" \
+            --pull-request "$ROLLUP_PULL_REQUEST" \
             --markdown-file quality-rollup/summary.md

@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import json
+import os
 import sys
 from copy import deepcopy
 from dataclasses import dataclass
@@ -35,7 +36,7 @@ def safe_output_path(raw: str, fallback: str, base: Path | None = None) -> Path:
     root = (base or Path.cwd()).resolve()
     candidate = Path((raw or "").strip() or fallback)
     resolved = candidate.resolve(strict=False) if candidate.is_absolute() else (root / candidate).resolve(strict=False)
-    if not resolved.is_relative_to(root):
+    if os.path.commonpath([str(root), str(resolved)]) != str(root):
         raise ValueError(f"Output path escapes workspace root: {candidate}")
     return resolved
 

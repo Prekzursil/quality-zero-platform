@@ -3,6 +3,7 @@ name: Quality Zero Platform
 permissions:
   contents: read
   id-token: write
+  pull-requests: write
 
 on:
   push:

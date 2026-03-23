@@ -11,12 +11,38 @@ from scripts.quality import control_plane_admin
 
 class ControlPlaneAdminExtraTests(unittest.TestCase):
     def test_parse_args_supports_admin_subcommands(self) -> None:
-        with patch("sys.argv", ["control_plane_admin.py", "set-scanner", "--profile-id", "example", "--scanner", "sonar", "--enabled", "true"]):
+        with patch(
+            "sys.argv",
+            [
+                "control_plane_admin.py",
+                "set-scanner",
+                "--profile-id",
+                "example",
+                "--scanner",
+                "sonar",
+                "--enabled",
+                "true",
+            ],
+        ):
             args = control_plane_admin.parse_args()
         self.assertEqual(args.command, "set-scanner")
         self.assertEqual(args.enabled, "true")
 
-        with patch("sys.argv", ["control_plane_admin.py", "set-required-context", "--profile-id", "example", "--context-set", "target", "--context-name", "Coverage 100 Gate", "--present", "false"]):
+        with patch(
+            "sys.argv",
+            [
+                "control_plane_admin.py",
+                "set-required-context",
+                "--profile-id",
+                "example",
+                "--context-set",
+                "target",
+                "--context-name",
+                "Coverage 100 Gate",
+                "--present",
+                "false",
+            ],
+        ):
             args = control_plane_admin.parse_args()
         self.assertEqual(args.command, "set-required-context")
         self.assertEqual(args.context_name, "Coverage 100 Gate")

@@ -308,7 +308,15 @@ class RunCoverageGateTests(unittest.TestCase):
             json.dumps({"artifacts": [{"name": "coverage-artifacts", "archive_download_url": "https://api.github.com/archive.zip"}]}).encode("utf-8"),
             baseline_zip.getvalue(),
         ]
-        with patch.object(run_coverage_gate, "_github_api_token", return_value="token"), patch.object(run_coverage_gate, "_download_bytes", side_effect=downloads):
+        with patch.object(
+            run_coverage_gate,
+            "_github_api_token",
+            return_value="token",
+        ), patch.object(
+            run_coverage_gate,
+            "_download_bytes",
+            side_effect=downloads,
+        ):
             payload = run_coverage_gate._load_baseline_coverage_payload({"slug": "owner/repo", "default_branch": "main"})
         self.assertEqual(payload["components"][0]["covered"], 5)
 

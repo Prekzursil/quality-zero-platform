@@ -58,7 +58,7 @@ class CoverageBackfillTests(unittest.TestCase):
                     runpy.run_path(str(script_path), run_name="__main__")
             self.assertEqual(result.exception.code, 0)
 
-    def test_quality_rollup_parse_args_and_module_entrypoint(self) -> None:
+    def test_quality_rollup_parse_args_and_reload_main(self) -> None:
         with patch.object(
             sys,
             "argv",
@@ -88,18 +88,35 @@ class CoverageBackfillTests(unittest.TestCase):
                 sys.path[:] = [item for item in sys.path if item != root_text]
                 reloaded = importlib.reload(build_quality_rollup)
                 self.assertIn(root_text, sys.path)
-                with patch.object(reloaded, "parse_args", return_value=Namespace(
-                    profile_json=str(profile_path),
-                    repo="owner/repo",
-                    sha="abc",
-                    artifacts_dir=str(root),
-                    out_json="quality-rollup/summary.json",
-                    out_md="quality-rollup/summary.md",
-                )), patch.object(reloaded, "write_report", return_value=0), patch.dict("os.environ", {}, clear=True):
+                with patch.object(
+                    reloaded,
+                    "parse_args",
+                    return_value=Namespace(
+                        profile_json=str(profile_path),
+                        repo="owner/repo",
+                        sha="abc",
+                        artifacts_dir=str(root),
+                        out_json="quality-rollup/summary.json",
+                        out_md="quality-rollup/summary.md",
+                    ),
+                ), patch.object(
+                    reloaded,
+                    "write_report",
+                    return_value=0,
+                ), patch.dict("os.environ", {}, clear=True):
                     self.assertEqual(reloaded.main(), 0)
             finally:
                 sys.path[:] = original_sys_path
 
+    def test_quality_rollup_module_entrypoint_from_script_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            profile_path = root / "profile.json"
+            profile_path.write_text(
+                json.dumps({"slug": "owner/repo", "active_required_contexts": []}),
+                encoding="utf-8",
+            )
+            script_path = Path(build_quality_rollup.__file__).resolve()
             with patch.object(
                 sys,
                 "argv",
@@ -157,23 +174,26 @@ class CoverageBackfillTests(unittest.TestCase):
             original_sys_path = list(sys.path)
             try:
                 sys.path[:] = [item for item in sys.path if item != root_text]
-                reloaded = importlib.reload(control_plane_admin)
+                importlib.reload(control_plane_admin)
                 self.assertIn(root_text, sys.path)
-                with patch.object(
-                    sys,
-                    "argv",
-                    [
-                        str(script_path),
-                        "--repo-root",
-                        str(root),
-                        "enroll-repo",
-                        "--repo-slug",
-                        "owner/repo",
-                        "--profile-id",
-                        "example",
-                        "--stack",
-                        "python-web",
-                    ],
+                with (
+                    patch.object(
+                        sys,
+                        "argv",
+                        [
+                            str(script_path),
+                            "--repo-root",
+                            str(root),
+                            "enroll-repo",
+                            "--repo-slug",
+                            "owner/repo",
+                            "--profile-id",
+                            "example",
+                            "--stack",
+                            "python-web",
+                        ],
+                    ),
+                    patch.dict("os.environ", {}, clear=True),
                 ):
                     with self.assertRaises(SystemExit) as result:
                         runpy.run_path(str(script_path), run_name="__main__")
@@ -181,21 +201,49 @@ class CoverageBackfillTests(unittest.TestCase):
             finally:
                 sys.path[:] = original_sys_path
 
-            with patch.object(control_plane_admin, "parse_args", return_value=Namespace(repo_root=str(root), command="set-scanner", profile_id="example", scanner="sonar", enabled="true")), patch.object(
-                control_plane_admin, "set_scanner"
-            ) as set_scanner_mock:
+            with patch.object(
+                control_plane_admin,
+                "parse_args",
+                return_value=Namespace(
+                    repo_root=str(root),
+                    command="set-scanner",
+                    profile_id="example",
+                    scanner="sonar",
+                    enabled="true",
+                ),
+            ), patch.object(control_plane_admin, "set_scanner") as set_scanner_mock:
                 self.assertEqual(control_plane_admin.main(), 0)
             set_scanner_mock.assert_called_once()
 
-            with patch.object(control_plane_admin, "parse_args", return_value=Namespace(repo_root=str(root), command="set-issue-policy", profile_id="example", mode="ratchet", baseline_ref="main")), patch.object(
-                control_plane_admin, "set_issue_policy"
+            with patch.object(
+                control_plane_admin,
+                "parse_args",
+                return_value=Namespace(
+                    repo_root=str(root),
+                    command="set-issue-policy",
+                    profile_id="example",
+                    mode="ratchet",
+                    baseline_ref="main",
+                ),
+            ), patch.object(
+                control_plane_admin,
+                "set_issue_policy",
             ) as set_issue_policy_mock:
                 self.assertEqual(control_plane_admin.main(), 0)
             set_issue_policy_mock.assert_called_once()
 
     def test_post_pr_comment_request_and_module_entrypoint(self) -> None:
-        with patch.object(post_pr_quality_comment, "load_json_https", return_value=({"ok": True}, {})) as load_json_mock:
-            payload = post_pr_quality_comment._github_request("https://api.github.com/repos/owner/repo/issues/1/comments", "token", method="POST", data={"body": "ok"})
+        with patch.object(
+            post_pr_quality_comment,
+            "load_json_https",
+            return_value=({"ok": True}, {}),
+        ) as load_json_mock:
+            payload = post_pr_quality_comment._github_request(
+                "https://api.github.com/repos/owner/repo/issues/1/comments",
+                "token",
+                method="POST",
+                data={"body": "ok"},
+            )
         self.assertEqual(payload, {"ok": True})
         self.assertEqual(load_json_mock.call_args.kwargs["method"], "POST")
 
@@ -205,9 +253,23 @@ class CoverageBackfillTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             markdown = Path(temp_dir) / "rollup.md"
             markdown.write_text("# Rollup\n", encoding="utf-8")
-            with patch.object(sys, "argv", [str(script_path), "--repo", "owner/repo", "--pull-request", "1", "--markdown-file", str(markdown)]), patch.object(
-                sys, "path", trimmed_sys_path[:]
-            ), patch.dict("os.environ", {}, clear=True):
+            with patch.object(
+                sys,
+                "argv",
+                [
+                    str(script_path),
+                    "--repo",
+                    "owner/repo",
+                    "--pull-request",
+                    "1",
+                    "--markdown-file",
+                    str(markdown),
+                ],
+            ), patch.object(sys, "path", trimmed_sys_path[:]), patch.dict(
+                "os.environ",
+                {},
+                clear=True,
+            ):
                 with self.assertRaises(SystemExit) as result:
                     runpy.run_path(str(script_path), run_name="__main__")
             self.assertEqual(str(result.exception), "GITHUB_TOKEN or GH_TOKEN is required")
@@ -225,7 +287,7 @@ class CoverageBackfillTests(unittest.TestCase):
                 "--markdown-file",
                 str(markdown),
             ]
-            result = subprocess.run(  # nosec B603
+            completed = subprocess.run(  # nosec B603
                 command,
                 cwd=temp_dir,
                 capture_output=True,
@@ -233,8 +295,11 @@ class CoverageBackfillTests(unittest.TestCase):
                 check=False,
                 env={k: v for k, v in os.environ.items() if k not in {"GITHUB_TOKEN", "GH_TOKEN"}},
             )
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("GITHUB_TOKEN or GH_TOKEN is required", result.stderr or result.stdout)
+        self.assertEqual(completed.returncode, 1)
+        self.assertIn(
+            "GITHUB_TOKEN or GH_TOKEN is required",
+            completed.stderr or completed.stdout,
+        )
 
     def test_profile_validation_branches_and_shape_non_dict(self) -> None:
         profile = {
@@ -266,18 +331,53 @@ class CoverageBackfillTests(unittest.TestCase):
             "issue_policy": {"mode": "ratchet", "pr_behavior": "introduced_only", "main_behavior": "absolute", "baseline_ref": ""},
             "deps": {"policy": "zero_critical", "scope": "runtime"},
             "enabled_scanners": {"coverage": True},
-            "coverage": {"command": "echo ok", "inputs": [{"name": "platform"}], "shell": "bash", "assert_mode": {"default": "enforce"}, "require_sources_mode": "infer"},
-            "vendors": {"chromatic": {"status_context": "Chromatic", "project_name": "proj", "token_secret": "token", "local_env_var": "env"}, "applitools": {"status_context": "Applitools", "project_name": "proj"}},
+            "coverage": {
+                "command": "echo ok",
+                "inputs": [{"name": "platform"}],
+                "shell": "bash",
+                "assert_mode": {"default": "enforce"},
+                "require_sources_mode": "infer",
+            },
+            "vendors": {
+                "chromatic": {
+                    "status_context": "Chromatic",
+                    "project_name": "proj",
+                    "token_secret": "token",
+                    "local_env_var": "env",
+                },
+                "applitools": {
+                    "status_context": "Applitools",
+                    "project_name": "proj",
+                },
+            },
             "visual_pair_required": False,
             "required_contexts": {"target": ["Coverage 100 Gate"], "required_now": ["Coverage 100 Gate"], "always": ["Coverage 100 Gate"], "pull_request_only": []},
             "verify_command": "bash scripts/verify",
             "github_mutation_lane": "codex-private-runner",
             "codex_auth_lane": "chatgpt-account",
             "provider_ui_mode": "playwright-manual-login",
-            "codex_environment": {"mode": "automatic", "verify_command": "bash scripts/verify", "auth_file": "~/.codex/auth.json", "network_profile": "unrestricted", "methods": "all", "runner_labels": ["self-hosted", "codex-trusted"]},
+            "codex_environment": {
+                "mode": "automatic",
+                "verify_command": "bash scripts/verify",
+                "auth_file": "~/.codex/auth.json",
+                "network_profile": "unrestricted",
+                "methods": "all",
+                "runner_labels": ["self-hosted", "codex-trusted"],
+            },
         }
-        ratchet_findings = profile_contract_validation.validate_profile(valid_profile, active_required_contexts_fn=lambda _profile, event_name: ["Coverage 100 Gate"])
-        self.assertTrue(any("issue_policy.baseline_ref is required when mode is ratchet" in item for item in ratchet_findings))
+        ratchet_findings = profile_contract_validation.validate_profile(
+            valid_profile,
+            active_required_contexts_fn=lambda _profile, event_name: [
+                "Coverage 100 Gate"
+            ],
+        )
+        self.assertTrue(
+            any(
+                "issue_policy.baseline_ref is required when mode is ratchet"
+                in item
+                for item in ratchet_findings
+            )
+        )
 
     def test_profile_normalization_helpers_cover_edge_branches(self) -> None:
         self.assertEqual(profile_coverage_normalization._normalize_source_hint("pkg.module"), "pkg/module.py")

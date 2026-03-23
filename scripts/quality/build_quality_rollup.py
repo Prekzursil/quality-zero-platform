@@ -140,6 +140,28 @@ def _wait_for_contexts(request: ContextWaitRequest) -> Dict[str, Dict[str, str]]
     return final_contexts
 
 
+def _build_rollup_row(
+    *,
+    context_name: str,
+    reverse_map: Mapping[str, str],
+    lane_payloads: Mapping[str, Dict[str, Any]],
+    contexts: Mapping[str, Dict[str, str]],
+) -> Dict[str, str]:
+    lane = reverse_map.get(context_name)
+    lane_payload = lane_payloads.get(lane or "")
+    status = (
+        "pass"
+        if lane_payload and lane_payload.get("status") == "pass"
+        else _status_from_context(context_name, contexts)
+    )
+    detail = _lane_detail(lane_payload) if lane_payload else "No findings."
+    return {
+        "context": context_name,
+        "status": status,
+        "detail": detail,
+    }
+
+
 def build_rollup(
     *,
     profile: Mapping[str, Any],
@@ -152,21 +174,17 @@ def build_rollup(
     overall = "pass"
     reverse_map = {context: lane for lane, context in LANE_CONTEXTS.items()}
     for context_name in required_contexts:
-        lane = reverse_map.get(context_name)
-        lane_payload = lane_payloads.get(lane or "")
-        status = "pass" if lane_payload and lane_payload.get("status") == "pass" else _status_from_context(context_name, contexts)
-        if status in {"fail", "missing"}:
-            overall = "fail"
-        elif status == "pending" and overall == "pass":
-            overall = "pending"
-        detail = _lane_detail(lane_payload) if lane_payload else "No findings."
-        rows.append(
-            {
-                "context": context_name,
-                "status": status,
-                "detail": detail,
-            }
+        row = _build_rollup_row(
+            context_name=context_name,
+            reverse_map=reverse_map,
+            lane_payloads=lane_payloads,
+            contexts=contexts,
         )
+        if row["status"] in {"fail", "missing"}:
+            overall = "fail"
+        elif row["status"] == "pending" and overall == "pass":
+            overall = "pending"
+        rows.append(row)
     return {
         "repo": profile["slug"],
         "sha": sha,

@@ -10,6 +10,25 @@ from scripts.quality import build_quality_rollup, post_pr_quality_comment
 FAKE_GITHUB_CREDENTIAL = "gh-auth-placeholder"
 
 
+def exercise_wait_for_contexts(responses):
+    with patch.object(
+        build_quality_rollup,
+        "load_check_contexts",
+        side_effect=responses,
+    ), patch("scripts.quality.build_quality_rollup.time.sleep") as sleep_mock:
+        contexts = build_quality_rollup._wait_for_contexts(
+            build_quality_rollup.ContextWaitRequest(
+                repo="owner/repo",
+                sha="abc123",
+                token=FAKE_GITHUB_CREDENTIAL,
+                required_contexts=["Coverage 100 Gate"],
+                timeout_seconds=2,
+                poll_seconds=0,
+            )
+        )
+    return contexts, sleep_mock
+
+
 class QualityRollupTests(unittest.TestCase):
     def test_build_rollup_combines_expected_contexts_lane_artifacts_and_check_results(self) -> None:
         profile = {
@@ -120,17 +139,7 @@ class QualityRollupTests(unittest.TestCase):
             },
         ]
 
-        with patch.object(build_quality_rollup, "load_check_contexts", side_effect=responses), patch("scripts.quality.build_quality_rollup.time.sleep") as sleep_mock:
-            contexts = build_quality_rollup._wait_for_contexts(
-                build_quality_rollup.ContextWaitRequest(
-                    repo="owner/repo",
-                    sha="abc123",
-                    token=FAKE_GITHUB_CREDENTIAL,
-                    required_contexts=["Coverage 100 Gate"],
-                    timeout_seconds=2,
-                    poll_seconds=0,
-                )
-            )
+        contexts, sleep_mock = exercise_wait_for_contexts(responses)
 
         self.assertEqual(contexts["Coverage 100 Gate"]["conclusion"], "success")
         sleep_mock.assert_called_once()
@@ -141,17 +150,7 @@ class QualityRollupTests(unittest.TestCase):
             {"Coverage 100 Gate": {"state": "completed", "conclusion": "success", "source": "check_run"}},
         ]
 
-        with patch.object(build_quality_rollup, "load_check_contexts", side_effect=responses), patch("scripts.quality.build_quality_rollup.time.sleep") as sleep_mock:
-            contexts = build_quality_rollup._wait_for_contexts(
-                build_quality_rollup.ContextWaitRequest(
-                    repo="owner/repo",
-                    sha="abc123",
-                    token=FAKE_GITHUB_CREDENTIAL,
-                    required_contexts=["Coverage 100 Gate"],
-                    timeout_seconds=2,
-                    poll_seconds=0,
-                )
-            )
+        contexts, sleep_mock = exercise_wait_for_contexts(responses)
 
         self.assertEqual(contexts["Coverage 100 Gate"]["conclusion"], "success")
         sleep_mock.assert_called_once()

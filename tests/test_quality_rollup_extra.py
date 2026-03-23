@@ -8,13 +8,27 @@ from pathlib import Path
 from unittest.mock import patch
 
 from scripts.quality import build_quality_rollup, post_pr_quality_comment
+from tests.test_quality_rollup import exercise_wait_for_contexts
 
 FAKE_GITHUB_CREDENTIAL = "gh-auth-placeholder"
 
 
 class QualityRollupExtraTests(unittest.TestCase):
     def test_parse_args_and_context_helpers_cover_default_paths(self) -> None:
-        with patch("sys.argv", ["build_quality_rollup.py", "--profile-json", "profile.json", "--repo", "owner/repo", "--sha", "abc", "--artifacts-dir", "artifacts"]):
+        with patch(
+            "sys.argv",
+            [
+                "build_quality_rollup.py",
+                "--profile-json",
+                "profile.json",
+                "--repo",
+                "owner/repo",
+                "--sha",
+                "abc",
+                "--artifacts-dir",
+                "artifacts",
+            ],
+        ):
             args = build_quality_rollup.parse_args()
         self.assertEqual(args.out_json, build_quality_rollup.DEFAULT_ROLLUP_JSON)
         self.assertEqual(args.out_md, build_quality_rollup.DEFAULT_ROLLUP_MD)
@@ -35,7 +49,23 @@ class QualityRollupExtraTests(unittest.TestCase):
         self.assertEqual(build_quality_rollup._lane_detail({"mode": "audit"}), "Mode: audit")
 
     def test_github_payload_load_contexts_and_main_cover_non_default_paths(self) -> None:
-        with patch.object(build_quality_rollup, "load_json_https", return_value=({"check_runs": [{"name": "Coverage 100 Gate", "status": "completed", "conclusion": "success"}, {"name": "", "status": "completed", "conclusion": "success"}]}, {})):
+        with patch.object(
+            build_quality_rollup,
+            "load_json_https",
+            return_value=(
+                {
+                    "check_runs": [
+                        {
+                            "name": "Coverage 100 Gate",
+                            "status": "completed",
+                            "conclusion": "success",
+                        },
+                        {"name": "", "status": "completed", "conclusion": "success"},
+                    ]
+                },
+                {},
+            ),
+        ):
             payload = build_quality_rollup._github_payload("owner/repo", "sha", "token")
         self.assertIn("check_runs", payload)
 
@@ -67,7 +97,17 @@ class QualityRollupExtraTests(unittest.TestCase):
             )
             with (
                 patch.object(build_quality_rollup, "parse_args", return_value=args),
-                patch.object(build_quality_rollup, "_wait_for_contexts", return_value={"Coverage 100 Gate": {"state": "completed", "conclusion": "success", "source": "check_run"}}),
+                patch.object(
+                    build_quality_rollup,
+                    "_wait_for_contexts",
+                    return_value={
+                        "Coverage 100 Gate": {
+                            "state": "completed",
+                            "conclusion": "success",
+                            "source": "check_run",
+                        }
+                    },
+                ),
                 patch.object(build_quality_rollup, "load_lane_payloads", return_value={"coverage": {"status": "pass", "findings": []}}),
                 patch.object(build_quality_rollup, "write_report", return_value=0) as write_report_mock,
                 patch.dict("os.environ", {"GITHUB_TOKEN": "token"}, clear=False),
@@ -85,17 +125,7 @@ class QualityRollupExtraTests(unittest.TestCase):
             {"Coverage 100 Gate": {"state": "in_progress", "conclusion": "", "source": "check_run"}},
             {"Coverage 100 Gate": {"state": "completed", "conclusion": "success", "source": "check_run"}},
         ]
-        with patch.object(build_quality_rollup, "load_check_contexts", side_effect=responses), patch("scripts.quality.build_quality_rollup.time.sleep") as sleep_mock:
-            contexts = build_quality_rollup._wait_for_contexts(
-                build_quality_rollup.ContextWaitRequest(
-                    repo="owner/repo",
-                    sha="abc123",
-                    token=FAKE_GITHUB_CREDENTIAL,
-                    required_contexts=["Coverage 100 Gate"],
-                    timeout_seconds=2,
-                    poll_seconds=0,
-                )
-            )
+        contexts, sleep_mock = exercise_wait_for_contexts(responses)
         self.assertEqual(contexts["Coverage 100 Gate"]["conclusion"], "success")
         sleep_mock.assert_called_once()
 
@@ -159,7 +189,18 @@ class QualityRollupExtraTests(unittest.TestCase):
         self.assertEqual(request_mock.call_args_list[1].kwargs["method"], "POST")
 
     def test_post_pr_comment_main_covers_missing_token_and_error_path(self) -> None:
-        with patch("sys.argv", ["post_pr_quality_comment.py", "--repo", "owner/repo", "--pull-request", "12", "--markdown-file", "note.md"]):
+        with patch(
+            "sys.argv",
+            [
+                "post_pr_quality_comment.py",
+                "--repo",
+                "owner/repo",
+                "--pull-request",
+                "12",
+                "--markdown-file",
+                "note.md",
+            ],
+        ):
             args = post_pr_quality_comment.parse_args()
         self.assertEqual(args.repo, "owner/repo")
 
@@ -173,10 +214,34 @@ class QualityRollupExtraTests(unittest.TestCase):
                     post_pr_quality_comment.main()
             self.assertEqual(str(exc.exception), "GITHUB_TOKEN or GH_TOKEN is required")
 
-            with patch.object(post_pr_quality_comment, "parse_args", return_value=args), patch.dict("os.environ", {"GITHUB_TOKEN": "token"}, clear=False), patch.object(post_pr_quality_comment, "upsert_comment", side_effect=RuntimeError("boom")):
+            with patch.object(
+                post_pr_quality_comment,
+                "parse_args",
+                return_value=args,
+            ), patch.dict(
+                "os.environ",
+                {"GITHUB_TOKEN": FAKE_GITHUB_CREDENTIAL},
+                clear=False,
+            ), patch.object(
+                post_pr_quality_comment,
+                "upsert_comment",
+                side_effect=RuntimeError("boom"),
+            ):
                 with self.assertRaises(SystemExit) as exc:
                     post_pr_quality_comment.main()
             self.assertIn("Unable to post PR comment: boom", str(exc.exception))
 
-            with patch.object(post_pr_quality_comment, "parse_args", return_value=args), patch.dict("os.environ", {"GITHUB_TOKEN": "token"}, clear=False), patch.object(post_pr_quality_comment, "upsert_comment", return_value=5):
+            with patch.object(
+                post_pr_quality_comment,
+                "parse_args",
+                return_value=args,
+            ), patch.dict(
+                "os.environ",
+                {"GITHUB_TOKEN": FAKE_GITHUB_CREDENTIAL},
+                clear=False,
+            ), patch.object(
+                post_pr_quality_comment,
+                "upsert_comment",
+                return_value=5,
+            ):
                 self.assertEqual(post_pr_quality_comment.main(), 0)

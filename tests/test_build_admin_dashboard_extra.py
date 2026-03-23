@@ -1,6 +1,5 @@
 from __future__ import absolute_import
 
-import json
 import tempfile
 import unittest
 from argparse import Namespace
@@ -36,7 +35,15 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
             {"event": "pull_request", "conclusion": "failure"},
         ]
         self.assertEqual(len(build_admin_dashboard._select_runs(runs)), 2)
-        self.assertEqual(len(build_admin_dashboard._select_runs(runs, filter_fn=lambda item: item.get("event") == "pull_request")), 1)
+        self.assertEqual(
+            len(
+                build_admin_dashboard._select_runs(
+                    runs,
+                    filter_fn=lambda item: item.get("event") == "pull_request",
+                )
+            ),
+            1,
+        )
         self.assertEqual(build_admin_dashboard._run_conclusions(runs), {"success", "failure"})
         self.assertEqual(build_admin_dashboard._compute_health([]), "unknown")
         self.assertEqual(build_admin_dashboard._compute_health(runs), "partial")
@@ -88,7 +95,15 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
                 patch.object(build_admin_dashboard, "load_repo_profile", return_value=profile),
                 patch.object(build_admin_dashboard, "write_dashboard") as write_dashboard_mock,
                 patch.dict("os.environ", {"GITHUB_TOKEN": "token"}, clear=False),
-                patch.object(build_admin_dashboard, "_live_health", return_value={"default_branch_health": "success", "open_pr_health": "unknown", "ruleset_present": False}),
+                patch.object(
+                    build_admin_dashboard,
+                    "_live_health",
+                    return_value={
+                        "default_branch_health": "success",
+                        "open_pr_health": "unknown",
+                        "ruleset_present": False,
+                    },
+                ),
             ):
                 self.assertEqual(build_admin_dashboard.main(), 0)
 

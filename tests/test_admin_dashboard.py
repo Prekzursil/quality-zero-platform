@@ -3,7 +3,6 @@ from __future__ import absolute_import
 import tempfile
 import unittest
 from pathlib import Path
-import textwrap
 
 from scripts.quality import build_admin_dashboard
 

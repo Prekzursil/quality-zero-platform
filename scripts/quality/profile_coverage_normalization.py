@@ -140,13 +140,18 @@ def _normalize_branch_min_percent(raw_branch_min_percent: Any) -> float | None:
         return None
 
 
-def normalize_coverage(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
-    coverage = deepcopy(raw or {}) if isinstance(raw, dict) else {}
-    inputs = infer_coverage_inputs(coverage)
+def _resolve_required_sources(coverage: Dict[str, Any]) -> tuple[List[str], str]:
     require_sources = dedupe_strings(coverage.get("require_sources", []))
     require_sources_mode = "explicit" if require_sources else str(coverage.get("require_sources_mode", "infer")).strip() or "infer"
     if require_sources_mode == "infer" and not require_sources:
         require_sources = infer_required_sources(coverage)
+    return require_sources, require_sources_mode
+
+
+def normalize_coverage(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
+    coverage = deepcopy(raw or {}) if isinstance(raw, dict) else {}
+    inputs = infer_coverage_inputs(coverage)
+    require_sources, require_sources_mode = _resolve_required_sources(coverage)
     coverage["runner"] = str(coverage.get("runner", "ubuntu-latest")).strip() or "ubuntu-latest"
     coverage["shell"] = str(coverage.get("shell", "bash")).strip() or "bash"
     coverage["command"] = str(coverage.get("command", "")).strip()

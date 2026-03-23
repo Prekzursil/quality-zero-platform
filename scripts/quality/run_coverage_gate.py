@@ -237,7 +237,8 @@ def _load_baseline_coverage_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
     artifact = _find_artifact_by_name(artifacts, "coverage-artifacts")
     if artifact is None:
         raise RuntimeError("Unable to find coverage-artifacts on the baseline run.")
-    archive = _download_bytes(str(artifact["archive_download_url"]), token)
+    archive_download_url = normalize_https_url(str(artifact["archive_download_url"]), allowed_hosts={"api.github.com"})
+    archive = _download_bytes(archive_download_url, token)
     with zipfile.ZipFile(BytesIO(archive)) as handle:
         with handle.open("coverage-100/coverage.json") as stream:
             return json.loads(stream.read().decode("utf-8"))

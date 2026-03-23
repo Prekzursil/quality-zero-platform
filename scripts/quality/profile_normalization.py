@@ -5,13 +5,13 @@ from typing import Any, Dict, List, Mapping
 
 from scripts.quality.common import dedupe_strings
 from scripts.quality.profile_coverage_normalization import (
-    infer_coverage_inputs,
-    infer_required_sources,
-    normalize_coverage,
-    normalize_coverage_assert_mode,
-    normalize_coverage_inputs,
-    normalize_coverage_setup,
-    normalize_java_setup,
+    infer_coverage_inputs,  # noqa: F401
+    infer_required_sources,  # noqa: F401
+    normalize_coverage,  # noqa: F401
+    normalize_coverage_assert_mode,  # noqa: F401
+    normalize_coverage_inputs,  # noqa: F401
+    normalize_coverage_setup,  # noqa: F401
+    normalize_java_setup,  # noqa: F401
 )
 
 

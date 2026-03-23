@@ -19,8 +19,8 @@ from scripts.quality.common import (
 )
 from scripts.quality.control_plane_vendors import finalize_vendors, normalize_visual_lane
 from scripts.quality.profile_contract_validation import (
-    _validate_coverage_contract,
-    _validate_vendor_urls,
+    _validate_coverage_contract,  # noqa: F401
+    _validate_vendor_urls,  # noqa: F401
     validate_profile as validate_profile_impl,
 )
 from scripts.quality.profile_normalization import (

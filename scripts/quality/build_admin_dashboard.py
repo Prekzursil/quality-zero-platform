@@ -64,32 +64,31 @@ def build_dashboard_payload(
     }
 
 
-def render_dashboard_html(payload: Mapping[str, Any]) -> str:
-    rows = "\n".join(
-        (
-            (
-                baseline_text := (
-                    f" ({item.get('issue_policy_baseline_ref')})"
-                    if item.get("issue_policy_baseline_ref")
-                    else ""
-                )
-            )
-            and
-            "<tr>"
-            f"<td>{item['slug']}</td>"
-            f"<td>{item['profile']}</td>"
-            f"<td>{item['rollout']}</td>"
-            f"<td>{item['issue_policy_mode']}{baseline_text}</td>"
-            f"<td>{', '.join(item['enabled_scanners'])}</td>"
-            f"<td>{item.get('branch_min_percent')}</td>"
-            f"<td>{item.get('deps_policy')}</td>"
-            f"<td>{item['default_branch_health']}</td>"
-            f"<td>{item['open_pr_health']}</td>"
-            f"<td>{'yes' if item['ruleset_present'] else 'no'}</td>"
-            "</tr>"
-        )
-        for item in payload.get("repos", [])
+def _baseline_text(item: Mapping[str, Any]) -> str:
+    baseline_ref = str(item.get("issue_policy_baseline_ref", "") or "").strip()
+    return f" ({baseline_ref})" if baseline_ref else ""
+
+
+def _render_repo_row(item: Mapping[str, Any]) -> str:
+    return "\n".join(
+        [
+            "<tr>",
+            f"<td>{item['slug']}</td>",
+            f"<td>{item['profile']}</td>",
+            f"<td>{item['rollout']}</td>",
+            f"<td>{item['issue_policy_mode']}{_baseline_text(item)}</td>",
+            f"<td>{', '.join(item['enabled_scanners'])}</td>",
+            f"<td>{item.get('branch_min_percent')}</td>",
+            f"<td>{item.get('deps_policy')}</td>",
+            f"<td>{item['default_branch_health']}</td>",
+            f"<td>{item['open_pr_health']}</td>",
+            f"<td>{'yes' if item['ruleset_present'] else 'no'}</td>",
+            "</tr>",
+        ]
     )
+
+
+def _render_dashboard_page(payload: Mapping[str, Any], rows: str) -> str:
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -130,6 +129,11 @@ def render_dashboard_html(payload: Mapping[str, Any]) -> str:
 """
 
 
+def render_dashboard_html(payload: Mapping[str, Any]) -> str:
+    rows = "\n".join(_render_repo_row(item) for item in payload.get("repos", []))
+    return _render_dashboard_page(payload, rows)
+
+
 def write_dashboard(output_dir: Path, payload: Mapping[str, Any], *, assets_dir: Path | None = None) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     data_dir = output_dir / "data"
@@ -156,8 +160,14 @@ def _github_payload(url: str, token: str) -> Any:
     return payload
 
 
+def _select_runs(workflow_runs: List[Mapping[str, Any]], *, filter_fn=None) -> List[Mapping[str, Any]]:
+    if filter_fn is None:
+        return workflow_runs
+    return [item for item in workflow_runs if filter_fn(item)]
+
+
 def _compute_health(workflow_runs: List[Mapping[str, Any]], *, filter_fn=None) -> str:
-    runs = workflow_runs if filter_fn is None else [item for item in workflow_runs if filter_fn(item)]
+    runs = _select_runs(workflow_runs, filter_fn=filter_fn)
     if not runs:
         return "unknown"
     conclusions = {str(item.get("conclusion") or "") for item in runs if item.get("conclusion")}

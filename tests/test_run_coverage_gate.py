@@ -44,6 +44,32 @@ class RunCoverageGateTests(unittest.TestCase):
             check=True,
         )
 
+    def _coverage_assert_fixture(self):
+        temp_dir = tempfile.TemporaryDirectory()
+        repo_dir = Path(temp_dir.name) / 'repo'
+        repo_dir.mkdir()
+        platform_dir = Path(temp_dir.name) / 'platform'
+        platform_dir.mkdir()
+        coverage_dir = repo_dir / 'coverage'
+        coverage_dir.mkdir()
+        (coverage_dir / 'platform-coverage.xml').write_text(
+            (
+                '<coverage lines-valid="1" lines-covered="1"><packages><package><classes>'
+                '<class filename="src/app.py"><lines><line number="1" hits="1" />'
+                '</lines></class></classes></package></packages></coverage>'
+            ),
+            encoding='utf-8',
+        )
+        coverage = {
+            'inputs': [
+                {'format': 'xml', 'name': 'platform', 'path': str(coverage_dir / 'platform-coverage.xml')},
+            ],
+            'require_sources': ['src/app.py'],
+            'min_percent': 100.0,
+            'branch_min_percent': 85.0,
+        }
+        return temp_dir, repo_dir, platform_dir, coverage_dir, coverage
+
     def test_coverage_mode_prefers_event_specific_override(self) -> None:
         self.assertEqual(
             run_coverage_gate._coverage_mode(
@@ -106,30 +132,8 @@ class RunCoverageGateTests(unittest.TestCase):
             self.assertFalse(run_coverage_gate._path_exists(str(target.with_name('missing.txt'))))
 
     def test_run_assert_coverage_invokes_module_in_repo_cwd(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            repo_dir = Path(temp_dir) / 'repo'
-            repo_dir.mkdir()
-            platform_dir = Path(temp_dir) / 'platform'
-            platform_dir.mkdir()
-            coverage_dir = repo_dir / 'coverage'
-            coverage_dir.mkdir()
-            (coverage_dir / 'platform-coverage.xml').write_text(
-                (
-                    '<coverage lines-valid="1" lines-covered="1"><packages><package><classes>'
-                    '<class filename="src/app.py"><lines><line number="1" hits="1" />'
-                    '</lines></class></classes></package></packages></coverage>'
-                ),
-                encoding='utf-8',
-            )
-
-            coverage = {
-                'inputs': [
-                    {'format': 'xml', 'name': 'platform', 'path': str(coverage_dir / 'platform-coverage.xml')},
-                ],
-                'require_sources': ['src/app.py'],
-                'min_percent': 100.0,
-                'branch_min_percent': 85.0,
-            }
+        temp_dir, repo_dir, platform_dir, coverage_dir, coverage = self._coverage_assert_fixture()
+        with temp_dir:
             observed_cwd = None
             observed_argv = None
 
@@ -298,7 +302,7 @@ class RunCoverageGateTests(unittest.TestCase):
         self.assertEqual(run_coverage_gate._find_artifact_by_name(artifacts, "coverage-artifacts"), artifacts[0])
         self.assertIsNone(run_coverage_gate._find_artifact_by_name(artifacts, "missing"))
 
-    def test_baseline_loading_and_non_regression_reporting_cover_success_and_failure(self) -> None:
+    def test_baseline_loading_reads_artifact_payload(self) -> None:
         baseline_zip = io.BytesIO()
         with zipfile.ZipFile(baseline_zip, "w") as handle:
             handle.writestr("coverage-100/coverage.json", json.dumps({"components": [{"covered": 5, "total": 10}]}))
@@ -320,12 +324,14 @@ class RunCoverageGateTests(unittest.TestCase):
             payload = run_coverage_gate._load_baseline_coverage_payload({"slug": "owner/repo", "default_branch": "main"})
         self.assertEqual(payload["components"][0]["covered"], 5)
 
+    def test_non_regression_markdown_mentions_regressions(self) -> None:
         markdown = run_coverage_gate._render_non_regression_md(
             {"status": "fail", "current_percent": 90.0, "baseline_percent": 95.0, "timestamp_utc": "now", "findings": ["regressed"]}
         )
         self.assertIn("non_regression", markdown)
         self.assertIn("regressed", markdown)
 
+    def test_write_non_regression_report_handles_pass_fail_and_write_errors(self) -> None:
         with patch.object(run_coverage_gate, "write_report", return_value=0) as write_report_mock:
             self.assertEqual(
                 run_coverage_gate._write_non_regression_report(

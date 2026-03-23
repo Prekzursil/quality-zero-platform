@@ -26,6 +26,65 @@ from scripts.quality import (
 from scripts import security_helpers
 
 
+VALID_CONTRACT_VENDORS = {
+    "chromatic": {
+        "status_context": "Chromatic",
+        "project_name": "proj",
+        "token_secret": "token",
+        "local_env_var": "env",
+    },
+    "applitools": {
+        "status_context": "Applitools",
+        "project_name": "proj",
+    },
+}
+VALID_CONTRACT_REQUIRED_CONTEXTS = {
+    "target": ["Coverage 100 Gate"],
+    "required_now": ["Coverage 100 Gate"],
+    "always": ["Coverage 100 Gate"],
+    "pull_request_only": [],
+}
+VALID_CODEX_ENVIRONMENT = {
+    "mode": "automatic",
+    "verify_command": "bash scripts/verify",
+    "auth_file": "~/.codex/auth.json",
+    "network_profile": "unrestricted",
+    "methods": "all",
+    "runner_labels": ["self-hosted", "codex-trusted"],
+}
+
+
+def build_valid_contract_profile() -> dict:
+    return {
+        "slug": "owner/repo",
+        "required_secrets": [],
+        "conditional_secrets": [],
+        "issue_policy": {
+            "mode": "ratchet",
+            "pr_behavior": "introduced_only",
+            "main_behavior": "absolute",
+            "baseline_ref": "",
+        },
+        "deps": {"policy": "zero_critical", "scope": "runtime"},
+        "enabled_scanners": {"coverage": True},
+        "coverage": {
+            "command": "echo ok",
+            "inputs": [{"name": "platform"}],
+            "shell": "bash",
+            "assert_mode": {"default": "enforce"},
+            "require_sources_mode": "infer",
+        },
+        "vendors": VALID_CONTRACT_VENDORS,
+        "visual_pair_required": False,
+        "required_contexts": VALID_CONTRACT_REQUIRED_CONTEXTS,
+        "verify_command": "bash scripts/verify",
+        "github_mutation_lane": "codex-private-runner",
+        "codex_auth_lane": "chatgpt-account",
+        "provider_ui_mode": "playwright-manual-login",
+        "codex_environment": VALID_CODEX_ENVIRONMENT,
+    }
+
+
 class CoverageBackfillTests(unittest.TestCase):
     def test_dashboard_parse_args_fallback_write_and_module_entrypoint(self) -> None:
         with patch.object(sys, "argv", ["build_admin_dashboard.py", "--output-dir", "site"]):
@@ -156,7 +215,7 @@ class CoverageBackfillTests(unittest.TestCase):
                 runpy.run_path(str(script_path), run_name="__main__")
         self.assertEqual(result.exception.code, 1)
 
-    def test_control_plane_admin_load_yaml_error_and_entrypoint(self) -> None:
+    def test_control_plane_admin_load_yaml_rejects_non_mapping(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             invalid = root / "invalid.yml"
@@ -164,6 +223,9 @@ class CoverageBackfillTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Expected mapping"):
                 control_plane_admin._load_yaml(invalid)
 
+    def test_control_plane_admin_script_entrypoint_restores_sys_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
             inventory = root / "inventory"
             profiles = root / "profiles" / "repos"
             inventory.mkdir(parents=True)
@@ -201,6 +263,9 @@ class CoverageBackfillTests(unittest.TestCase):
             finally:
                 sys.path[:] = original_sys_path
 
+    def test_control_plane_admin_main_dispatches_mutations(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
             with patch.object(
                 control_plane_admin,
                 "parse_args",
@@ -232,7 +297,7 @@ class CoverageBackfillTests(unittest.TestCase):
                 self.assertEqual(control_plane_admin.main(), 0)
             set_issue_policy_mock.assert_called_once()
 
-    def test_post_pr_comment_request_and_module_entrypoint(self) -> None:
+    def test_post_pr_comment_request_uses_json_helper(self) -> None:
         with patch.object(
             post_pr_quality_comment,
             "load_json_https",
@@ -247,6 +312,7 @@ class CoverageBackfillTests(unittest.TestCase):
         self.assertEqual(payload, {"ok": True})
         self.assertEqual(load_json_mock.call_args.kwargs["method"], "POST")
 
+    def test_post_pr_comment_runpy_entrypoint_requires_token(self) -> None:
         script_path = Path(post_pr_quality_comment.__file__).resolve()
         root_text = str(script_path.parents[2])
         trimmed_sys_path = [item for item in sys.path if item != root_text]
@@ -274,6 +340,8 @@ class CoverageBackfillTests(unittest.TestCase):
                     runpy.run_path(str(script_path), run_name="__main__")
             self.assertEqual(str(result.exception), "GITHUB_TOKEN or GH_TOKEN is required")
 
+    def test_post_pr_comment_subprocess_bootstraps_repo_root(self) -> None:
+        script_path = Path(post_pr_quality_comment.__file__).resolve()
         with tempfile.TemporaryDirectory() as temp_dir:
             markdown = Path(temp_dir) / "rollup.md"
             markdown.write_text("# Rollup\n", encoding="utf-8")
@@ -301,7 +369,7 @@ class CoverageBackfillTests(unittest.TestCase):
             completed.stderr or completed.stdout,
         )
 
-    def test_profile_validation_branches_and_shape_non_dict(self) -> None:
+    def test_profile_validation_flags_invalid_issue_and_dependency_policies(self) -> None:
         profile = {
             "slug": "owner/repo",
             "required_secrets": [],
@@ -321,50 +389,12 @@ class CoverageBackfillTests(unittest.TestCase):
         self.assertTrue(any("visual_pair_required" in item for item in findings))
         self.assertTrue(any("issue_policy.main_behavior must be absolute" in item for item in findings))
 
+    def test_profile_shape_ignores_non_mapping_coverage_payload(self) -> None:
         findings = profile_shape.validate_profile_shape({"slug": "owner/repo", "coverage": "not-a-dict"}, slug="owner/repo")
         self.assertEqual(findings, [])
 
-        valid_profile = {
-            "slug": "owner/repo",
-            "required_secrets": [],
-            "conditional_secrets": [],
-            "issue_policy": {"mode": "ratchet", "pr_behavior": "introduced_only", "main_behavior": "absolute", "baseline_ref": ""},
-            "deps": {"policy": "zero_critical", "scope": "runtime"},
-            "enabled_scanners": {"coverage": True},
-            "coverage": {
-                "command": "echo ok",
-                "inputs": [{"name": "platform"}],
-                "shell": "bash",
-                "assert_mode": {"default": "enforce"},
-                "require_sources_mode": "infer",
-            },
-            "vendors": {
-                "chromatic": {
-                    "status_context": "Chromatic",
-                    "project_name": "proj",
-                    "token_secret": "token",
-                    "local_env_var": "env",
-                },
-                "applitools": {
-                    "status_context": "Applitools",
-                    "project_name": "proj",
-                },
-            },
-            "visual_pair_required": False,
-            "required_contexts": {"target": ["Coverage 100 Gate"], "required_now": ["Coverage 100 Gate"], "always": ["Coverage 100 Gate"], "pull_request_only": []},
-            "verify_command": "bash scripts/verify",
-            "github_mutation_lane": "codex-private-runner",
-            "codex_auth_lane": "chatgpt-account",
-            "provider_ui_mode": "playwright-manual-login",
-            "codex_environment": {
-                "mode": "automatic",
-                "verify_command": "bash scripts/verify",
-                "auth_file": "~/.codex/auth.json",
-                "network_profile": "unrestricted",
-                "methods": "all",
-                "runner_labels": ["self-hosted", "codex-trusted"],
-            },
-        }
+    def test_profile_validation_requires_ratchet_baseline_ref(self) -> None:
+        valid_profile = build_valid_contract_profile()
         ratchet_findings = profile_contract_validation.validate_profile(
             valid_profile,
             active_required_contexts_fn=lambda _profile, event_name: [

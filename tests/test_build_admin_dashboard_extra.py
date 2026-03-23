@@ -55,15 +55,7 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
             "success",
         )
 
-    def test_github_payload_live_health_and_main_cover_token_paths(self) -> None:
-        inventory = {"repos": [{"slug": "Prekzursil/example", "profile": "example", "default_branch": "main"}]}
-        profile = {
-            "enabled_scanners": {"coverage": True},
-            "issue_policy": {"mode": "ratchet", "baseline_ref": "main"},
-            "coverage": {"min_percent": 100.0, "branch_min_percent": None},
-            "deps": {"policy": "zero_critical"},
-        }
-
+    def test_github_payload_and_live_health_cover_token_paths(self) -> None:
         with patch.object(
             build_admin_dashboard,
             "load_json_https",
@@ -86,6 +78,22 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
         self.assertEqual(live["open_pr_health"], "success")
         self.assertTrue(live["ruleset_present"])
 
+    def test_main_uses_live_health_when_token_is_present(self) -> None:
+        inventory = {
+            "repos": [
+                {
+                    "slug": "Prekzursil/example",
+                    "profile": "example",
+                    "default_branch": "main",
+                }
+            ]
+        }
+        profile = {
+            "enabled_scanners": {"coverage": True},
+            "issue_policy": {"mode": "ratchet", "baseline_ref": "main"},
+            "coverage": {"min_percent": 100.0, "branch_min_percent": None},
+            "deps": {"policy": "zero_critical"},
+        }
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir) / "site"
             args = Namespace(inventory="", output_dir=str(output_dir), assets_dir="")

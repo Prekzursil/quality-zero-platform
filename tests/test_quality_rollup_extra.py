@@ -48,7 +48,7 @@ class QualityRollupExtraTests(unittest.TestCase):
         self.assertEqual(build_quality_rollup._lane_detail({"quality_gate": "OK"}), "Quality gate: OK")
         self.assertEqual(build_quality_rollup._lane_detail({"mode": "audit"}), "Mode: audit")
 
-    def test_github_payload_load_contexts_and_main_cover_non_default_paths(self) -> None:
+    def test_github_payload_and_load_contexts_cover_non_default_paths(self) -> None:
         with patch.object(
             build_quality_rollup,
             "load_json_https",
@@ -83,6 +83,7 @@ class QualityRollupExtraTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "Unexpected GitHub API response payload"):
                 build_quality_rollup._github_payload("owner/repo", "sha", "token")
 
+    def test_quality_rollup_main_passes_with_token_and_lane_payloads(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             profile_path = root / "profile.json"
@@ -188,7 +189,7 @@ class QualityRollupExtraTests(unittest.TestCase):
             )
         self.assertEqual(request_mock.call_args_list[1].kwargs["method"], "POST")
 
-    def test_post_pr_comment_main_covers_missing_token_and_error_path(self) -> None:
+    def test_post_pr_comment_parse_args_and_missing_token_path(self) -> None:
         with patch(
             "sys.argv",
             [
@@ -214,6 +215,12 @@ class QualityRollupExtraTests(unittest.TestCase):
                     post_pr_quality_comment.main()
             self.assertEqual(str(exc.exception), "GITHUB_TOKEN or GH_TOKEN is required")
 
+    def test_post_pr_comment_main_wraps_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            markdown = Path(temp_dir) / "note.md"
+            markdown.write_text("# Rollup\n", encoding="utf-8")
+            args = Namespace(repo="owner/repo", pull_request="12", markdown_file=str(markdown))
+
             with patch.object(
                 post_pr_quality_comment,
                 "parse_args",
@@ -230,6 +237,12 @@ class QualityRollupExtraTests(unittest.TestCase):
                 with self.assertRaises(SystemExit) as exc:
                     post_pr_quality_comment.main()
             self.assertIn("Unable to post PR comment: boom", str(exc.exception))
+
+    def test_post_pr_comment_main_returns_zero_on_success(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            markdown = Path(temp_dir) / "note.md"
+            markdown.write_text("# Rollup\n", encoding="utf-8")
+            args = Namespace(repo="owner/repo", pull_request="12", markdown_file=str(markdown))
 
             with patch.object(
                 post_pr_quality_comment,

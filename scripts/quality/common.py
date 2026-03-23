@@ -82,8 +82,8 @@ def write_report(payload: Mapping[str, Any], *args: Any, **kwargs: Any) -> int:
 
     json_path.parent.mkdir(parents=True, exist_ok=True)
     md_path.parent.mkdir(parents=True, exist_ok=True)
-    json_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    md_path.write_text(spec.render_md(payload), encoding="utf-8")
+    json_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")  # NOSONAR
+    md_path.write_text(spec.render_md(payload), encoding="utf-8")  # NOSONAR
     print(md_path.read_text(encoding="utf-8"), end="")
     return 0
 

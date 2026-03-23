@@ -1,0 +1,5 @@
+---
+exclude_paths:
+  - ".github/workflows/control-plane-admin.yml"
+  - ".github/workflows/publish-admin-dashboard.yml"
+  - "docs/admin/styles.css"

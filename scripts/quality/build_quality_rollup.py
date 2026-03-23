@@ -5,6 +5,8 @@ import argparse
 import json
 import os
 import sys
+import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Mapping
 
@@ -12,6 +14,11 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.quality.common import utc_timestamp, write_report
+from scripts.quality.check_required_checks import (
+    _collect_contexts,
+    _evaluate_observed_context,
+    _resolve_observed_context,
+)
 from scripts.security_helpers import load_json_https
 
 
@@ -40,6 +47,16 @@ LANE_ARTIFACT_PATHS = {
 }
 
 
+@dataclass(frozen=True)
+class ContextWaitRequest:
+    repo: str
+    sha: str
+    token: str
+    required_contexts: List[str]
+    timeout_seconds: int = 900
+    poll_seconds: int = 20
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build one aggregated strict-zero rollup.")
     parser.add_argument("--profile-json", required=True)
@@ -51,9 +68,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _github_payload(repo: str, sha: str, token: str) -> Dict[str, Any]:
+def _github_payload(repo: str, path: str, token: str) -> Dict[str, Any]:
     payload, _ = load_json_https(
-        f"{GITHUB_API_BASE}/repos/{repo}/commits/{sha}/check-runs?per_page=100",
+        f"{GITHUB_API_BASE}/repos/{repo}/commits/{path}",
         allowed_hosts={"api.github.com"},
         headers={
             "Accept": "application/vnd.github+json",
@@ -68,18 +85,9 @@ def _github_payload(repo: str, sha: str, token: str) -> Dict[str, Any]:
 
 
 def load_check_contexts(repo: str, sha: str, token: str) -> Dict[str, Dict[str, str]]:
-    payload = _github_payload(repo, sha, token)
-    contexts: Dict[str, Dict[str, str]] = {}
-    for run in payload.get("check_runs", []) or []:
-        name = str(run.get("name") or "").strip()
-        if not name:
-            continue
-        contexts[name] = {
-            "state": str(run.get("status") or ""),
-            "conclusion": str(run.get("conclusion") or ""),
-            "source": "check_run",
-        }
-    return contexts
+    check_runs = _github_payload(repo, f"{sha}/check-runs?per_page=100", token)
+    statuses = _github_payload(repo, f"{sha}/status", token)
+    return _collect_contexts(check_runs, statuses)
 
 
 def load_lane_payloads(artifacts_root: Path) -> Dict[str, Dict[str, Any]]:
@@ -109,12 +117,27 @@ def _lane_detail(payload: Mapping[str, Any]) -> str:
 
 
 def _status_from_context(context_name: str, contexts: Mapping[str, Dict[str, str]]) -> str:
-    details = contexts.get(context_name)
+    details = _resolve_observed_context(context_name, contexts)
     if not details:
         return "missing"
-    if details.get("state") != "completed":
+    if details.get("source") == "check_run" and details.get("state") != "completed":
         return "pending"
-    return "pass" if details.get("conclusion") == "success" else "fail"
+    if details.get("source") == "status" and details.get("conclusion") == "pending":
+        return "pending"
+    failure = _evaluate_observed_context(context_name, details)
+    return "fail" if failure else "pass"
+
+
+def _wait_for_contexts(request: ContextWaitRequest) -> Dict[str, Dict[str, str]]:
+    deadline = time.time() + max(request.timeout_seconds, 1)
+    final_contexts: Dict[str, Dict[str, str]] = {}
+    while time.time() <= deadline:
+        final_contexts = load_check_contexts(request.repo, request.sha, request.token)
+        statuses = [_status_from_context(context_name, final_contexts) for context_name in request.required_contexts]
+        if "pending" not in statuses:
+            break
+        time.sleep(max(request.poll_seconds, 0))
+    return final_contexts
 
 
 def build_rollup(
@@ -134,6 +157,8 @@ def build_rollup(
         status = "pass" if lane_payload and lane_payload.get("status") == "pass" else _status_from_context(context_name, contexts)
         if status in {"fail", "missing"}:
             overall = "fail"
+        elif status == "pending" and overall == "pass":
+            overall = "pending"
         detail = _lane_detail(lane_payload) if lane_payload else "No findings."
         rows.append(
             {
@@ -172,10 +197,22 @@ def main() -> int:
     args = parse_args()
     profile = json.loads(Path(args.profile_json).read_text(encoding="utf-8"))
     token = (os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")).strip()
-    contexts = load_check_contexts(args.repo, args.sha, token) if token else {}
+    required_contexts = sorted(profile.get("active_required_contexts", []))
+    contexts = (
+        _wait_for_contexts(
+            ContextWaitRequest(
+                repo=args.repo,
+                sha=args.sha,
+                token=token,
+                required_contexts=required_contexts,
+            )
+        )
+        if token
+        else {}
+    )
     lane_payloads = load_lane_payloads(Path(args.artifacts_dir))
     payload = build_rollup(profile=profile, lane_payloads=lane_payloads, contexts=contexts, sha=args.sha)
-    return write_report(
+    return_code = write_report(
         payload,
         out_json=args.out_json,
         out_md=args.out_md,
@@ -183,6 +220,9 @@ def main() -> int:
         default_md=DEFAULT_ROLLUP_MD,
         render_md=render_markdown,
     )
+    if return_code != 0:
+        return return_code
+    return 0 if payload["status"] == "pass" else 1
 
 
 if __name__ == "__main__":

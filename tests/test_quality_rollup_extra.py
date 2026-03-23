@@ -18,12 +18,14 @@ class QualityRollupExtraTests(unittest.TestCase):
         self.assertEqual(args.out_md, build_quality_rollup.DEFAULT_ROLLUP_MD)
 
         contexts = {
-            "Coverage 100 Gate": {"state": "completed", "conclusion": "success"},
-            "QLTY Zero": {"state": "completed", "conclusion": "failure"},
-            "Pending": {"state": "in_progress", "conclusion": ""},
+            "Coverage 100 Gate": {"state": "completed", "conclusion": "success", "source": "check_run"},
+            "QLTY Zero": {"state": "completed", "conclusion": "failure", "source": "check_run"},
+            "Pending": {"state": "in_progress", "conclusion": "", "source": "check_run"},
+            "StatusPending": {"state": "pending", "conclusion": "pending", "source": "status"},
         }
         self.assertEqual(build_quality_rollup._status_from_context("Missing", contexts), "missing")
         self.assertEqual(build_quality_rollup._status_from_context("Pending", contexts), "pending")
+        self.assertEqual(build_quality_rollup._status_from_context("StatusPending", contexts), "pending")
         self.assertEqual(build_quality_rollup._status_from_context("QLTY Zero", contexts), "fail")
         self.assertEqual(build_quality_rollup._status_from_context("Coverage 100 Gate", contexts), "pass")
         self.assertEqual(build_quality_rollup._lane_detail({"open_issues": 2}), "Open issues: 2")
@@ -33,9 +35,16 @@ class QualityRollupExtraTests(unittest.TestCase):
     def test_github_payload_load_contexts_and_main_cover_non_default_paths(self) -> None:
         with patch.object(build_quality_rollup, "load_json_https", return_value=({"check_runs": [{"name": "Coverage 100 Gate", "status": "completed", "conclusion": "success"}, {"name": "", "status": "completed", "conclusion": "success"}]}, {})):
             payload = build_quality_rollup._github_payload("owner/repo", "sha", "token")
-            contexts = build_quality_rollup.load_check_contexts("owner/repo", "sha", "token")
         self.assertIn("check_runs", payload)
+
+        responses = [
+            {"check_runs": [{"name": "Coverage 100 Gate", "status": "completed", "conclusion": "success"}]},
+            {"statuses": [{"context": "DeepScan", "state": "success"}]},
+        ]
+        with patch.object(build_quality_rollup, "_github_payload", side_effect=responses):
+            contexts = build_quality_rollup.load_check_contexts("owner/repo", "sha", "token")
         self.assertEqual(contexts["Coverage 100 Gate"]["conclusion"], "success")
+        self.assertEqual(contexts["DeepScan"]["source"], "status")
         self.assertNotIn("", contexts)
 
         with patch.object(build_quality_rollup, "load_json_https", return_value=(["invalid"], {})):
@@ -56,7 +65,7 @@ class QualityRollupExtraTests(unittest.TestCase):
             )
             with (
                 patch.object(build_quality_rollup, "parse_args", return_value=args),
-                patch.object(build_quality_rollup, "load_check_contexts", return_value={"Coverage 100 Gate": {"state": "completed", "conclusion": "success"}}),
+                patch.object(build_quality_rollup, "_wait_for_contexts", return_value={"Coverage 100 Gate": {"state": "completed", "conclusion": "success", "source": "check_run"}}),
                 patch.object(build_quality_rollup, "load_lane_payloads", return_value={"coverage": {"status": "pass", "findings": []}}),
                 patch.object(build_quality_rollup, "write_report", return_value=0) as write_report_mock,
                 patch.dict("os.environ", {"GITHUB_TOKEN": "token"}, clear=False),
@@ -64,11 +73,51 @@ class QualityRollupExtraTests(unittest.TestCase):
                 self.assertEqual(build_quality_rollup.main(), 0)
         self.assertEqual(write_report_mock.call_args.args[0]["status"], "pass")
 
+    def test_build_rollup_and_wait_cover_pending_and_report_failure_paths(self) -> None:
+        profile = {"slug": "owner/repo", "active_required_contexts": ["Coverage 100 Gate"]}
+        pending_contexts = {"Coverage 100 Gate": {"state": "in_progress", "conclusion": "", "source": "check_run"}}
+        rollup = build_quality_rollup.build_rollup(profile=profile, lane_payloads={}, contexts=pending_contexts, sha="abc")
+        self.assertEqual(rollup["status"], "pending")
+
+        responses = [
+            {"Coverage 100 Gate": {"state": "in_progress", "conclusion": "", "source": "check_run"}},
+            {"Coverage 100 Gate": {"state": "completed", "conclusion": "success", "source": "check_run"}},
+        ]
+        with patch.object(build_quality_rollup, "load_check_contexts", side_effect=responses), patch("scripts.quality.build_quality_rollup.time.sleep") as sleep_mock:
+            contexts = build_quality_rollup._wait_for_contexts(
+                build_quality_rollup.ContextWaitRequest(
+                    repo="owner/repo",
+                    sha="abc123",
+                    token="token",
+                    required_contexts=["Coverage 100 Gate"],
+                    timeout_seconds=2,
+                    poll_seconds=0,
+                )
+            )
+        self.assertEqual(contexts["Coverage 100 Gate"]["conclusion"], "success")
+        sleep_mock.assert_called_once()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            profile_path = root / "profile.json"
+            profile_path.write_text(json.dumps({"slug": "owner/repo", "active_required_contexts": []}), encoding="utf-8")
+            args = Namespace(
+                profile_json=str(profile_path),
+                repo="owner/repo",
+                sha="abc123",
+                artifacts_dir=str(root),
+                out_json="quality-rollup/summary.json",
+                out_md="quality-rollup/summary.md",
+            )
+            with (
+                patch.object(build_quality_rollup, "parse_args", return_value=args),
+                patch.object(build_quality_rollup, "load_lane_payloads", return_value={}),
+                patch.object(build_quality_rollup, "write_report", return_value=4),
+                patch.dict("os.environ", {}, clear=True),
+            ):
+                self.assertEqual(build_quality_rollup.main(), 4)
+
     def test_comment_client_updates_existing_comment_or_creates_one(self) -> None:
-        with patch.object(post_pr_quality_comment, "load_json_https", return_value=([{"id": 7, "body": "<!-- quality-zero-rollup --> old"}], {})) as load_json_mock:
-            with patch.object(post_pr_quality_comment, "_github_request", wraps=post_pr_quality_comment._github_request) as wrapped:
-                pass
-        # direct upsert behavior tested via patched helper below
         with patch.object(
             post_pr_quality_comment,
             "_github_request",

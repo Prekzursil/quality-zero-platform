@@ -3,6 +3,7 @@ from __future__ import absolute_import
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from scripts.quality import build_quality_rollup, post_pr_quality_comment
 
@@ -83,3 +84,51 @@ class QualityRollupTests(unittest.TestCase):
         self.assertEqual(sorted(payloads), ["coverage", "sonar"])
         self.assertEqual(payloads["coverage"]["status"], "pass")
         self.assertEqual(payloads["sonar"]["findings"], ["bad"])
+
+    def test_status_resolution_handles_suffix_matches_and_status_contexts(self) -> None:
+        contexts = {
+            "shared-scanner-matrix / Semgrep Zero": {"state": "completed", "conclusion": "success", "source": "check_run"},
+            "DeepScan": {"state": "success", "conclusion": "success", "source": "status"},
+            "Pending": {"state": "in_progress", "conclusion": "", "source": "check_run"},
+        }
+        self.assertEqual(build_quality_rollup._status_from_context("Semgrep Zero", contexts), "pass")
+        self.assertEqual(build_quality_rollup._status_from_context("DeepScan", contexts), "pass")
+        self.assertEqual(build_quality_rollup._status_from_context("Pending", contexts), "pending")
+        self.assertEqual(build_quality_rollup._status_from_context("Missing", contexts), "missing")
+
+    def test_load_check_contexts_merges_check_runs_and_statuses(self) -> None:
+        responses = [
+            {"check_runs": [{"name": "shared-scanner-matrix / QLTY Zero", "status": "completed", "conclusion": "success"}]},
+            {"statuses": [{"context": "DeepScan", "state": "success"}]},
+        ]
+
+        with patch.object(build_quality_rollup, "_github_payload", side_effect=responses):
+            contexts = build_quality_rollup.load_check_contexts("owner/repo", "sha", "token")
+
+        self.assertEqual(contexts["shared-scanner-matrix / QLTY Zero"]["conclusion"], "success")
+        self.assertEqual(contexts["DeepScan"]["source"], "status")
+
+    def test_wait_for_contexts_polls_until_pending_contexts_settle(self) -> None:
+        responses = [
+            {
+                "Coverage 100 Gate": {"state": "in_progress", "conclusion": "", "source": "check_run"},
+            },
+            {
+                "Coverage 100 Gate": {"state": "completed", "conclusion": "success", "source": "check_run"},
+            },
+        ]
+
+        with patch.object(build_quality_rollup, "load_check_contexts", side_effect=responses), patch("scripts.quality.build_quality_rollup.time.sleep") as sleep_mock:
+            contexts = build_quality_rollup._wait_for_contexts(
+                build_quality_rollup.ContextWaitRequest(
+                    repo="owner/repo",
+                    sha="abc123",
+                    token="token",
+                    required_contexts=["Coverage 100 Gate"],
+                    timeout_seconds=2,
+                    poll_seconds=0,
+                )
+            )
+
+        self.assertEqual(contexts["Coverage 100 Gate"]["conclusion"], "success")
+        sleep_mock.assert_called_once()

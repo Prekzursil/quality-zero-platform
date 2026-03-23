@@ -210,7 +210,11 @@ class CoverageBackfillTests(unittest.TestCase):
         script_path = Path(check_dependabot_alerts.__file__).resolve()
         root_text = str(script_path.parents[2])
         trimmed_sys_path = [item for item in sys.path if item != root_text]
-        with patch.object(sys, "argv", [str(script_path), "--repo", "owner/repo"]), patch.object(sys, "path", trimmed_sys_path[:]), patch.dict("os.environ", {}, clear=True):
+        with (
+            patch.object(sys, "argv", [str(script_path), "--repo", "owner/repo"]),
+            patch.object(sys, "path", trimmed_sys_path[:]),
+            patch.dict("os.environ", {}, clear=True),
+        ):
             with self.assertRaises(SystemExit) as result:
                 runpy.run_path(str(script_path), run_name="__main__")
         self.assertEqual(result.exception.code, 1)

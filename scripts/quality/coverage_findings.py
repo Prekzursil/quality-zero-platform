@@ -1,6 +1,6 @@
 from __future__ import absolute_import
 
-from typing import List, Set, TYPE_CHECKING
+from typing import List, Set, TYPE_CHECKING, Tuple
 
 from scripts.quality.coverage_paths import _normalize_source_path
 
@@ -49,7 +49,7 @@ def _coverage_threshold_findings(stats: List["CoverageStats"], min_percent: floa
     return findings
 
 
-def _combined_branch_coverage(stats: List["CoverageStats"]) -> tuple[int, int, float]:
+def _combined_branch_coverage(stats: List["CoverageStats"]) -> Tuple[int, int, float]:
     combined_total = sum(item.branch_total for item in stats)
     combined_covered = sum(item.branch_covered for item in stats)
     combined = 100.0 if combined_total <= 0 else (combined_covered / combined_total) * 100.0

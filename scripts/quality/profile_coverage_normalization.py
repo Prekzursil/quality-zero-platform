@@ -2,7 +2,7 @@ from __future__ import absolute_import
 
 from copy import deepcopy
 import re
-from typing import Any, Dict, List, Mapping, Sequence
+from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
 from scripts.quality.common import dedupe_strings
 
@@ -140,7 +140,7 @@ def _normalize_branch_min_percent(raw_branch_min_percent: Any) -> float | None:
         return None
 
 
-def _resolve_required_sources(coverage: Dict[str, Any]) -> tuple[List[str], str]:
+def _resolve_required_sources(coverage: Dict[str, Any]) -> Tuple[List[str], str]:
     require_sources = dedupe_strings(coverage.get("require_sources", []))
     require_sources_mode = "explicit" if require_sources else str(coverage.get("require_sources_mode", "infer")).strip() or "infer"
     if require_sources_mode == "infer" and not require_sources:

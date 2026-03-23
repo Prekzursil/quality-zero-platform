@@ -360,6 +360,7 @@ class QualityCommonTests(unittest.TestCase):
                 "mode": "ratchet",
                 "pr_behavior": "introduced_only",
                 "main_behavior": "absolute",
+                "baseline_ref": "main",
             },
         )
 
@@ -386,6 +387,7 @@ class QualityCommonTests(unittest.TestCase):
                 "mode": "zero",
                 "pr_behavior": "absolute",
                 "main_behavior": "absolute",
+                "baseline_ref": "",
             },
         )
         self.assertEqual(
@@ -394,6 +396,7 @@ class QualityCommonTests(unittest.TestCase):
                 "mode": "audit",
                 "pr_behavior": "introduced_only",
                 "main_behavior": "absolute",
+                "baseline_ref": "main",
             },
         )
         self.assertEqual(

@@ -40,7 +40,7 @@ TOP_LEVEL_KEYS: Set[str] = {
 NESTED_KEYS: Dict[str, Set[str]] = {
     "codex_environment": {"mode", "verify_command", "auth_file", "network_profile", "methods", "runner_labels"},
     "required_contexts": {"always", "pull_request_only", "required_now", "target"},
-    "issue_policy": {"mode", "pr_behavior", "main_behavior"},
+    "issue_policy": {"mode", "pr_behavior", "main_behavior", "baseline_ref"},
     "deps": {"enabled", "policy", "scope"},
     "coverage": {
         "runner",

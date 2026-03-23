@@ -415,6 +415,8 @@ def _validate_issue_policy_contract(profile: Dict[str, Any]) -> List[str]:
         findings.append(f"{profile['slug']}: issue_policy.pr_behavior must be introduced_only or absolute")
     if issue_policy.get("main_behavior") != "absolute":
         findings.append(f"{profile['slug']}: issue_policy.main_behavior must be absolute")
+    if issue_policy.get("mode") == "ratchet" and not issue_policy.get("baseline_ref"):
+        findings.append(f"{profile['slug']}: issue_policy.baseline_ref is required when mode is ratchet")
     return findings
 
 

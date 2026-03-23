@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 
 import argparse
+import shutil
 import json
 import os
 import sys
@@ -23,6 +24,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build the GitHub Pages admin dashboard payload.")
     parser.add_argument("--inventory", default="")
     parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--assets-dir", default="")
     return parser.parse_args()
 
 
@@ -43,6 +45,7 @@ def build_dashboard_payload(
                 "profile": repo_entry.get("profile", ""),
                 "rollout": repo_entry.get("rollout", ""),
                 "issue_policy_mode": profile.get("issue_policy", {}).get("mode", ""),
+                "issue_policy_baseline_ref": profile.get("issue_policy", {}).get("baseline_ref", ""),
                 "enabled_scanners": sorted(
                     name for name, enabled in profile.get("enabled_scanners", {}).items() if enabled
                 ),
@@ -64,11 +67,19 @@ def build_dashboard_payload(
 def render_dashboard_html(payload: Mapping[str, Any]) -> str:
     rows = "\n".join(
         (
+            (
+                baseline_text := (
+                    f" ({item.get('issue_policy_baseline_ref')})"
+                    if item.get("issue_policy_baseline_ref")
+                    else ""
+                )
+            )
+            and
             "<tr>"
             f"<td>{item['slug']}</td>"
             f"<td>{item['profile']}</td>"
             f"<td>{item['rollout']}</td>"
-            f"<td>{item['issue_policy_mode']}</td>"
+            f"<td>{item['issue_policy_mode']}{baseline_text}</td>"
             f"<td>{', '.join(item['enabled_scanners'])}</td>"
             f"<td>{item.get('branch_min_percent')}</td>"
             f"<td>{item.get('deps_policy')}</td>"
@@ -119,9 +130,15 @@ def render_dashboard_html(payload: Mapping[str, Any]) -> str:
 """
 
 
-def write_dashboard(output_dir: Path, payload: Mapping[str, Any]) -> None:
+def write_dashboard(output_dir: Path, payload: Mapping[str, Any], *, assets_dir: Path | None = None) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "dashboard-data.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    data_dir = output_dir / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    (data_dir / "dashboard.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if assets_dir is not None:
+        for asset_name in ("index.html", "styles.css", "app.js"):
+            shutil.copy2(assets_dir / asset_name, output_dir / asset_name)
+        return
     (output_dir / "index.html").write_text(render_dashboard_html(payload), encoding="utf-8")
 
 
@@ -176,7 +193,9 @@ def main() -> int:
         for repo_entry in inventory["repos"]:
             live[repo_entry["slug"]] = _live_health(token, repo_entry["slug"], repo_entry.get("default_branch", "main"))
     payload = build_dashboard_payload(inventory=inventory, profiles=profiles, live=live)
-    write_dashboard(Path(args.output_dir), payload)
+    docs_admin = Path(args.assets_dir).resolve() if args.assets_dir else Path(__file__).resolve().parents[2] / "docs" / "admin"
+    assets_dir = docs_admin if docs_admin.exists() else None
+    write_dashboard(Path(args.output_dir), payload, assets_dir=assets_dir)
     return 0
 
 

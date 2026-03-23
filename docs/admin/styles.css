@@ -1,0 +1,81 @@
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #0b1020;
+  color: #edf2f7;
+}
+a { color: #8cc8ff; text-decoration: none; }
+a:hover { text-decoration: underline; }
+.topbar, .filters, .table-wrap, .detail-panel, .summary-grid {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 16px 20px;
+}
+.topbar {
+  border-bottom: 1px solid #1f2a44;
+}
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+}
+.summary-card {
+  background: #121a31;
+  border: 1px solid #1f2a44;
+  border-radius: 12px;
+  padding: 16px;
+}
+.summary-card h3 { margin: 0 0 8px; font-size: 14px; color: #a0aec0; }
+.summary-card .value { font-size: 28px; font-weight: 700; }
+.filters { display: flex; gap: 12px; }
+input {
+  min-width: 280px;
+  background: #121a31;
+  color: #edf2f7;
+  border: 1px solid #33415c;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #121a31;
+  border: 1px solid #1f2a44;
+}
+th, td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #1f2a44;
+  text-align: left;
+  vertical-align: top;
+}
+tbody tr:hover { background: #16203d; cursor: pointer; }
+.badge {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.badge.pass { background: rgba(16, 185, 129, 0.18); color: #6ee7b7; }
+.badge.fail { background: rgba(239, 68, 68, 0.18); color: #fca5a5; }
+.badge.pending, .badge.unknown { background: rgba(148, 163, 184, 0.18); color: #cbd5e1; }
+.detail-panel {
+  background: #121a31;
+  border: 1px solid #1f2a44;
+  border-radius: 12px;
+}
+.hidden { display: none; }
+.detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.button.secondary {
+  background: transparent;
+  color: #edf2f7;
+  border: 1px solid #33415c;
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.small { color: #cbd5e1; }

@@ -52,12 +52,17 @@ class ControlPlaneAdminTests(unittest.TestCase):
             )
 
             control_plane_admin.set_scanner(repo_root=root, profile_id="example-repo", scanner="sonar", enabled=False)
-            control_plane_admin.set_issue_policy(repo_root=root, profile_id="example-repo", mode="ratchet")
+            control_plane_admin.set_issue_policy(
+                repo_root=root,
+                profile_id="example-repo",
+                mode="ratchet",
+                baseline_ref="main",
+            )
             control_plane_admin.set_coverage_mode(
                 repo_root=root,
                 profile_id="example-repo",
                 event_name="pull_request",
-                mode="evidence_only",
+                mode="non_regression",
             )
 
             profile_text = profile_path.read_text(encoding="utf-8")
@@ -65,4 +70,40 @@ class ControlPlaneAdminTests(unittest.TestCase):
         self.assertIn("sonar: false", profile_text)
         self.assertIn("issue_policy:", profile_text)
         self.assertIn("mode: ratchet", profile_text)
-        self.assertIn("pull_request: evidence_only", profile_text)
+        self.assertIn("baseline_ref: main", profile_text)
+        self.assertIn("pull_request: non_regression", profile_text)
+
+    def test_set_required_context_adds_and_removes_contexts(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            self._write_repo(root)
+            profile_path = root / "profiles" / "repos" / "example-repo.yml"
+            profile_path.write_text(
+                "slug: Prekzursil/example-repo\n"
+                "stack: python-web\n"
+                "required_contexts:\n"
+                "  target:\n"
+                "    - Coverage 100 Gate\n",
+                encoding="utf-8",
+            )
+
+            control_plane_admin.set_required_context(
+                repo_root=root,
+                profile_id="example-repo",
+                context_set="pull_request_only",
+                context_name="qlty coverage diff",
+                present=True,
+            )
+            control_plane_admin.set_required_context(
+                repo_root=root,
+                profile_id="example-repo",
+                context_set="target",
+                context_name="Coverage 100 Gate",
+                present=False,
+            )
+
+            profile_text = profile_path.read_text(encoding="utf-8")
+
+        self.assertIn("pull_request_only:", profile_text)
+        self.assertIn("qlty coverage diff", profile_text)
+        self.assertNotIn("    - Coverage 100 Gate", profile_text)

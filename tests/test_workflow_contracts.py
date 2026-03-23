@@ -348,6 +348,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("pages: write", dashboard_text)
         self.assertIn("id-token: write", dashboard_text)
         self.assertIn("build_admin_dashboard.py", dashboard_text)
+        self.assertIn("docs/admin", dashboard_text)
 
         admin_text = (ROOT / ".github" / "workflows" / "control-plane-admin.yml").read_text(encoding="utf-8")
         self.assertIn("workflow_dispatch:", admin_text)
@@ -355,4 +356,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("operation:", admin_text)
         self.assertIn("control_plane_admin.py", admin_text)
         self.assertIn("create-pull-request", admin_text)
+        self.assertIn("set-required-context", admin_text)
+        self.assertIn("baseline_ref", admin_text)
+        self.assertIn('options: ["enforce", "evidence_only", "non_regression"]', admin_text)
 

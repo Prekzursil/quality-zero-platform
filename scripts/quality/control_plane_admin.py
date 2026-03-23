@@ -57,10 +57,14 @@ def set_scanner(*, repo_root: Path, profile_id: str, scanner: str, enabled: bool
     _write_yaml(path, payload)
 
 
-def set_issue_policy(*, repo_root: Path, profile_id: str, mode: str) -> None:
+def set_issue_policy(*, repo_root: Path, profile_id: str, mode: str, baseline_ref: str = "") -> None:
     path = _profile_path(repo_root, profile_id)
     payload = _load_yaml(path)
-    payload["issue_policy"] = {"mode": mode}
+    issue_policy = {"mode": mode}
+    baseline_text = str(baseline_ref or "").strip()
+    if baseline_text:
+        issue_policy["baseline_ref"] = baseline_text
+    payload["issue_policy"] = issue_policy
     _write_yaml(path, payload)
 
 
@@ -70,6 +74,28 @@ def set_coverage_mode(*, repo_root: Path, profile_id: str, event_name: str, mode
     coverage = payload.setdefault("coverage", {})
     assert_mode = coverage.setdefault("assert_mode", {})
     assert_mode[event_name] = mode
+    _write_yaml(path, payload)
+
+
+def set_required_context(
+    *,
+    repo_root: Path,
+    profile_id: str,
+    context_set: str,
+    context_name: str,
+    present: bool,
+) -> None:
+    path = _profile_path(repo_root, profile_id)
+    payload = _load_yaml(path)
+    required_contexts = payload.setdefault("required_contexts", {})
+    current = list(required_contexts.get(context_set, []))
+    value = str(context_name).strip()
+    if present:
+        if value and value not in current:
+            current.append(value)
+    else:
+        current = [item for item in current if item != value]
+    required_contexts[context_set] = current
     _write_yaml(path, payload)
 
 
@@ -93,11 +119,18 @@ def parse_args() -> argparse.Namespace:
     issue_policy = subparsers.add_parser("set-issue-policy")
     issue_policy.add_argument("--profile-id", required=True)
     issue_policy.add_argument("--mode", choices=("zero", "ratchet", "audit"), required=True)
+    issue_policy.add_argument("--baseline-ref", default="")
 
     coverage = subparsers.add_parser("set-coverage-mode")
     coverage.add_argument("--profile-id", required=True)
     coverage.add_argument("--event-name", choices=("default", "push", "pull_request"), required=True)
-    coverage.add_argument("--mode", choices=("enforce", "evidence_only"), required=True)
+    coverage.add_argument("--mode", choices=("enforce", "evidence_only", "non_regression"), required=True)
+
+    required_context = subparsers.add_parser("set-required-context")
+    required_context.add_argument("--profile-id", required=True)
+    required_context.add_argument("--context-set", choices=("always", "pull_request_only", "required_now", "target"), required=True)
+    required_context.add_argument("--context-name", required=True)
+    required_context.add_argument("--present", choices=("true", "false"), required=True)
     return parser.parse_args()
 
 
@@ -116,7 +149,15 @@ def main() -> int:
     elif args.command == "set-scanner":
         set_scanner(repo_root=repo_root, profile_id=args.profile_id, scanner=args.scanner, enabled=args.enabled == "true")
     elif args.command == "set-issue-policy":
-        set_issue_policy(repo_root=repo_root, profile_id=args.profile_id, mode=args.mode)
+        set_issue_policy(repo_root=repo_root, profile_id=args.profile_id, mode=args.mode, baseline_ref=args.baseline_ref)
+    elif args.command == "set-required-context":
+        set_required_context(
+            repo_root=repo_root,
+            profile_id=args.profile_id,
+            context_set=args.context_set,
+            context_name=args.context_name,
+            present=args.present == "true",
+        )
     else:
         event_name = "default" if args.event_name == "default" else args.event_name
         set_coverage_mode(repo_root=repo_root, profile_id=args.profile_id, event_name=event_name, mode=args.mode)

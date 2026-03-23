@@ -12,6 +12,7 @@ on:
           - set-scanner
           - set-issue-policy
           - set-coverage-mode
+          - set-required-context
       repo_slug:
         description: "Target owner/repo"
         required: true
@@ -46,16 +47,34 @@ on:
         required: false
         type: choice
         options: ["zero", "ratchet", "audit"]
+      baseline_ref:
+        description: "Optional baseline ref for ratchet issue policy"
+        required: false
+        type: string
+      context_set:
+        description: "always, pull_request_only, required_now, or target"
+        required: false
+        type: choice
+        options: ["always", "pull_request_only", "required_now", "target"]
+      context_name:
+        description: "Context name for set-required-context"
+        required: false
+        type: string
+      present:
+        description: "true or false for set-required-context"
+        required: false
+        type: choice
+        options: ["true", "false"]
       coverage_event:
         description: "default, push, or pull_request"
         required: false
         type: choice
         options: ["default", "push", "pull_request"]
       coverage_mode:
-        description: "enforce or evidence_only"
+        description: "enforce, evidence_only, or non_regression"
         required: false
         type: choice
-        options: ["enforce", "evidence_only"]
+        options: ["enforce", "evidence_only", "non_regression"]
 
 permissions:
   contents: write
@@ -93,13 +112,21 @@ jobs:
             set-issue-policy)
               python scripts/quality/control_plane_admin.py --repo-root . set-issue-policy \
                 --profile-id "${{ inputs.profile_id }}" \
-                --mode "${{ inputs.issue_policy_mode || 'ratchet' }}"
+                --mode "${{ inputs.issue_policy_mode || 'ratchet' }}" \
+                --baseline-ref "${{ inputs.baseline_ref }}"
               ;;
             set-coverage-mode)
               python scripts/quality/control_plane_admin.py --repo-root . set-coverage-mode \
                 --profile-id "${{ inputs.profile_id }}" \
                 --event-name "${{ inputs.coverage_event || 'pull_request' }}" \
                 --mode "${{ inputs.coverage_mode || 'enforce' }}"
+              ;;
+            set-required-context)
+              python scripts/quality/control_plane_admin.py --repo-root . set-required-context \
+                --profile-id "${{ inputs.profile_id }}" \
+                --context-set "${{ inputs.context_set }}" \
+                --context-name "${{ inputs.context_name }}" \
+                --present "${{ inputs.present || 'true' }}"
               ;;
             *)
               echo "Unsupported operation: ${{ inputs.operation }}" >&2
@@ -123,3 +150,5 @@ jobs:
             - operation: `${{ inputs.operation }}`
             - repo: `${{ inputs.repo_slug }}`
             - profile: `${{ inputs.profile_id }}`
+            - baseline ref: `${{ inputs.baseline_ref }}`
+            - context set/name/present: `${{ inputs.context_set }}` / `${{ inputs.context_name }}` / `${{ inputs.present }}`

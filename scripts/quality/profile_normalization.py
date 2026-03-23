@@ -55,6 +55,7 @@ def normalize_issue_policy(raw_issue_policy: Mapping[str, Any] | str | None) -> 
             "mode": mode,
             "pr_behavior": "absolute" if mode == "zero" else "introduced_only",
             "main_behavior": "absolute",
+            "baseline_ref": "" if mode == "zero" else "main",
         }
 
     payload = deepcopy(raw_issue_policy or {}) if isinstance(raw_issue_policy, dict) else {}
@@ -67,6 +68,7 @@ def normalize_issue_policy(raw_issue_policy: Mapping[str, Any] | str | None) -> 
         "mode": mode,
         "pr_behavior": pr_behavior,
         "main_behavior": main_behavior,
+        "baseline_ref": str(payload.get("baseline_ref", "" if mode == "zero" else "main")).strip() or ("" if mode == "zero" else "main"),
     }
 
 

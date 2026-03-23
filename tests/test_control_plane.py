@@ -234,6 +234,7 @@ class ControlPlaneTests(unittest.TestCase):
                 "mode": "ratchet",
                 "pr_behavior": "introduced_only",
                 "main_behavior": "absolute",
+                "baseline_ref": "main",
             },
         )
 

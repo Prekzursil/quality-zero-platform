@@ -2,16 +2,17 @@
 from __future__ import absolute_import
 
 import argparse
+import http.client
 import json
 import os
 import subprocess  # nosec B404
 import sys
-import urllib.request
 import zipfile
 from io import BytesIO
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, List, cast
+from urllib.parse import urlparse
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # pragma: no cover
@@ -183,17 +184,24 @@ def _collect_current_coverage_payload(coverage: Dict[str, Any], *, repo_dir: Pat
 
 def _download_bytes(url: str, token: str) -> bytes:
     safe_url = normalize_https_url(url, allowed_hosts={"api.github.com"})
-    request = urllib.request.Request(
-        safe_url,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {token}",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "quality-zero-platform",
-        },
-    )
-    with urllib.request.urlopen(request, timeout=30) as response:  # nosec B310
+    parsed = urlparse(safe_url)
+    path = parsed.path + (f"?{parsed.query}" if parsed.query else "")
+    connection = http.client.HTTPSConnection(parsed.netloc, timeout=30)
+    try:
+        connection.request(
+            "GET",
+            path,
+            headers={
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {token}",
+                "X-GitHub-Api-Version": "2022-11-28",
+                "User-Agent": "quality-zero-platform",
+            },
+        )
+        response = connection.getresponse()
         return response.read()
+    finally:
+        connection.close()
 
 
 def _github_api_token() -> str:
@@ -238,7 +246,7 @@ def _load_baseline_coverage_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
     if artifact is None:
         raise RuntimeError("Unable to find coverage-artifacts on the baseline run.")
     archive_download_url = normalize_https_url(str(artifact["archive_download_url"]), allowed_hosts={"api.github.com"})
-    archive = _download_bytes(archive_download_url, token)  # nosec B310
+    archive = _download_bytes(archive_download_url, token)
     with zipfile.ZipFile(BytesIO(archive)) as handle:
         with handle.open("coverage-100/coverage.json") as stream:
             return json.loads(stream.read().decode("utf-8"))

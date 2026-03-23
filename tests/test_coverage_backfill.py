@@ -4,6 +4,7 @@ import importlib
 import json
 import os
 import runpy
+import subprocess  # nosec B404
 import sys
 import tempfile
 import unittest
@@ -210,6 +211,30 @@ class CoverageBackfillTests(unittest.TestCase):
                 with self.assertRaises(SystemExit) as result:
                     runpy.run_path(str(script_path), run_name="__main__")
             self.assertEqual(str(result.exception), "GITHUB_TOKEN or GH_TOKEN is required")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            markdown = Path(temp_dir) / "rollup.md"
+            markdown.write_text("# Rollup\n", encoding="utf-8")
+            command = [
+                sys.executable,
+                str(script_path),
+                "--repo",
+                "owner/repo",
+                "--pull-request",
+                "1",
+                "--markdown-file",
+                str(markdown),
+            ]
+            result = subprocess.run(  # nosec B603
+                command,
+                cwd=temp_dir,
+                capture_output=True,
+                text=True,
+                check=False,
+                env={k: v for k, v in os.environ.items() if k not in {"GITHUB_TOKEN", "GH_TOKEN"}},
+            )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("GITHUB_TOKEN or GH_TOKEN is required", result.stderr or result.stdout)
 
     def test_profile_validation_branches_and_shape_non_dict(self) -> None:
         profile = {

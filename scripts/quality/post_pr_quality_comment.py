@@ -4,9 +4,13 @@ from __future__ import absolute_import
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any, Dict
 from urllib.error import HTTPError
+
+if str(Path(__file__).resolve().parents[2]) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.security_helpers import load_json_https
 

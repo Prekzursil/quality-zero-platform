@@ -65,3 +65,8 @@ repos:
     rollout: phase1-wave3
     default_branch: main
     notes: Preserve PR-focused trigger behavior metadata.
+  - slug: Prekzursil/codeblocks-pretty-prints-stable
+    profile: codeblocks-pretty-prints-stable
+    rollout: phase1-wave6
+    default_branch: main
+    notes: Public fetch-and-package Code::Blocks control-plane repo with managed profile seeding and strict-zero governance.

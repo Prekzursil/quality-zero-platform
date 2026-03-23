@@ -24,9 +24,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ControlPlaneTests(unittest.TestCase):
-    def test_inventory_expands_to_13_repos(self) -> None:
+    def test_inventory_expands_to_14_repos(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
-        self.assertEqual(len(inventory["repos"]), 13)
+        self.assertEqual(len(inventory["repos"]), 14)
 
     def test_common_phase1_template_contexts_resolve(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")

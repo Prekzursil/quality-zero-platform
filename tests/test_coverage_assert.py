@@ -305,7 +305,7 @@ class CoverageAssertTests(unittest.TestCase):
             out_md="coverage-100/custom.md",
         )), patch.object(assert_coverage_100, "_collect_coverage_inputs", return_value=(stats, {"pkg/main.py"})), patch.object(
             assert_coverage_100, "write_report", return_value=0
-        ) as write_report_mock, patch.object(assert_coverage_100, "safe_output_path", side_effect=lambda raw, _fallback: Path(raw)):
+        ) as write_report_mock:
             self.assertEqual(assert_coverage_100.main(), 0)
 
         payload = write_report_mock.call_args.args[0]
@@ -369,7 +369,6 @@ class CoverageAssertTests(unittest.TestCase):
             patch.object(assert_coverage_100, "_parse_args", return_value=parsed_args),
             patch.object(assert_coverage_100, "_collect_coverage_inputs", return_value=collected_inputs),
             patch.object(assert_coverage_100, "write_report", return_value=5),
-            patch.object(assert_coverage_100, "safe_output_path", side_effect=lambda raw, _fallback: Path(raw)),
         ):
             self.assertEqual(assert_coverage_100.main(), 5)
 

@@ -33,10 +33,8 @@ def dedupe_strings(items: Iterable[str]) -> List[str]:
 
 def safe_output_path(raw: str, fallback: str, base: Path | None = None) -> Path:
     root = (base or Path.cwd()).resolve()
-    candidate = Path((raw or "").strip() or fallback).expanduser()
-    if not candidate.is_absolute():
-        candidate = root / candidate
-    resolved = candidate.resolve(strict=False)
+    candidate = Path((raw or "").strip() or fallback)
+    resolved = candidate.resolve(strict=False) if candidate.is_absolute() else (root / candidate).resolve(strict=False)
     if not resolved.is_relative_to(root):
         raise ValueError(f"Output path escapes workspace root: {candidate}")
     return resolved

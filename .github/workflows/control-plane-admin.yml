@@ -83,6 +83,9 @@ permissions:
 jobs:
   propose-change:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -93,43 +96,59 @@ jobs:
       - name: Install platform dependencies
         run: python -m pip install -r requirements-dev.txt
       - name: Apply admin mutation
+        env:
+          ADMIN_OPERATION: ${{ inputs.operation }}
+          ADMIN_REPO_SLUG: ${{ inputs.repo_slug }}
+          ADMIN_PROFILE_ID: ${{ inputs.profile_id }}
+          ADMIN_STACK: ${{ inputs.stack }}
+          ADMIN_ROLLOUT: ${{ inputs.rollout || 'phase2-wave0' }}
+          ADMIN_DEFAULT_BRANCH: ${{ inputs.default_branch || 'main' }}
+          ADMIN_SCANNER: ${{ inputs.scanner }}
+          ADMIN_ENABLED: ${{ inputs.enabled || 'true' }}
+          ADMIN_ISSUES_MODE: ${{ inputs.issue_policy_mode || 'ratchet' }}
+          ADMIN_BASELINE_REF: ${{ inputs.baseline_ref }}
+          ADMIN_CONTEXT_SET: ${{ inputs.context_set }}
+          ADMIN_CONTEXT_NAME: ${{ inputs.context_name }}
+          ADMIN_CONTEXT_PRESENT: ${{ inputs.present || 'true' }}
+          ADMIN_COVERAGE_EVENT: ${{ inputs.coverage_event || 'pull_request' }}
+          ADMIN_COVERAGE_MODE: ${{ inputs.coverage_mode || 'enforce' }}
         run: |
-          case "${{ inputs.operation }}" in
+          case "$ADMIN_OPERATION" in
             enroll-repo)
               python scripts/quality/control_plane_admin.py --repo-root . enroll-repo \
-                --repo-slug "${{ inputs.repo_slug }}" \
-                --profile-id "${{ inputs.profile_id }}" \
-                --stack "${{ inputs.stack }}" \
-                --rollout "${{ inputs.rollout || 'phase2-wave0' }}" \
-                --default-branch "${{ inputs.default_branch || 'main' }}"
+                --repo-slug "$ADMIN_REPO_SLUG" \
+                --profile-id "$ADMIN_PROFILE_ID" \
+                --stack "$ADMIN_STACK" \
+                --rollout "$ADMIN_ROLLOUT" \
+                --default-branch "$ADMIN_DEFAULT_BRANCH"
               ;;
             set-scanner)
               python scripts/quality/control_plane_admin.py --repo-root . set-scanner \
-                --profile-id "${{ inputs.profile_id }}" \
-                --scanner "${{ inputs.scanner }}" \
-                --enabled "${{ inputs.enabled || 'true' }}"
+                --profile-id "$ADMIN_PROFILE_ID" \
+                --scanner "$ADMIN_SCANNER" \
+                --enabled "$ADMIN_ENABLED"
               ;;
             set-issue-policy)
               python scripts/quality/control_plane_admin.py --repo-root . set-issue-policy \
-                --profile-id "${{ inputs.profile_id }}" \
-                --mode "${{ inputs.issue_policy_mode || 'ratchet' }}" \
-                --baseline-ref "${{ inputs.baseline_ref }}"
+                --profile-id "$ADMIN_PROFILE_ID" \
+                --mode "$ADMIN_ISSUES_MODE" \
+                --baseline-ref "$ADMIN_BASELINE_REF"
               ;;
             set-coverage-mode)
               python scripts/quality/control_plane_admin.py --repo-root . set-coverage-mode \
-                --profile-id "${{ inputs.profile_id }}" \
-                --event-name "${{ inputs.coverage_event || 'pull_request' }}" \
-                --mode "${{ inputs.coverage_mode || 'enforce' }}"
+                --profile-id "$ADMIN_PROFILE_ID" \
+                --event-name "$ADMIN_COVERAGE_EVENT" \
+                --mode "$ADMIN_COVERAGE_MODE"
               ;;
             set-required-context)
               python scripts/quality/control_plane_admin.py --repo-root . set-required-context \
-                --profile-id "${{ inputs.profile_id }}" \
-                --context-set "${{ inputs.context_set }}" \
-                --context-name "${{ inputs.context_name }}" \
-                --present "${{ inputs.present || 'true' }}"
+                --profile-id "$ADMIN_PROFILE_ID" \
+                --context-set "$ADMIN_CONTEXT_SET" \
+                --context-name "$ADMIN_CONTEXT_NAME" \
+                --present "$ADMIN_CONTEXT_PRESENT"
               ;;
             *)
-              echo "Unsupported operation: ${{ inputs.operation }}" >&2
+              echo "Unsupported operation: $ADMIN_OPERATION" >&2
               exit 1
               ;;
           esac

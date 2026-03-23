@@ -12,7 +12,7 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.quality import coverage_support
-from scripts.quality.common import DEFAULT_COVERAGE_JSON, DEFAULT_COVERAGE_MD, NONE_BULLET, safe_output_path, utc_timestamp, write_report
+from scripts.quality.common import DEFAULT_COVERAGE_JSON, DEFAULT_COVERAGE_MD, NONE_BULLET, utc_timestamp, write_report
 from scripts.quality.coverage_support import (
     _coverage_threshold_findings,
     _required_source_findings,
@@ -215,12 +215,10 @@ def main() -> int:
         status=status,
         findings=findings,
     )
-    out_json = str(safe_output_path(args.out_json, DEFAULT_COVERAGE_JSON))
-    out_md = str(safe_output_path(args.out_md, DEFAULT_COVERAGE_MD))
     return_code = write_report(
         payload,
-        out_json=out_json,
-        out_md=out_md,
+        out_json=args.out_json,
+        out_md=args.out_md,
         default_json=DEFAULT_COVERAGE_JSON,
         default_md=DEFAULT_COVERAGE_MD,
         render_md=_render_md,

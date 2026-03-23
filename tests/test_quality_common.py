@@ -107,6 +107,8 @@ class QualityCommonTests(unittest.TestCase):
                 nested_path = safe_output_path("nested/report.md", "ignored.txt")
                 self.assertEqual(nested_path.name, "report.md")
                 self.assertTrue(nested_path.as_posix().endswith("/nested/report.md"))
+                absolute_candidate = str((root / "absolute-outside.json").resolve())
+                self.assertEqual(safe_output_path(absolute_candidate, "reports/out.json"), Path(absolute_candidate))
                 with self.assertRaisesRegex(ValueError, "escapes workspace root"):
                     safe_output_path("../outside.json", "reports/out.json")
 

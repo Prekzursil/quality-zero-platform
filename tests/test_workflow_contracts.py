@@ -347,6 +347,9 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("workflow_dispatch:", dashboard_text)
         self.assertIn("pages: write", dashboard_text)
         self.assertIn("id-token: write", dashboard_text)
+        self.assertIn("build:", dashboard_text)
+        self.assertIn("deploy:", dashboard_text)
+        self.assertIn("permissions:", dashboard_text)
         self.assertIn("build_admin_dashboard.py", dashboard_text)
         self.assertIn("docs/admin", dashboard_text)
 
@@ -359,4 +362,8 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("set-required-context", admin_text)
         self.assertIn("baseline_ref", admin_text)
         self.assertIn('options: ["enforce", "evidence_only", "non_regression"]', admin_text)
+        self.assertIn("ADMIN_OPERATION: ${{ inputs.operation }}", admin_text)
+        self.assertIn("ADMIN_REPO_SLUG: ${{ inputs.repo_slug }}", admin_text)
+        self.assertIn('--repo-slug "$ADMIN_REPO_SLUG"', admin_text)
+        self.assertNotIn('--repo-slug "${{ inputs.repo_slug }}"', admin_text)
 

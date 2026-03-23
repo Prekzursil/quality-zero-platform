@@ -80,10 +80,11 @@ class RulesetPayloadTests(unittest.TestCase):
 
         contexts = [entry["context"] for entry in payload["rules"][1]["parameters"]["required_status_checks"]]
 
-        self.assertIn("qlty check", contexts)
-        self.assertIn("qlty coverage", contexts)
-        self.assertIn("qlty coverage diff", contexts)
-        self.assertIn("qlty check", profile["required_contexts"]["target"])
-        self.assertIn("qlty coverage", profile["required_contexts"]["target"])
-        self.assertIn("qlty coverage diff", profile["required_contexts"]["target"])
+        self.assertNotIn("qlty check", contexts)
+        self.assertNotIn("qlty coverage", contexts)
+        self.assertNotIn("qlty coverage diff", contexts)
+        self.assertNotIn("qlty check", profile["required_contexts"]["target"])
+        self.assertNotIn("qlty coverage", profile["required_contexts"]["target"])
+        self.assertNotIn("qlty coverage diff", profile["required_contexts"]["target"])
+        self.assertIn("QLTY Zero", contexts)
 

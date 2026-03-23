@@ -15,16 +15,10 @@ required_contexts:
   pull_request_only:
     - Codacy Static Code Analysis
     - DeepScan
-    - qlty check
-    - qlty coverage
-    - qlty coverage diff
   target:
     - Coverage 100 Gate
     - Codecov Analytics
     - QLTY Zero
-    - qlty check
-    - qlty coverage
-    - qlty coverage diff
     - Sonar Zero
     - Codacy Zero
     - Semgrep Zero

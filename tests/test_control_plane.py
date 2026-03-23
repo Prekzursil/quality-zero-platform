@@ -111,7 +111,9 @@ class ControlPlaneTests(unittest.TestCase):
 
         self.assertNotIn("Codacy Static Code Analysis", push_contexts)
         self.assertIn("Codacy Static Code Analysis", pr_contexts)
-        self.assertTrue({"qlty check", "qlty coverage", "qlty coverage diff"}.issubset(pr_contexts))
+        self.assertNotIn("qlty check", pr_contexts)
+        self.assertNotIn("qlty coverage", pr_contexts)
+        self.assertNotIn("qlty coverage diff", pr_contexts)
 
     def test_quality_zero_platform_requires_controller_qlty_zero_context_on_push_and_ruleset(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
@@ -124,7 +126,7 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertIn("QLTY Zero", push_contexts)
         self.assertIn("QLTY Zero", profile["required_contexts"]["target"])
         self.assertIn("QLTY Zero", ruleset_contexts)
-        self.assertIn("qlty coverage diff", ruleset_contexts)
+        self.assertNotIn("qlty coverage diff", ruleset_contexts)
         self.assertIn("QLTY Zero", [item["context"] for item in payload["rules"][1]["parameters"]["required_status_checks"]])
 
     def test_quality_zero_platform_requires_qlty_zero(self) -> None:

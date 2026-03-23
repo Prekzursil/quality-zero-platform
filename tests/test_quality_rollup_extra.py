@@ -9,6 +9,8 @@ from unittest.mock import patch
 
 from scripts.quality import build_quality_rollup, post_pr_quality_comment
 
+FAKE_GITHUB_CREDENTIAL = "gh-auth-placeholder"
+
 
 class QualityRollupExtraTests(unittest.TestCase):
     def test_parse_args_and_context_helpers_cover_default_paths(self) -> None:
@@ -88,7 +90,7 @@ class QualityRollupExtraTests(unittest.TestCase):
                 build_quality_rollup.ContextWaitRequest(
                     repo="owner/repo",
                     sha="abc123",
-                    token="token",
+                    token=FAKE_GITHUB_CREDENTIAL,
                     required_contexts=["Coverage 100 Gate"],
                     timeout_seconds=2,
                     poll_seconds=0,
@@ -131,7 +133,7 @@ class QualityRollupExtraTests(unittest.TestCase):
                     repo="owner/repo",
                     pull_request="12",
                     body="<!-- quality-zero-rollup -->\nnew",
-                    token="token",
+                    token=FAKE_GITHUB_CREDENTIAL,
                 ),
                 7,
             )
@@ -150,7 +152,7 @@ class QualityRollupExtraTests(unittest.TestCase):
                     repo="owner/repo",
                     pull_request="12",
                     body="<!-- quality-zero-rollup -->\nnew",
-                    token="token",
+                    token=FAKE_GITHUB_CREDENTIAL,
                 ),
                 11,
             )

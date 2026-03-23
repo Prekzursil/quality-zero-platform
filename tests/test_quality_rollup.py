@@ -7,6 +7,8 @@ from unittest.mock import patch
 
 from scripts.quality import build_quality_rollup, post_pr_quality_comment
 
+FAKE_GITHUB_CREDENTIAL = "gh-auth-placeholder"
+
 
 class QualityRollupTests(unittest.TestCase):
     def test_build_rollup_combines_expected_contexts_lane_artifacts_and_check_results(self) -> None:
@@ -123,7 +125,7 @@ class QualityRollupTests(unittest.TestCase):
                 build_quality_rollup.ContextWaitRequest(
                     repo="owner/repo",
                     sha="abc123",
-                    token="token",
+                    token=FAKE_GITHUB_CREDENTIAL,
                     required_contexts=["Coverage 100 Gate"],
                     timeout_seconds=2,
                     poll_seconds=0,
@@ -144,7 +146,7 @@ class QualityRollupTests(unittest.TestCase):
                 build_quality_rollup.ContextWaitRequest(
                     repo="owner/repo",
                     sha="abc123",
-                    token="token",
+                    token=FAKE_GITHUB_CREDENTIAL,
                     required_contexts=["Coverage 100 Gate"],
                     timeout_seconds=2,
                     poll_seconds=0,

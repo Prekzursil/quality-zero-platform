@@ -4,39 +4,36 @@ from copy import deepcopy
 from typing import Any, Dict, List, Mapping
 
 from scripts.quality.common import dedupe_strings
-from scripts.quality.profile_coverage_normalization import (
-    infer_coverage_inputs,  # noqa: F401
-    infer_required_sources,  # noqa: F401
-    normalize_coverage,  # noqa: F401
-    normalize_coverage_assert_mode,  # noqa: F401
-    normalize_coverage_inputs,  # noqa: F401
-    normalize_coverage_setup,  # noqa: F401
-    normalize_java_setup,  # noqa: F401
-)
+from scripts.quality import profile_coverage_normalization
+
+
+def _issue_policy_defaults(mode: str) -> Dict[str, str]:
+    zero_mode = mode == "zero"
+    return {
+        "mode": mode,
+        "pr_behavior": "absolute" if zero_mode else "introduced_only",
+        "main_behavior": "absolute",
+        "baseline_ref": "" if zero_mode else "main",
+    }
+
+
+def _merge_issue_policy_defaults(mode: str, payload: Mapping[str, Any]) -> Dict[str, str]:
+    defaults = _issue_policy_defaults(mode)
+    return {
+        "mode": mode,
+        "pr_behavior": str(payload.get("pr_behavior", defaults["pr_behavior"])).strip() or defaults["pr_behavior"],
+        "main_behavior": str(payload.get("main_behavior", defaults["main_behavior"])).strip() or defaults["main_behavior"],
+        "baseline_ref": str(payload.get("baseline_ref", defaults["baseline_ref"])).strip() or defaults["baseline_ref"],
+    }
 
 
 def normalize_issue_policy(raw_issue_policy: Mapping[str, Any] | str | None) -> Dict[str, str]:
     if isinstance(raw_issue_policy, str):
-        mode = str(raw_issue_policy or "").strip() or "ratchet"
-        return {
-            "mode": mode,
-            "pr_behavior": "absolute" if mode == "zero" else "introduced_only",
-            "main_behavior": "absolute",
-            "baseline_ref": "" if mode == "zero" else "main",
-        }
+        return _issue_policy_defaults(str(raw_issue_policy or "").strip() or "ratchet")
 
     payload = deepcopy(raw_issue_policy or {}) if isinstance(raw_issue_policy, dict) else {}
     mode = str(payload.get("mode", "ratchet")).strip() or "ratchet"
-    pr_behavior = str(
-        payload.get("pr_behavior", "absolute" if mode == "zero" else "introduced_only")
-    ).strip() or ("absolute" if mode == "zero" else "introduced_only")
-    main_behavior = str(payload.get("main_behavior", "absolute")).strip() or "absolute"
-    return {
-        "mode": mode,
-        "pr_behavior": pr_behavior,
-        "main_behavior": main_behavior,
-        "baseline_ref": str(payload.get("baseline_ref", "" if mode == "zero" else "main")).strip() or ("" if mode == "zero" else "main"),
-    }
+    return _merge_issue_policy_defaults(mode, payload)
 
 
 def normalize_deps(raw_deps: Mapping[str, Any] | None) -> Dict[str, Any]:
@@ -73,6 +70,34 @@ def merge_required_contexts(base: Mapping[str, Any] | None, overlay: Mapping[str
             "target": [*base_payload.get("target", []), *overlay_payload.get("target", [])],
         }
     )
+
+
+def normalize_coverage_inputs(raw_inputs: Any) -> List[Dict[str, str]]:
+    return profile_coverage_normalization.normalize_coverage_inputs(raw_inputs)
+
+
+def infer_coverage_inputs(coverage: Mapping[str, Any] | None) -> List[Dict[str, str]]:
+    return profile_coverage_normalization.infer_coverage_inputs(coverage)
+
+
+def infer_required_sources(raw_coverage: Mapping[str, Any] | None) -> List[str]:
+    return profile_coverage_normalization.infer_required_sources(raw_coverage)
+
+
+def normalize_java_setup(raw_java: Any) -> Dict[str, Any]:
+    return profile_coverage_normalization.normalize_java_setup(raw_java)
+
+
+def normalize_coverage_setup(raw_setup: Any) -> Dict[str, Any]:
+    return profile_coverage_normalization.normalize_coverage_setup(raw_setup)
+
+
+def normalize_coverage_assert_mode(raw_assert_mode: Any) -> Dict[str, str]:
+    return profile_coverage_normalization.normalize_coverage_assert_mode(raw_assert_mode)
+
+
+def normalize_coverage(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
+    return profile_coverage_normalization.normalize_coverage(raw)
 
 
 def normalize_codex_environment(raw: Mapping[str, Any] | None, *, verify_command: str) -> Dict[str, Any]:

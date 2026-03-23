@@ -18,11 +18,7 @@ from scripts.quality.common import (
     dedupe_strings,
 )
 from scripts.quality.control_plane_vendors import finalize_vendors, normalize_visual_lane
-from scripts.quality.profile_contract_validation import (
-    _validate_coverage_contract,  # noqa: F401
-    _validate_vendor_urls,  # noqa: F401
-    validate_profile as validate_profile_impl,
-)
+from scripts.quality import profile_contract_validation
 from scripts.quality.profile_normalization import (
     normalize_deps as common_normalize_deps,
     infer_coverage_inputs as common_infer_coverage_inputs,
@@ -322,7 +318,15 @@ def build_ruleset_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def validate_profile(profile: Dict[str, Any]) -> List[str]:
-    return validate_profile_impl(profile, active_required_contexts_fn=active_required_contexts)
+    return profile_contract_validation.validate_profile(profile, active_required_contexts_fn=active_required_contexts)
+
+
+def _validate_coverage_contract(profile: Dict[str, Any]) -> List[str]:
+    return profile_contract_validation._validate_coverage_contract(profile)
+
+
+def _validate_vendor_urls(profile: Dict[str, Any]) -> List[str]:
+    return profile_contract_validation._validate_vendor_urls(profile)
 
 
 def _parse_args() -> argparse.Namespace:

@@ -37,7 +37,7 @@ class DependabotAlertTests(unittest.TestCase):
     def test_main_handles_missing_token_and_open_alerts(self) -> None:
         args = check_dependabot_alerts.argparse.Namespace(
             repo="Prekzursil/quality-zero-platform",
-            token="",
+            token=None,
             policy="zero_critical",
             scope="runtime",
             out_json="deps-zero/deps.json",

@@ -7,7 +7,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Mapping
+from typing import Any, Dict, List, Mapping, Set
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -166,11 +166,15 @@ def _select_runs(workflow_runs: List[Mapping[str, Any]], *, filter_fn=None) -> L
     return [item for item in workflow_runs if filter_fn(item)]
 
 
+def _run_conclusions(workflow_runs: List[Mapping[str, Any]]) -> Set[str]:
+    return {str(item.get("conclusion") or "") for item in workflow_runs if item.get("conclusion")}
+
+
 def _compute_health(workflow_runs: List[Mapping[str, Any]], *, filter_fn=None) -> str:
     runs = _select_runs(workflow_runs, filter_fn=filter_fn)
     if not runs:
         return "unknown"
-    conclusions = {str(item.get("conclusion") or "") for item in runs if item.get("conclusion")}
+    conclusions = _run_conclusions(runs)
     return "success" if conclusions and conclusions <= {"success"} else "partial"
 
 

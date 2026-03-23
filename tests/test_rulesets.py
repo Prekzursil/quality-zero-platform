@@ -83,8 +83,12 @@ class RulesetPayloadTests(unittest.TestCase):
         self.assertNotIn("qlty check", contexts)
         self.assertNotIn("qlty coverage", contexts)
         self.assertNotIn("qlty coverage diff", contexts)
+        self.assertNotIn("Codacy Static Code Analysis", contexts)
+        self.assertNotIn("DeepScan", contexts)
         self.assertNotIn("qlty check", profile["required_contexts"]["target"])
         self.assertNotIn("qlty coverage", profile["required_contexts"]["target"])
         self.assertNotIn("qlty coverage diff", profile["required_contexts"]["target"])
+        self.assertNotIn("Codacy Static Code Analysis", profile["required_contexts"]["target"])
+        self.assertNotIn("DeepScan", profile["required_contexts"]["target"])
         self.assertIn("QLTY Zero", contexts)
 

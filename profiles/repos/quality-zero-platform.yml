@@ -12,9 +12,7 @@ required_contexts:
     - Sentry Zero
     - DeepScan Zero
     - SonarCloud Code Analysis
-  pull_request_only:
-    - Codacy Static Code Analysis
-    - DeepScan
+  pull_request_only: []
   target:
     - Coverage 100 Gate
     - Codecov Analytics
@@ -25,8 +23,6 @@ required_contexts:
     - Sentry Zero
     - DeepScan Zero
     - SonarCloud Code Analysis
-    - Codacy Static Code Analysis
-    - DeepScan
 coverage:
   command: |
     python -m pip install --upgrade pip

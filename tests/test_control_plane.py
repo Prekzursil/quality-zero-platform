@@ -110,7 +110,8 @@ class ControlPlaneTests(unittest.TestCase):
         pr_contexts = active_required_contexts(profile, event_name="pull_request")
 
         self.assertNotIn("Codacy Static Code Analysis", push_contexts)
-        self.assertIn("Codacy Static Code Analysis", pr_contexts)
+        self.assertNotIn("Codacy Static Code Analysis", pr_contexts)
+        self.assertNotIn("DeepScan", pr_contexts)
         self.assertNotIn("qlty check", pr_contexts)
         self.assertNotIn("qlty coverage", pr_contexts)
         self.assertNotIn("qlty coverage diff", pr_contexts)
@@ -140,6 +141,8 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertIn("QLTY Zero", push_contexts)
         self.assertIn("QLTY Zero", pr_contexts)
         self.assertIn("QLTY Zero", target_contexts)
+        self.assertNotIn("Codacy Static Code Analysis", target_contexts)
+        self.assertNotIn("DeepScan", target_contexts)
 
     def test_reframe_overlay_adds_visual_and_platform_contexts_to_target(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")

@@ -1,0 +1,16 @@
+slug: Prekzursil/codeblocks-pretty-prints-stable
+stack: python-desktop
+verify_command: bash scripts/verify
+coverage:
+  command: |
+    python -m pip install --upgrade pip
+    python -m pip install -r requirements-dev.txt
+    npm ci
+    bash scripts/verify
+  inputs:
+    - format: xml
+      name: repo
+      path: build/coverage.xml
+vendors:
+  sonar:
+    project_key: Prekzursil_codeblocks-pretty-prints-stable

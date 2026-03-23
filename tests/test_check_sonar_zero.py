@@ -45,7 +45,7 @@ class SonarZeroTests(unittest.TestCase):
             captured_urls.append(url)
             return responses.pop(0)
 
-        args = Namespace(project_key="project", branch="", pull_request="5")
+        args = Namespace(project_key="project", branch="", pull_request="5", policy_mode="zero")
         with patch("scripts.quality.check_sonar_zero._request_json", side_effect=fake_request):
             self.assertEqual(check_sonar_zero._load_open_issues(args, "auth"), 1)
             self.assertEqual(check_sonar_zero._load_quality_gate(args, "auth"), "ERROR")
@@ -59,7 +59,7 @@ class SonarZeroTests(unittest.TestCase):
             branch_urls.append(url)
             return {"paging": {"total": 0}}
 
-        branch_args = Namespace(project_key="project", branch="main", pull_request="")
+        branch_args = Namespace(project_key="project", branch="main", pull_request="", policy_mode="zero")
         with patch("scripts.quality.check_sonar_zero._request_json", side_effect=fake_branch_request):
             self.assertEqual(check_sonar_zero._load_open_issues(branch_args, "auth"), 0)
 
@@ -78,6 +78,12 @@ class SonarZeroTests(unittest.TestCase):
             check_sonar_zero, "_load_quality_gate", return_value="OK"
         ):
             self.assertEqual(check_sonar_zero._load_sonar_findings(args, "auth"), (0, "OK", []))
+
+        ratchet_args = Namespace(project_key="project", branch="", pull_request="5", policy_mode="ratchet")
+        with patch.object(check_sonar_zero, "_load_open_issues", return_value=6), patch.object(
+            check_sonar_zero, "_load_quality_gate", return_value="OK"
+        ):
+            self.assertEqual(check_sonar_zero._load_sonar_findings(ratchet_args, "auth"), (6, "OK", []))
 
     def test_retry_waits_for_pr_scoped_findings_to_settle(self) -> None:
         args = argparse.Namespace(branch="", pull_request="5")
@@ -220,6 +226,13 @@ class SonarZeroTests(unittest.TestCase):
             check_sonar_zero, "load_sonar_findings_with_retry", return_value=(0, "OK", [])
         ), patch.object(check_sonar_zero, "write_report", return_value=4):
             self.assertEqual(check_sonar_zero.main(), 4)
+
+        audit_args = Namespace(**{**success_args.__dict__, "policy_mode": "audit"})
+        with patch.object(check_sonar_zero, "_parse_args", return_value=audit_args), patch.object(
+            check_sonar_zero, "load_sonar_findings_with_retry", return_value=(3, "ERROR", ["Sonar reports 3 open issues (expected 0)."])
+        ), patch.object(check_sonar_zero, "write_report", return_value=0) as write_report_mock:
+            self.assertEqual(check_sonar_zero.main(), 0)
+        self.assertEqual(write_report_mock.call_args.args[0]["status"], "pass")
 
     def test_parse_args_render_markdown_and_script_entrypoint(self) -> None:
         with patch.object(sys, "argv", ["check_sonar_zero.py", "--project-key", "project"]):

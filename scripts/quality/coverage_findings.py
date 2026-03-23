@@ -1,10 +1,10 @@
 from __future__ import absolute_import
 
-from typing import List, Set, TYPE_CHECKING
+from typing import List, Set, TYPE_CHECKING, Tuple
 
 from scripts.quality.coverage_paths import _normalize_source_path
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from scripts.quality.assert_coverage_100 import CoverageStats
 
 
@@ -45,6 +45,37 @@ def _coverage_threshold_findings(stats: List["CoverageStats"], min_percent: floa
     if combined < min_percent:
         findings.append(
             f"combined coverage below {min_percent:.2f}%: {combined:.2f}% ({combined_covered}/{combined_total})"
+        )
+    return findings
+
+
+def _combined_branch_coverage(stats: List["CoverageStats"]) -> Tuple[int, int, float]:
+    combined_total = sum(item.branch_total for item in stats)
+    combined_covered = sum(item.branch_covered for item in stats)
+    combined = 100.0 if combined_total <= 0 else (combined_covered / combined_total) * 100.0
+    return combined_total, combined_covered, combined
+
+
+def _branch_coverage_findings_for_stats(stats: List["CoverageStats"], branch_min_percent: float) -> List[str]:
+    findings: List[str] = []
+    for item in stats:
+        if item.branch_percent < branch_min_percent:
+            findings.append(
+                f"{item.name} branch coverage below {branch_min_percent:.2f}%: {item.branch_percent:.2f}% ({item.branch_covered}/{item.branch_total})"
+            )
+    return findings
+
+
+def _branch_threshold_findings(stats: List["CoverageStats"], branch_min_percent: float | None) -> List[str]:
+    if branch_min_percent is None:
+        return []
+
+    stats_list = [item for item in stats if item.branch_total > 0]
+    findings = _branch_coverage_findings_for_stats(stats_list, branch_min_percent)
+    combined_total, combined_covered, combined = _combined_branch_coverage(stats_list)
+    if combined_total > 0 and combined < branch_min_percent:
+        findings.append(
+            f"combined branch coverage below {branch_min_percent:.2f}%: {combined:.2f}% ({combined_covered}/{combined_total})"
         )
     return findings
 

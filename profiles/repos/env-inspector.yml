@@ -62,11 +62,15 @@ required_contexts:
     - Codacy Static Code Analysis
     - DeepScan
     - qlty check
+    - qlty coverage
+    - qlty coverage diff
   pull_request_only:
     - SonarCloud Code Analysis
     - Codacy Static Code Analysis
     - DeepScan
     - qlty check
+    - qlty coverage
+    - qlty coverage diff
 vendors:
   sonar:
     project_key: Prekzursil_env-inspector

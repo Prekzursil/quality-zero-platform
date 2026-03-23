@@ -110,7 +110,11 @@ class ControlPlaneTests(unittest.TestCase):
         pr_contexts = active_required_contexts(profile, event_name="pull_request")
 
         self.assertNotIn("Codacy Static Code Analysis", push_contexts)
-        self.assertIn("Codacy Static Code Analysis", pr_contexts)
+        self.assertNotIn("Codacy Static Code Analysis", pr_contexts)
+        self.assertNotIn("DeepScan", pr_contexts)
+        self.assertNotIn("qlty check", pr_contexts)
+        self.assertNotIn("qlty coverage", pr_contexts)
+        self.assertNotIn("qlty coverage diff", pr_contexts)
 
     def test_quality_zero_platform_requires_controller_qlty_zero_context_on_push_and_ruleset(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
@@ -123,6 +127,7 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertIn("QLTY Zero", push_contexts)
         self.assertIn("QLTY Zero", profile["required_contexts"]["target"])
         self.assertIn("QLTY Zero", ruleset_contexts)
+        self.assertNotIn("qlty coverage diff", ruleset_contexts)
         self.assertIn("QLTY Zero", [item["context"] for item in payload["rules"][1]["parameters"]["required_status_checks"]])
 
     def test_quality_zero_platform_requires_qlty_zero(self) -> None:
@@ -136,6 +141,8 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertIn("QLTY Zero", push_contexts)
         self.assertIn("QLTY Zero", pr_contexts)
         self.assertIn("QLTY Zero", target_contexts)
+        self.assertNotIn("Codacy Static Code Analysis", target_contexts)
+        self.assertNotIn("DeepScan", target_contexts)
 
     def test_reframe_overlay_adds_visual_and_platform_contexts_to_target(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
@@ -218,14 +225,23 @@ class ControlPlaneTests(unittest.TestCase):
             "--exclude '.*/build/_deps/.*'",
             airline["coverage"]["command"],
         )
-        self.assertEqual(swfoc["coverage"]["assert_mode"]["pull_request"], "evidence_only")
+        self.assertEqual(swfoc["coverage"]["assert_mode"]["pull_request"], "non_regression")
         self.assertEqual(swfoc["coverage"]["runner"], "windows-latest")
         self.assertEqual(swfoc["visual_lane"]["kind"], "desktop-adapter")
-        self.assertIn("DEEPSCAN_POLICY_MODE", quality_zero_platform["required_vars"])
+        self.assertNotIn("DEEPSCAN_POLICY_MODE", quality_zero_platform["required_vars"])
         self.assertEqual(quality_zero_platform["github_mutation_lane"], "codex-private-runner")
         self.assertEqual(quality_zero_platform["codex_auth_lane"], "chatgpt-account")
         self.assertNotIn("OPENAI_API_KEY", quality_zero_platform["required_secrets"])
         self.assertIn("CODEX_AUTH_JSON", quality_zero_platform["conditional_secrets"])
+        self.assertEqual(
+            quality_zero_platform["issue_policy"],
+            {
+                "mode": "ratchet",
+                "pr_behavior": "introduced_only",
+                "main_behavior": "absolute",
+                "baseline_ref": "main",
+            },
+        )
 
     def test_quality_zero_platform_keeps_codecov_target_only_until_provider_check_emits(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
@@ -272,13 +288,16 @@ class ControlPlaneTests(unittest.TestCase):
                 "Codacy Static Code Analysis",
                 "DeepScan",
                 "qlty check",
+                "qlty coverage",
+                "qlty coverage diff",
             }.issubset(pr_contexts)
         )
         self.assertIn("Codecov Analytics", target_contexts)
         self.assertIn("QLTY Zero", target_contexts)
+        self.assertIn("qlty coverage", target_contexts)
+        self.assertIn("qlty coverage diff", target_contexts)
         for unexpected in ("qlty coverage", "qlty coverage diff"):
             self.assertNotIn(unexpected, push_contexts)
-            self.assertNotIn(unexpected, target_contexts)
 
     def test_provider_metadata_tracks_real_qlty_names_and_visual_repo_tokens(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")

@@ -4,6 +4,45 @@ from copy import deepcopy
 from typing import Any, Dict, List, Mapping
 
 from scripts.quality.common import dedupe_strings
+from scripts.quality import profile_coverage_normalization
+
+
+def _issue_policy_defaults(mode: str) -> Dict[str, str]:
+    zero_mode = mode == "zero"
+    return {
+        "mode": mode,
+        "pr_behavior": "absolute" if zero_mode else "introduced_only",
+        "main_behavior": "absolute",
+        "baseline_ref": "" if zero_mode else "main",
+    }
+
+
+def _merge_issue_policy_defaults(mode: str, payload: Mapping[str, Any]) -> Dict[str, str]:
+    defaults = _issue_policy_defaults(mode)
+    return {
+        "mode": mode,
+        "pr_behavior": str(payload.get("pr_behavior", defaults["pr_behavior"])).strip() or defaults["pr_behavior"],
+        "main_behavior": str(payload.get("main_behavior", defaults["main_behavior"])).strip() or defaults["main_behavior"],
+        "baseline_ref": str(payload.get("baseline_ref", defaults["baseline_ref"])).strip() or defaults["baseline_ref"],
+    }
+
+
+def normalize_issue_policy(raw_issue_policy: Mapping[str, Any] | str | None) -> Dict[str, str]:
+    if isinstance(raw_issue_policy, str):
+        return _issue_policy_defaults(str(raw_issue_policy or "").strip() or "ratchet")
+
+    payload = deepcopy(raw_issue_policy or {}) if isinstance(raw_issue_policy, dict) else {}
+    mode = str(payload.get("mode", "ratchet")).strip() or "ratchet"
+    return _merge_issue_policy_defaults(mode, payload)
+
+
+def normalize_deps(raw_deps: Mapping[str, Any] | None) -> Dict[str, Any]:
+    payload = deepcopy(raw_deps or {}) if isinstance(raw_deps, dict) else {}
+    return {
+        "enabled": bool(payload.get("enabled", False)),
+        "policy": str(payload.get("policy", "zero_critical")).strip() or "zero_critical",
+        "scope": str(payload.get("scope", "runtime")).strip() or "runtime",
+    }
 
 
 def normalize_required_contexts(raw: Mapping[str, Any] | None) -> Dict[str, List[str]]:
@@ -34,84 +73,31 @@ def merge_required_contexts(base: Mapping[str, Any] | None, overlay: Mapping[str
 
 
 def normalize_coverage_inputs(raw_inputs: Any) -> List[Dict[str, str]]:
-    if not isinstance(raw_inputs, list):
-        return []
-
-    normalized_items: List[Dict[str, str]] = []
-    for item in raw_inputs:
-        if not isinstance(item, dict):
-            continue
-        normalized_item = {
-            "format": str(item.get("format", "")).strip().lower(),
-            "name": str(item.get("name", "")).strip(),
-            "path": str(item.get("path", "")).strip(),
-        }
-        if normalized_item["format"] in {"xml", "lcov"} and normalized_item["name"] and normalized_item["path"]:
-            normalized_items.append(normalized_item)
-    return normalized_items
+    return profile_coverage_normalization.normalize_coverage_inputs(raw_inputs)
 
 
 def infer_coverage_inputs(coverage: Mapping[str, Any] | None) -> List[Dict[str, str]]:
-    payload = deepcopy(coverage or {}) if isinstance(coverage, dict) else {}
-    inputs = normalize_coverage_inputs(payload.get("inputs", []))
-    legacy_path = str(payload.get("artifact_path", "")).strip()
-    if inputs or not legacy_path:
-        return inputs
+    return profile_coverage_normalization.infer_coverage_inputs(coverage)
 
-    inferred = "xml" if legacy_path.endswith(".xml") else "lcov"
-    return [{"format": inferred, "name": "default", "path": legacy_path}]
+
+def infer_required_sources(raw_coverage: Mapping[str, Any] | None) -> List[str]:
+    return profile_coverage_normalization.infer_required_sources(raw_coverage)
 
 
 def normalize_java_setup(raw_java: Any) -> Dict[str, Any]:
-    if isinstance(raw_java, str):
-        raw_java = {"distribution": "temurin", "version": raw_java}
-    java = deepcopy(raw_java) if isinstance(raw_java, dict) else {}
-    return {
-        "distribution": str(java.get("distribution", "")).strip(),
-        "version": str(java.get("version", "")).strip(),
-    }
+    return profile_coverage_normalization.normalize_java_setup(raw_java)
 
 
 def normalize_coverage_setup(raw_setup: Any) -> Dict[str, Any]:
-    setup = deepcopy(raw_setup) if isinstance(raw_setup, dict) else {}
-    return {
-        "python": str(setup.get("python", "")).strip(),
-        "node": str(setup.get("node", "")).strip(),
-        "go": str(setup.get("go", "")).strip(),
-        "dotnet": str(setup.get("dotnet", "")).strip(),
-        "rust": bool(setup.get("rust", False)),
-        "system_packages": dedupe_strings(setup.get("system_packages", [])),
-        "java": normalize_java_setup(setup.get("java", {})),
-    }
+    return profile_coverage_normalization.normalize_coverage_setup(raw_setup)
 
 
 def normalize_coverage_assert_mode(raw_assert_mode: Any) -> Dict[str, str]:
-    if isinstance(raw_assert_mode, str):
-        raw_assert_mode = {"default": raw_assert_mode}
-    if not isinstance(raw_assert_mode, dict):
-        return {"default": "enforce"}
-
-    resolved = {
-        str(key): text
-        for key, value in raw_assert_mode.items()
-        if (text := str(value or "").strip())
-    }
-    return {"default": "enforce", **resolved}
+    return profile_coverage_normalization.normalize_coverage_assert_mode(raw_assert_mode)
 
 
 def normalize_coverage(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
-    coverage = deepcopy(raw or {}) if isinstance(raw, dict) else {}
-    inputs = infer_coverage_inputs(coverage)
-    coverage["runner"] = str(coverage.get("runner", "ubuntu-latest")).strip() or "ubuntu-latest"
-    coverage["shell"] = str(coverage.get("shell", "bash")).strip() or "bash"
-    coverage["command"] = str(coverage.get("command", "")).strip()
-    coverage["inputs"] = inputs
-    coverage["require_sources"] = dedupe_strings(coverage.get("require_sources", []))
-    coverage["min_percent"] = float(coverage.get("min_percent", 100.0))
-    coverage["assert_mode"] = normalize_coverage_assert_mode(coverage.get("assert_mode", {}))
-    coverage["evidence_note"] = str(coverage.get("evidence_note", "")).strip()
-    coverage["setup"] = normalize_coverage_setup(coverage.get("setup", {}))
-    return coverage
+    return profile_coverage_normalization.normalize_coverage(raw)
 
 
 def normalize_codex_environment(raw: Mapping[str, Any] | None, *, verify_command: str) -> Dict[str, Any]:

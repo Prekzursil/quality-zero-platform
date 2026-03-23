@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Quality Zero Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Quality Zero Admin</h1>
+      <p class="muted">Governed repos, gate config, live status, and PR health in one GitHub-native dashboard.</p>
+    </div>
+  </header>
+
+  <section class="summary-grid" id="summary"></section>
+
+  <section class="filters">
+    <input id="searchInput" placeholder="Filter repos">
+  </section>
+
+  <section class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Repo</th>
+          <th>Profile</th>
+          <th>Rollout</th>
+          <th>Issue policy</th>
+          <th>Scanners</th>
+          <th>Branch coverage</th>
+          <th>Deps policy</th>
+          <th>Main</th>
+          <th>Open PRs</th>
+          <th>Ruleset</th>
+        </tr>
+      </thead>
+      <tbody id="repoRows"></tbody>
+    </table>
+  </section>
+
+  <section class="detail-panel hidden" id="detailPanel">
+    <div class="detail-header">
+      <h2 id="detailTitle">Repo detail</h2>
+      <button id="closeDetail" class="button secondary" type="button">Close</button>
+    </div>
+    <div id="detailContent"></div>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>

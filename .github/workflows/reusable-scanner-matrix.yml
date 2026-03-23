@@ -85,6 +85,8 @@ jobs:
             lane: sentry
           - job_name: DeepScan Zero
             lane: deepscan
+          - job_name: Dependency Alerts
+            lane: deps
     steps:
       - uses: actions/checkout@v4
         with:
@@ -194,6 +196,9 @@ jobs:
           lane = os.environ["LANE"]
           branch_name = os.environ.get("BRANCH_NAME", "").strip()
           pull_request_number = os.environ.get("PULL_REQUEST_NUMBER", "").strip()
+          issue_policy = profile.get("issue_policy", {})
+          issue_mode = str(issue_policy.get("mode", "ratchet")).strip() or "ratchet"
+          pr_issue_behavior = str(issue_policy.get("pr_behavior", "introduced_only")).strip() or "introduced_only"
           repo_dir = root / "repo"
           platform_dir = root / "platform"
 
@@ -264,8 +269,10 @@ jobs:
               "sonar-zero/sonar.json",
               "--out-md",
               "sonar-zero/sonar.md",
+              "--policy-mode",
+              issue_mode,
             ]
-            if pull_request_number:
+            if pull_request_number and pr_issue_behavior == "introduced_only":
               cmd.extend(["--pull-request", pull_request_number])
             elif branch_name:
               cmd.extend(["--branch", branch_name])
@@ -285,8 +292,10 @@ jobs:
               "codacy-zero/codacy.json",
               "--out-md",
               "codacy-zero/codacy.md",
+              "--policy-mode",
+              issue_mode,
             ]
-            if pull_request_number:
+            if pull_request_number and pr_issue_behavior == "introduced_only":
               cmd.extend(["--pull-request", pull_request_number])
             run(cmd, cwd=repo_dir)
           elif lane == "semgrep":
@@ -317,6 +326,26 @@ jobs:
               "deepscan-zero/deepscan.json",
               "--out-md",
               "deepscan-zero/deepscan.md",
+            ]
+            run(cmd, cwd=repo_dir)
+          elif lane == "deps":
+            if not profile.get("enabled_scanners", {}).get("deps", False):
+              print("Dependency alert lane is disabled for this profile; skipping.")
+              sys.exit(0)
+            deps = profile.get("deps", {})
+            cmd = [
+              sys.executable,
+              str(platform_dir / "scripts/quality/check_dependabot_alerts.py"),
+              "--repo",
+              os.environ["REPO_SLUG"],
+              "--policy",
+              str(deps.get("policy", "zero_critical")),
+              "--scope",
+              str(deps.get("scope", "runtime")),
+              "--out-json",
+              "deps-zero/deps.json",
+              "--out-md",
+              "deps-zero/deps.md",
             ]
             run(cmd, cwd=repo_dir)
           else:
@@ -377,3 +406,70 @@ jobs:
             repo/codacy-zero
             repo/sentry-zero
             repo/deepscan-zero
+            repo/deps-zero
+
+  quality-rollup:
+    name: Quality Rollup
+    if: always()
+    needs: scanner
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.platform_repository }}
+          ref: ${{ inputs.platform_ref }}
+          path: platform
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install platform dependencies
+        run: python -m pip install -r platform/requirements-dev.txt
+      - name: Export resolved profile
+        id: profile
+        env:
+          REPO_SLUG: ${{ inputs.repo_slug }}
+          EVENT_NAME_INPUT: ${{ inputs.event_name }}
+        run: |
+          python platform/scripts/quality/export_profile.py \
+            --repo-slug "$REPO_SLUG" \
+            --event-name "$EVENT_NAME_INPUT" \
+            --out-json "$RUNNER_TEMP/profile.json"
+      - name: Download lane artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: "*-artifacts"
+          merge-multiple: false
+      - name: Build quality rollup
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ROLLUP_REPO_SLUG: ${{ inputs.repo_slug }}
+          ROLLUP_SHA: ${{ inputs.sha != '' && inputs.sha || github.sha }}
+        run: |
+          python platform/scripts/quality/build_quality_rollup.py \
+            --profile-json "$RUNNER_TEMP/profile.json" \
+            --repo "$ROLLUP_REPO_SLUG" \
+            --sha "$ROLLUP_SHA" \
+            --artifacts-dir artifacts \
+            --out-json quality-rollup/summary.json \
+            --out-md quality-rollup/summary.md
+      - name: Upload quality rollup
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-rollup
+          path: quality-rollup
+      - name: Post sticky PR comment
+        if: ${{ inputs.pull_request_number != '' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ROLLUP_REPO_SLUG: ${{ inputs.repo_slug }}
+          ROLLUP_PULL_REQUEST: ${{ inputs.pull_request_number }}
+        run: |
+          python platform/scripts/quality/post_pr_quality_comment.py \
+            --repo "$ROLLUP_REPO_SLUG" \
+            --pull-request "$ROLLUP_PULL_REQUEST" \
+            --markdown-file quality-rollup/summary.md

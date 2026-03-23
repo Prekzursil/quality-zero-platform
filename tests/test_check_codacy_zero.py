@@ -223,6 +223,13 @@ class CodacyZeroTests(unittest.TestCase):
         ), patch.object(check_codacy_zero, "write_report", return_value=7):
             self.assertEqual(check_codacy_zero.main(), 7)
 
+        audit_args = Namespace(**{**success_args.__dict__, "policy_mode": "audit"})
+        with patch.object(check_codacy_zero, "_parse_args", return_value=audit_args), patch.object(
+            check_codacy_zero, "_query_codacy_open_issues", return_value=(5, ["Codacy reports 5 open issues (expected 0)."], None)
+        ), patch.object(check_codacy_zero, "write_report", return_value=0) as write_report_mock:
+            self.assertEqual(check_codacy_zero.main(), 0)
+        self.assertEqual(write_report_mock.call_args.args[0]["status"], "pass")
+
     def test_parse_args_render_markdown_and_script_entrypoint(self) -> None:
         with patch.object(
             sys,

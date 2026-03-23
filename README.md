@@ -1,7 +1,7 @@
 # quality-zero-platform
 
-`quality-zero-platform` is the personal-account control plane for strict-zero governance.
-It replaces the old queue/template baseline with reusable workflows, shared quality scripts, repo metadata, ruleset payload generation, provider-admin browser bootstrap helpers, and trusted-runner Codex remediation contracts.
+`quality-zero-platform` is the personal-account control plane for hybrid ratchet plus strict-zero governance.
+It replaces the old queue/template baseline with reusable workflows, shared quality scripts, repo metadata, ruleset payload generation, provider-admin browser bootstrap helpers, GitHub-native admin or dashboard surfaces, aggregated PR rollups, and trusted-runner Codex remediation contracts.
 
 ## What This Repo Owns
 
@@ -10,7 +10,7 @@ It replaces the old queue/template baseline with reusable workflows, shared qual
 - `profiles/repos/*.yml`: repo-specific overrides
 - `scripts/quality/`: shared strict-zero policy, provider checks, ruleset generation, and remediation prompt rendering
 - `scripts/provider_ui/`: Playwright-based provider-admin bootstrap scripts that persist browser state outside the repo
-- `.github/workflows/`: reusable workflows called by governed repos, including push-parity scanner, gate, and Codecov analytics lanes
+- `.github/workflows/`: reusable workflows called by governed repos, including push-parity scanner, gate, rollup, admin, Pages, and Codecov analytics lanes
 - `templates/repo/`: thin wrapper contract for governed repos
 - `generated/rulesets/`: committed ruleset payloads for review and drift detection
 
@@ -41,6 +41,24 @@ Phase-1 compatibility still preserves the established public check names for the
 3. Ruleset payloads are generated from the same repo profile data that powers the gate.
 4. Failed pull requests enter the trusted-runner Codex remediation loop and write only to `codex/fix/<context>/<shortsha>`.
 5. Nightly backlog sweeps isolate one tool lane per run on `codex/backlog/<tool>`.
+6. Pull requests receive one aggregated quality rollup comment instead of forcing reviewers to inspect every individual scanner artifact.
+
+## Hybrid Ratchet
+
+The control plane now distinguishes onboarding and convergence:
+
+- PRs can use `issue_policy.mode: ratchet` so Sonar and Codacy enforce no-new-debt semantics while a repo still carries legacy backlog.
+- Protected-branch convergence stays strict once the repo is fully onboarded.
+- Coverage remains whole-project 100 by default, while QLTY still enforces patch coverage and total non-regression.
+
+## Admin Dashboard
+
+The repo now includes a GitHub-native admin surface:
+
+- `publish-admin-dashboard.yml` builds and deploys a read-only dashboard to GitHub Pages.
+- `control-plane-admin.yml` accepts typed `workflow_dispatch` inputs and opens PRs for inventory or profile changes instead of mutating `main` directly.
+- `scripts/quality/build_admin_dashboard.py` renders the dashboard payload and static HTML.
+- `scripts/quality/control_plane_admin.py` applies the requested YAML edits before rulesets are regenerated and reviewed in the PR.
 
 ## Trusted Runner Codex Lane
 

@@ -25,6 +25,7 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Assert SonarCloud has zero open issues and a passing quality gate.")
     parser.add_argument("--project-key", required=True)
     parser.add_argument("--token", default="")
+    parser.add_argument("--policy-mode", default="ratchet")
     parser.add_argument("--branch", default="")
     parser.add_argument("--pull-request", default="")
     parser.add_argument("--out-json", default="sonar-zero/sonar.json")
@@ -110,7 +111,8 @@ def _load_sonar_findings(args: argparse.Namespace, auth: str) -> Tuple[int, str,
     open_issues = _load_open_issues(args, auth)
     quality_gate = _load_quality_gate(args, auth)
     findings: List[str] = []
-    if open_issues != 0:
+    ratchet_scoped = getattr(args, "policy_mode", "ratchet") == "ratchet" and _is_scoped_analysis(args)
+    if open_issues != 0 and not ratchet_scoped:
         findings.append(f"Sonar reports {open_issues} open issues (expected 0).")
     if quality_gate != "OK":
         findings.append(f"Sonar quality gate status is {quality_gate} (expected OK).")
@@ -158,6 +160,8 @@ def main() -> int:
             auth = _auth_header(token)
             open_issues, quality_gate, findings = load_sonar_findings_with_retry(args, auth)
             status = "pass" if not findings else "fail"
+            if getattr(args, "policy_mode", "ratchet") == "audit":
+                status = "pass"
         except (OSError, RuntimeError, ValueError) as exc:  # pragma: no cover
             findings.append(f"Sonar API request failed: {exc}")
             status = "fail"

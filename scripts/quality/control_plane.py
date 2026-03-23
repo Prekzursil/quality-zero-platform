@@ -18,17 +18,19 @@ from scripts.quality.common import (
     dedupe_strings,
 )
 from scripts.quality.control_plane_vendors import finalize_vendors, normalize_visual_lane
+from scripts.quality import profile_contract_validation
 from scripts.quality.profile_normalization import (
+    normalize_deps as common_normalize_deps,
     infer_coverage_inputs as common_infer_coverage_inputs,
     merge_required_contexts as common_merge_required_contexts,
     normalize_codex_environment as common_normalize_codex_environment,
     normalize_coverage as common_normalize_coverage,
     normalize_coverage_assert_mode as common_normalize_coverage_assert_mode,
     normalize_coverage_inputs as common_normalize_coverage_inputs,
+    normalize_issue_policy as common_normalize_issue_policy,
     normalize_java_setup as common_normalize_java_setup,
     normalize_required_contexts as common_normalize_required_contexts,
 )
-from scripts.security_helpers import normalize_https_url
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -143,6 +145,10 @@ def _normalize_codex_environment(raw: Dict[str, Any], *, verify_command: str) ->
     return common_normalize_codex_environment(raw, verify_command=verify_command)
 
 
+def _normalize_issue_policy(raw: Dict[str, Any]) -> Dict[str, str]:
+    return common_normalize_issue_policy(raw)
+
+
 
 def _resolve_repo_sources(inventory: Dict[str, Any], repo_slug: str) -> RepoSources:
     repo_entry = next((item for item in inventory["repos"] if item.get("slug") == repo_slug), None)
@@ -221,6 +227,9 @@ def _finalize_repo_profile(merged: Dict[str, Any], repo_slug: str) -> Dict[str, 
     merged["required_vars"] = dedupe_strings(merged.get("required_vars", []))
     merged["required_contexts"] = common_normalize_required_contexts(merged.get("required_contexts", {}))
     merged["enabled_scanners"] = merged.get("enabled_scanners", {})
+    merged["issue_policy"] = common_normalize_issue_policy(merged.get("issue_policy", {}))
+    merged["deps"] = common_normalize_deps(merged.get("deps", {}))
+    merged["enabled_scanners"]["deps"] = bool(merged["deps"]["enabled"])
     merged["coverage"] = common_normalize_coverage(merged.get("coverage", {}))
     merged["codex_environment"] = common_normalize_codex_environment(
         merged.get("codex_environment", {}),
@@ -308,170 +317,16 @@ def build_ruleset_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _require_values(slug: str, required_values: List[Tuple[str, Any]]) -> List[str]:
-    return [f"{slug}: {field_name} is required" for field_name, value in required_values if not value]
-
-
-def _require_expected_values(slug: str, expected_values: List[Tuple[str, Any, Any]]) -> List[str]:
-    return [f"{slug}: {field_name} must be {expected}" for field_name, actual, expected in expected_values if actual != expected]
-
-
-def _validate_codex_environment(profile: Dict[str, Any], codex_environment: Dict[str, Any]) -> List[str]:
-    slug = profile["slug"]
-    findings = _require_expected_values(
-        slug,
-        [
-            ("codex_environment.mode", codex_environment.get("mode"), "automatic"),
-            ("codex_environment.network_profile", codex_environment.get("network_profile"), "unrestricted"),
-            ("codex_environment.methods", codex_environment.get("methods"), "all"),
-        ],
-    )
-    findings.extend(
-        _require_values(
-            slug,
-            [
-                ("codex_environment.verify_command", codex_environment.get("verify_command")),
-                ("codex_environment.auth_file", codex_environment.get("auth_file")),
-                ("codex_environment.runner_labels", codex_environment.get("runner_labels", [])),
-            ],
-        )
-    )
-    runner_labels = codex_environment.get("runner_labels", [])
-    if runner_labels and "self-hosted" not in runner_labels:
-        findings.append(f"{slug}: codex_environment.runner_labels must include self-hosted")
-    return findings
-
-
-def _validate_control_plane_lanes(profile: Dict[str, Any]) -> List[str]:
-    slug = profile["slug"]
-    findings = _require_values(slug, [("verify_command", profile.get("verify_command"))])
-    findings.extend(
-        _require_expected_values(
-            slug,
-            [
-                ("github_mutation_lane", profile.get("github_mutation_lane"), "codex-private-runner"),
-                ("codex_auth_lane", profile.get("codex_auth_lane"), "chatgpt-account"),
-                ("provider_ui_mode", profile.get("provider_ui_mode"), "playwright-manual-login"),
-            ],
-        )
-    )
-    findings.extend(_validate_codex_environment(profile, profile.get("codex_environment", {})))
-    return findings
-
-
-def _validate_required_context_sets(profile: Dict[str, Any]) -> List[str]:
-    findings: List[str] = []
-    if not active_required_contexts(profile, event_name="ruleset"):
-        findings.append(f"{profile['slug']}: at least one required context is required")
-    pr_contexts = dedupe_strings(
-        [*profile["required_contexts"].get("always", []), *profile["required_contexts"].get("pull_request_only", [])]
-    )
-    required_now = set(profile["required_contexts"].get("required_now", []))
-    missing_required_now = [name for name in pr_contexts if name not in required_now]
-    if missing_required_now:
-        findings.append(
-            f"{profile['slug']}: required_contexts.required_now is missing {', '.join(missing_required_now)}"
-        )
-    target_contexts = set(profile["required_contexts"].get("target", []))
-    missing_target = [name for name in required_now if name not in target_contexts]
-    if missing_target:
-        findings.append(
-            f"{profile['slug']}: required_contexts.target is missing {', '.join(missing_target)}"
-        )
-    return findings
-
-
-def _validate_secret_contract(profile: Dict[str, Any]) -> List[str]:
-    findings: List[str] = []
-    duplicate_conditional = [name for name in profile.get("conditional_secrets", []) if name in profile.get("required_secrets", [])]
-    if duplicate_conditional:
-        findings.append(
-            f"{profile['slug']}: conditional_secrets duplicates required_secrets for {', '.join(duplicate_conditional)}"
-        )
-    findings.extend(
-        f"{profile['slug']}: {secret_name} must not be part of required_secrets"
-        for secret_name in ["OPENAI_API_KEY"]
-        if secret_name in profile.get("required_secrets", [])
-    )
-    return findings
-
-
-def _validate_visual_pair_contract(profile: Dict[str, Any]) -> List[str]:
-    if not profile.get("visual_pair_required"):
-        return []
-
-    findings: List[str] = []
-    vendors = profile["vendors"]
-    chromatic = vendors["chromatic"]["status_context"]
-    applitools = vendors["applitools"]["status_context"]
-    ruleset_contexts = set(active_required_contexts(profile, event_name="ruleset"))
-    target_contexts = set(profile["required_contexts"].get("target", []))
-    paired_contexts = [
-        (ruleset_contexts, "required_now"),
-        (target_contexts, "target"),
-    ]
-    findings.extend(
-        f"{profile['slug']}: visual_pair_required needs both Chromatic and Applitools contexts in {label}"
-        for contexts, label in paired_contexts
-        if (chromatic in contexts) != (applitools in contexts)
-    )
-    findings.extend(
-        f"{profile['slug']}: visual_pair_required requires {vendor_name}.{field_name}"
-        for vendor_name, field_name in [
-            ("chromatic", "project_name"),
-            ("chromatic", "token_secret"),
-            ("chromatic", "local_env_var"),
-            ("applitools", "project_name"),
-        ]
-        if not vendors[vendor_name].get(field_name)
-    )
-    return findings
+def validate_profile(profile: Dict[str, Any]) -> List[str]:
+    return profile_contract_validation.validate_profile(profile, active_required_contexts_fn=active_required_contexts)
 
 
 def _validate_coverage_contract(profile: Dict[str, Any]) -> List[str]:
-    coverage = profile.get("coverage", {})
-    if not profile.get("enabled_scanners", {}).get("coverage", False):
-        return []
-
-    findings = _require_values(profile["slug"], [("coverage.command", coverage.get("command"))])
-    if not coverage.get("inputs"):
-        findings.append(f"{profile['slug']}: coverage.inputs must declare at least one report")
-    if coverage.get("shell") not in {"bash", "pwsh"}:
-        findings.append(f"{profile['slug']}: coverage.shell must be bash or pwsh")
-    findings.extend(
-        f"{profile['slug']}: coverage.assert_mode.{mode_name} must be enforce or evidence_only"
-        for mode_name, mode_value in coverage.get("assert_mode", {}).items()
-        if mode_value not in {"enforce", "evidence_only"}
-    )
-    return findings
+    return profile_contract_validation._validate_coverage_contract(profile)
 
 
 def _validate_vendor_urls(profile: Dict[str, Any]) -> List[str]:
-    findings: List[str] = []
-    for vendor_name, vendor_payload in profile["vendors"].items():
-        if not isinstance(vendor_payload, dict):
-            continue
-        for key, value in vendor_payload.items():
-            if key.endswith("_url") and value:
-                try:
-                    normalize_https_url(str(value))
-                except ValueError as exc:
-                    findings.append(f"{profile['slug']}: invalid {vendor_name}.{key}: {exc}")
-    return findings
-
-
-def validate_profile(profile: Dict[str, Any]) -> List[str]:
-    findings: List[str] = []
-    for validator in (
-        _validate_control_plane_lanes,
-        _validate_required_context_sets,
-        _validate_secret_contract,
-        _validate_visual_pair_contract,
-        _validate_coverage_contract,
-        _validate_vendor_urls,
-    ):
-        findings.extend(validator(profile))
-    return findings
+    return profile_contract_validation._validate_vendor_urls(profile)
 
 
 def _parse_args() -> argparse.Namespace:

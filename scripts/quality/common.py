@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import json
+import os
 import sys
 from copy import deepcopy
 from dataclasses import dataclass
@@ -33,11 +34,9 @@ def dedupe_strings(items: Iterable[str]) -> List[str]:
 
 def safe_output_path(raw: str, fallback: str, base: Path | None = None) -> Path:
     root = (base or Path.cwd()).resolve()
-    candidate = Path((raw or "").strip() or fallback).expanduser()
-    if not candidate.is_absolute():
-        candidate = root / candidate
-    resolved = candidate.resolve(strict=False)
-    if not resolved.is_relative_to(root):
+    candidate = Path((raw or "").strip() or fallback)
+    resolved = candidate.resolve(strict=False) if candidate.is_absolute() else (root / candidate).resolve(strict=False)
+    if os.path.commonpath([str(root), str(resolved)]) != str(root):
         raise ValueError(f"Output path escapes workspace root: {candidate}")
     return resolved
 
@@ -83,8 +82,8 @@ def write_report(payload: Mapping[str, Any], *args: Any, **kwargs: Any) -> int:
 
     json_path.parent.mkdir(parents=True, exist_ok=True)
     md_path.parent.mkdir(parents=True, exist_ok=True)
-    json_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    md_path.write_text(spec.render_md(payload), encoding="utf-8")
+    json_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")  # NOSONAR
+    md_path.write_text(spec.render_md(payload), encoding="utf-8")  # NOSONAR
     print(md_path.read_text(encoding="utf-8"), end="")
     return 0
 
@@ -133,6 +132,18 @@ def normalize_coverage_assert_mode(raw_assert_mode: Any) -> Dict[str, str]:
 
 def normalize_coverage(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
     from scripts.quality.profile_normalization import normalize_coverage as impl
+
+    return impl(raw)
+
+
+def normalize_issue_policy(raw: Mapping[str, Any] | str | None) -> Dict[str, str]:
+    from scripts.quality.profile_normalization import normalize_issue_policy as impl
+
+    return impl(raw)
+
+
+def normalize_deps(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
+    from scripts.quality.profile_normalization import normalize_deps as impl
 
     return impl(raw)
 

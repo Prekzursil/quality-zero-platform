@@ -1,0 +1,173 @@
+name: Control Plane Admin
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "Mutation to apply to the control plane"
+        required: true
+        type: choice
+        options:
+          - enroll-repo
+          - set-scanner
+          - set-issue-policy
+          - set-coverage-mode
+          - set-required-context
+      repo_slug:
+        description: "Target owner/repo"
+        required: true
+        type: string
+      profile_id:
+        description: "Profile id for the governed repo"
+        required: true
+        type: string
+      stack:
+        description: "Stack id for enroll-repo"
+        required: false
+        type: string
+      rollout:
+        description: "Rollout wave for enroll-repo"
+        required: false
+        type: string
+      default_branch:
+        description: "Default branch for enroll-repo"
+        required: false
+        type: string
+      scanner:
+        description: "Scanner name for set-scanner"
+        required: false
+        type: string
+      enabled:
+        description: "true or false for set-scanner"
+        required: false
+        type: choice
+        options: ["true", "false"]
+      issue_policy_mode:
+        description: "zero, ratchet, or audit"
+        required: false
+        type: choice
+        options: ["zero", "ratchet", "audit"]
+      baseline_ref:
+        description: "Optional baseline ref for ratchet issue policy"
+        required: false
+        type: string
+      context_set:
+        description: "always, pull_request_only, required_now, or target"
+        required: false
+        type: choice
+        options: ["always", "pull_request_only", "required_now", "target"]
+      context_name:
+        description: "Context name for set-required-context"
+        required: false
+        type: string
+      present:
+        description: "true or false for set-required-context"
+        required: false
+        type: choice
+        options: ["true", "false"]
+      coverage_event:
+        description: "default, push, or pull_request"
+        required: false
+        type: choice
+        options: ["default", "push", "pull_request"]
+      coverage_mode:
+        description: "enforce, evidence_only, or non_regression"
+        required: false
+        type: choice
+        options: ["enforce", "evidence_only", "non_regression"]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  propose-change:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install platform dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Apply admin mutation
+        env:
+          ADMIN_OPERATION: ${{ inputs.operation }}
+          ADMIN_REPO_SLUG: ${{ inputs.repo_slug }}
+          ADMIN_PROFILE_ID: ${{ inputs.profile_id }}
+          ADMIN_STACK: ${{ inputs.stack }}
+          ADMIN_ROLLOUT: ${{ inputs.rollout || 'phase2-wave0' }}
+          ADMIN_DEFAULT_BRANCH: ${{ inputs.default_branch || 'main' }}
+          ADMIN_SCANNER: ${{ inputs.scanner }}
+          ADMIN_ENABLED: ${{ inputs.enabled || 'true' }}
+          ADMIN_ISSUES_MODE: ${{ inputs.issue_policy_mode || 'ratchet' }}
+          ADMIN_BASELINE_REF: ${{ inputs.baseline_ref }}
+          ADMIN_CONTEXT_SET: ${{ inputs.context_set }}
+          ADMIN_CONTEXT_NAME: ${{ inputs.context_name }}
+          ADMIN_CONTEXT_PRESENT: ${{ inputs.present || 'true' }}
+          ADMIN_COVERAGE_EVENT: ${{ inputs.coverage_event || 'pull_request' }}
+          ADMIN_COVERAGE_MODE: ${{ inputs.coverage_mode || 'enforce' }}
+        run: |
+          case "$ADMIN_OPERATION" in
+            enroll-repo)
+              python scripts/quality/control_plane_admin.py --repo-root . enroll-repo \
+                --repo-slug "$ADMIN_REPO_SLUG" \
+                --profile-id "$ADMIN_PROFILE_ID" \
+                --stack "$ADMIN_STACK" \
+                --rollout "$ADMIN_ROLLOUT" \
+                --default-branch "$ADMIN_DEFAULT_BRANCH"
+              ;;
+            set-scanner)
+              python scripts/quality/control_plane_admin.py --repo-root . set-scanner \
+                --profile-id "$ADMIN_PROFILE_ID" \
+                --scanner "$ADMIN_SCANNER" \
+                --enabled "$ADMIN_ENABLED"
+              ;;
+            set-issue-policy)
+              python scripts/quality/control_plane_admin.py --repo-root . set-issue-policy \
+                --profile-id "$ADMIN_PROFILE_ID" \
+                --mode "$ADMIN_ISSUES_MODE" \
+                --baseline-ref "$ADMIN_BASELINE_REF"
+              ;;
+            set-coverage-mode)
+              python scripts/quality/control_plane_admin.py --repo-root . set-coverage-mode \
+                --profile-id "$ADMIN_PROFILE_ID" \
+                --event-name "$ADMIN_COVERAGE_EVENT" \
+                --mode "$ADMIN_COVERAGE_MODE"
+              ;;
+            set-required-context)
+              python scripts/quality/control_plane_admin.py --repo-root . set-required-context \
+                --profile-id "$ADMIN_PROFILE_ID" \
+                --context-set "$ADMIN_CONTEXT_SET" \
+                --context-name "$ADMIN_CONTEXT_NAME" \
+                --present "$ADMIN_CONTEXT_PRESENT"
+              ;;
+            *)
+              echo "Unsupported operation: $ADMIN_OPERATION" >&2
+              exit 1
+              ;;
+          esac
+      - name: Regenerate rulesets
+        run: python scripts/quality/validate_control_plane.py --write-generated generated/rulesets
+      - name: Create admin PR
+        uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c
+        with:
+          branch: codex/admin/${{ inputs.operation }}/${{ inputs.profile_id }}
+          title: "[admin] ${{ inputs.operation }}: ${{ inputs.profile_id }}"
+          commit-message: |
+            chore: ${{ inputs.operation }} ${{ inputs.profile_id }}
+
+            Co-authored-by: Codex <noreply@openai.com>
+          body: |
+            Proposed by the `Control Plane Admin` workflow.
+
+            - operation: `${{ inputs.operation }}`
+            - repo: `${{ inputs.repo_slug }}`
+            - profile: `${{ inputs.profile_id }}`
+            - baseline ref: `${{ inputs.baseline_ref }}`
+            - context set/name/present: `${{ inputs.context_set }}` / `${{ inputs.context_name }}` / `${{ inputs.present }}`

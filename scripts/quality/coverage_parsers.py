@@ -10,11 +10,13 @@ from scripts.quality.coverage_paths import (
     _should_track_coverage_source,
 )
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from scripts.quality.assert_coverage_100 import CoverageStats
 
 _XML_LINES_VALID_RE = re.compile(r'lines-valid="(\d+(?:\.\d+)?)"')
 _XML_LINES_COVERED_RE = re.compile(r'lines-covered="(\d+(?:\.\d+)?)"')
+_XML_BRANCHES_VALID_RE = re.compile(r'branches-valid="(\d+(?:\.\d+)?)"')
+_XML_BRANCHES_COVERED_RE = re.compile(r'branches-covered="(\d+(?:\.\d+)?)"')
 _XML_LINE_HITS_RE = re.compile(r'<line\b[^>]*\bhits="(\d+(?:\.\d+)?)"')
 _XML_FILENAME_RE = re.compile(r'<[^>]+\bfilename=(?P<quote>["\'])(?P<value>.*?)(?P=quote)')
 _XML_SOURCE_RE = re.compile(r"<source>(?P<value>.*?)</source>")
@@ -48,10 +50,21 @@ def parse_coverage_xml(name: str, path: Path) -> "CoverageStats":
     text = path.read_text(encoding="utf-8")
     lines_valid_match = _XML_LINES_VALID_RE.search(text)
     lines_covered_match = _XML_LINES_COVERED_RE.search(text)
+    branches_valid_match = _XML_BRANCHES_VALID_RE.search(text)
+    branches_covered_match = _XML_BRANCHES_COVERED_RE.search(text)
     if lines_valid_match and lines_covered_match:
         total = int(float(lines_valid_match.group(1)))
         covered = int(float(lines_covered_match.group(1)))
-        return CoverageStats(name=name, path=str(path), covered=covered, total=total)
+        branch_total = int(float(branches_valid_match.group(1))) if branches_valid_match else 0
+        branch_covered = int(float(branches_covered_match.group(1))) if branches_covered_match else 0
+        return CoverageStats(
+            name=name,
+            path=str(path),
+            covered=covered,
+            total=total,
+            branch_covered=branch_covered,
+            branch_total=branch_total,
+        )
 
     total = 0
     covered = 0
@@ -67,6 +80,8 @@ def parse_lcov(name: str, path: Path) -> "CoverageStats":
 
     total = 0
     covered = 0
+    branch_total = 0
+    branch_covered = 0
     include_record = False
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
@@ -79,4 +94,15 @@ def parse_lcov(name: str, path: Path) -> "CoverageStats":
             total += int(line.split(":", 1)[1])
         elif include_record and line.startswith("LH:"):
             covered += int(line.split(":", 1)[1])
-    return CoverageStats(name=name, path=str(path), covered=covered, total=total)
+        elif include_record and line.startswith("BRF:"):
+            branch_total += int(line.split(":", 1)[1])
+        elif include_record and line.startswith("BRH:"):
+            branch_covered += int(line.split(":", 1)[1])
+    return CoverageStats(
+        name=name,
+        path=str(path),
+        covered=covered,
+        total=total,
+        branch_covered=branch_covered,
+        branch_total=branch_total,
+    )

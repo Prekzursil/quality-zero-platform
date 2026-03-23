@@ -27,6 +27,7 @@ def _write_github_output(path: Path, profile: dict, event_name: str) -> None:
     contexts = active_required_contexts(profile, event_name=event_name)
     coverage = profile.get("coverage", {})
     codex_environment = profile.get("codex_environment", {})
+    issue_policy = profile.get("issue_policy", {})
     setup = coverage.get("setup", {})
     java = setup.get("java", {})
     coverage_input_files = ",".join(
@@ -51,6 +52,7 @@ def _write_github_output(path: Path, profile: dict, event_name: str) -> None:
         f"codex_auth_file={codex_environment.get('auth_file', '')}",
         f"codex_runner_labels_json={json.dumps(codex_environment.get('runner_labels', []), separators=(',', ':'))}",
         f"coverage_json={json.dumps(coverage, separators=(',', ':'))}",
+        f"issue_policy_json={json.dumps(issue_policy, separators=(',', ':'))}",
         f"coverage_runner={coverage.get('runner', 'ubuntu-latest')}",
         f"coverage_shell={coverage.get('shell', 'bash')}",
         f"coverage_node_version={setup.get('node', '')}",

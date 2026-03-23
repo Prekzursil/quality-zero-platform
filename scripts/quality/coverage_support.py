@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 from scripts.quality.coverage_findings import (
+    _branch_threshold_findings,  # noqa: F401
     _coverage_threshold_findings,
     _find_missing_required_sources,
     _is_tests_only_report,

@@ -2,6 +2,7 @@ from __future__ import absolute_import
 
 import contextlib
 import io
+import importlib
 import json
 import runpy
 import sys
@@ -58,7 +59,7 @@ conditional_secrets duplicates required_secrets
 coverage.command is required
 coverage.inputs must declare at least one report
 coverage.shell must be bash or pwsh
-coverage.assert_mode.default must be enforce or evidence_only
+coverage.assert_mode.default must be enforce, evidence_only, or non_regression
 invalid codacy.dashboard_url
 """
 
@@ -169,6 +170,15 @@ invalid codacy.dashboard_url
             _normalize_codex_environment({}, verify_command="bash scripts/verify")["verify_command"],
             "bash scripts/verify",
         )
+        self.assertEqual(
+            importlib.import_module("scripts.quality.control_plane")._normalize_issue_policy({"mode": "ratchet", "baseline_ref": "main"}),
+            {
+                "mode": "ratchet",
+                "pr_behavior": "introduced_only",
+                "main_behavior": "absolute",
+                "baseline_ref": "main",
+            },
+        )
 
         merged = _apply_inventory_overrides(
             {"verify_command": "bash scripts/verify"},
@@ -236,6 +246,17 @@ invalid codacy.dashboard_url
         findings = validate_profile(profile)
         for fragment in self._invalid_profile_findings():
             self.assertTrue(any(fragment in item for item in findings), fragment)
+
+    def test_validate_profile_shape_rejects_unknown_keys(self) -> None:
+        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
+        profile = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
+        profile["unexpected"] = True
+        profile["coverage"]["mystery"] = 1
+
+        findings = validate_profile(profile)
+
+        self.assertTrue(any("unexpected profile key `unexpected`" in item for item in findings))
+        self.assertTrue(any("unexpected coverage key `mystery`" in item for item in findings))
 
     def test_additional_contract_validators_cover_repo_lookup_target_and_runner_label_edges(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")

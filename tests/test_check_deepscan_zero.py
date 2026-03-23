@@ -17,6 +17,12 @@ def _placeholder_token(label: str) -> str:
 
 
 class DeepScanZeroTests(unittest.TestCase):
+    def test_policy_mode_defaults_to_github_check_context(self) -> None:
+        args = Namespace(policy_mode="", repo="", sha="", github_context="DeepScan")
+
+        with patch.dict("os.environ", {}, clear=True):
+            self.assertEqual(check_deepscan_zero._policy_mode(args), "github_check_context")
+
     def test_github_check_context_mode_passes_when_deepscan_status_is_green(self) -> None:
         args = Namespace(repo="Prekzursil/quality-zero-platform", sha="abc123")
         api_token = _placeholder_token("api")

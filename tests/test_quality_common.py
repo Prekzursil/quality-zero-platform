@@ -21,6 +21,8 @@ from scripts.quality.common import (
     normalize_coverage,
     normalize_coverage_assert_mode,
     normalize_coverage_inputs,
+    normalize_deps,
+    normalize_issue_policy,
     normalize_coverage_setup,
     normalize_java_setup,
     normalize_required_contexts,
@@ -105,6 +107,8 @@ class QualityCommonTests(unittest.TestCase):
                 nested_path = safe_output_path("nested/report.md", "ignored.txt")
                 self.assertEqual(nested_path.name, "report.md")
                 self.assertTrue(nested_path.as_posix().endswith("/nested/report.md"))
+                absolute_candidate = str((root / "absolute-outside.json").resolve())
+                self.assertEqual(safe_output_path(absolute_candidate, "reports/out.json"), Path(absolute_candidate))
                 with self.assertRaisesRegex(ValueError, "escapes workspace root"):
                     safe_output_path("../outside.json", "reports/out.json")
 
@@ -260,6 +264,10 @@ class QualityCommonTests(unittest.TestCase):
             normalize_coverage_assert_mode({"default": "", "python": " warn ", "javascript": " "}),
             {"default": "enforce", "python": "warn"},
         )
+        self.assertEqual(
+            normalize_coverage_assert_mode({"default": "non_regression"}),
+            {"default": "non_regression"},
+        )
 
     def test_normalize_coverage_helper_covers_string_inputs(self) -> None:
         self.assertEqual(
@@ -290,7 +298,9 @@ class QualityCommonTests(unittest.TestCase):
                 "command": "qlty check",
                 "inputs": [{"format": "xml", "name": "coverage", "path": "coverage.xml"}],
                 "require_sources": ["source-a", "source-b"],
+                "require_sources_mode": "explicit",
                 "min_percent": 98.5,
+                "branch_min_percent": None,
                 "assert_mode": {"default": "enforce", "python": "warn"},
                 "evidence_note": "note",
                 "setup": {
@@ -305,6 +315,34 @@ class QualityCommonTests(unittest.TestCase):
             },
         )
 
+        inferred = normalize_coverage(
+            {
+                "command": (
+                    "python -m pytest --cov=scripts --cov=scripts.quality.assert_coverage_100 "
+                    "--cov=scripts.quality.check_sentry_zero && "
+                    "gcovr --filter '.*/src/.*' && "
+                    "npm --prefix airline-gui test -- --coverage --watch=false"
+                ),
+                "inputs": [
+                    {"format": "xml", "name": "coverage", "path": "coverage.xml"},
+                    {"format": "lcov", "name": "frontend", "path": "airline-gui/coverage/lcov.info"},
+                ],
+            }
+        )
+        self.assertEqual(
+            inferred["require_sources"],
+            [
+                "scripts/",
+                "scripts/quality/assert_coverage_100.py",
+                "scripts/quality/check_sentry_zero.py",
+                "src/",
+                "airline-gui/src/",
+            ],
+        )
+        self.assertEqual(inferred["require_sources_mode"], "infer")
+        self.assertIsNone(inferred["branch_min_percent"])
+        self.assertIsNone(normalize_coverage({"branch_min_percent": "bogus"})["branch_min_percent"])
+
     def test_normalize_codex_environment_helper_covers_string_inputs(self) -> None:
         self.assertEqual(
             normalize_codex_environment(None, verify_command="bash scripts/verify"),
@@ -315,6 +353,53 @@ class QualityCommonTests(unittest.TestCase):
                 "network_profile": "unrestricted",
                 "methods": "all",
                 "runner_labels": ["self-hosted", "codex-trusted"],
+            },
+        )
+
+    def test_normalize_issue_policy_supports_defaults_and_shortcuts(self) -> None:
+        self.assertEqual(
+            normalize_issue_policy(None),
+            {
+                "mode": "ratchet",
+                "pr_behavior": "introduced_only",
+                "main_behavior": "absolute",
+                "baseline_ref": "main",
+            },
+        )
+        self.assertEqual(
+            normalize_issue_policy("zero"),
+            {
+                "mode": "zero",
+                "pr_behavior": "absolute",
+                "main_behavior": "absolute",
+                "baseline_ref": "",
+            },
+        )
+        self.assertEqual(
+            normalize_issue_policy({"mode": "audit", "pr_behavior": "introduced_only", "main_behavior": "absolute"}),
+            {
+                "mode": "audit",
+                "pr_behavior": "introduced_only",
+                "main_behavior": "absolute",
+                "baseline_ref": "main",
+            },
+        )
+
+    def test_normalize_deps_supports_defaults_and_shortcuts(self) -> None:
+        self.assertEqual(
+            normalize_deps(None),
+            {
+                "enabled": False,
+                "policy": "zero_critical",
+                "scope": "runtime",
+            },
+        )
+        self.assertEqual(
+            normalize_deps({"enabled": True, "policy": "zero_high", "scope": "all"}),
+            {
+                "enabled": True,
+                "policy": "zero_high",
+                "scope": "all",
             },
         )
         self.assertEqual(

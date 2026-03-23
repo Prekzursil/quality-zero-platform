@@ -57,6 +57,9 @@ required_contexts:
     - CodeQL
     - CodeRabbit
     - Codacy Static Code Analysis
+    - qlty check
+    - qlty coverage
+    - qlty coverage diff
   target:
     - Coverage 100 Gate
     - Codecov Analytics

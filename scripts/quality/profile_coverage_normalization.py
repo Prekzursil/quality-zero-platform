@@ -1,0 +1,166 @@
+from __future__ import absolute_import
+
+from copy import deepcopy
+import re
+from typing import Any, Dict, List, Mapping, Sequence, Tuple
+
+from scripts.quality.common import dedupe_strings
+
+
+_LCOV_SRC_RE = re.compile(r"(?P<prefix>.+?)/coverage/(?:lcov|lcov\.info|lcov-report).*", re.IGNORECASE)
+_COV_ARG_RE = re.compile(r"--cov(?:=|\s+)(?P<value>[A-Za-z0-9_./-]+)")
+_GCOVR_FILTER_RE = re.compile(r"--filter\s+'\.*/(?P<value>[A-Za-z0-9_./-]+)/\.\*'")
+
+
+def _normalize_source_hint(raw: str) -> str:
+    value = str(raw or "").strip().replace("\\", "/")
+    if not value:
+        return ""
+    if "/" not in value and "." in value:
+        value = value.replace(".", "/") + ".py"
+    if value.endswith((".py", ".js", ".ts", ".tsx", ".jsx")):
+        return value
+    return value.rstrip("/") + "/"
+
+
+def _extract_cov_hints(command: str) -> List[str]:
+    inferred: List[str] = []
+    for match in _COV_ARG_RE.finditer(command):
+        hint = _normalize_source_hint(match.group("value"))
+        if hint:
+            inferred.append(hint)
+    return inferred
+
+
+def _extract_gcovr_hints(command: str) -> List[str]:
+    inferred: List[str] = []
+    for match in _GCOVR_FILTER_RE.finditer(command):
+        hint = _normalize_source_hint(match.group("value"))
+        if hint:
+            inferred.append(hint)
+    if "src/.*" in command or "src/.*'" in command or 'src/.*"' in command:
+        inferred.append("src/")
+    return inferred
+
+
+def _extract_lcov_hint_from_inputs(inputs: Sequence[Mapping[str, Any]]) -> List[str]:
+    inferred: List[str] = []
+    for item in inputs:
+        path = str(item.get("path", "")).replace("\\", "/").strip()
+        lcov_match = _LCOV_SRC_RE.match(path)
+        if lcov_match:
+            inferred.append(_normalize_source_hint(f"{lcov_match.group('prefix')}/src"))
+    return inferred
+
+
+def infer_required_sources(raw_coverage: Mapping[str, Any] | None) -> List[str]:
+    coverage = deepcopy(raw_coverage or {}) if isinstance(raw_coverage, dict) else {}
+    command = str(coverage.get("command", "")).strip()
+    inputs = infer_coverage_inputs(coverage)
+    inferred = [
+        *_extract_cov_hints(command),
+        *_extract_gcovr_hints(command),
+        *_extract_lcov_hint_from_inputs(inputs),
+    ]
+    return dedupe_strings(inferred)
+
+
+def normalize_coverage_inputs(raw_inputs: Any) -> List[Dict[str, str]]:
+    if not isinstance(raw_inputs, list):
+        return []
+
+    normalized_items: List[Dict[str, str]] = []
+    for item in raw_inputs:
+        if not isinstance(item, dict):
+            continue
+        normalized_item = {
+            "format": str(item.get("format", "")).strip().lower(),
+            "name": str(item.get("name", "")).strip(),
+            "path": str(item.get("path", "")).strip(),
+        }
+        if normalized_item["format"] in {"xml", "lcov"} and normalized_item["name"] and normalized_item["path"]:
+            normalized_items.append(normalized_item)
+    return normalized_items
+
+
+def infer_coverage_inputs(coverage: Mapping[str, Any] | None) -> List[Dict[str, str]]:
+    payload = deepcopy(coverage or {}) if isinstance(coverage, dict) else {}
+    inputs = normalize_coverage_inputs(payload.get("inputs", []))
+    legacy_path = str(payload.get("artifact_path", "")).strip()
+    if inputs or not legacy_path:
+        return inputs
+
+    inferred = "xml" if legacy_path.endswith(".xml") else "lcov"
+    return [{"format": inferred, "name": "default", "path": legacy_path}]
+
+
+def normalize_java_setup(raw_java: Any) -> Dict[str, Any]:
+    if isinstance(raw_java, str):
+        raw_java = {"distribution": "temurin", "version": raw_java}
+    java = deepcopy(raw_java) if isinstance(raw_java, dict) else {}
+    return {
+        "distribution": str(java.get("distribution", "")).strip(),
+        "version": str(java.get("version", "")).strip(),
+    }
+
+
+def normalize_coverage_setup(raw_setup: Any) -> Dict[str, Any]:
+    setup = deepcopy(raw_setup) if isinstance(raw_setup, dict) else {}
+    return {
+        "python": str(setup.get("python", "")).strip(),
+        "node": str(setup.get("node", "")).strip(),
+        "go": str(setup.get("go", "")).strip(),
+        "dotnet": str(setup.get("dotnet", "")).strip(),
+        "rust": bool(setup.get("rust", False)),
+        "system_packages": dedupe_strings(setup.get("system_packages", [])),
+        "java": normalize_java_setup(setup.get("java", {})),
+    }
+
+
+def normalize_coverage_assert_mode(raw_assert_mode: Any) -> Dict[str, str]:
+    if isinstance(raw_assert_mode, str):
+        raw_assert_mode = {"default": raw_assert_mode}
+    if not isinstance(raw_assert_mode, dict):
+        return {"default": "enforce"}
+
+    resolved = {
+        str(key): text
+        for key, value in raw_assert_mode.items()
+        if (text := str(value or "").strip())
+    }
+    return {"default": "enforce", **resolved}
+
+
+def _normalize_branch_min_percent(raw_branch_min_percent: Any) -> float | None:
+    if raw_branch_min_percent in {"", None}:
+        return None
+    try:
+        return float(raw_branch_min_percent)
+    except (TypeError, ValueError):
+        return None
+
+
+def _resolve_required_sources(coverage: Dict[str, Any]) -> Tuple[List[str], str]:
+    require_sources = dedupe_strings(coverage.get("require_sources", []))
+    require_sources_mode = "explicit" if require_sources else str(coverage.get("require_sources_mode", "infer")).strip() or "infer"
+    if require_sources_mode == "infer" and not require_sources:
+        require_sources = infer_required_sources(coverage)
+    return require_sources, require_sources_mode
+
+
+def normalize_coverage(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
+    coverage = deepcopy(raw or {}) if isinstance(raw, dict) else {}
+    inputs = infer_coverage_inputs(coverage)
+    require_sources, require_sources_mode = _resolve_required_sources(coverage)
+    coverage["runner"] = str(coverage.get("runner", "ubuntu-latest")).strip() or "ubuntu-latest"
+    coverage["shell"] = str(coverage.get("shell", "bash")).strip() or "bash"
+    coverage["command"] = str(coverage.get("command", "")).strip()
+    coverage["inputs"] = inputs
+    coverage["require_sources"] = require_sources
+    coverage["require_sources_mode"] = require_sources_mode
+    coverage["min_percent"] = float(coverage.get("min_percent", 100.0))
+    coverage["branch_min_percent"] = _normalize_branch_min_percent(coverage.get("branch_min_percent"))
+    coverage["assert_mode"] = normalize_coverage_assert_mode(coverage.get("assert_mode", {}))
+    coverage["evidence_note"] = str(coverage.get("evidence_note", "")).strip()
+    coverage["setup"] = normalize_coverage_setup(coverage.get("setup", {}))
+    return coverage

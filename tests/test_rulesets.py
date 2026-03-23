@@ -39,7 +39,9 @@ class RulesetPayloadTests(unittest.TestCase):
         self.assertIn("Codacy Static Code Analysis", contexts)
         self.assertNotIn("Chromatic Playwright", contexts)
         self.assertNotIn("Applitools Visual", contexts)
-        self.assertNotIn("qlty check", contexts)
+        self.assertIn("qlty check", contexts)
+        self.assertIn("qlty coverage", contexts)
+        self.assertIn("qlty coverage diff", contexts)
         self.assertIn("Chromatic Playwright", profile["required_contexts"]["target"])
         self.assertIn("qlty check", profile["required_contexts"]["target"])
 
@@ -54,9 +56,9 @@ class RulesetPayloadTests(unittest.TestCase):
         self.assertIn("Codecov Analytics", contexts)
         self.assertIn("QLTY Zero", contexts)
         self.assertIn("qlty check", contexts)
+        self.assertIn("qlty coverage", contexts)
+        self.assertIn("qlty coverage diff", contexts)
         self.assertIn("SonarCloud Code Analysis", contexts)
-        self.assertNotIn("qlty coverage", contexts)
-        self.assertNotIn("qlty coverage diff", contexts)
 
     def test_airline_ruleset_payload_requires_qlty_contexts(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
@@ -71,7 +73,7 @@ class RulesetPayloadTests(unittest.TestCase):
         self.assertIn("qlty coverage", contexts)
         self.assertIn("qlty coverage diff", contexts)
 
-    def test_quality_zero_platform_self_ruleset_defers_qlty_until_emitted(self) -> None:
+    def test_quality_zero_platform_self_ruleset_enforces_qlty_coverage_contexts(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
         payload = build_ruleset_payload(profile)
@@ -81,7 +83,12 @@ class RulesetPayloadTests(unittest.TestCase):
         self.assertNotIn("qlty check", contexts)
         self.assertNotIn("qlty coverage", contexts)
         self.assertNotIn("qlty coverage diff", contexts)
-        self.assertIn("qlty check", profile["required_contexts"]["target"])
-        self.assertIn("qlty coverage", profile["required_contexts"]["target"])
-        self.assertIn("qlty coverage diff", profile["required_contexts"]["target"])
+        self.assertNotIn("Codacy Static Code Analysis", contexts)
+        self.assertNotIn("DeepScan", contexts)
+        self.assertNotIn("qlty check", profile["required_contexts"]["target"])
+        self.assertNotIn("qlty coverage", profile["required_contexts"]["target"])
+        self.assertNotIn("qlty coverage diff", profile["required_contexts"]["target"])
+        self.assertNotIn("Codacy Static Code Analysis", profile["required_contexts"]["target"])
+        self.assertNotIn("DeepScan", profile["required_contexts"]["target"])
+        self.assertIn("QLTY Zero", contexts)
 

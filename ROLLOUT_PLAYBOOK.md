@@ -2,7 +2,7 @@
 
 ## Goals
 
-- keep absolute strict-zero enforcement intact
+- keep strict-zero convergence intact while allowing ratchet onboarding for repos with legacy debt
 - preserve phase-1 public check names
 - move policy resolution and reusable workflow logic out of per-repo copy templates
 - make remediation deterministic and branch-safe
@@ -14,6 +14,7 @@
 3. Migrate the four overlay repos: `SWFOC-Mod-Menu`, `env-inspector`, `Airline-Reservations-System`, and `Reframe`.
 4. Generate repo-level ruleset payloads and validate emitted contexts before applying them.
 5. Configure Codex with the repo profile's automatic environment contract and unrestricted network.
+6. Publish the admin dashboard and use PR-backed admin workflows for profile or inventory changes instead of manual YAML edits on `main`.
 
 ## Wrapper Contract
 
@@ -39,6 +40,15 @@ The scanner, gate, and Codecov wrappers must run on:
 - Treat missing vendor statuses as drift in policy, secrets, or provider wiring.
 - Keep child check names stable until the migration is explicitly marked complete in `inventory/repos.yml`.
 - Never let remediation or backlog workflows write to `main` or `master`.
+- When `issue_policy.mode` is `ratchet`, keep PR analyzers focused on no-new-debt semantics and delay whole-tree convergence to the cleanup phase.
+
+## PR Rollup
+
+Every PR should get one aggregated quality summary:
+
+1. scanner lanes upload their normal artifacts
+2. the rollup job downloads those artifacts and merges them with live GitHub check results
+3. one sticky PR comment is updated with the combined status and first actionable finding per context
 
 ## Codex Web Manual Pass
 

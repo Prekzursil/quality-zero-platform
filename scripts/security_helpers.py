@@ -161,6 +161,28 @@ class _ValidatedTLSConnection(HTTPConnection):
         self.sock = _build_tls_context().wrap_socket(self.sock, server_hostname=self.host)
 
 
+def _prepare_https_request(raw_url: str, *, function_name: str, kwargs: Dict[str, Any]) -> Tuple[ParseResult, Dict[str, Any]]:
+    allowed_hosts = kwargs.pop("allowed_hosts", None)
+    allowed_host_suffixes = kwargs.pop("allowed_host_suffixes", None)
+    headers = kwargs.pop("headers", None)
+    method = str(kwargs.pop("method", "GET"))
+    data = kwargs.pop("data", None)
+    timeout = int(kwargs.pop("timeout", 30))
+    if kwargs:
+        raise TypeError(f"Unexpected {function_name} parameters: {', '.join(sorted(kwargs))}")
+    safe_url = normalize_https_url(
+        raw_url,
+        allowed_hosts=allowed_hosts,
+        allowed_host_suffixes=allowed_host_suffixes,
+    )
+    return urlparse(safe_url), {
+        "headers": headers,
+        "method": method,
+        "data": data,
+        "timeout": timeout,
+    }
+
+
 def _read_json_response(parsed: ParseResult, *args: Any, **kwargs: Any) -> Tuple[Any, Dict[str, str]]:
     if args:
         raise TypeError("_read_json_response expects keyword arguments only")
@@ -198,27 +220,57 @@ def _read_json_response(parsed: ParseResult, *args: Any, **kwargs: Any) -> Tuple
     return payload, response_headers
 
 
+def _read_bytes_response(parsed: ParseResult, *args: Any, **kwargs: Any) -> Tuple[bytes, Dict[str, str]]:
+    if args:
+        raise TypeError("_read_bytes_response expects keyword arguments only")
+    headers = kwargs.pop("headers", None)
+    method = str(kwargs.pop("method"))
+    data = kwargs.pop("data", None)
+    timeout = int(kwargs.pop("timeout"))
+    if kwargs:
+        raise TypeError(f"Unexpected _read_bytes_response parameters: {', '.join(sorted(kwargs))}")
+    request = _build_request(parsed, headers=headers, method=method, data=data)
+    hostname = _require_request_hostname(parsed)
+    connection = _ValidatedTLSConnection(
+        hostname,
+        port=parsed.port,
+        timeout=timeout,
+    )
+    response = None
+    try:
+        connection.request(
+            request.get_method(),
+            _build_request_target(parsed),
+            body=request.data,
+            headers=dict(request.header_items()),
+        )
+        response = connection.getresponse()
+        payload_bytes = response.read()
+        response_headers = {key.lower(): value for key, value in response.headers.items()}
+        if response.status >= 400:
+            raise HTTPError(request.full_url, response.status, response.reason, hdrs=response.headers, fp=None)
+    finally:
+        if response is not None and hasattr(response, "close"):
+            response.close()
+        connection.close()
+    return payload_bytes, response_headers
+
+
 def load_json_https(raw_url: str, *args: Any, **kwargs: Any) -> Tuple[Any, Dict[str, str]]:
     if args:
         raise TypeError("load_json_https expects keyword arguments only")
-    allowed_hosts = kwargs.pop("allowed_hosts", None)
-    allowed_host_suffixes = kwargs.pop("allowed_host_suffixes", None)
-    headers = kwargs.pop("headers", None)
-    method = str(kwargs.pop("method", "GET"))
-    data = kwargs.pop("data", None)
-    timeout = int(kwargs.pop("timeout", 30))
-    if kwargs:
-        raise TypeError(f"Unexpected load_json_https parameters: {', '.join(sorted(kwargs))}")
-    safe_url = normalize_https_url(
-        raw_url,
-        allowed_hosts=allowed_hosts,
-        allowed_host_suffixes=allowed_host_suffixes,
-    )
-    parsed = urlparse(safe_url)
+    parsed, request_kwargs = _prepare_https_request(raw_url, function_name="load_json_https", kwargs=kwargs)
     return _read_json_response(
         parsed,
-        headers=headers,
-        method=method,
-        data=data,
-        timeout=timeout,
+        **request_kwargs,
+    )
+
+
+def load_bytes_https(raw_url: str, *args: Any, **kwargs: Any) -> Tuple[bytes, Dict[str, str]]:
+    if args:
+        raise TypeError("load_bytes_https expects keyword arguments only")
+    parsed, request_kwargs = _prepare_https_request(raw_url, function_name="load_bytes_https", kwargs=kwargs)
+    return _read_bytes_response(
+        parsed,
+        **request_kwargs,
     )

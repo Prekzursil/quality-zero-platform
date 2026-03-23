@@ -315,6 +315,7 @@ class CoverageAssertTests(unittest.TestCase):
 
     def test_coverage_stats_percent_and_render_markdown_cover_zero_totals_and_empty_sections(self) -> None:
         self.assertEqual(CoverageStats(name="empty", path="coverage.xml", covered=0, total=0).percent, 100.0)
+        self.assertEqual(CoverageStats(name="empty", path="coverage.xml", covered=0, total=0, branch_covered=0, branch_total=0).branch_percent, 100.0)
         markdown = _render_md(
             {
                 "status": "pass",

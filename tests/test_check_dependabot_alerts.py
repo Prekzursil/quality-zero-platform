@@ -59,3 +59,12 @@ class DependabotAlertTests(unittest.TestCase):
         ) as write_report_mock:
             self.assertEqual(check_dependabot_alerts.main(), 1)
         self.assertEqual(write_report_mock.call_args.args[0]["open_alerts"], 1)
+
+        with patch.object(
+            check_dependabot_alerts,
+            "_request_alerts",
+            return_value=[],
+        ), patch.object(check_dependabot_alerts, "_parse_args", return_value=live_args), patch.object(
+            check_dependabot_alerts, "write_report", return_value=4
+        ):
+            self.assertEqual(check_dependabot_alerts.main(), 4)

@@ -4,7 +4,7 @@ from typing import List, Set, TYPE_CHECKING, Tuple
 
 from scripts.quality.coverage_paths import _normalize_source_path
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from scripts.quality.assert_coverage_100 import CoverageStats
 
 

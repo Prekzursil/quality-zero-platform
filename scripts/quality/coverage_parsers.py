@@ -10,7 +10,7 @@ from scripts.quality.coverage_paths import (
     _should_track_coverage_source,
 )
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from scripts.quality.assert_coverage_100 import CoverageStats
 
 _XML_LINES_VALID_RE = re.compile(r'lines-valid="(\d+(?:\.\d+)?)"')

@@ -227,6 +227,13 @@ class SonarZeroTests(unittest.TestCase):
         ), patch.object(check_sonar_zero, "write_report", return_value=4):
             self.assertEqual(check_sonar_zero.main(), 4)
 
+        audit_args = Namespace(**{**success_args.__dict__, "policy_mode": "audit"})
+        with patch.object(check_sonar_zero, "_parse_args", return_value=audit_args), patch.object(
+            check_sonar_zero, "load_sonar_findings_with_retry", return_value=(3, "ERROR", ["Sonar reports 3 open issues (expected 0)."])
+        ), patch.object(check_sonar_zero, "write_report", return_value=0) as write_report_mock:
+            self.assertEqual(check_sonar_zero.main(), 0)
+        self.assertEqual(write_report_mock.call_args.args[0]["status"], "pass")
+
     def test_parse_args_render_markdown_and_script_entrypoint(self) -> None:
         with patch.object(sys, "argv", ["check_sonar_zero.py", "--project-key", "project"]):
             args = check_sonar_zero._parse_args()

@@ -2,6 +2,7 @@ from __future__ import absolute_import
 
 import contextlib
 import io
+import importlib
 import json
 import runpy
 import sys
@@ -168,6 +169,15 @@ invalid codacy.dashboard_url
         self.assertEqual(
             _normalize_codex_environment({}, verify_command="bash scripts/verify")["verify_command"],
             "bash scripts/verify",
+        )
+        self.assertEqual(
+            importlib.import_module("scripts.quality.control_plane")._normalize_issue_policy({"mode": "ratchet", "baseline_ref": "main"}),
+            {
+                "mode": "ratchet",
+                "pr_behavior": "introduced_only",
+                "main_behavior": "absolute",
+                "baseline_ref": "main",
+            },
         )
 
         merged = _apply_inventory_overrides(

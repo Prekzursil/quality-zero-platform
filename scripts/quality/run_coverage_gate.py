@@ -196,10 +196,30 @@ def _download_bytes(url: str, token: str) -> bytes:
         return response.read()
 
 
-def _load_baseline_coverage_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
+def _github_api_token() -> str:
     token = (os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")).strip()
     if not token:
         raise RuntimeError("GITHUB_TOKEN or GH_TOKEN is required for non_regression coverage mode.")
+    return token
+
+
+def _find_successful_run_id(workflow_runs: List[Dict[str, Any]], workflow_name: str) -> int | None:
+    return next(
+        (
+            int(item["id"])
+            for item in workflow_runs
+            if item.get("name") == workflow_name and item.get("conclusion") == "success"
+        ),
+        None,
+    )
+
+
+def _find_artifact_by_name(artifacts: List[Dict[str, Any]], name: str) -> Dict[str, Any] | None:
+    return next((item for item in artifacts if item.get("name") == name), None)
+
+
+def _load_baseline_coverage_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
+    token = _github_api_token()
     repo_slug = str(profile["slug"])
     default_branch = str(profile["default_branch"])
     workflow_runs_url = (
@@ -208,20 +228,13 @@ def _load_baseline_coverage_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
     )
     runs_payload = json.loads(_download_bytes(workflow_runs_url, token).decode("utf-8"))
     workflow_runs = runs_payload.get("workflow_runs", []) if isinstance(runs_payload, dict) else []
-    run_id = next(
-        (
-            item["id"]
-            for item in workflow_runs
-            if item.get("name") == "Quality Zero Platform" and item.get("conclusion") == "success"
-        ),
-        None,
-    )
+    run_id = _find_successful_run_id(workflow_runs, "Quality Zero Platform")
     if run_id is None:
         raise RuntimeError("Unable to find a successful Quality Zero Platform run on the default branch.")
     artifacts_url = f"https://api.github.com/repos/{repo_slug}/actions/runs/{run_id}/artifacts?per_page=100"
     artifacts_payload = json.loads(_download_bytes(artifacts_url, token).decode("utf-8"))
     artifacts = artifacts_payload.get("artifacts", []) if isinstance(artifacts_payload, dict) else []
-    artifact = next((item for item in artifacts if item.get("name") == "coverage-artifacts"), None)
+    artifact = _find_artifact_by_name(artifacts, "coverage-artifacts")
     if artifact is None:
         raise RuntimeError("Unable to find coverage-artifacts on the baseline run.")
     archive = _download_bytes(str(artifact["archive_download_url"]), token)

@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from scripts.quality import assert_coverage_100
 from scripts.quality.assert_coverage_100 import (
+    CoverageEvaluationRequest,
     CoverageStats,
     _build_payload,
     _collect_coverage_inputs,
@@ -152,9 +153,11 @@ class CoverageAssertTests(unittest.TestCase):
 
         status, findings = evaluate(
             stats,
-            100.0,
-            required_sources=["app/main.py"],
-            reported_sources={"tests/test_main.py"},
+            CoverageEvaluationRequest(
+                min_percent=100.0,
+                required_sources=["app/main.py"],
+                reported_sources={"tests/test_main.py"},
+            ),
         )
 
         self.assertEqual(status, "fail")
@@ -164,9 +167,11 @@ class CoverageAssertTests(unittest.TestCase):
 
         ok_status, ok_findings = evaluate(
             stats,
-            90.0,
-            required_sources=["app/main.py"],
-            reported_sources={"app/main.py"},
+            CoverageEvaluationRequest(
+                min_percent=90.0,
+                required_sources=["app/main.py"],
+                reported_sources={"app/main.py"},
+            ),
         )
 
         self.assertEqual(ok_status, "pass")
@@ -175,10 +180,12 @@ class CoverageAssertTests(unittest.TestCase):
         branch_stats = [CoverageStats(name="python", path="coverage.xml", covered=10, total=10, branch_covered=5, branch_total=10)]
         branch_status, branch_findings = evaluate(
             branch_stats,
-            100.0,
-            branch_min_percent=80.0,
-            required_sources=["app/main.py"],
-            reported_sources={"app/main.py"},
+            CoverageEvaluationRequest(
+                min_percent=100.0,
+                branch_min_percent=80.0,
+                required_sources=["app/main.py"],
+                reported_sources={"app/main.py"},
+            ),
         )
         self.assertEqual(branch_status, "fail")
         self.assertTrue(any("branch coverage below 80.00%" in item for item in branch_findings))

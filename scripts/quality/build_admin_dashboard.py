@@ -156,6 +156,14 @@ def _github_payload(url: str, token: str) -> Any:
     return payload
 
 
+def _compute_health(workflow_runs: List[Mapping[str, Any]], *, filter_fn=None) -> str:
+    runs = workflow_runs if filter_fn is None else [item for item in workflow_runs if filter_fn(item)]
+    if not runs:
+        return "unknown"
+    conclusions = {str(item.get("conclusion") or "") for item in runs if item.get("conclusion")}
+    return "success" if conclusions and conclusions <= {"success"} else "partial"
+
+
 def _live_health(token: str, repo_slug: str, default_branch: str) -> Dict[str, Any]:
     runs = _github_payload(
         f"{GITHUB_API_BASE}/repos/{repo_slug}/actions/runs?branch={default_branch}&per_page=20",
@@ -163,19 +171,12 @@ def _live_health(token: str, repo_slug: str, default_branch: str) -> Dict[str, A
     )
     rulesets = _github_payload(f"{GITHUB_API_BASE}/repos/{repo_slug}/rulesets", token)
     workflow_runs = runs.get("workflow_runs", []) if isinstance(runs, dict) else []
-    default_branch_health = "unknown"
-    if workflow_runs:
-        conclusions = {str(item.get("conclusion") or "") for item in workflow_runs if item.get("conclusion")}
-        default_branch_health = "success" if conclusions and conclusions <= {"success"} else "partial"
-    open_pr_health = "unknown"
-    if workflow_runs:
-        pr_runs = [item for item in workflow_runs if item.get("event") == "pull_request"]
-        if pr_runs:
-            conclusions = {str(item.get("conclusion") or "") for item in pr_runs if item.get("conclusion")}
-            open_pr_health = "success" if conclusions and conclusions <= {"success"} else "partial"
     return {
-        "default_branch_health": default_branch_health,
-        "open_pr_health": open_pr_health,
+        "default_branch_health": _compute_health(workflow_runs),
+        "open_pr_health": _compute_health(
+            workflow_runs,
+            filter_fn=lambda item: item.get("event") == "pull_request",
+        ),
         "ruleset_present": bool(rulesets),
     }
 

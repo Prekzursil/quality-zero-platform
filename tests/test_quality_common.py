@@ -339,6 +339,7 @@ class QualityCommonTests(unittest.TestCase):
         )
         self.assertEqual(inferred["require_sources_mode"], "infer")
         self.assertIsNone(inferred["branch_min_percent"])
+        self.assertIsNone(normalize_coverage({"branch_min_percent": "bogus"})["branch_min_percent"])
 
     def test_normalize_codex_environment_helper_covers_string_inputs(self) -> None:
         self.assertEqual(
@@ -363,24 +364,6 @@ class QualityCommonTests(unittest.TestCase):
                 "baseline_ref": "main",
             },
         )
-
-    def test_normalize_deps_supports_defaults_and_shortcuts(self) -> None:
-        self.assertEqual(
-            normalize_deps(None),
-            {
-                "enabled": False,
-                "policy": "zero_critical",
-                "scope": "runtime",
-            },
-        )
-        self.assertEqual(
-            normalize_deps({"enabled": True, "policy": "zero_high", "scope": "all"}),
-            {
-                "enabled": True,
-                "policy": "zero_high",
-                "scope": "all",
-            },
-        )
         self.assertEqual(
             normalize_issue_policy("zero"),
             {
@@ -397,6 +380,24 @@ class QualityCommonTests(unittest.TestCase):
                 "pr_behavior": "introduced_only",
                 "main_behavior": "absolute",
                 "baseline_ref": "main",
+            },
+        )
+
+    def test_normalize_deps_supports_defaults_and_shortcuts(self) -> None:
+        self.assertEqual(
+            normalize_deps(None),
+            {
+                "enabled": False,
+                "policy": "zero_critical",
+                "scope": "runtime",
+            },
+        )
+        self.assertEqual(
+            normalize_deps({"enabled": True, "policy": "zero_high", "scope": "all"}),
+            {
+                "enabled": True,
+                "policy": "zero_high",
+                "scope": "all",
             },
         )
         self.assertEqual(

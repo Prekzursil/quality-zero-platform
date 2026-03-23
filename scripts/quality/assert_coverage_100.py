@@ -56,6 +56,14 @@ class CoverageStats:
         return (self.branch_covered / self.branch_total) * 100.0
 
 
+@dataclass(frozen=True)
+class CoverageEvaluationRequest:
+    min_percent: float
+    branch_min_percent: float | None = None
+    required_sources: List[str] | None = None
+    reported_sources: Set[str] | None = None
+
+
 _PAIR_RE = re.compile(r"^(?P<name>[^=]+)=(?P<path>.+)$")
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Assert minimum coverage for all declared components.")
@@ -93,16 +101,12 @@ def parse_named_path(value: str) -> Tuple[str, Path]:
 
 def evaluate(
     stats: List[CoverageStats],
-    min_percent: float,
-    *,
-    branch_min_percent: float | None = None,
-    required_sources: List[str] | None = None,
-    reported_sources: Set[str] | None = None,
+    request: CoverageEvaluationRequest,
 ) -> Tuple[str, List[str]]:
-    normalized_sources = reported_sources or set()
-    findings = _coverage_threshold_findings(stats, min_percent)
-    findings.extend(coverage_support._branch_threshold_findings(stats, branch_min_percent))
-    findings.extend(_required_source_findings(normalized_sources, list(required_sources or [])))
+    normalized_sources = request.reported_sources or set()
+    findings = _coverage_threshold_findings(stats, request.min_percent)
+    findings.extend(coverage_support._branch_threshold_findings(stats, request.branch_min_percent))
+    findings.extend(_required_source_findings(normalized_sources, list(request.required_sources or [])))
     return ("pass" if not findings else "fail", findings)
 
 
@@ -112,7 +116,11 @@ def _render_md(payload: Mapping[str, Any]) -> str:
         "",
         f"- Status: `{payload['status']}`",
         f"- Minimum required coverage: `{payload['min_percent']:.2f}%`",
-        f"- Minimum required branch coverage: `{payload['branch_min_percent']:.2f}%`" if payload.get("branch_min_percent") is not None else "- Minimum required branch coverage: `disabled`",
+        (
+            f"- Minimum required branch coverage: `{payload['branch_min_percent']:.2f}%`"
+            if payload.get("branch_min_percent") is not None
+            else "- Minimum required branch coverage: `disabled`"
+        ),
         f"- Timestamp (UTC): `{payload['timestamp_utc']}`",
         "",
         "## Components",
@@ -120,15 +128,13 @@ def _render_md(payload: Mapping[str, Any]) -> str:
     components = payload.get("components", [])
     if components:
         for item in components:
-            lines.append(
-                f"- `{item['name']}`: line=`{item['percent']:.2f}%` ({item['covered']}/{item['total']})"
-                + (
-                    f", branch=`{item['branch_percent']:.2f}%` ({item['branch_covered']}/{item['branch_total']})"
-                    if item.get("branch_total", 0)
-                    else ""
-                )
-                + f" from `{item['path']}`"
+            base_message = f"- `{item['name']}`: line=`{item['percent']:.2f}%` ({item['covered']}/{item['total']})"
+            branch_message = (
+                f", branch=`{item['branch_percent']:.2f}%` ({item['branch_covered']}/{item['branch_total']})"
+                if item.get("branch_total", 0)
+                else ""
             )
+            lines.append(f"{base_message}{branch_message} from `{item['path']}`")
     else:
         lines.append(NONE_BULLET)
 
@@ -194,10 +200,12 @@ def main() -> int:
     branch_min_percent = _normalized_branch_min_percent(args.branch_min_percent)
     status, findings = evaluate(
         stats,
-        min_percent,
-        branch_min_percent=branch_min_percent,
-        required_sources=list(args.require_source),
-        reported_sources=covered_sources,
+        CoverageEvaluationRequest(
+            min_percent=min_percent,
+            branch_min_percent=branch_min_percent,
+            required_sources=list(args.require_source),
+            reported_sources=covered_sources,
+        ),
     )
     payload = _build_payload(
         stats=stats,

@@ -1,7 +1,6 @@
 from __future__ import absolute_import
 
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
 from scripts.quality import check_dependabot_alerts
@@ -18,6 +17,22 @@ class DependabotAlertTests(unittest.TestCase):
         self.assertEqual(len(check_dependabot_alerts.filter_alerts(alerts, policy="zero_critical")), 1)
         self.assertEqual(len(check_dependabot_alerts.filter_alerts(alerts, policy="zero_high")), 2)
         self.assertEqual(len(check_dependabot_alerts.filter_alerts(alerts, policy="zero_any")), 3)
+
+    def test_request_alerts_follows_github_pagination(self) -> None:
+        responses = [
+            ([{"number": 1}], {"link": '<https://api.github.com/repos/Prekzursil/quality-zero-platform/dependabot/alerts?page=2>; rel="next"'}),
+            ([{"number": 2}], {}),
+        ]
+
+        with patch.object(check_dependabot_alerts, "load_json_https", side_effect=responses) as load_json_https_mock:
+            payload = check_dependabot_alerts._request_alerts(
+                "Prekzursil/quality-zero-platform",
+                "token",
+                scope="runtime",
+            )
+
+        self.assertEqual([item["number"] for item in payload], [1, 2])
+        self.assertEqual(load_json_https_mock.call_count, 2)
 
     def test_main_handles_missing_token_and_open_alerts(self) -> None:
         args = check_dependabot_alerts.argparse.Namespace(

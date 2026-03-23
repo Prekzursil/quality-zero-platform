@@ -3,6 +3,7 @@ from __future__ import absolute_import
 
 import argparse
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Mapping
@@ -15,6 +16,7 @@ from scripts.security_helpers import load_json_https
 
 
 GITHUB_API_BASE = "https://api.github.com"
+_NEXT_LINK_RE = re.compile(r'<(?P<url>[^>]+)>;\s*rel="next"')
 
 
 def _parse_args() -> argparse.Namespace:
@@ -30,19 +32,27 @@ def _parse_args() -> argparse.Namespace:
 
 def _request_alerts(repo: str, token: str, *, scope: str) -> List[Dict[str, Any]]:
     ecosystem = "" if scope == "all" else "&scope=runtime"
-    payload, _ = load_json_https(
-        f"{GITHUB_API_BASE}/repos/{repo}/dependabot/alerts?state=open&per_page=100{ecosystem}",
-        allowed_hosts={"api.github.com"},
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {token}",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "quality-zero-platform",
-        },
-    )
-    if not isinstance(payload, list):
-        raise RuntimeError("Unexpected Dependabot alerts payload")
-    return payload
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"Bearer {token}",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "quality-zero-platform",
+    }
+    next_url = f"{GITHUB_API_BASE}/repos/{repo}/dependabot/alerts?state=open&per_page=100{ecosystem}"
+    alerts: List[Dict[str, Any]] = []
+    while next_url:
+        payload, response_headers = load_json_https(
+            next_url,
+            allowed_hosts={"api.github.com"},
+            headers=headers,
+        )
+        if not isinstance(payload, list):
+            raise RuntimeError("Unexpected Dependabot alerts payload")
+        alerts.extend(payload)
+        link_header = str(response_headers.get("link", "") or "")
+        next_match = _NEXT_LINK_RE.search(link_header)
+        next_url = next_match.group("url") if next_match else ""
+    return alerts
 
 
 def filter_alerts(alerts: List[Dict[str, Any]], *, policy: str) -> List[Dict[str, Any]]:

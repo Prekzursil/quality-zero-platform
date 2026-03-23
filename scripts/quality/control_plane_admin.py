@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 
 import argparse
+from dataclasses import dataclass
 from pathlib import Path
 import sys
 from typing import Any, Dict
@@ -24,25 +25,42 @@ def _write_yaml(path: Path, payload: Dict[str, Any]) -> None:
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
 
 
-def enroll_repo(*, repo_root: Path, repo_slug: str, profile_id: str, stack: str, rollout: str, default_branch: str) -> None:
+@dataclass(frozen=True)
+class EnrollmentRequest:
+    repo_slug: str
+    profile_id: str
+    stack: str
+    rollout: str
+    default_branch: str
+
+
+@dataclass(frozen=True)
+class RequiredContextMutation:
+    profile_id: str
+    context_set: str
+    context_name: str
+    present: bool
+
+
+def enroll_repo(*, repo_root: Path, request: EnrollmentRequest) -> None:
     inventory_path = repo_root / "inventory" / "repos.yml"
     inventory = _load_yaml(inventory_path)
     inventory.setdefault("version", 1)
     repos = inventory.setdefault("repos", [])
-    if not any(item.get("slug") == repo_slug for item in repos):
+    if not any(item.get("slug") == request.repo_slug for item in repos):
         repos.append(
             {
-                "slug": repo_slug,
-                "profile": profile_id,
-                "rollout": rollout,
-                "default_branch": default_branch,
+                "slug": request.repo_slug,
+                "profile": request.profile_id,
+                "rollout": request.rollout,
+                "default_branch": request.default_branch,
             }
         )
     _write_yaml(inventory_path, inventory)
 
-    profile_path = repo_root / "profiles" / "repos" / f"{profile_id}.yml"
+    profile_path = repo_root / "profiles" / "repos" / f"{request.profile_id}.yml"
     if not profile_path.exists():
-        _write_yaml(profile_path, {"slug": repo_slug, "stack": stack})
+        _write_yaml(profile_path, {"slug": request.repo_slug, "stack": request.stack})
 
 
 def _profile_path(repo_root: Path, profile_id: str) -> Path:
@@ -80,22 +98,19 @@ def set_coverage_mode(*, repo_root: Path, profile_id: str, event_name: str, mode
 def set_required_context(
     *,
     repo_root: Path,
-    profile_id: str,
-    context_set: str,
-    context_name: str,
-    present: bool,
+    mutation: RequiredContextMutation,
 ) -> None:
-    path = _profile_path(repo_root, profile_id)
+    path = _profile_path(repo_root, mutation.profile_id)
     payload = _load_yaml(path)
     required_contexts = payload.setdefault("required_contexts", {})
-    current = list(required_contexts.get(context_set, []))
-    value = str(context_name).strip()
-    if present:
+    current = list(required_contexts.get(mutation.context_set, []))
+    value = str(mutation.context_name).strip()
+    if mutation.present:
         if value and value not in current:
             current.append(value)
     else:
         current = [item for item in current if item != value]
-    required_contexts[context_set] = current
+    required_contexts[mutation.context_set] = current
     _write_yaml(path, payload)
 
 
@@ -140,11 +155,13 @@ def main() -> int:
     if args.command == "enroll-repo":
         enroll_repo(
             repo_root=repo_root,
-            repo_slug=args.repo_slug,
-            profile_id=args.profile_id,
-            stack=args.stack,
-            rollout=args.rollout,
-            default_branch=args.default_branch,
+            request=EnrollmentRequest(
+                repo_slug=args.repo_slug,
+                profile_id=args.profile_id,
+                stack=args.stack,
+                rollout=args.rollout,
+                default_branch=args.default_branch,
+            ),
         )
     elif args.command == "set-scanner":
         set_scanner(repo_root=repo_root, profile_id=args.profile_id, scanner=args.scanner, enabled=args.enabled == "true")
@@ -153,10 +170,12 @@ def main() -> int:
     elif args.command == "set-required-context":
         set_required_context(
             repo_root=repo_root,
-            profile_id=args.profile_id,
-            context_set=args.context_set,
-            context_name=args.context_name,
-            present=args.present == "true",
+            mutation=RequiredContextMutation(
+                profile_id=args.profile_id,
+                context_set=args.context_set,
+                context_name=args.context_name,
+                present=args.present == "true",
+            ),
         )
     else:
         event_name = "default" if args.event_name == "default" else args.event_name

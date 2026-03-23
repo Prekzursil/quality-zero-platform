@@ -11,11 +11,13 @@ from typing import Any, Dict, List, Mapping
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.quality.common import safe_output_path, utc_timestamp, write_report
+from scripts.quality.common import utc_timestamp, write_report
 from scripts.security_helpers import load_json_https
 
 
 GITHUB_API_BASE = "https://api.github.com"
+DEFAULT_ROLLUP_JSON = "quality-rollup/summary.json"
+DEFAULT_ROLLUP_MD = "quality-rollup/summary.md"
 LANE_CONTEXTS = {
     "coverage": "Coverage 100 Gate",
     "qlty_zero": "QLTY Zero",
@@ -44,8 +46,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--repo", required=True)
     parser.add_argument("--sha", required=True)
     parser.add_argument("--artifacts-dir", required=True)
-    parser.add_argument("--out-json", default="quality-rollup/summary.json")
-    parser.add_argument("--out-md", default="quality-rollup/summary.md")
+    parser.add_argument("--out-json", default=DEFAULT_ROLLUP_JSON)
+    parser.add_argument("--out-md", default=DEFAULT_ROLLUP_MD)
     return parser.parse_args()
 
 
@@ -95,12 +97,14 @@ def _lane_detail(payload: Mapping[str, Any]) -> str:
     findings = payload.get("findings", [])
     if isinstance(findings, list) and findings:
         return str(findings[0])
-    if "open_issues" in payload and payload.get("open_issues") is not None:
-        return f"Open issues: {payload['open_issues']}"
-    if "quality_gate" in payload and payload.get("quality_gate"):
-        return f"Quality gate: {payload['quality_gate']}"
-    if "mode" in payload and payload.get("mode"):
-        return f"Mode: {payload['mode']}"
+    for key, template in (
+        ("open_issues", "Open issues: {}"),
+        ("quality_gate", "Quality gate: {}"),
+        ("mode", "Mode: {}"),
+    ):
+        value = payload.get(key)
+        if value is not None and value != "":
+            return template.format(value)
     return "No findings."
 
 
@@ -173,10 +177,10 @@ def main() -> int:
     payload = build_rollup(profile=profile, lane_payloads=lane_payloads, contexts=contexts, sha=args.sha)
     return write_report(
         payload,
-        out_json=str(safe_output_path(args.out_json, "quality-rollup/summary.json")),
-        out_md=str(safe_output_path(args.out_md, "quality-rollup/summary.md")),
-        default_json="quality-rollup/summary.json",
-        default_md="quality-rollup/summary.md",
+        out_json=args.out_json,
+        out_md=args.out_md,
+        default_json=DEFAULT_ROLLUP_JSON,
+        default_md=DEFAULT_ROLLUP_MD,
         render_md=render_markdown,
     )
 

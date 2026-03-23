@@ -20,11 +20,13 @@ class ControlPlaneAdminTests(unittest.TestCase):
 
             control_plane_admin.enroll_repo(
                 repo_root=root,
-                repo_slug="Prekzursil/example-repo",
-                profile_id="example-repo",
-                stack="python-web",
-                rollout="phase2-wave0",
-                default_branch="main",
+                request=control_plane_admin.EnrollmentRequest(
+                    repo_slug="Prekzursil/example-repo",
+                    profile_id="example-repo",
+                    stack="python-web",
+                    rollout="phase2-wave0",
+                    default_branch="main",
+                ),
             )
 
             inventory = (root / "inventory" / "repos.yml").read_text(encoding="utf-8")
@@ -89,17 +91,21 @@ class ControlPlaneAdminTests(unittest.TestCase):
 
             control_plane_admin.set_required_context(
                 repo_root=root,
-                profile_id="example-repo",
-                context_set="pull_request_only",
-                context_name="qlty coverage diff",
-                present=True,
+                mutation=control_plane_admin.RequiredContextMutation(
+                    profile_id="example-repo",
+                    context_set="pull_request_only",
+                    context_name="qlty coverage diff",
+                    present=True,
+                ),
             )
             control_plane_admin.set_required_context(
                 repo_root=root,
-                profile_id="example-repo",
-                context_set="target",
-                context_name="Coverage 100 Gate",
-                present=False,
+                mutation=control_plane_admin.RequiredContextMutation(
+                    profile_id="example-repo",
+                    context_set="target",
+                    context_name="Coverage 100 Gate",
+                    present=False,
+                ),
             )
 
             profile_text = profile_path.read_text(encoding="utf-8")

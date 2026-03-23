@@ -21,6 +21,7 @@ from scripts.quality.common import (
     normalize_coverage,
     normalize_coverage_assert_mode,
     normalize_coverage_inputs,
+    normalize_deps,
     normalize_issue_policy,
     normalize_coverage_setup,
     normalize_java_setup,
@@ -261,6 +262,10 @@ class QualityCommonTests(unittest.TestCase):
             normalize_coverage_assert_mode({"default": "", "python": " warn ", "javascript": " "}),
             {"default": "enforce", "python": "warn"},
         )
+        self.assertEqual(
+            normalize_coverage_assert_mode({"default": "non_regression"}),
+            {"default": "non_regression"},
+        )
 
     def test_normalize_coverage_helper_covers_string_inputs(self) -> None:
         self.assertEqual(
@@ -355,6 +360,24 @@ class QualityCommonTests(unittest.TestCase):
                 "mode": "ratchet",
                 "pr_behavior": "introduced_only",
                 "main_behavior": "absolute",
+            },
+        )
+
+    def test_normalize_deps_supports_defaults_and_shortcuts(self) -> None:
+        self.assertEqual(
+            normalize_deps(None),
+            {
+                "enabled": False,
+                "policy": "zero_critical",
+                "scope": "runtime",
+            },
+        )
+        self.assertEqual(
+            normalize_deps({"enabled": True, "policy": "zero_high", "scope": "all"}),
+            {
+                "enabled": True,
+                "policy": "zero_high",
+                "scope": "all",
             },
         )
         self.assertEqual(

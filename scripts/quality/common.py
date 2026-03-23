@@ -143,6 +143,12 @@ def normalize_issue_policy(raw: Mapping[str, Any] | str | None) -> Dict[str, str
     return impl(raw)
 
 
+def normalize_deps(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
+    from scripts.quality.profile_normalization import normalize_deps as impl
+
+    return impl(raw)
+
+
 def normalize_codex_environment(raw: Mapping[str, Any] | None, *, verify_command: str) -> Dict[str, Any]:
     from scripts.quality.profile_normalization import normalize_codex_environment as impl
 

@@ -55,7 +55,10 @@ class CoverageAssertTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             summary_xml = root / "summary.xml"
-            summary_xml.write_text('<coverage lines-valid="5" lines-covered="4"></coverage>', encoding="utf-8")
+            summary_xml.write_text(
+                '<coverage lines-valid="5" lines-covered="4" branches-valid="6" branches-covered="3"></coverage>',
+                encoding="utf-8",
+            )
             summary_stats = parse_coverage_xml("summary", summary_xml)
 
             fallback_xml = root / "fallback.xml"
@@ -66,6 +69,7 @@ class CoverageAssertTests(unittest.TestCase):
             fallback_stats = parse_coverage_xml("fallback", fallback_xml)
 
         self.assertEqual((summary_stats.covered, summary_stats.total), (4, 5))
+        self.assertEqual((summary_stats.branch_covered, summary_stats.branch_total), (3, 6))
         self.assertEqual((fallback_stats.covered, fallback_stats.total), (2, 3))
 
     def test_parse_lcov_counts_lines_found_and_hit(self) -> None:
@@ -80,6 +84,8 @@ class CoverageAssertTests(unittest.TestCase):
                         f"SF:{root.as_posix()}/build/CMakeFiles/app.dir/src/main.cpp",
                         "LF:4",
                         "LH:3",
+                        "BRF:6",
+                        "BRH:4",
                         "end_of_record",
                         f"SF:{root.as_posix()}/build/_deps/googletest-src/googletest/src/gtest.cc",
                         "LF:2",
@@ -94,6 +100,7 @@ class CoverageAssertTests(unittest.TestCase):
                 stats = parse_lcov("frontend", lcov_path)
 
         self.assertEqual((stats.covered, stats.total), (3, 4))
+        self.assertEqual((stats.branch_covered, stats.branch_total), (4, 6))
 
     def test_coverage_sources_from_xml_and_lcov_are_workspace_relative(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -165,6 +172,17 @@ class CoverageAssertTests(unittest.TestCase):
         self.assertEqual(ok_status, "pass")
         self.assertEqual(ok_findings, [])
 
+        branch_stats = [CoverageStats(name="python", path="coverage.xml", covered=10, total=10, branch_covered=5, branch_total=10)]
+        branch_status, branch_findings = evaluate(
+            branch_stats,
+            100.0,
+            branch_min_percent=80.0,
+            required_sources=["app/main.py"],
+            reported_sources={"app/main.py"},
+        )
+        self.assertEqual(branch_status, "fail")
+        self.assertTrue(any("branch coverage below 80.00%" in item for item in branch_findings))
+
     def test_source_normalization_and_required_source_helpers_cover_edge_cases(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -229,6 +247,7 @@ class CoverageAssertTests(unittest.TestCase):
             stats=stats,
             covered_sources=covered_sources,
             min_percent=100.0,
+            branch_min_percent=85.0,
             status="pass",
             findings=[],
         )
@@ -239,6 +258,7 @@ class CoverageAssertTests(unittest.TestCase):
         self.assertEqual(payload["status"], "pass")
         self.assertIn("pkg/main.py", markdown)
         self.assertIn("web/app.ts", markdown)
+        self.assertIn("85.00%", markdown)
 
     def test_build_payload_rejects_positional_and_unexpected_keyword_arguments(self) -> None:
         with self.assertRaisesRegex(TypeError, "keyword arguments only"):
@@ -260,6 +280,7 @@ class CoverageAssertTests(unittest.TestCase):
             lcov=[],
             require_source=[],
             min_percent=250.0,
+            branch_min_percent="",
             out_json="coverage-100/coverage.json",
             out_md="coverage-100/coverage.md",
         )):
@@ -272,6 +293,7 @@ class CoverageAssertTests(unittest.TestCase):
             lcov=[],
             require_source=[],
             min_percent=250.0,
+            branch_min_percent=90.0,
             out_json="coverage-100/custom.json",
             out_md="coverage-100/custom.md",
         )), patch.object(assert_coverage_100, "_collect_coverage_inputs", return_value=(stats, {"pkg/main.py"})), patch.object(
@@ -281,6 +303,7 @@ class CoverageAssertTests(unittest.TestCase):
 
         payload = write_report_mock.call_args.args[0]
         self.assertEqual(payload["min_percent"], 100.0)
+        self.assertEqual(payload["branch_min_percent"], 90.0)
         self.assertEqual(payload["status"], "pass")
 
     def test_coverage_stats_percent_and_render_markdown_cover_zero_totals_and_empty_sections(self) -> None:
@@ -330,6 +353,7 @@ class CoverageAssertTests(unittest.TestCase):
             lcov=[],
             require_source=[],
             min_percent=100.0,
+            branch_min_percent="",
             out_json="coverage-100/coverage.json",
             out_md="coverage-100/coverage.md",
         )

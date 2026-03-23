@@ -18,7 +18,9 @@ from scripts.quality.common import (
     dedupe_strings,
 )
 from scripts.quality.control_plane_vendors import finalize_vendors, normalize_visual_lane
+from scripts.quality.profile_shape import validate_profile_shape
 from scripts.quality.profile_normalization import (
+    normalize_deps as common_normalize_deps,
     infer_coverage_inputs as common_infer_coverage_inputs,
     merge_required_contexts as common_merge_required_contexts,
     normalize_codex_environment as common_normalize_codex_environment,
@@ -227,6 +229,8 @@ def _finalize_repo_profile(merged: Dict[str, Any], repo_slug: str) -> Dict[str, 
     merged["required_contexts"] = common_normalize_required_contexts(merged.get("required_contexts", {}))
     merged["enabled_scanners"] = merged.get("enabled_scanners", {})
     merged["issue_policy"] = common_normalize_issue_policy(merged.get("issue_policy", {}))
+    merged["deps"] = common_normalize_deps(merged.get("deps", {}))
+    merged["enabled_scanners"]["deps"] = bool(merged["deps"]["enabled"])
     merged["coverage"] = common_normalize_coverage(merged.get("coverage", {}))
     merged["codex_environment"] = common_normalize_codex_environment(
         merged.get("codex_environment", {}),
@@ -414,6 +418,16 @@ def _validate_issue_policy_contract(profile: Dict[str, Any]) -> List[str]:
     return findings
 
 
+def _validate_deps_contract(profile: Dict[str, Any]) -> List[str]:
+    deps = profile.get("deps", {})
+    findings: List[str] = []
+    if deps.get("policy") not in {"zero_critical", "zero_high", "zero_any"}:
+        findings.append(f"{profile['slug']}: deps.policy must be zero_critical, zero_high, or zero_any")
+    if deps.get("scope") not in {"runtime", "all"}:
+        findings.append(f"{profile['slug']}: deps.scope must be runtime or all")
+    return findings
+
+
 def _validate_visual_pair_contract(profile: Dict[str, Any]) -> List[str]:
     if not profile.get("visual_pair_required"):
         return []
@@ -457,9 +471,9 @@ def _validate_coverage_contract(profile: Dict[str, Any]) -> List[str]:
     if coverage.get("shell") not in {"bash", "pwsh"}:
         findings.append(f"{profile['slug']}: coverage.shell must be bash or pwsh")
     findings.extend(
-        f"{profile['slug']}: coverage.assert_mode.{mode_name} must be enforce or evidence_only"
+        f"{profile['slug']}: coverage.assert_mode.{mode_name} must be enforce, evidence_only, or non_regression"
         for mode_name, mode_value in coverage.get("assert_mode", {}).items()
-        if mode_value not in {"enforce", "evidence_only"}
+        if mode_value not in {"enforce", "evidence_only", "non_regression"}
     )
     if coverage.get("require_sources_mode") not in {"explicit", "infer", "disabled"}:
         findings.append(f"{profile['slug']}: coverage.require_sources_mode must be explicit, infer, or disabled")
@@ -481,12 +495,13 @@ def _validate_vendor_urls(profile: Dict[str, Any]) -> List[str]:
 
 
 def validate_profile(profile: Dict[str, Any]) -> List[str]:
-    findings: List[str] = []
+    findings: List[str] = validate_profile_shape(profile, slug=profile["slug"])
     for validator in (
         _validate_control_plane_lanes,
         _validate_required_context_sets,
         _validate_secret_contract,
         _validate_issue_policy_contract,
+        _validate_deps_contract,
         _validate_visual_pair_contract,
         _validate_coverage_contract,
         _validate_vendor_urls,

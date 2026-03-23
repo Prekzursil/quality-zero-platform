@@ -24,7 +24,8 @@ class AdminDashboardTests(unittest.TestCase):
                 "Prekzursil/example-repo": {
                     "enabled_scanners": {"coverage": True, "sonar": True},
                     "issue_policy": {"mode": "ratchet"},
-                    "coverage": {"min_percent": 100.0},
+                    "coverage": {"min_percent": 100.0, "branch_min_percent": 85.0},
+                    "deps": {"policy": "zero_critical"},
                 }
             },
             live={
@@ -40,6 +41,8 @@ class AdminDashboardTests(unittest.TestCase):
         repo = payload["repos"][0]
         self.assertEqual(repo["slug"], "Prekzursil/example-repo")
         self.assertEqual(repo["issue_policy_mode"], "ratchet")
+        self.assertEqual(repo["branch_min_percent"], 85.0)
+        self.assertEqual(repo["deps_policy"], "zero_critical")
         self.assertEqual(repo["default_branch_health"], "partial")
         self.assertFalse(repo["ruleset_present"])
 
@@ -54,6 +57,8 @@ class AdminDashboardTests(unittest.TestCase):
                     "rollout": "phase2-wave0",
                     "issue_policy_mode": "ratchet",
                     "enabled_scanners": ["coverage", "sonar"],
+                    "branch_min_percent": 85.0,
+                    "deps_policy": "zero_critical",
                     "default_branch_health": "partial",
                     "open_pr_health": "success",
                     "ruleset_present": False,
@@ -67,6 +72,8 @@ class AdminDashboardTests(unittest.TestCase):
         self.assertIn("Prekzursil/example-repo", html)
         self.assertIn("phase2-wave0", html)
         self.assertIn("ratchet", html)
+        self.assertIn("85.0", html)
+        self.assertIn("zero_critical", html)
 
     def test_write_dashboard_outputs_index_and_data_json(self) -> None:
         payload = {

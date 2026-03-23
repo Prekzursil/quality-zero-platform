@@ -125,6 +125,7 @@ class RunCoverageGateTests(unittest.TestCase):
                 ],
                 'require_sources': ['src/app.py'],
                 'min_percent': 100.0,
+                'branch_min_percent': 85.0,
             }
             observed_cwd = None
             observed_argv = None
@@ -154,6 +155,8 @@ class RunCoverageGateTests(unittest.TestCase):
                 'src/app.py',
                 '--min-percent',
                 '100.0',
+                '--branch-min-percent',
+                '85.0',
                 '--out-json',
                 DEFAULT_COVERAGE_JSON,
                 '--out-md',
@@ -234,3 +237,42 @@ class RunCoverageGateTests(unittest.TestCase):
         self.assertEqual(result, 0)
         mock_shell.assert_called_once_with('', shell_name='bash', cwd=Path.cwd().resolve())
         mock_assert.assert_not_called()
+
+    def test_non_regression_mode_uses_baseline_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            profile_json = temp_path / 'profile.json'
+            profile_json.write_text(
+                json.dumps(
+                    {
+                        'slug': 'Prekzursil/SWFOC-Mod-Menu',
+                        'default_branch': 'main',
+                        'coverage': {
+                            'command': '',
+                            'shell': 'bash',
+                            'assert_mode': {'default': 'non_regression'},
+                            'inputs': [],
+                        },
+                    }
+                ),
+                encoding='utf-8',
+            )
+
+            with (
+                patch('scripts.quality.run_coverage_gate._run_shell') as mock_shell,
+                patch('scripts.quality.run_coverage_gate._collect_current_coverage_payload', return_value={'combined_percent': 95.0}),
+                patch('scripts.quality.run_coverage_gate._load_baseline_coverage_payload', return_value={'combined_percent': 94.0}),
+                patch('scripts.quality.run_coverage_gate._write_non_regression_report', return_value=0) as mock_report,
+                patch.object(sys, 'argv', [
+                    'run_coverage_gate.py',
+                    '--profile-json',
+                    str(profile_json),
+                    '--event-name',
+                    'pull_request',
+                ]),
+            ):
+                result = run_coverage_gate.main()
+
+        self.assertEqual(result, 0)
+        mock_shell.assert_called_once()
+        mock_report.assert_called_once()

@@ -25,8 +25,8 @@ coverage:
       path: TestResults/coverage/cobertura.xml
   assert_mode:
     default: enforce
-    pull_request: evidence_only
-  evidence_note: 100/100 hard gate is enforced on protected branch pushes.
+    pull_request: non_regression
+  evidence_note: PRs enforce non-regression against the last successful protected-branch baseline.
 trigger:
   mode: standard
   pr_head_sha: true

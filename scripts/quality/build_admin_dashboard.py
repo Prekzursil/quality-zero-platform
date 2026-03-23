@@ -47,6 +47,8 @@ def build_dashboard_payload(
                     name for name, enabled in profile.get("enabled_scanners", {}).items() if enabled
                 ),
                 "coverage_min_percent": profile.get("coverage", {}).get("min_percent"),
+                "branch_min_percent": profile.get("coverage", {}).get("branch_min_percent"),
+                "deps_policy": profile.get("deps", {}).get("policy", ""),
                 "default_branch_health": live_state.get("default_branch_health", "unknown"),
                 "open_pr_health": live_state.get("open_pr_health", "unknown"),
                 "ruleset_present": bool(live_state.get("ruleset_present", False)),
@@ -68,6 +70,8 @@ def render_dashboard_html(payload: Mapping[str, Any]) -> str:
             f"<td>{item['rollout']}</td>"
             f"<td>{item['issue_policy_mode']}</td>"
             f"<td>{', '.join(item['enabled_scanners'])}</td>"
+            f"<td>{item.get('branch_min_percent')}</td>"
+            f"<td>{item.get('deps_policy')}</td>"
             f"<td>{item['default_branch_health']}</td>"
             f"<td>{item['open_pr_health']}</td>"
             f"<td>{'yes' if item['ruleset_present'] else 'no'}</td>"
@@ -99,6 +103,8 @@ def render_dashboard_html(payload: Mapping[str, Any]) -> str:
         <th>Rollout</th>
         <th>Issue policy</th>
         <th>Enabled scanners</th>
+        <th>Branch coverage</th>
+        <th>Deps policy</th>
         <th>Default branch</th>
         <th>Open PRs</th>
         <th>Ruleset</th>

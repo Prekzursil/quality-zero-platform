@@ -70,6 +70,15 @@ def normalize_issue_policy(raw_issue_policy: Mapping[str, Any] | str | None) -> 
     }
 
 
+def normalize_deps(raw_deps: Mapping[str, Any] | None) -> Dict[str, Any]:
+    payload = deepcopy(raw_deps or {}) if isinstance(raw_deps, dict) else {}
+    return {
+        "enabled": bool(payload.get("enabled", False)),
+        "policy": str(payload.get("policy", "zero_critical")).strip() or "zero_critical",
+        "scope": str(payload.get("scope", "runtime")).strip() or "runtime",
+    }
+
+
 def normalize_required_contexts(raw: Mapping[str, Any] | None) -> Dict[str, List[str]]:
     payload = deepcopy(raw or {}) if isinstance(raw, dict) else {}
     always = dedupe_strings(payload.get("always", []))

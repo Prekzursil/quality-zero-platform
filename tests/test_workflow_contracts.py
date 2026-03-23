@@ -337,6 +337,9 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("build_quality_rollup.py", text)
         self.assertIn("post_pr_quality_comment.py", text)
         self.assertIn("actions/download-artifact@v4", text)
+        self.assertIn("job_name: Dependency Alerts", text)
+        self.assertIn('lane == "deps"', text)
+        self.assertIn("check_dependabot_alerts.py", text)
 
     def test_admin_dashboard_and_control_plane_admin_workflows_exist_with_expected_triggers(self) -> None:
         dashboard_text = (ROOT / ".github" / "workflows" / "publish-admin-dashboard.yml").read_text(encoding="utf-8")

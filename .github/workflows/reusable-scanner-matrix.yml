@@ -85,6 +85,8 @@ jobs:
             lane: sentry
           - job_name: DeepScan Zero
             lane: deepscan
+          - job_name: Dependency Alerts
+            lane: deps
     steps:
       - uses: actions/checkout@v4
         with:
@@ -326,6 +328,26 @@ jobs:
               "deepscan-zero/deepscan.md",
             ]
             run(cmd, cwd=repo_dir)
+          elif lane == "deps":
+            if not profile.get("enabled_scanners", {}).get("deps", False):
+              print("Dependency alert lane is disabled for this profile; skipping.")
+              sys.exit(0)
+            deps = profile.get("deps", {})
+            cmd = [
+              sys.executable,
+              str(platform_dir / "scripts/quality/check_dependabot_alerts.py"),
+              "--repo",
+              os.environ["REPO_SLUG"],
+              "--policy",
+              str(deps.get("policy", "zero_critical")),
+              "--scope",
+              str(deps.get("scope", "runtime")),
+              "--out-json",
+              "deps-zero/deps.json",
+              "--out-md",
+              "deps-zero/deps.md",
+            ]
+            run(cmd, cwd=repo_dir)
           else:
             raise SystemExit(f"Unsupported lane: {lane}")
           PY
@@ -384,6 +406,7 @@ jobs:
             repo/codacy-zero
             repo/sentry-zero
             repo/deepscan-zero
+            repo/deps-zero
 
   quality-rollup:
     name: Quality Rollup

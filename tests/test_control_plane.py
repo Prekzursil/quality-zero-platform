@@ -220,7 +220,7 @@ class ControlPlaneTests(unittest.TestCase):
             "--exclude '.*/build/_deps/.*'",
             airline["coverage"]["command"],
         )
-        self.assertEqual(swfoc["coverage"]["assert_mode"]["pull_request"], "evidence_only")
+        self.assertEqual(swfoc["coverage"]["assert_mode"]["pull_request"], "non_regression")
         self.assertEqual(swfoc["coverage"]["runner"], "windows-latest")
         self.assertEqual(swfoc["visual_lane"]["kind"], "desktop-adapter")
         self.assertNotIn("DEEPSCAN_POLICY_MODE", quality_zero_platform["required_vars"])

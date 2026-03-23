@@ -49,6 +49,28 @@ def _coverage_threshold_findings(stats: List["CoverageStats"], min_percent: floa
     return findings
 
 
+def _branch_threshold_findings(stats: List["CoverageStats"], branch_min_percent: float | None) -> List[str]:
+    if branch_min_percent is None:
+        return []
+
+    findings: List[str] = []
+    stats_list = [item for item in stats if item.branch_total > 0]
+    for item in stats_list:
+        if item.branch_percent < branch_min_percent:
+            findings.append(
+                f"{item.name} branch coverage below {branch_min_percent:.2f}%: {item.branch_percent:.2f}% ({item.branch_covered}/{item.branch_total})"
+            )
+
+    combined_total = sum(item.branch_total for item in stats_list)
+    combined_covered = sum(item.branch_covered for item in stats_list)
+    combined = 100.0 if combined_total <= 0 else (combined_covered / combined_total) * 100.0
+    if combined_total > 0 and combined < branch_min_percent:
+        findings.append(
+            f"combined branch coverage below {branch_min_percent:.2f}%: {combined:.2f}% ({combined_covered}/{combined_total})"
+        )
+    return findings
+
+
 def _required_source_findings(reported_sources: Set[str], required_sources: List[str]) -> List[str]:
     findings: List[str] = []
     if _is_tests_only_report(reported_sources):

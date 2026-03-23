@@ -6,6 +6,9 @@ import json
 import os
 import subprocess  # nosec B404
 import sys
+import urllib.request
+import zipfile
+from io import BytesIO
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, List, cast
@@ -21,6 +24,7 @@ from scripts.quality.common import (
     utc_timestamp,
     write_report,
 )
+from scripts.security_helpers import normalize_https_url
 
 
 def _parse_args() -> argparse.Namespace:
@@ -101,6 +105,8 @@ def _build_assert_coverage_argv(coverage: Dict[str, Any], platform_dir: Path) ->
     for item in cast(List[Any], coverage.get("require_sources", [])):
         cmd.extend(["--require-source", str(item)])
     cmd.extend(["--min-percent", str(coverage.get("min_percent", 100.0))])
+    if coverage.get("branch_min_percent") is not None:
+        cmd.extend(["--branch-min-percent", str(coverage.get("branch_min_percent"))])
     cmd.extend(["--out-json", DEFAULT_COVERAGE_JSON, "--out-md", DEFAULT_COVERAGE_MD])
     return cmd
 
@@ -158,6 +164,119 @@ def _write_evidence_only_report(note: str) -> int:
     )
 
 
+def _combined_coverage_percent(payload: Dict[str, Any]) -> float:
+    components = payload.get("components", [])
+    if not isinstance(components, list):
+        return 100.0
+    total = sum(int(item.get("total", 0)) for item in components if isinstance(item, dict))
+    covered = sum(int(item.get("covered", 0)) for item in components if isinstance(item, dict))
+    return 100.0 if total <= 0 else (covered / total) * 100.0
+
+
+def _collect_current_coverage_payload(coverage: Dict[str, Any], *, repo_dir: Path, platform_dir: Path) -> Dict[str, Any]:
+    result = _run_assert_coverage_100(coverage, repo_dir=repo_dir, platform_dir=platform_dir)
+    if result not in {0, 1}:
+        raise RuntimeError(f"coverage assertion returned unexpected exit code {result}")
+    coverage_path = repo_dir / DEFAULT_COVERAGE_JSON
+    return json.loads(coverage_path.read_text(encoding="utf-8"))
+
+
+def _download_bytes(url: str, token: str) -> bytes:
+    safe_url = normalize_https_url(url, allowed_hosts={"api.github.com"})
+    request = urllib.request.Request(
+        safe_url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "quality-zero-platform",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:  # nosec B310
+        return response.read()
+
+
+def _load_baseline_coverage_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
+    token = (os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")).strip()
+    if not token:
+        raise RuntimeError("GITHUB_TOKEN or GH_TOKEN is required for non_regression coverage mode.")
+    repo_slug = str(profile["slug"])
+    default_branch = str(profile["default_branch"])
+    workflow_runs_url = (
+        f"https://api.github.com/repos/{repo_slug}/actions/runs"
+        f"?branch={default_branch}&status=completed&per_page=50"
+    )
+    runs_payload = json.loads(_download_bytes(workflow_runs_url, token).decode("utf-8"))
+    workflow_runs = runs_payload.get("workflow_runs", []) if isinstance(runs_payload, dict) else []
+    run_id = next(
+        (
+            item["id"]
+            for item in workflow_runs
+            if item.get("name") == "Quality Zero Platform" and item.get("conclusion") == "success"
+        ),
+        None,
+    )
+    if run_id is None:
+        raise RuntimeError("Unable to find a successful Quality Zero Platform run on the default branch.")
+    artifacts_url = f"https://api.github.com/repos/{repo_slug}/actions/runs/{run_id}/artifacts?per_page=100"
+    artifacts_payload = json.loads(_download_bytes(artifacts_url, token).decode("utf-8"))
+    artifacts = artifacts_payload.get("artifacts", []) if isinstance(artifacts_payload, dict) else []
+    artifact = next((item for item in artifacts if item.get("name") == "coverage-artifacts"), None)
+    if artifact is None:
+        raise RuntimeError("Unable to find coverage-artifacts on the baseline run.")
+    archive = _download_bytes(str(artifact["archive_download_url"]), token)
+    with zipfile.ZipFile(BytesIO(archive)) as handle:
+        with handle.open("coverage-100/coverage.json") as stream:
+            return json.loads(stream.read().decode("utf-8"))
+
+
+def _render_non_regression_md(payload: dict) -> str:
+    lines = [
+        "# Coverage 100 Gate",
+        "",
+        f"- Status: `{payload['status']}`",
+        "- Mode: `non_regression`",
+        f"- Current combined coverage: `{payload['current_percent']:.2f}%`",
+        f"- Baseline combined coverage: `{payload['baseline_percent']:.2f}%`",
+        f"- Timestamp (UTC): `{payload['timestamp_utc']}`",
+        "",
+        "## Findings",
+    ]
+    lines.extend([f"- {item}" for item in payload.get("findings", [])] or [NONE_BULLET])
+    return "\n".join(lines) + "\n"
+
+
+def _write_non_regression_report(current: Dict[str, Any], baseline: Dict[str, Any]) -> int:
+    current_percent = _combined_coverage_percent(current)
+    baseline_percent = _combined_coverage_percent(baseline)
+    findings = []
+    status = "pass"
+    if current_percent < baseline_percent:
+        status = "fail"
+        findings.append(
+            f"combined coverage regressed from {baseline_percent:.2f}% to {current_percent:.2f}%"
+        )
+    payload = {
+        "status": status,
+        "mode": "non_regression",
+        "current_percent": current_percent,
+        "baseline_percent": baseline_percent,
+        "timestamp_utc": utc_timestamp(),
+        "findings": findings,
+    }
+    return_code = write_report(
+        payload,
+        out_json=DEFAULT_COVERAGE_JSON,
+        out_md=DEFAULT_COVERAGE_MD,
+        default_json=DEFAULT_COVERAGE_JSON,
+        default_md=DEFAULT_COVERAGE_MD,
+        render_md=_render_non_regression_md,
+    )
+    if return_code != 0:
+        return return_code
+    return 0 if status == "pass" else 1
+
+
 def main() -> int:
     args = _parse_args()
     profile = json.loads(Path(args.profile_json).read_text(encoding="utf-8"))
@@ -171,6 +290,10 @@ def main() -> int:
     if mode == "evidence_only":
         note = str(coverage.get("evidence_note", "")).strip() or "100/100 hard gate is enforced on protected branch pushes."
         return _write_evidence_only_report(note)
+    if mode == "non_regression":
+        current_payload = _collect_current_coverage_payload(coverage, repo_dir=repo_dir, platform_dir=platform_dir)
+        baseline_payload = _load_baseline_coverage_payload(cast(Dict[str, Any], profile))
+        return _write_non_regression_report(current_payload, baseline_payload)
 
     return _run_assert_coverage_100(coverage, repo_dir=repo_dir, platform_dir=platform_dir)
 

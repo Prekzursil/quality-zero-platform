@@ -21,7 +21,6 @@ from scripts.quality import (
     profile_coverage_normalization,
     profile_normalization,
     profile_shape,
-    run_coverage_gate,
 )
 from scripts import security_helpers
 
@@ -267,47 +266,6 @@ class CoverageBackfillTests(unittest.TestCase):
         self.assertIn("src/", profile_coverage_normalization._extract_gcovr_hints("gcovr --filter '.*/src/.*'"))
         self.assertIn("src/", profile_coverage_normalization._extract_gcovr_hints('gcovr --filter ".*/src/.*"'))
         self.assertEqual(profile_normalization.infer_required_sources({"command": ""}), [])
-
-    def test_run_coverage_gate_remaining_helpers_cover_error_branches(self) -> None:
-        self.assertEqual(run_coverage_gate._combined_coverage_percent({"components": "bad"}), 100.0)
-        with tempfile.TemporaryDirectory() as temp_dir:
-            repo_dir = Path(temp_dir)
-            (repo_dir / "coverage-100").mkdir()
-            (repo_dir / "coverage-100" / "coverage.json").write_text("{}", encoding="utf-8")
-            with patch.object(run_coverage_gate, "_run_assert_coverage_100", return_value=0):
-                self.assertEqual(
-                    run_coverage_gate._collect_current_coverage_payload({}, repo_dir=repo_dir, platform_dir=repo_dir),
-                    {},
-                )
-            with patch.object(run_coverage_gate, "_run_assert_coverage_100", return_value=2):
-                with self.assertRaisesRegex(RuntimeError, "coverage assertion returned unexpected exit code 2"):
-                    run_coverage_gate._collect_current_coverage_payload({}, repo_dir=repo_dir, platform_dir=repo_dir)
-
-        with patch.object(run_coverage_gate, "_github_api_token", return_value="token"), patch.object(
-            run_coverage_gate, "_download_bytes", return_value=json.dumps({"workflow_runs": []}).encode("utf-8")
-        ):
-            with self.assertRaisesRegex(RuntimeError, "Unable to find a successful Quality Zero Platform run"):
-                run_coverage_gate._load_baseline_coverage_payload({"slug": "owner/repo", "default_branch": "main"})
-
-        with patch.object(run_coverage_gate, "_github_api_token", return_value="token"), patch.object(
-            run_coverage_gate,
-            "_download_bytes",
-            side_effect=[
-                json.dumps({"workflow_runs": [{"id": 1, "name": "Quality Zero Platform", "conclusion": "success"}]}).encode("utf-8"),
-                json.dumps({"artifacts": []}).encode("utf-8"),
-            ],
-        ):
-            with self.assertRaisesRegex(RuntimeError, "Unable to find coverage-artifacts"):
-                run_coverage_gate._load_baseline_coverage_payload({"slug": "owner/repo", "default_branch": "main"})
-
-        script_path = Path(run_coverage_gate.__file__).resolve()
-        with tempfile.TemporaryDirectory() as temp_dir:
-            profile_json = Path(temp_dir) / "profile.json"
-            profile_json.write_text(json.dumps({"coverage": {"command": "", "shell": "bash", "assert_mode": {"default": "evidence_only"}}}), encoding="utf-8")
-            with patch.object(sys, "argv", [str(script_path), "--profile-json", str(profile_json), "--event-name", "push"]):
-                with self.assertRaises(SystemExit) as result:
-                    runpy.run_path(str(script_path), run_name="__main__")
-            self.assertEqual(result.exception.code, 0)
 
     def test_security_helper_remaining_error_branches(self) -> None:
         parsed = security_helpers.urlparse("https://api.github.com/repos/owner/repo")

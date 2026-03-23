@@ -2,7 +2,6 @@
 from __future__ import absolute_import
 
 import argparse
-import http.client
 import json
 import os
 import subprocess  # nosec B404
@@ -12,7 +11,6 @@ from io import BytesIO
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, List, cast
-from urllib.parse import urlparse
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # pragma: no cover
@@ -25,7 +23,7 @@ from scripts.quality.common import (
     utc_timestamp,
     write_report,
 )
-from scripts.security_helpers import normalize_https_url
+from scripts.security_helpers import load_bytes_https, normalize_https_url
 
 
 def _parse_args() -> argparse.Namespace:
@@ -183,25 +181,18 @@ def _collect_current_coverage_payload(coverage: Dict[str, Any], *, repo_dir: Pat
 
 
 def _download_bytes(url: str, token: str) -> bytes:
-    safe_url = normalize_https_url(url, allowed_hosts={"api.github.com"})
-    parsed = urlparse(safe_url)
-    path = parsed.path + (f"?{parsed.query}" if parsed.query else "")
-    connection = http.client.HTTPSConnection(parsed.netloc, timeout=30)
-    try:
-        connection.request(
-            "GET",
-            path,
-            headers={
-                "Accept": "application/vnd.github+json",
-                "Authorization": f"Bearer {token}",
-                "X-GitHub-Api-Version": "2022-11-28",
-                "User-Agent": "quality-zero-platform",
-            },
-        )
-        response = connection.getresponse()
-        return response.read()
-    finally:
-        connection.close()
+    payload, _ = load_bytes_https(
+        url,
+        allowed_hosts={"api.github.com"},
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "quality-zero-platform",
+        },
+        timeout=30,
+    )
+    return payload
 
 
 def _github_api_token() -> str:

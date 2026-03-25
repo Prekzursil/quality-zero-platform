@@ -121,6 +121,20 @@ class CodacyZeroTests(unittest.TestCase):
         self.assertEqual(open_issues, 2)
         self.assertEqual(findings, ["Codacy reports 2 open issues (expected 0)."])
 
+    def test_query_codacy_public_repository_issues_covers_success_and_invalid_payloads(self) -> None:
+        with patch("scripts.quality.check_codacy_zero.load_json_https", return_value=({"issuesCount": 0}, {})):
+            open_issues, findings = check_codacy_zero._query_codacy_public_repository_issues(
+                "gh",
+                "Prekzursil",
+                "quality-zero-platform",
+            )
+        self.assertEqual(open_issues, 0)
+        self.assertEqual(findings, [])
+
+        with patch("scripts.quality.check_codacy_zero.load_json_https", return_value=(["invalid"], {})):
+            with self.assertRaisesRegex(RuntimeError, "Unexpected Codacy public repository payload"):
+                check_codacy_zero._query_codacy_public_repository_issues("gh", "Prekzursil", "quality-zero-platform")
+
     def test_query_open_issues_uses_public_repository_fallback_after_401_on_main(self) -> None:
         from urllib.error import HTTPError
 
@@ -143,6 +157,32 @@ class CodacyZeroTests(unittest.TestCase):
         self.assertEqual(findings, [])
         self.assertIsNone(exc)
         fallback_mock.assert_called_once_with("gh", "Prekzursil", "quality-zero-platform")
+
+    def test_handle_codacy_http_error_covers_pull_request_and_failed_public_fallback(self) -> None:
+        from urllib.error import HTTPError
+
+        headers = Message()
+        error = HTTPError("https://api.codacy.com", 401, "Unauthorized", hdrs=headers, fp=None)
+        query = check_codacy_zero.CodacyQuery("gh", "Prekzursil", "quality-zero-platform", pull_request="5")
+        self.assertIsNone(check_codacy_zero._fallback_public_issues(query))
+        self.assertEqual(
+            check_codacy_zero._handle_codacy_http_error(error, query),
+            (None, ["Codacy API request failed: HTTP 401"], error, True),
+        )
+
+        with patch(
+            "scripts.quality.check_codacy_zero._query_codacy_public_repository_issues",
+            side_effect=RuntimeError("fallback broke"),
+        ):
+            open_issues, findings, exc, should_return = check_codacy_zero._handle_codacy_http_error(
+                error,
+                check_codacy_zero.CodacyQuery("gh", "Prekzursil", "quality-zero-platform"),
+            )
+
+        self.assertIsNone(open_issues)
+        self.assertEqual(findings, [])
+        self.assertIsInstance(exc, RuntimeError)
+        self.assertFalse(should_return)
 
     def test_keyword_only_guards_reject_unexpected_arguments(self) -> None:
         with self.assertRaisesRegex(TypeError, "Unexpected _query_codacy_provider parameters: extra"):
@@ -321,20 +361,11 @@ class CodacyZeroTests(unittest.TestCase):
             "_query_codacy_open_issues",
             return_value=(3, ["Codacy reports 3 open issues (expected 0)."], None),
         ):
-            status, findings, open_issues, pull_request = _resolve_codacy_status(args)
+            result = _resolve_codacy_status(args)
 
-        self.assertEqual(status, "pass")
-        self.assertEqual(findings, ["Codacy reports 3 open issues (expected 0)."])
-        self.assertEqual(open_issues, 3)
-        self.assertEqual(pull_request, "")
-        self.assertEqual(
-            _build_payload(
-                args,
-                status=status,
-                findings=findings,
-                open_issues=open_issues,
-                pull_request=pull_request,
-            )["open_issues"],
-            3,
-        )
+        self.assertEqual(result.status, "pass")
+        self.assertEqual(result.findings, ["Codacy reports 3 open issues (expected 0)."])
+        self.assertEqual(result.open_issues, 3)
+        self.assertEqual(result.pull_request, "")
+        self.assertEqual(_build_payload(args, result)["open_issues"], 3)
 

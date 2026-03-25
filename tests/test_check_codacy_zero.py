@@ -120,11 +120,14 @@ class CodacyZeroTests(unittest.TestCase):
             )
         self.assertEqual(
             captured,
-            [(
-                "https://app.codacy.com/api/v3/analysis/organizations/gh/Prekzursil/repositories/quality-zero-platform/pull-requests/5/issues?status=new&limit=1",
-                "GET",
-                None,
-            )],
+            [
+                (
+                    "https://app.codacy.com/api/v3/analysis/organizations/gh/Prekzursil/"
+                    "repositories/quality-zero-platform/pull-requests/5/issues?status=new&limit=1",
+                    "GET",
+                    None,
+                )
+            ],
         )
 
     def test_open_issue_http_error_and_not_found_paths(self) -> None:
@@ -135,16 +138,25 @@ class CodacyZeroTests(unittest.TestCase):
             "scripts.quality.check_codacy_zero._query_codacy_public_repository_issues",
             return_value=(0, []),
         ) as fallback_mock:
-            self.assertEqual(_query_codacy_open_issues(self._base_query(), "token", ["gh"]), (0, [], None))
+            self.assertEqual(
+                _query_codacy_open_issues(self._base_query(), "token", ["gh"]),
+                (0, [], None),
+            )
         fallback_mock.assert_called_once_with("gh", "Prekzursil", "quality-zero-platform")
 
-        with patch("scripts.quality.check_codacy_zero._query_codacy_provider", side_effect=HTTPError("u", 500, "Boom", hdrs=Message(), fp=None)):
+        with patch(
+            "scripts.quality.check_codacy_zero._query_codacy_provider",
+            side_effect=HTTPError("u", 500, "Boom", hdrs=Message(), fp=None),
+        ):
             open_issues, findings, exc = _query_codacy_open_issues(self._base_query(), "token", ["gh"])
         self.assertIsNone(open_issues)
         self.assertEqual(findings, ["Codacy API request failed: HTTP 500"])
         self.assertIsNotNone(exc)
 
-        with patch("scripts.quality.check_codacy_zero._query_codacy_provider", side_effect=RuntimeError("network broke")):
+        with patch(
+            "scripts.quality.check_codacy_zero._query_codacy_provider",
+            side_effect=RuntimeError("network broke"),
+        ):
             open_issues, findings, exc = _query_codacy_open_issues(self._base_query(), "token", ["gh"])
         self.assertIsNone(open_issues)
         self.assertEqual(findings, ["Codacy API request failed: network broke"])
@@ -153,8 +165,15 @@ class CodacyZeroTests(unittest.TestCase):
         def fake_provider(*_args, **_kwargs):
             raise HTTPError("https://api.codacy.com", 404, "Not Found", hdrs=Message(), fp=None)
 
-        with patch("scripts.quality.check_codacy_zero._query_codacy_provider", side_effect=fake_provider):
-            open_issues, findings, exc = _query_codacy_open_issues(self._base_query(), "token", ["custom", "github"])
+        with patch(
+            "scripts.quality.check_codacy_zero._query_codacy_provider",
+            side_effect=fake_provider,
+        ):
+            open_issues, findings, exc = _query_codacy_open_issues(
+                self._base_query(),
+                "token",
+                ["custom", "github"],
+            )
         self.assertIsNone(open_issues)
         self.assertIn("Codacy API endpoint was not found", findings[0])
         self.assertIsNotNone(exc)
@@ -175,7 +194,10 @@ class CodacyZeroTests(unittest.TestCase):
             "scripts.quality.check_codacy_zero._fallback_public_issues",
             return_value=(None, [], RuntimeError("fallback broke")),
         ):
-            open_issues, findings, exc, should_return = check_codacy_zero._handle_codacy_http_error(error, self._base_query())
+            open_issues, findings, exc, should_return = check_codacy_zero._handle_codacy_http_error(
+                error,
+                self._base_query(),
+            )
         self.assertIsNone(open_issues)
         self.assertEqual(findings, [])
         self.assertIsInstance(exc, RuntimeError)
@@ -183,27 +205,64 @@ class CodacyZeroTests(unittest.TestCase):
 
     def test_query_candidate_and_helpers(self) -> None:
         query = self._base_query()
-        with patch("scripts.quality.check_codacy_zero._query_codacy_provider", return_value=(0, [])):
-            self.assertEqual(_query_codacy_candidate(query, "token"), (0, [], None, True))
-        with patch("scripts.quality.check_codacy_zero._query_codacy_provider", side_effect=RuntimeError("provider broke")):
+        with patch(
+            "scripts.quality.check_codacy_zero._query_codacy_provider",
+            return_value=(0, []),
+        ):
+            self.assertEqual(
+                _query_codacy_candidate(query, "token"),
+                (0, [], None, True),
+            )
+        with patch(
+            "scripts.quality.check_codacy_zero._query_codacy_provider",
+            side_effect=RuntimeError("provider broke"),
+        ):
             open_issues, findings, exc, should_return = _query_codacy_candidate(query, "token")
         self.assertIsNone(open_issues)
         self.assertEqual(findings, ["Codacy API request failed: provider broke"])
         self.assertIsInstance(exc, RuntimeError)
         self.assertTrue(should_return)
-        open_issues, findings, exc = check_codacy_zero._not_found_findings(["gh"], RuntimeError("boom"))
+        open_issues, findings, exc = check_codacy_zero._not_found_findings(
+            ["gh"],
+            RuntimeError("boom"),
+        )
         self.assertIsNone(open_issues)
-        self.assertEqual(findings, ["Codacy API endpoint was not found for providers: gh.", "Last Codacy API error: boom"])
+        self.assertEqual(
+            findings,
+            [
+                "Codacy API endpoint was not found for providers: gh.",
+                "Last Codacy API error: boom",
+            ],
+        )
         self.assertIsInstance(exc, RuntimeError)
 
     def test_main_and_payload_helpers(self) -> None:
-        args = Namespace(provider="gh", owner="Prekzursil", repo="quality-zero-platform", pull_request="", token="", out_json="codacy-zero/codacy.json", out_md="codacy-zero/codacy.md")
-        with patch.dict("os.environ", {}, clear=True), patch.object(check_codacy_zero, "_parse_args", return_value=args), patch.object(check_codacy_zero, "write_report", return_value=0) as write_report_mock:
+        empty_value = str()
+        args = Namespace(
+            provider="gh",
+            owner="Prekzursil",
+            repo="quality-zero-platform",
+            pull_request=empty_value,
+            token=empty_value,
+            out_json="codacy-zero/codacy.json",
+            out_md="codacy-zero/codacy.md",
+        )
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch.object(check_codacy_zero, "_parse_args", return_value=args),
+            patch.object(check_codacy_zero, "write_report", return_value=0) as write_report_mock,
+        ):
             self.assertEqual(check_codacy_zero.main(), 1)
         self.assertEqual(write_report_mock.call_args.args[0]["findings"], ["CODACY_API_TOKEN is missing."])
 
-        success_args = Namespace(**{**args.__dict__, "token": "explicit-token", "pull_request": "5"})
-        with patch.object(check_codacy_zero, "_parse_args", return_value=success_args), patch.object(check_codacy_zero, "_query_codacy_open_issues", return_value=(0, [], None)), patch.object(check_codacy_zero, "write_report", return_value=0) as write_report_mock:
+        success_args = Namespace(
+            **{**args.__dict__, "token": "explicit-token", "pull_request": "5"}
+        )
+        with (
+            patch.object(check_codacy_zero, "_parse_args", return_value=success_args),
+            patch.object(check_codacy_zero, "_query_codacy_open_issues", return_value=(0, [], None)),
+            patch.object(check_codacy_zero, "write_report", return_value=0) as write_report_mock,
+        ):
             self.assertEqual(check_codacy_zero.main(), 0)
         self.assertEqual(write_report_mock.call_args.args[0]["status"], "pass")
 
@@ -213,13 +272,30 @@ class CodacyZeroTests(unittest.TestCase):
             self.assertEqual(check_codacy_zero.main(), 7)
 
         audit_args = Namespace(**{**success_args.__dict__, "policy_mode": "audit"})
-        with patch.object(check_codacy_zero, "_parse_args", return_value=audit_args), patch.object(check_codacy_zero, "_query_codacy_open_issues", return_value=(5, ["Codacy reports 5 open issues (expected 0)."], None)), patch.object(check_codacy_zero, "write_report", return_value=0):
+        with (
+            patch.object(check_codacy_zero, "_parse_args", return_value=audit_args),
+            patch.object(
+                check_codacy_zero,
+                "_query_codacy_open_issues",
+                return_value=(5, ["Codacy reports 5 open issues (expected 0)."], None),
+            ),
+            patch.object(check_codacy_zero, "write_report", return_value=0),
+        ):
             self.assertEqual(check_codacy_zero.main(), 0)
 
-        payload = _build_payload(Namespace(provider="gh", owner="Prekzursil", repo="quality-zero-platform"), CodacyStatusResult(status="pass", findings=["done"], open_issues=0, pull_request=""))
+        payload = _build_payload(
+            Namespace(provider="gh", owner="Prekzursil", repo="quality-zero-platform"),
+            CodacyStatusResult(status="pass", findings=["done"], open_issues=0, pull_request=""),
+        )
         self.assertIn("- done", check_codacy_zero._render_md(payload))
         with patch.object(check_codacy_zero, "write_report", return_value=0) as write_report_mock:
-            self.assertEqual(_write_codacy_report(Namespace(out_json="codacy-zero/codacy.json", out_md="codacy-zero/codacy.md"), payload), 0)
+            self.assertEqual(
+                _write_codacy_report(
+                    Namespace(out_json="codacy-zero/codacy.json", out_md="codacy-zero/codacy.md"),
+                    payload,
+                ),
+                0,
+            )
         self.assertEqual(write_report_mock.call_args.kwargs["render_md"], check_codacy_zero._render_md)
 
     def test_parse_args_and_script_entrypoint(self) -> None:
@@ -231,7 +307,16 @@ class CodacyZeroTests(unittest.TestCase):
         script_path = Path("scripts/quality/check_codacy_zero.py").resolve()
         root_text = str(Path.cwd().resolve())
         trimmed_sys_path = [item for item in sys.path if item != root_text]
-        with tempfile.TemporaryDirectory() as tmp, patch.dict("os.environ", {}, clear=True), patch.object(sys, "argv", [str(script_path), "--owner", "Prekzursil", "--repo", "quality-zero-platform"]), patch.object(sys, "path", trimmed_sys_path[:]):
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch.dict("os.environ", {}, clear=True),
+            patch.object(
+                sys,
+                "argv",
+                [str(script_path), "--owner", "Prekzursil", "--repo", "quality-zero-platform"],
+            ),
+            patch.object(sys, "path", trimmed_sys_path[:]),
+        ):
             cwd = Path(tmp)
             previous = Path.cwd()
             os.chdir(cwd)

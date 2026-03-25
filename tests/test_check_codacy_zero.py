@@ -236,7 +236,7 @@ class CodacyZeroTests(unittest.TestCase):
         )
         self.assertIsInstance(exc, RuntimeError)
 
-    def test_main_and_payload_helpers(self) -> None:
+    def test_main_status_paths(self) -> None:
         empty_value = str()
         args = Namespace(
             provider="gh",
@@ -283,6 +283,7 @@ class CodacyZeroTests(unittest.TestCase):
         ):
             self.assertEqual(check_codacy_zero.main(), 0)
 
+    def test_payload_and_report_helpers(self) -> None:
         payload = _build_payload(
             Namespace(provider="gh", owner="Prekzursil", repo="quality-zero-platform"),
             CodacyStatusResult(status="pass", findings=["done"], open_issues=0, pull_request=""),

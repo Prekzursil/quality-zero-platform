@@ -5,6 +5,7 @@ import argparse
 import json
 from pathlib import Path, PurePosixPath
 import sys
+from typing import Any, Dict, List
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -23,18 +24,26 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _write_github_output(path: Path, profile: dict, event_name: str) -> None:
+def _coverage_input_files(coverage: Dict[str, Any]) -> str:
+    return ",".join(
+        str(PurePosixPath("repo") / PurePosixPath(str(item["path"]).replace("\\", "/")))
+        for item in coverage.get("inputs", [])
+    )
+
+
+def _json_output(key: str, value: object) -> str:
+    return f"{key}={json.dumps(value, separators=(',', ':'))}"
+
+
+def _profile_output_lines(profile: Dict[str, Any], event_name: str) -> List[str]:
     contexts = active_required_contexts(profile, event_name=event_name)
     coverage = profile.get("coverage", {})
     codex_environment = profile.get("codex_environment", {})
     issue_policy = profile.get("issue_policy", {})
     setup = coverage.get("setup", {})
     java = setup.get("java", {})
-    coverage_input_files = ",".join(
-        str(PurePosixPath("repo") / PurePosixPath(str(item["path"]).replace("\\", "/")))
-        for item in coverage.get("inputs", [])
-    )
-    payload_lines = [
+    coverage_input_files = _coverage_input_files(coverage)
+    return [
         f"verify_command={profile['verify_command']}",
         f"default_branch={profile['default_branch']}",
         f"profile_id={profile['profile_id']}",
@@ -42,17 +51,17 @@ def _write_github_output(path: Path, profile: dict, event_name: str) -> None:
         f"github_mutation_lane={profile['github_mutation_lane']}",
         f"codex_auth_lane={profile['codex_auth_lane']}",
         f"provider_ui_mode={profile['provider_ui_mode']}",
-        f"required_contexts_json={json.dumps(contexts, separators=(',', ':'))}",
-        f"required_contexts_required_now_json={json.dumps(profile['required_contexts']['required_now'], separators=(',', ':'))}",
-        f"required_contexts_target_json={json.dumps(profile['required_contexts']['target'], separators=(',', ':'))}",
-        f"required_secrets_json={json.dumps(profile['required_secrets'], separators=(',', ':'))}",
-        f"conditional_secrets_json={json.dumps(profile.get('conditional_secrets', []), separators=(',', ':'))}",
-        f"required_vars_json={json.dumps(profile['required_vars'], separators=(',', ':'))}",
-        f"codex_environment_json={json.dumps(codex_environment, separators=(',', ':'))}",
+        _json_output("required_contexts_json", contexts),
+        _json_output("required_contexts_required_now_json", profile["required_contexts"]["required_now"]),
+        _json_output("required_contexts_target_json", profile["required_contexts"]["target"]),
+        _json_output("required_secrets_json", profile["required_secrets"]),
+        _json_output("conditional_secrets_json", profile.get("conditional_secrets", [])),
+        _json_output("required_vars_json", profile["required_vars"]),
+        _json_output("codex_environment_json", codex_environment),
         f"codex_auth_file={codex_environment.get('auth_file', '')}",
-        f"codex_runner_labels_json={json.dumps(codex_environment.get('runner_labels', []), separators=(',', ':'))}",
-        f"coverage_json={json.dumps(coverage, separators=(',', ':'))}",
-        f"issue_policy_json={json.dumps(issue_policy, separators=(',', ':'))}",
+        _json_output("codex_runner_labels_json", codex_environment.get("runner_labels", [])),
+        _json_output("coverage_json", coverage),
+        _json_output("issue_policy_json", issue_policy),
         f"coverage_runner={coverage.get('runner', 'ubuntu-latest')}",
         f"coverage_shell={coverage.get('shell', 'bash')}",
         f"coverage_node_version={setup.get('node', '')}",
@@ -61,20 +70,33 @@ def _write_github_output(path: Path, profile: dict, event_name: str) -> None:
         f"coverage_java_distribution={java.get('distribution', '')}",
         f"coverage_java_version={java.get('version', '')}",
         f"coverage_needs_rust={str(bool(setup.get('rust', False))).lower()}",
-        f"coverage_system_packages_json={json.dumps(setup.get('system_packages', []), separators=(',', ':'))}",
+        _json_output("coverage_system_packages_json", setup.get("system_packages", [])),
         f"codecov_enabled={str(bool(profile.get('enabled_scanners', {}).get('codecov', False))).lower()}",
         f"coverage_input_files={coverage_input_files}",
         f"qlty_enabled={str(bool(profile.get('enabled_scanners', {}).get('qlty', False))).lower()}",
         f"qlty_coverage_files={coverage_input_files}",
-        f"enabled_scanners_json={json.dumps(profile.get('enabled_scanners', {}), separators=(',', ':'))}",
-        f"vendors_json={json.dumps(profile.get('vendors', {}), separators=(',', ':'))}",
+        _json_output("enabled_scanners_json", profile.get("enabled_scanners", {})),
+        _json_output("vendors_json", profile.get("vendors", {})),
     ]
+
+
+def _profile_json_output(profile: Dict[str, Any]) -> List[str]:
+    return [
+        "profile_json<<__PROFILE__",
+        json.dumps(profile, indent=2, sort_keys=True),
+        "__PROFILE__",
+    ]
+
+
+def _github_output_lines(profile: Dict[str, Any], event_name: str) -> List[str]:
+    return [*_profile_output_lines(profile, event_name), *_profile_json_output(profile)]
+
+
+def _write_github_output(path: Path, profile: Dict[str, Any], event_name: str) -> None:
+    payload_lines = _github_output_lines(profile, event_name)
     with path.open("a", encoding="utf-8") as handle:
         for line in payload_lines:
             handle.write(line + "\n")
-        handle.write("profile_json<<__PROFILE__\n")
-        handle.write(json.dumps(profile, indent=2, sort_keys=True) + "\n")
-        handle.write("__PROFILE__\n")
 
 
 def main() -> int:

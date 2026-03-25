@@ -110,44 +110,52 @@ def evaluate(
     return ("pass" if not findings else "fail", findings)
 
 
+def _component_markdown_line(item: Mapping[str, Any]) -> str:
+    base_message = f"- `{item['name']}`: line=`{item['percent']:.2f}%` ({item['covered']}/{item['total']})"
+    if item.get("branch_total", 0):
+        return (
+            f"{base_message}, branch=`{item['branch_percent']:.2f}%` "
+            f"({item['branch_covered']}/{item['branch_total']}) from `{item['path']}`"
+        )
+    return f"{base_message} from `{item['path']}`"
+
+
+def _append_bullets(lines: List[str], items: List[str], *, formatter=lambda item: f"- {item}") -> None:
+    if items:
+        lines.extend(formatter(item) for item in items)
+        return
+    lines.append(NONE_BULLET)
+
+
+def _branch_requirement_line(payload: Mapping[str, Any]) -> str:
+    branch_min_percent = payload.get("branch_min_percent")
+    if branch_min_percent is None:
+        return "- Minimum required branch coverage: `disabled`"
+    return f"- Minimum required branch coverage: `{branch_min_percent:.2f}%`"
+
+
+def _append_coverage_section(lines: List[str], title: str, items: List[Any], *, formatter) -> None:
+    lines.extend(["", title])
+    _append_bullets(lines, items, formatter=formatter)
+
+
 def _render_md(payload: Mapping[str, Any]) -> str:
     lines = [
         "# Coverage 100 Gate",
         "",
         f"- Status: `{payload['status']}`",
         f"- Minimum required coverage: `{payload['min_percent']:.2f}%`",
-        (
-            f"- Minimum required branch coverage: `{payload['branch_min_percent']:.2f}%`"
-            if payload.get("branch_min_percent") is not None
-            else "- Minimum required branch coverage: `disabled`"
-        ),
+        _branch_requirement_line(payload),
         f"- Timestamp (UTC): `{payload['timestamp_utc']}`",
-        "",
-        "## Components",
     ]
-    components = payload.get("components", [])
-    if components:
-        for item in components:
-            base_message = f"- `{item['name']}`: line=`{item['percent']:.2f}%` ({item['covered']}/{item['total']})"
-            branch_message = (
-                f", branch=`{item['branch_percent']:.2f}%` ({item['branch_covered']}/{item['branch_total']})"
-                if item.get("branch_total", 0)
-                else ""
-            )
-            lines.append(f"{base_message}{branch_message} from `{item['path']}`")
-    else:
-        lines.append(NONE_BULLET)
-
-    lines.extend(["", "## Covered sources"])
-    sources = payload.get("covered_sources", [])
-    if sources:
-        for source_path in sources:
-            lines.append(f"- `{source_path}`")
-    else:
-        lines.append(NONE_BULLET)
-
-    lines.extend(["", "## Findings"])
-    lines.extend([f"- {finding}" for finding in payload.get("findings", [])] or [NONE_BULLET])
+    _append_coverage_section(lines, "## Components", list(payload.get("components", [])), formatter=_component_markdown_line)
+    _append_coverage_section(
+        lines,
+        "## Covered sources",
+        list(payload.get("covered_sources", [])),
+        formatter=lambda source_path: f"- `{source_path}`",
+    )
+    _append_coverage_section(lines, "## Findings", list(payload.get("findings", [])), formatter=lambda item: f"- {item}")
     return "\n".join(lines) + "\n"
 
 

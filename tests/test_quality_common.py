@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, List
 
 from scripts.quality.common import (
     ReportSpec,
@@ -43,6 +44,47 @@ def _temporary_cwd(target: Path):
 
 
 class QualityCommonTests(unittest.TestCase):
+    @staticmethod
+    def _normalized_explicit_coverage() -> dict:
+        return normalize_coverage(
+            {
+                "runner": " ",
+                "shell": "",
+                "command": "  qlty check  ",
+                "inputs": [{"format": "xml", "name": "coverage", "path": "coverage.xml"}],
+                "require_sources": [" source-a ", "source-a", "source-b"],
+                "min_percent": "98.5",
+                "assert_mode": {"default": "", "python": " warn "},
+                "evidence_note": "  note  ",
+                "setup": {
+                    "python": " 3.11 ",
+                    "node": " 20 ",
+                    "go": " 1.22 ",
+                    "dotnet": " 8 ",
+                    "rust": "yes",
+                    "system_packages": [" git ", "curl", "git"],
+                    "java": {"distribution": " temurin ", "version": " 21 "},
+                },
+            }
+        )
+
+    @staticmethod
+    def _inferred_coverage() -> dict:
+        return normalize_coverage(
+            {
+                "command": (
+                    "python -m pytest --cov=scripts --cov=scripts.quality.assert_coverage_100 "
+                    "--cov=scripts.quality.check_sentry_zero && "
+                    "gcovr --filter '.*/src/.*' && "
+                    "npm --prefix airline-gui test -- --coverage --watch=false"
+                ),
+                "inputs": [
+                    {"format": "xml", "name": "coverage", "path": "coverage.xml"},
+                    {"format": "lcov", "name": "frontend", "path": "airline-gui/coverage/lcov.info"},
+                ],
+            }
+        )
+
     def test_resolve_report_spec_supports_report_spec_and_validates_legacy_kwargs(self) -> None:
         report_spec = ReportSpec(
             out_json="reports/out.json",
@@ -91,8 +133,9 @@ class QualityCommonTests(unittest.TestCase):
         self.assertEqual(parsed.tzinfo, timezone.utc)
 
     def test_dedupe_strings_trims_skips_empty_and_preserves_first_seen_order(self) -> None:
+        values: List[Any] = ["  alpha ", "", "beta", "alpha", None, " beta ", "gamma"]
         self.assertEqual(
-            dedupe_strings(["  alpha ", "", "beta", "alpha", None, " beta ", "gamma"]),
+            dedupe_strings(values),
             ["alpha", "beta", "gamma"],
         )
 
@@ -220,7 +263,12 @@ class QualityCommonTests(unittest.TestCase):
             ],
         )
         self.assertEqual(
-            infer_coverage_inputs({"inputs": [{"format": "lcov", "name": "existing", "path": "cov.info"}], "artifact_path": "coverage.xml"}),
+            infer_coverage_inputs(
+                {
+                    "inputs": [{"format": "lcov", "name": "existing", "path": "cov.info"}],
+                    "artifact_path": "coverage.xml",
+                }
+            ),
             [{"format": "lcov", "name": "existing", "path": "cov.info"}],
         )
         self.assertEqual(
@@ -269,29 +317,9 @@ class QualityCommonTests(unittest.TestCase):
             {"default": "non_regression"},
         )
 
-    def test_normalize_coverage_helper_covers_string_inputs(self) -> None:
+    def test_normalize_coverage_helper_covers_explicit_inputs(self) -> None:
         self.assertEqual(
-            normalize_coverage(
-                {
-                    "runner": " ",
-                    "shell": "",
-                    "command": "  qlty check  ",
-                    "inputs": [{"format": "xml", "name": "coverage", "path": "coverage.xml"}],
-                    "require_sources": [" source-a ", "source-a", "source-b"],
-                    "min_percent": "98.5",
-                    "assert_mode": {"default": "", "python": " warn "},
-                    "evidence_note": "  note  ",
-                    "setup": {
-                        "python": " 3.11 ",
-                        "node": " 20 ",
-                        "go": " 1.22 ",
-                        "dotnet": " 8 ",
-                        "rust": "yes",
-                        "system_packages": [" git ", "curl", "git"],
-                        "java": {"distribution": " temurin ", "version": " 21 "},
-                    },
-                }
-            ),
+            self._normalized_explicit_coverage(),
             {
                 "runner": "ubuntu-latest",
                 "shell": "bash",
@@ -315,20 +343,8 @@ class QualityCommonTests(unittest.TestCase):
             },
         )
 
-        inferred = normalize_coverage(
-            {
-                "command": (
-                    "python -m pytest --cov=scripts --cov=scripts.quality.assert_coverage_100 "
-                    "--cov=scripts.quality.check_sentry_zero && "
-                    "gcovr --filter '.*/src/.*' && "
-                    "npm --prefix airline-gui test -- --coverage --watch=false"
-                ),
-                "inputs": [
-                    {"format": "xml", "name": "coverage", "path": "coverage.xml"},
-                    {"format": "lcov", "name": "frontend", "path": "airline-gui/coverage/lcov.info"},
-                ],
-            }
-        )
+    def test_normalize_coverage_helper_infers_required_sources_from_command(self) -> None:
+        inferred = self._inferred_coverage()
         self.assertEqual(
             inferred["require_sources"],
             [

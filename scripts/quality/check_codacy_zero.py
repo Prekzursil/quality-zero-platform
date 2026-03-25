@@ -8,6 +8,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Tuple
 
@@ -18,9 +19,26 @@ from scripts.quality.common import utc_timestamp, write_report
 from scripts.security_helpers import load_json_https
 
 
-TOTAL_KEYS = {"total", "totalItems", "total_items", "count", "hits", "open_issues"}
+TOTAL_KEYS = {"total", "totalItems", "total_items", "count", "hits", "open_issues", "issuesCount"}
 CODACY_API_BASE = "https://api.codacy.com"
 CODACY_APP_API_BASE = "https://app.codacy.com/api/v3"
+JSON_ACCEPT_HEADER = "application/json"
+
+
+@dataclass(frozen=True)
+class CodacyStatusResult:
+    status: str
+    findings: List[str]
+    open_issues: int | None
+    pull_request: str
+
+
+@dataclass(frozen=True)
+class CodacyQuery:
+    provider: str
+    owner: str
+    repo: str
+    pull_request: str = ""
 
 
 def _parse_args() -> argparse.Namespace:
@@ -42,7 +60,7 @@ def _request_json(url: str, token: str, *, method: str = "GET", data: Dict[str, 
         url.rstrip("/"),
         allowed_host_suffixes={"codacy.com"},
         headers={
-            "Accept": "application/json",
+            "Accept": JSON_ACCEPT_HEADER,
             "api-token": token,
             "User-Agent": "quality-zero-platform",
             **({"Content-Type": "application/json"} if body is not None else {}),
@@ -63,11 +81,22 @@ def _nested_payload_values(payload: Any) -> List[Any]:
     return []
 
 
+def _direct_total_open(payload: Mapping[str, Any]) -> int | None:
+    for key, value in payload.items():
+        if key in TOTAL_KEYS and isinstance(value, (int, float)):
+            return int(value)
+    return None
+
+
+def _dict_total_open(payload: Any) -> int | None:
+    if not isinstance(payload, dict):
+        return None
+    return _direct_total_open(payload)
+
+
 def extract_total_open(payload: Any) -> int | None:
-    if isinstance(payload, dict):
-        for key, value in payload.items():
-            if key in TOTAL_KEYS and isinstance(value, (int, float)):
-                return int(value)
+    if (total := _dict_total_open(payload)) is not None:
+        return total
     for nested in _nested_payload_values(payload):
         total = extract_total_open(nested)
         if total is not None:
@@ -106,23 +135,36 @@ def build_issues_url(provider: str, owner: str, repo: str, *, pull_request: str 
     return f"{CODACY_API_BASE}/api/v3/analysis/organizations/{provider}/{owner}/repositories/{repo}/issues/search?{query}"
 
 
-def _request_mode(pull_request: str) -> Tuple[str, Dict[str, Any] | None]:
-    if pull_request:
-        return "GET", None
-    return "POST", {}
+def build_repository_analysis_url(provider: str, owner: str, repo: str) -> str:
+    return f"{CODACY_APP_API_BASE}/analysis/organizations/{provider}/{owner}/repositories/{repo}"
 
 
-def _query_codacy_provider(*args: Any, **kwargs: Any) -> Tuple[int | None, List[str]]:
-    pull_request = str(kwargs.pop("pull_request", "")).strip()
-    if kwargs:
-        raise TypeError(f"Unexpected _query_codacy_provider parameters: {', '.join(sorted(kwargs))}")
-    if len(args) != 4:
-        raise TypeError("_query_codacy_provider expects provider, owner, repo, and token")
-    provider, owner, repo, token = (str(item) for item in args)
-    url = build_issues_url(provider, owner, repo, pull_request=pull_request)
-    request_method, request_data = _request_mode(pull_request)
+def _request_mode(query: CodacyQuery) -> Tuple[str, Dict[str, Any] | None]:
+    return ("GET", None) if query.pull_request else ("POST", {})
+
+
+def _query_codacy_public_repository_issues(provider: str, owner: str, repo: str) -> Tuple[int | None, List[str]]:
+    payload, _ = load_json_https(
+        build_repository_analysis_url(provider, owner, repo),
+        allowed_host_suffixes={"codacy.com"},
+        headers={
+            "Accept": JSON_ACCEPT_HEADER,
+            "User-Agent": "quality-zero-platform",
+        },
+    )
+    if not isinstance(payload, dict):
+        raise RuntimeError("Unexpected Codacy public repository payload")
+
+    return _issue_total_findings(payload)
+
+
+def _query_codacy_provider(query: CodacyQuery, token: str) -> Tuple[int | None, List[str]]:
+    url = build_issues_url(query.provider, query.owner, query.repo, pull_request=query.pull_request)
+    request_method, request_data = _request_mode(query)
     payload = _request_json(url, token, method=request_method, data=request_data)
+    return _issue_total_findings(payload)
 
+def _issue_total_findings(payload: Any) -> Tuple[int | None, List[str]]:
     open_issues = extract_total_open(payload)
     if open_issues is None:
         return None, ["Codacy response did not include a parseable total issue count."]
@@ -131,71 +173,131 @@ def _query_codacy_provider(*args: Any, **kwargs: Any) -> Tuple[int | None, List[
     return open_issues, []
 
 
-def _query_codacy_open_issues(*args: Any, **kwargs: Any) -> Tuple[int | None, List[str], Exception | None]:
-    pull_request = str(kwargs.pop("pull_request", "")).strip()
-    if kwargs:
-        raise TypeError(f"Unexpected _query_codacy_open_issues parameters: {', '.join(sorted(kwargs))}")
-    if len(args) != 4:
-        raise TypeError("_query_codacy_open_issues expects owner, repo, token, and provider candidates")
-    owner, repo, token, provider_candidates = args
-    findings: List[str] = []
-    last_exc: Exception | None = None
-    for provider in provider_candidates:
-        try:
-            open_issues, findings = _query_codacy_provider(provider, owner, repo, token, pull_request=pull_request)
-        except urllib.error.HTTPError as exc:
-            last_exc = exc
-            if exc.code == 404:
-                continue
-            return None, [f"Codacy API request failed: HTTP {exc.code}"], last_exc
-        except (OSError, RuntimeError, ValueError) as exc:  # pragma: no cover
-            last_exc = exc
-            return None, [f"Codacy API request failed: {exc}"], last_exc
+def _fallback_public_issues(query: CodacyQuery) -> Tuple[int | None, List[str], Exception | None] | None:
+    if query.pull_request:
+        return None
+    try:
+        open_issues, findings = _query_codacy_public_repository_issues(query.provider, query.owner, query.repo)
+    except (OSError, RuntimeError, ValueError) as fallback_exc:  # pragma: no cover
+        return None, [], fallback_exc
+    return open_issues, findings, None
 
-        return open_issues, findings, last_exc
 
-    findings.append(f"Codacy API endpoint was not found for providers: {', '.join(provider_candidates)}.")
+def _http_error_findings(exc: urllib.error.HTTPError) -> List[str]:
+    return [f"Codacy API request failed: HTTP {exc.code}"]
+
+
+def _unauthorized_http_result(
+    exc: urllib.error.HTTPError,
+    query: CodacyQuery,
+) -> Tuple[int | None, List[str], Exception | None, bool]:
+    if fallback := _fallback_public_issues(query):
+        open_issues, findings, last_exc = fallback
+        if last_exc is None:
+            return open_issues, findings, None, True
+        return None, [], last_exc, False
+    return None, _http_error_findings(exc), exc, True
+
+
+def _handle_codacy_http_error(exc: urllib.error.HTTPError, query: CodacyQuery) -> Tuple[int | None, List[str], Exception | None, bool]:
+    if exc.code == 401:
+        return _unauthorized_http_result(exc, query)
+    if exc.code == 404:
+        return None, [], exc, False
+    return None, _http_error_findings(exc), exc, True
+
+
+def _not_found_findings(provider_candidates: Any, last_exc: Exception | None) -> Tuple[int | None, List[str], Exception | None]:
+    findings = [f"Codacy API endpoint was not found for providers: {', '.join(provider_candidates)}."]
     if last_exc is not None:
         findings.append(f"Last Codacy API error: {last_exc}")
     return None, findings, last_exc
 
 
-def main() -> int:
-    args = _parse_args()
+def _provider_query(base_query: CodacyQuery, provider: str) -> CodacyQuery:
+    return CodacyQuery(
+        provider=str(provider),
+        owner=base_query.owner,
+        repo=base_query.repo,
+        pull_request=base_query.pull_request,
+    )
+
+
+def _query_codacy_candidate(query: CodacyQuery, token: Any) -> Tuple[int | None, List[str], Exception | None, bool]:
+    try:
+        open_issues, findings = _query_codacy_provider(query, token)
+    except urllib.error.HTTPError as exc:
+        return _handle_codacy_http_error(exc, query)
+    except (OSError, RuntimeError, ValueError) as exc:  # pragma: no cover
+        return None, [f"Codacy API request failed: {exc}"], exc, True
+    return open_issues, findings, None, True
+
+
+def _query_codacy_open_issues(
+    base_query: CodacyQuery,
+    token: str,
+    provider_candidates: Any,
+) -> Tuple[int | None, List[str], Exception | None]:
+    last_exc: Exception | None = None
+    for provider in provider_candidates:
+        query = _provider_query(base_query, str(provider))
+        open_issues, findings, last_exc, should_return = _query_codacy_candidate(query, token)
+        if should_return:
+            return open_issues, findings, last_exc
+        if isinstance(last_exc, urllib.error.HTTPError) and last_exc.code == 404:
+            continue
+
+    return _not_found_findings(provider_candidates, last_exc)
+
+
+def _codacy_status(findings: List[str], policy_mode: str) -> str:
+    return "pass" if policy_mode == "audit" or not findings else "fail"
+
+
+def _base_query(args: argparse.Namespace, pull_request: str) -> CodacyQuery:
+    return CodacyQuery(
+        provider=args.provider,
+        owner=urllib.parse.quote(args.owner.strip(), safe=""),
+        repo=urllib.parse.quote(args.repo.strip(), safe=""),
+        pull_request=pull_request,
+    )
+
+
+def _resolve_codacy_status(args: argparse.Namespace) -> CodacyStatusResult:
     token = (args.token or os.environ.get("CODACY_API_TOKEN", "")).strip()
-    owner = urllib.parse.quote(args.owner.strip(), safe="")
-    repo = urllib.parse.quote(args.repo.strip(), safe="")
     pull_request = str(args.pull_request or "").strip()
-    findings: List[str] = []
-    open_issues: int | None = None
-    status = "fail"
-
     if not token:
-        findings.append("CODACY_API_TOKEN is missing.")
-    else:
-        provider_candidates = _provider_candidates(args.provider)
-        open_issues, findings, _ = _query_codacy_open_issues(
-            owner,
-            repo,
-            token,
-            provider_candidates,
-            pull_request=pull_request,
-        )
-        status = "pass" if not findings else "fail"
-        if getattr(args, "policy_mode", "ratchet") == "audit":
-            status = "pass"
+        return CodacyStatusResult(status="fail", findings=["CODACY_API_TOKEN is missing."], open_issues=None, pull_request=pull_request)
 
-    payload = {
-        "status": status,
+    provider_candidates = _provider_candidates(args.provider)
+    open_issues, findings, _ = _query_codacy_open_issues(
+        _base_query(args, pull_request),
+        token,
+        provider_candidates,
+    )
+    return CodacyStatusResult(
+        status=_codacy_status(findings, getattr(args, "policy_mode", "ratchet")),
+        findings=findings,
+        open_issues=open_issues,
+        pull_request=pull_request,
+    )
+
+
+def _build_payload(args: argparse.Namespace, result: CodacyStatusResult) -> Dict[str, Any]:
+    return {
+        "status": result.status,
         "owner": args.owner,
         "repo": args.repo,
         "provider": args.provider,
-        "pull_request": pull_request or None,
-        "open_issues": open_issues,
+        "pull_request": result.pull_request or None,
+        "open_issues": result.open_issues,
         "timestamp_utc": utc_timestamp(),
-        "findings": findings,
+        "findings": result.findings,
     }
-    return_code = write_report(
+
+
+def _write_codacy_report(args: argparse.Namespace, payload: Mapping[str, Any]) -> int:
+    return write_report(
         payload,
         out_json=args.out_json,
         out_md=args.out_md,
@@ -203,9 +305,16 @@ def main() -> int:
         default_md="codacy-zero/codacy.md",
         render_md=_render_md,
     )
+
+
+def main() -> int:
+    args = _parse_args()
+    result = _resolve_codacy_status(args)
+    payload = _build_payload(args, result)
+    return_code = _write_codacy_report(args, payload)
     if return_code != 0:
         return return_code
-    return 0 if status == "pass" else 1
+    return 0 if result.status == "pass" else 1
 
 
 if __name__ == "__main__":

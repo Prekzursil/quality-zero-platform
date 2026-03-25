@@ -355,6 +355,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("permissions:", dashboard_text)
         self.assertIn("build_admin_dashboard.py", dashboard_text)
         self.assertIn("docs/admin", dashboard_text)
+        self.assertIn("enablement: true", dashboard_text)
 
         admin_text = (ROOT / ".github" / "workflows" / "control-plane-admin.yml").read_text(encoding="utf-8")
         self.assertIn("workflow_dispatch:", admin_text)

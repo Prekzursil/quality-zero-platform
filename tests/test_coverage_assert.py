@@ -328,6 +328,31 @@ class CoverageAssertTests(unittest.TestCase):
         )
         self.assertIn("- None", markdown)
 
+    def test_component_markdown_line_renders_branch_coverage_when_present(self) -> None:
+        markdown = _render_md(
+            {
+                "status": "pass",
+                "min_percent": 100.0,
+                "branch_min_percent": 85.0,
+                "timestamp_utc": "2026-03-15T00:00:00+00:00",
+                "components": [
+                    {
+                        "name": "python",
+                        "percent": 100.0,
+                        "covered": 10,
+                        "total": 10,
+                        "branch_percent": 90.0,
+                        "branch_covered": 9,
+                        "branch_total": 10,
+                        "path": "coverage.xml",
+                    }
+                ],
+                "covered_sources": ["pkg/main.py"],
+                "findings": [],
+            }
+        )
+        self.assertIn("branch=`90.00%` (9/10) from `coverage.xml`", markdown)
+
     def test_script_entrypoint_handles_import_guard_and_report_failures(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -2,7 +2,6 @@ from __future__ import absolute_import
 
 import contextlib
 import io
-import importlib
 import json
 import runpy
 import sys
@@ -24,6 +23,7 @@ from scripts.quality.control_plane import (
     _normalize_coverage_assert_mode,
     _normalize_coverage_setup,
     _normalize_coverage_inputs,
+    _normalize_issue_policy,
     _normalize_java_setup,
     _normalize_required_contexts,
     _validate_coverage_contract,
@@ -99,6 +99,27 @@ invalid codacy.dashboard_url
     def _invalid_profile_findings() -> List[str]:
         return ControlPlaneExtraTests._INVALID_PROFILE_FINDINGS_BLOCK.strip().splitlines()
 
+    @staticmethod
+    def _expected_issue_policy() -> Dict[str, str]:
+        return {
+            "mode": "ratchet",
+            "pr_behavior": "introduced_only",
+            "main_behavior": "absolute",
+            "baseline_ref": "main",
+        }
+
+    @staticmethod
+    def _expected_python_only_setup() -> Dict[str, Any]:
+        return {
+            "python": "3.12",
+            "node": "",
+            "go": "",
+            "dotnet": "",
+            "rust": False,
+            "system_packages": [],
+            "java": {"distribution": "", "version": ""},
+        }
+
     def test_normalize_coverage_helpers_filter_invalid_entries_and_support_legacy_path(self) -> None:
         self.assertEqual(repo_root(), ROOT)
         self.assertEqual(_normalize_coverage_inputs("not-a-list"), [])
@@ -149,18 +170,10 @@ invalid codacy.dashboard_url
             },
         )
 
-    def test_coverage_and_inventory_override_wrappers_cover_helper_paths(self) -> None:
+    def test_coverage_helper_wrappers_cover_helper_paths(self) -> None:
         self.assertEqual(
             _normalize_coverage_setup({"python": " 3.12 "}),
-            {
-                "python": "3.12",
-                "node": "",
-                "go": "",
-                "dotnet": "",
-                "rust": False,
-                "system_packages": [],
-                "java": {"distribution": "", "version": ""},
-            },
+            self._expected_python_only_setup(),
         )
         self.assertEqual(
             _normalize_coverage({"runner": "", "shell": "", "setup": {"python": "3.12"}})["setup"]["python"],
@@ -171,15 +184,11 @@ invalid codacy.dashboard_url
             "bash scripts/verify",
         )
         self.assertEqual(
-            importlib.import_module("scripts.quality.control_plane")._normalize_issue_policy({"mode": "ratchet", "baseline_ref": "main"}),
-            {
-                "mode": "ratchet",
-                "pr_behavior": "introduced_only",
-                "main_behavior": "absolute",
-                "baseline_ref": "main",
-            },
+            _normalize_issue_policy({"mode": "ratchet", "baseline_ref": "main"}),
+            self._expected_issue_policy(),
         )
 
+    def test_inventory_override_wrappers_cover_helper_paths(self) -> None:
         merged = _apply_inventory_overrides(
             {"verify_command": "bash scripts/verify"},
             {

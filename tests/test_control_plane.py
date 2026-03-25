@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from typing import Dict
 from unittest.mock import patch
 
 from scripts.quality.control_plane import (
@@ -24,6 +25,42 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ControlPlaneTests(unittest.TestCase):
+    @staticmethod
+    def _special_repo_profiles() -> Dict[str, dict]:
+        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
+        return {
+            "devextreme": load_repo_profile(inventory, "Prekzursil/DevExtreme-Filter-Go-Language"),
+            "reframe": load_repo_profile(inventory, "Prekzursil/Reframe"),
+            "momentstudio": load_repo_profile(inventory, "Prekzursil/momentstudio"),
+            "env_inspector": load_repo_profile(inventory, "Prekzursil/env-inspector"),
+            "airline": load_repo_profile(inventory, "Prekzursil/Airline-Reservations-System"),
+            "swfoc": load_repo_profile(inventory, "Prekzursil/SWFOC-Mod-Menu"),
+            "quality_zero_platform": load_repo_profile(inventory, "Prekzursil/quality-zero-platform"),
+        }
+
+    def _assert_airline_existing_behaviors(self, profile: dict) -> None:
+        airline_inputs = {(item["format"], item["name"], item["path"]) for item in profile["coverage"]["inputs"]}
+        self.assertEqual(
+            airline_inputs,
+            {
+                ("xml", "scripts", "coverage/python/coverage.xml"),
+                ("lcov", "node", "airline-gui/coverage/lcov.info"),
+                ("lcov", "cpp", "coverage/cpp/lcov.info"),
+            },
+        )
+        self.assertIn(
+            "python -m pytest -q tests/test_quality_security_scripts.py tests/test_quality_script_coverage.py",
+            profile["coverage"]["command"],
+        )
+        self.assertEqual(profile["coverage"]["require_sources"], ["scripts/", "src/", "airline-gui/src/"])
+        self.assertIn("--filter '.*/src/.*'", profile["coverage"]["command"])
+        self.assertIn("--exclude '.*/build/_deps/.*'", profile["coverage"]["command"])
+
+    def _assert_swfoc_existing_behaviors(self, profile: dict) -> None:
+        self.assertEqual(profile["coverage"]["assert_mode"]["pull_request"], "non_regression")
+        self.assertEqual(profile["coverage"]["runner"], "windows-latest")
+        self.assertEqual(profile["visual_lane"]["kind"], "desktop-adapter")
+
     def test_inventory_expands_to_14_repos(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         self.assertEqual(len(inventory["repos"]), 14)
@@ -169,18 +206,9 @@ class ControlPlaneTests(unittest.TestCase):
         ):
             self.assertIn(name, target_contexts)
 
-    def test_special_repo_coverage_profiles_capture_existing_behaviors(self) -> None:
-        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
-
-        devextreme = load_repo_profile(inventory, "Prekzursil/DevExtreme-Filter-Go-Language")
-        reframe = load_repo_profile(inventory, "Prekzursil/Reframe")
-        momentstudio = load_repo_profile(inventory, "Prekzursil/momentstudio")
-        env_inspector = load_repo_profile(inventory, "Prekzursil/env-inspector")
-        airline = load_repo_profile(inventory, "Prekzursil/Airline-Reservations-System")
-        swfoc = load_repo_profile(inventory, "Prekzursil/SWFOC-Mod-Menu")
-        quality_zero_platform = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
-
-        reframe_inputs = {(item["format"], item["name"], item["path"]) for item in reframe["coverage"]["inputs"]}
+    def test_special_repo_coverage_profiles_capture_multi_language_inputs(self) -> None:
+        profiles = self._special_repo_profiles()
+        reframe_inputs = {(item["format"], item["name"], item["path"]) for item in profiles["reframe"]["coverage"]["inputs"]}
         self.assertEqual(
             reframe_inputs,
             {
@@ -188,7 +216,9 @@ class ControlPlaneTests(unittest.TestCase):
                 ("lcov", "desktop-ts", "apps/desktop/coverage/lcov.info"),
             },
         )
-        momentstudio_inputs = {(item["format"], item["name"], item["path"]) for item in momentstudio["coverage"]["inputs"]}
+        momentstudio_inputs = {
+            (item["format"], item["name"], item["path"]) for item in profiles["momentstudio"]["coverage"]["inputs"]
+        }
         self.assertEqual(
             momentstudio_inputs,
             {
@@ -196,45 +226,28 @@ class ControlPlaneTests(unittest.TestCase):
                 ("lcov", "frontend", "frontend/coverage/lcov.info"),
             },
         )
-        self.assertIn('grep -vE "/ent($|/)"', devextreme["coverage"]["command"])
+        self.assertIn('grep -vE "/ent($|/)"', profiles["devextreme"]["coverage"]["command"])
         self.assertIn(
             "go test $packages -coverprofile=coverage/go-coverage.out -covermode=count",
-            devextreme["coverage"]["command"],
+            profiles["devextreme"]["coverage"]["command"],
         )
-        self.assertEqual(env_inspector["coverage"]["min_percent"], 100.0)
-        self.assertIn("env_inspector.py", env_inspector["coverage"]["require_sources"])
-        airline_inputs = {(item["format"], item["name"], item["path"]) for item in airline["coverage"]["inputs"]}
+        self.assertEqual(profiles["env_inspector"]["coverage"]["min_percent"], 100.0)
+        self.assertIn("env_inspector.py", profiles["env_inspector"]["coverage"]["require_sources"])
+
+    def test_special_repo_coverage_profiles_capture_existing_behaviors(self) -> None:
+        profiles = self._special_repo_profiles()
+        self._assert_airline_existing_behaviors(profiles["airline"])
+        self._assert_swfoc_existing_behaviors(profiles["swfoc"])
+
+    def test_quality_zero_platform_profile_keeps_controller_specific_contracts(self) -> None:
+        profile = self._special_repo_profiles()["quality_zero_platform"]
+        self.assertNotIn("DEEPSCAN_POLICY_MODE", profile["required_vars"])
+        self.assertEqual(profile["github_mutation_lane"], "codex-private-runner")
+        self.assertEqual(profile["codex_auth_lane"], "chatgpt-account")
+        self.assertNotIn("OPENAI_API_KEY", profile["required_secrets"])
+        self.assertIn("CODEX_AUTH_JSON", profile["conditional_secrets"])
         self.assertEqual(
-            airline_inputs,
-            {
-                ("xml", "scripts", "coverage/python/coverage.xml"),
-                ("lcov", "node", "airline-gui/coverage/lcov.info"),
-                ("lcov", "cpp", "coverage/cpp/lcov.info"),
-            },
-        )
-        self.assertIn(
-            "python -m pytest -q tests/test_quality_security_scripts.py tests/test_quality_script_coverage.py",
-            airline["coverage"]["command"],
-        )
-        self.assertEqual(
-            airline["coverage"]["require_sources"],
-            ["scripts/", "src/", "airline-gui/src/"],
-        )
-        self.assertIn("--filter '.*/src/.*'", airline["coverage"]["command"])
-        self.assertIn(
-            "--exclude '.*/build/_deps/.*'",
-            airline["coverage"]["command"],
-        )
-        self.assertEqual(swfoc["coverage"]["assert_mode"]["pull_request"], "non_regression")
-        self.assertEqual(swfoc["coverage"]["runner"], "windows-latest")
-        self.assertEqual(swfoc["visual_lane"]["kind"], "desktop-adapter")
-        self.assertNotIn("DEEPSCAN_POLICY_MODE", quality_zero_platform["required_vars"])
-        self.assertEqual(quality_zero_platform["github_mutation_lane"], "codex-private-runner")
-        self.assertEqual(quality_zero_platform["codex_auth_lane"], "chatgpt-account")
-        self.assertNotIn("OPENAI_API_KEY", quality_zero_platform["required_secrets"])
-        self.assertIn("CODEX_AUTH_JSON", quality_zero_platform["conditional_secrets"])
-        self.assertEqual(
-            quality_zero_platform["issue_policy"],
+            profile["issue_policy"],
             {
                 "mode": "ratchet",
                 "pr_behavior": "introduced_only",
@@ -341,7 +354,7 @@ class ControlPlaneTests(unittest.TestCase):
         profile["vendors"]["chromatic"].pop("project_name", None)
         profile["vendors"]["chromatic"].pop("token_secret", None)
         profile["vendors"]["chromatic"].pop("local_env_var", None)
-        profile["vendors"]["applitools"]["project_name"] = None
+        profile["vendors"]["applitools"].pop("project_name", None)
 
         findings = validate_profile(profile)
 

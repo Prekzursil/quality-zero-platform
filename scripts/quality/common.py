@@ -27,7 +27,7 @@ def utc_timestamp() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def dedupe_strings(items: Iterable[str]) -> List[str]:
+def dedupe_strings(items: Iterable[str | None]) -> List[str]:
     normalized = (str(item or "").strip() for item in items)
     return list(dict.fromkeys(value for value in normalized if value))
 
@@ -41,33 +41,47 @@ def safe_output_path(raw: str, fallback: str, base: Path | None = None) -> Path:
     return resolved
 
 
-def _resolve_report_spec(*args: Any, **kwargs: Any) -> ReportSpec:
+def _raise_write_report_type_error(message: str) -> None:
+    raise TypeError(message)
+
+
+def _validate_report_spec_args(args: Any, kwargs: Any) -> ReportSpec | None:
     if args and isinstance(args[0], ReportSpec):
         if len(args) != 1 or kwargs:
-            raise TypeError("write_report expects a ReportSpec or legacy keyword arguments")
+            _raise_write_report_type_error("write_report expects a ReportSpec or legacy keyword arguments")
         return args[0]
 
     if args:
-        raise TypeError("write_report expects a ReportSpec or legacy keyword arguments")
+        _raise_write_report_type_error("write_report expects a ReportSpec or legacy keyword arguments")
+    return None
 
+
+def _pop_report_kwargs(kwargs: Dict[str, Any]) -> Dict[str, Any]:
     required = ("out_json", "out_md", "default_json", "default_md", "render_md")
     missing = [key for key in required if key not in kwargs]
     if missing:
-        raise TypeError(f"Missing required report parameter: {missing[0]}")
+        _raise_write_report_type_error(f"Missing required report parameter: {missing[0]}")
 
-    out_json = kwargs.pop("out_json")
-    out_md = kwargs.pop("out_md")
-    default_json = kwargs.pop("default_json")
-    default_md = kwargs.pop("default_md")
-    render_md = kwargs.pop("render_md")
+    values = {key: kwargs.pop(key) for key in required}
     if kwargs:
-        raise TypeError(f"Unexpected write_report parameters: {', '.join(sorted(kwargs))}")
+        _raise_write_report_type_error(f"Unexpected write_report parameters: {', '.join(sorted(kwargs))}")
+    return values
+
+
+def _resolve_report_spec(*args: Any, **kwargs: Any) -> ReportSpec:
+    spec = _validate_report_spec_args(args, kwargs)
+    if spec is not None:
+        return spec
+    return _report_spec_from_kwargs(_pop_report_kwargs(kwargs))
+
+
+def _report_spec_from_kwargs(values: Mapping[str, Any]) -> ReportSpec:
     return ReportSpec(
-        out_json=str(out_json),
-        out_md=str(out_md),
-        default_json=str(default_json),
-        default_md=str(default_md),
-        render_md=render_md,
+        out_json=str(values["out_json"]),
+        out_md=str(values["out_md"]),
+        default_json=str(values["default_json"]),
+        default_md=str(values["default_md"]),
+        render_md=values["render_md"],
     )
 
 

@@ -2,7 +2,7 @@ from __future__ import absolute_import
 
 import re
 from pathlib import Path
-from typing import Set, TYPE_CHECKING
+from typing import List, Optional, Set, TYPE_CHECKING, Tuple
 
 from scripts.quality.coverage_paths import (
     _coverage_source_candidates,
@@ -48,15 +48,8 @@ def parse_coverage_xml(name: str, path: Path) -> "CoverageStats":
     from scripts.quality.assert_coverage_100 import CoverageStats
 
     text = path.read_text(encoding="utf-8")
-    lines_valid_match = _XML_LINES_VALID_RE.search(text)
-    lines_covered_match = _XML_LINES_COVERED_RE.search(text)
-    branches_valid_match = _XML_BRANCHES_VALID_RE.search(text)
-    branches_covered_match = _XML_BRANCHES_COVERED_RE.search(text)
-    if lines_valid_match and lines_covered_match:
-        total = int(float(lines_valid_match.group(1)))
-        covered = int(float(lines_covered_match.group(1)))
-        branch_total = int(float(branches_valid_match.group(1))) if branches_valid_match else 0
-        branch_covered = int(float(branches_covered_match.group(1))) if branches_covered_match else 0
+    if counts := _parse_xml_totals(text):
+        total, covered, branch_total, branch_covered = counts
         return CoverageStats(
             name=name,
             path=str(path),
@@ -75,34 +68,68 @@ def parse_coverage_xml(name: str, path: Path) -> "CoverageStats":
     return CoverageStats(name=name, path=str(path), covered=covered, total=total)
 
 
-def parse_lcov(name: str, path: Path) -> "CoverageStats":
-    from scripts.quality.assert_coverage_100 import CoverageStats
+def _parse_xml_totals(text: str) -> Optional[Tuple[int, int, int, int]]:
+    lines_valid_match = _XML_LINES_VALID_RE.search(text)
+    lines_covered_match = _XML_LINES_COVERED_RE.search(text)
+    if not (lines_valid_match and lines_covered_match):
+        return None
 
-    total = 0
-    covered = 0
-    branch_total = 0
-    branch_covered = 0
+    branches_valid_match = _XML_BRANCHES_VALID_RE.search(text)
+    branches_covered_match = _XML_BRANCHES_COVERED_RE.search(text)
+    return (
+        int(float(lines_valid_match.group(1))),
+        int(float(lines_covered_match.group(1))),
+        int(float(branches_valid_match.group(1))) if branches_valid_match else 0,
+        int(float(branches_covered_match.group(1))) if branches_covered_match else 0,
+    )
+
+
+def _lcov_counter_key(line: str) -> Optional[str]:
+    if line.startswith("LF:"):
+        return "total"
+    if line.startswith("LH:"):
+        return "covered"
+    if line.startswith("BRF:"):
+        return "branch_total"
+    if line.startswith("BRH:"):
+        return "branch_covered"
+    return None
+
+
+def _iter_included_lcov_lines(path: Path) -> List[str]:
+    included_lines: List[str] = []
     include_record = False
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if line.startswith("SF:"):
             source_path = _normalize_source_path(line.split(":", 1)[1])
             include_record = _should_track_coverage_source(source_path)
-        elif line == "end_of_record":
+            continue
+        if line == "end_of_record":
             include_record = False
-        elif include_record and line.startswith("LF:"):
-            total += int(line.split(":", 1)[1])
-        elif include_record and line.startswith("LH:"):
-            covered += int(line.split(":", 1)[1])
-        elif include_record and line.startswith("BRF:"):
-            branch_total += int(line.split(":", 1)[1])
-        elif include_record and line.startswith("BRH:"):
-            branch_covered += int(line.split(":", 1)[1])
+            continue
+        if include_record:
+            included_lines.append(line)
+    return included_lines
+
+
+def parse_lcov(name: str, path: Path) -> "CoverageStats":
+    from scripts.quality.assert_coverage_100 import CoverageStats
+
+    counters = {
+        "total": 0,
+        "covered": 0,
+        "branch_total": 0,
+        "branch_covered": 0,
+    }
+    for line in _iter_included_lcov_lines(path):
+        if counter_key := _lcov_counter_key(line):
+            counters[counter_key] += int(line.split(":", 1)[1])
     return CoverageStats(
         name=name,
         path=str(path),
-        covered=covered,
-        total=total,
-        branch_covered=branch_covered,
-        branch_total=branch_total,
+        covered=counters["covered"],
+        total=counters["total"],
+        branch_covered=counters["branch_covered"],
+        branch_total=counters["branch_total"],
     )

@@ -181,6 +181,50 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertNotIn("Codacy Static Code Analysis", target_contexts)
         self.assertNotIn("DeepScan", target_contexts)
 
+    def test_codex_session_manager_profile_tracks_windows_wpf_rollout_contract(self) -> None:
+        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
+        profile = load_repo_profile(inventory, "Prekzursil/codex-session-manager")
+
+        push_contexts = active_required_contexts(profile, event_name="push")
+        pr_contexts = active_required_contexts(profile, event_name="pull_request")
+        target_contexts = set(profile["required_contexts"]["target"])
+
+        self.assertEqual(profile["stack"], "dotnet-wpf")
+        self.assertEqual(profile["verify_command"], "bash scripts/verify")
+        self.assertEqual(profile["coverage"]["runner"], "windows-latest")
+        self.assertEqual(profile["coverage"]["shell"], "pwsh")
+        self.assertEqual(
+            [(item["name"], item["path"]) for item in profile["coverage"]["inputs"]],
+            [
+                ("app", "coverage/app/coverage.cobertura.xml"),
+                ("core", "coverage/core/coverage.cobertura.xml"),
+                ("storage", "coverage/storage/coverage.cobertura.xml"),
+            ],
+        )
+        self.assertEqual(
+            profile["coverage"]["require_sources"],
+            [
+                "src/CodexSessionManager.App/",
+                "src/CodexSessionManager.Core/",
+                "src/CodexSessionManager.Storage/",
+            ],
+        )
+        self.assertEqual(
+            profile["vendors"]["sonar"]["project_key"],
+            "Prekzursil_codex-session-manager",
+        )
+        self.assertTrue({"build-test", "analyze", "scan", "dependency-review"}.issubset(push_contexts))
+        self.assertTrue({"build-test", "analyze", "scan", "dependency-review"}.issubset(target_contexts))
+        self.assertTrue(
+            {
+                "qlty check",
+                "qlty coverage",
+                "qlty coverage diff",
+                "Codacy Static Code Analysis",
+                "DeepScan",
+            }.issubset(pr_contexts)
+        )
+
     def test_reframe_overlay_adds_visual_and_platform_contexts_to_target(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/Reframe")

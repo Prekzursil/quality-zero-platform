@@ -13,11 +13,14 @@ from unittest.mock import patch
 
 from scripts.quality import check_codacy_zero
 from scripts.quality.check_codacy_zero import (
+    _build_payload,
     _provider_candidates,
     _query_codacy_open_issues,
     _query_codacy_provider,
+    _resolve_codacy_status,
     _request_mode,
     build_issues_url,
+    build_repository_analysis_url,
     extract_total_open,
 )
 
@@ -117,6 +120,29 @@ class CodacyZeroTests(unittest.TestCase):
             open_issues, findings = _query_codacy_provider("gh", "Prekzursil", "quality-zero-platform", "token")
         self.assertEqual(open_issues, 2)
         self.assertEqual(findings, ["Codacy reports 2 open issues (expected 0)."])
+
+    def test_query_open_issues_uses_public_repository_fallback_after_401_on_main(self) -> None:
+        from urllib.error import HTTPError
+
+        headers = Message()
+        with patch(
+            "scripts.quality.check_codacy_zero._query_codacy_provider",
+            side_effect=HTTPError("https://api.codacy.com", 401, "Unauthorized", hdrs=headers, fp=None),
+        ), patch(
+            "scripts.quality.check_codacy_zero._query_codacy_public_repository_issues",
+            return_value=(0, []),
+        ) as fallback_mock:
+            open_issues, findings, exc = _query_codacy_open_issues(
+                "Prekzursil",
+                "quality-zero-platform",
+                "token",
+                ["gh"],
+            )
+
+        self.assertEqual(open_issues, 0)
+        self.assertEqual(findings, [])
+        self.assertIsNone(exc)
+        fallback_mock.assert_called_once_with("gh", "Prekzursil", "quality-zero-platform")
 
     def test_keyword_only_guards_reject_unexpected_arguments(self) -> None:
         with self.assertRaisesRegex(TypeError, "Unexpected _query_codacy_provider parameters: extra"):
@@ -274,4 +300,41 @@ class CodacyZeroTests(unittest.TestCase):
             finally:
                 os.chdir(previous)
         self.assertEqual(result.exception.code, 1)
+
+    def test_repository_analysis_url_and_resolve_status_helpers_cover_public_paths(self) -> None:
+        self.assertEqual(
+            build_repository_analysis_url("gh", "Prekzursil", "quality-zero-platform"),
+            "https://app.codacy.com/api/v3/analysis/organizations/gh/Prekzursil/repositories/quality-zero-platform",
+        )
+        args = Namespace(
+            provider="gh",
+            owner="Prekzursil",
+            repo="quality-zero-platform",
+            pull_request="",
+            token="explicit-token",
+            policy_mode="audit",
+            out_json="codacy-zero/codacy.json",
+            out_md="codacy-zero/codacy.md",
+        )
+        with patch.object(
+            check_codacy_zero,
+            "_query_codacy_open_issues",
+            return_value=(3, ["Codacy reports 3 open issues (expected 0)."], None),
+        ):
+            status, findings, open_issues, pull_request = _resolve_codacy_status(args)
+
+        self.assertEqual(status, "pass")
+        self.assertEqual(findings, ["Codacy reports 3 open issues (expected 0)."])
+        self.assertEqual(open_issues, 3)
+        self.assertEqual(pull_request, "")
+        self.assertEqual(
+            _build_payload(
+                args,
+                status=status,
+                findings=findings,
+                open_issues=open_issues,
+                pull_request=pull_request,
+            )["open_issues"],
+            3,
+        )
 

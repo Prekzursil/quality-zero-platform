@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, List
 
 from scripts.quality.common import (
     ReportSpec,
@@ -133,7 +133,7 @@ class QualityCommonTests(unittest.TestCase):
         self.assertEqual(parsed.tzinfo, timezone.utc)
 
     def test_dedupe_strings_trims_skips_empty_and_preserves_first_seen_order(self) -> None:
-        values: list[Any] = ["  alpha ", "", "beta", "alpha", None, " beta ", "gamma"]
+        values: List[Any] = ["  alpha ", "", "beta", "alpha", None, " beta ", "gamma"]
         self.assertEqual(
             dedupe_strings(values),
             ["alpha", "beta", "gamma"],

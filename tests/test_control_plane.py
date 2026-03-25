@@ -61,9 +61,9 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(profile["coverage"]["runner"], "windows-latest")
         self.assertEqual(profile["visual_lane"]["kind"], "desktop-adapter")
 
-    def test_inventory_expands_to_14_repos(self) -> None:
+    def test_inventory_expands_to_15_repos(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
-        self.assertEqual(len(inventory["repos"]), 14)
+        self.assertEqual(len(inventory["repos"]), 15)
 
     def test_common_phase1_template_contexts_resolve(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
@@ -509,4 +509,5 @@ class ControlPlaneTests(unittest.TestCase):
             payload = json.loads(stdout.getvalue())
             self.assertEqual(payload["profile_id"], "quality-zero-platform")
             self.assertEqual(payload["coverage"]["inputs"][0]["path"], "coverage/platform-coverage.xml")
+
 

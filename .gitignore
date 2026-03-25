@@ -10,3 +10,4 @@ generated/tmp/
 !.qlty/qlty.toml
 qlty-zero/
 quality-zero-gate/
+.worktrees/

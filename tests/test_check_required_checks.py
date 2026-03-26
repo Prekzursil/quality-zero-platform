@@ -191,6 +191,7 @@ class RequiredChecksTests(unittest.TestCase):
     def test_has_in_progress_check_runs_detects_active_check_runs(self) -> None:
         self.assertTrue(
             checks_module._has_in_progress_check_runs(
+                ["Coverage 100 Gate"],
                 {
                     "shared-scanner-matrix / Coverage 100 Gate": {
                         "state": "in_progress",
@@ -202,6 +203,7 @@ class RequiredChecksTests(unittest.TestCase):
         )
         self.assertFalse(
             checks_module._has_in_progress_check_runs(
+                ["DeepScan"],
                 {
                     "DeepScan": {
                         "state": "success",
@@ -209,6 +211,25 @@ class RequiredChecksTests(unittest.TestCase):
                         "source": "status",
                     }
                 }
+            )
+        )
+
+    def test_has_in_progress_check_runs_ignores_non_required_in_progress_checks(self) -> None:
+        self.assertFalse(
+            checks_module._has_in_progress_check_runs(
+                ["build-test"],
+                {
+                    "aggregate-gate / Quality Zero Gate": {
+                        "state": "in_progress",
+                        "conclusion": "",
+                        "source": "check_run",
+                    },
+                    "build-test": {
+                        "state": "completed",
+                        "conclusion": "success",
+                        "source": "check_run",
+                    },
+                },
             )
         )
 

@@ -1,17 +1,30 @@
 slug: Prekzursil/codex-session-manager
 stack: dotnet-wpf
 verify_command: bash scripts/verify
+required_contexts_mode: replace
 required_contexts:
   always:
     - build-test
     - analyze
     - scan
+  pull_request_only:
     - dependency-review
+  required_now:
+    - build-test
+    - analyze
+    - scan
+    - dependency-review
+    - shared-codecov-analytics / Codecov Analytics
+    - aggregate-gate / Quality Zero Gate
+    - shared-scanner-matrix / Quality Rollup
   target:
     - build-test
     - analyze
     - scan
     - dependency-review
+    - shared-codecov-analytics / Codecov Analytics
+    - aggregate-gate / Quality Zero Gate
+    - shared-scanner-matrix / Quality Rollup
 coverage:
   runner: windows-latest
   shell: pwsh

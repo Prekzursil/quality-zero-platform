@@ -28,42 +28,6 @@
         "do_not_enforce_on_create": false,
         "required_status_checks": [
           {
-            "context": "Coverage 100 Gate",
-            "integration_id": null
-          },
-          {
-            "context": "Codecov Analytics",
-            "integration_id": null
-          },
-          {
-            "context": "QLTY Zero",
-            "integration_id": null
-          },
-          {
-            "context": "Sonar Zero",
-            "integration_id": null
-          },
-          {
-            "context": "Codacy Zero",
-            "integration_id": null
-          },
-          {
-            "context": "Semgrep Zero",
-            "integration_id": null
-          },
-          {
-            "context": "Sentry Zero",
-            "integration_id": null
-          },
-          {
-            "context": "DeepScan Zero",
-            "integration_id": null
-          },
-          {
-            "context": "SonarCloud Code Analysis",
-            "integration_id": null
-          },
-          {
             "context": "build-test",
             "integration_id": null
           },
@@ -80,23 +44,15 @@
             "integration_id": null
           },
           {
-            "context": "Codacy Static Code Analysis",
+            "context": "shared-codecov-analytics / Codecov Analytics",
             "integration_id": null
           },
           {
-            "context": "DeepScan",
+            "context": "aggregate-gate / Quality Zero Gate",
             "integration_id": null
           },
           {
-            "context": "qlty check",
-            "integration_id": null
-          },
-          {
-            "context": "qlty coverage",
-            "integration_id": null
-          },
-          {
-            "context": "qlty coverage diff",
+            "context": "shared-scanner-matrix / Quality Rollup",
             "integration_id": null
           }
         ],

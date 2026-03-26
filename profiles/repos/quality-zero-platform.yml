@@ -11,7 +11,7 @@ required_contexts:
     - Semgrep Zero
     - Sentry Zero
     - DeepScan Zero
-    - SonarCloud
+    - SonarCloud Code Analysis
   pull_request_only: []
   target:
     - Coverage 100 Gate
@@ -22,7 +22,7 @@ required_contexts:
     - Semgrep Zero
     - Sentry Zero
     - DeepScan Zero
-    - SonarCloud
+    - SonarCloud Code Analysis
 coverage:
   command: |
     python -m pip install --upgrade pip

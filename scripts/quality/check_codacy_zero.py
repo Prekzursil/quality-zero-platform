@@ -126,15 +126,17 @@ def _provider_candidates(primary_provider: str) -> List[str]:
 
 
 def build_issues_url(provider: str, owner: str, repo: str, *, pull_request: str = "") -> str:
-    if pull_request:
-        query = urllib.parse.urlencode({"status": "new", "limit": "1"})
-        return (
+    query = [
+        urllib.parse.urlencode({"limit": "1"}),
+        urllib.parse.urlencode({"status": "new", "limit": "1"}),
+    ][bool(pull_request)]
+    return [
+        f"{CODACY_API_BASE}/api/v3/analysis/organizations/{provider}/{owner}/repositories/{repo}/issues/search?{query}",
+        (
             f"{CODACY_APP_API_BASE}/analysis/organizations/{provider}/{owner}/repositories/{repo}"
             f"/pull-requests/{pull_request}/issues?{query}"
-        )
-
-    query = urllib.parse.urlencode({"limit": "1"})
-    return f"{CODACY_API_BASE}/api/v3/analysis/organizations/{provider}/{owner}/repositories/{repo}/issues/search?{query}"
+        ),
+    ][bool(pull_request)]
 
 
 def build_repository_analysis_url(provider: str, owner: str, repo: str) -> str:
@@ -142,7 +144,7 @@ def build_repository_analysis_url(provider: str, owner: str, repo: str) -> str:
 
 
 def _request_mode(query: CodacyQuery) -> Tuple[str, Dict[str, Any] | None]:
-    return ("GET", None) if query.pull_request else ("POST", {})
+    return [("POST", {}), ("GET", None)][bool(query.pull_request)]
 
 
 def _query_codacy_public_repository_issues(provider: str, owner: str, repo: str) -> Tuple[int | None, List[str]]:

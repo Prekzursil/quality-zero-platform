@@ -108,6 +108,27 @@ class SonarZeroTests(unittest.TestCase):
         self.assertEqual((open_issues, quality_gate, findings), (0, "OK", []))
         self.assertEqual(attempts, [1, 2])
 
+    def test_retry_retries_transient_scoped_api_errors_before_failing(self) -> None:
+        args = argparse.Namespace(branch="", pull_request="5")
+        attempts: List[int] = []
+
+        def fake_loader(current_args, auth):
+            attempts.append(len(attempts) + 1)
+            if len(attempts) == 1:
+                raise RuntimeError("HTTP Error 404")
+            return 0, "OK", []
+
+        open_issues, quality_gate, findings = load_sonar_findings_with_retry(
+            args,
+            "auth",
+            fetch_fn=fake_loader,
+            attempts=2,
+            sleep_seconds=0.0,
+        )
+
+        self.assertEqual((open_issues, quality_gate, findings), (0, "OK", []))
+        self.assertEqual(attempts, [1, 2])
+
     def test_retry_keyword_only_guards_reject_invalid_invocations(self) -> None:
         args = argparse.Namespace(branch="", pull_request="5")
 

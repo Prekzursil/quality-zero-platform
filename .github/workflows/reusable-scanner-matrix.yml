@@ -380,6 +380,7 @@ jobs:
           export QLTY_COVERAGE_TOKEN="$(python -c "import json,sys; print(json.load(sys.stdin)['value'])" <<<"$OIDC_RESPONSE")"
           python - <<'PY'
           import os
+          from pathlib import Path
           import shutil
           import subprocess
 
@@ -392,7 +393,16 @@ jobs:
               if item.startswith("repo/"):
                   item = item[len("repo/") :]
               items.append(item)
-          qlty_executable = shutil.which("qlty.exe" if os.name == "nt" else "qlty")
+          candidate_paths = []
+          if os.name == "nt":
+              for env_name in ("USERPROFILE", "HOME"):
+                  raw_home = os.environ.get(env_name, "").strip()
+                  if raw_home:
+                      candidate_paths.append(Path(raw_home) / ".qlty" / "bin" / "qlty.exe")
+                      candidate_paths.append(Path(raw_home) / ".qlty" / "bin" / "qlty")
+          qlty_executable = next((str(path) for path in candidate_paths if path.exists()), "")
+          if not qlty_executable:
+              qlty_executable = shutil.which("qlty.exe" if os.name == "nt" else "qlty")
           if not qlty_executable:
               qlty_executable = shutil.which("qlty")
           if not qlty_executable:

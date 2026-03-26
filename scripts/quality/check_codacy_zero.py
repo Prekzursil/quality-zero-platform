@@ -130,12 +130,13 @@ def build_issues_url(provider: str, owner: str, repo: str, *, pull_request: str 
         urllib.parse.urlencode({"limit": "1"}),
         urllib.parse.urlencode({"status": "new", "limit": "1"}),
     ][bool(pull_request)]
+    pull_request_url = (
+        f"{CODACY_APP_API_BASE}/analysis/organizations/{provider}/{owner}/repositories/{repo}"
+        f"/pull-requests/{pull_request}/issues?{query}"
+    )
     return [
         f"{CODACY_API_BASE}/api/v3/analysis/organizations/{provider}/{owner}/repositories/{repo}/issues/search?{query}",
-        (
-            f"{CODACY_APP_API_BASE}/analysis/organizations/{provider}/{owner}/repositories/{repo}"
-            f"/pull-requests/{pull_request}/issues?{query}"
-        ),
+        pull_request_url,
     ][bool(pull_request)]
 
 

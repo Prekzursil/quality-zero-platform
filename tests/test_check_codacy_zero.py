@@ -292,7 +292,7 @@ class CodacyZeroTests(unittest.TestCase):
             self.assertEqual(check_codacy_zero.main(), 0)
 
     def test_load_codacy_findings_with_retry_retries_pull_request_404s(self) -> None:
-        calls = []
+        calls: List[int] = []
 
         def fake_query(*_args, **_kwargs):
             calls.append(len(calls))

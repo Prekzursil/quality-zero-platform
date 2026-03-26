@@ -238,6 +238,12 @@ class CodacyZeroTests(unittest.TestCase):
         )
         self.assertIsInstance(exc, RuntimeError)
 
+    def test_not_found_findings_without_exception(self) -> None:
+        open_issues, findings, exc = check_codacy_zero._not_found_findings(["gh"], None)
+        self.assertIsNone(open_issues)
+        self.assertEqual(findings, ["Codacy API endpoint was not found for providers: gh."])
+        self.assertIsNone(exc)
+
     def test_main_status_paths(self) -> None:
         empty_value = str()
         args = Namespace(
@@ -339,6 +345,22 @@ class CodacyZeroTests(unittest.TestCase):
 
         self.assertEqual((open_issues, findings), (0, []))
         query_mock.assert_called_once()
+
+    def test_load_codacy_findings_with_retry_returns_immediately_for_pull_request_success(self) -> None:
+        with patch.object(
+            check_codacy_zero,
+            "_query_codacy_open_issues",
+            return_value=(0, [], None),
+        ) as query_mock, patch.object(check_codacy_zero.time, "sleep", return_value=None) as sleep_mock:
+            open_issues, findings = load_codacy_findings_with_retry(
+                self._base_query(pull_request="49"),
+                "token",
+                ["gh"],
+            )
+
+        self.assertEqual((open_issues, findings), (0, []))
+        query_mock.assert_called_once()
+        sleep_mock.assert_not_called()
 
     def test_payload_and_report_helpers(self) -> None:
         payload = _build_payload(

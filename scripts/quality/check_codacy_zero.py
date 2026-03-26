@@ -204,10 +204,12 @@ def _unauthorized_http_result(
 
 
 def _handle_codacy_http_error(exc: urllib.error.HTTPError, query: CodacyQuery) -> Tuple[int | None, List[str], Exception | None, bool]:
-    if exc.code == 401:
-        return _unauthorized_http_result(exc, query)
-    if exc.code == 404:
-        return None, [], exc, False
+    handler = {
+        401: lambda: _unauthorized_http_result(exc, query),
+        404: lambda: (None, [], exc, False),
+    }.get(exc.code)
+    if handler is not None:
+        return handler()
     return None, _http_error_findings(exc), exc, True
 
 
@@ -248,8 +250,6 @@ def _query_codacy_open_issues(
         open_issues, findings, last_exc, should_return = _query_codacy_candidate(query, token)
         if should_return:
             return open_issues, findings, last_exc
-        if isinstance(last_exc, urllib.error.HTTPError) and last_exc.code == 404:
-            continue
 
     return _not_found_findings(provider_candidates, last_exc)
 
@@ -281,13 +281,13 @@ def load_codacy_findings_with_retry(
     provider_candidates: List[str],
 ) -> Tuple[int | None, List[str]]:
     retry_budget = SCOPED_ANALYSIS_RETRY_ATTEMPTS if base_query.pull_request else 1
-    open_issues: int | None = None
-    findings: List[str] = []
-    for attempt in range(retry_budget):
+    for _ in range(max(0, retry_budget - 1)):
         open_issues, findings, last_exc = _query_codacy_open_issues(base_query, token, provider_candidates)
-        if not _is_retryable_pr_not_found(base_query, last_exc) or attempt == retry_budget - 1:
+        if not _is_retryable_pr_not_found(base_query, last_exc):
             return open_issues, findings
         time.sleep(5.0)
+
+    open_issues, findings, _ = _query_codacy_open_issues(base_query, token, provider_candidates)
     return open_issues, findings
 
 

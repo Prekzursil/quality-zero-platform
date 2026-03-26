@@ -223,6 +223,13 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("ref: ${{ inputs.sha != '' && inputs.sha || github.sha }}", text)
         self.assertEqual(text.count("persist-credentials: false"), 3)
 
+    def test_scanner_matrix_uses_windows_runner_for_windows_only_coverage_repos(self) -> None:
+        text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
+        self.assertIn("matrix.lane == 'coverage'", text)
+        self.assertIn("Prekzursil/SWFOC-Mod-Menu", text)
+        self.assertIn("Prekzursil/codex-session-manager", text)
+        self.assertIn("windows-latest", text)
+
     def test_scanner_matrix_scopes_sonar_and_codacy_zero_to_the_current_pull_request(self) -> None:
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
         self.assertIn('pull_request_number = os.environ.get("PULL_REQUEST_NUMBER", "").strip()', text)

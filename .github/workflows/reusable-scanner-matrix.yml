@@ -61,7 +61,7 @@ on:
 jobs:
   scanner:
     name: ${{ matrix.job_name }}
-    runs-on: ${{ inputs.repo_slug == 'Prekzursil/SWFOC-Mod-Menu' && 'windows-latest' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.lane == 'coverage' && (inputs.repo_slug == 'Prekzursil/SWFOC-Mod-Menu' || inputs.repo_slug == 'Prekzursil/codex-session-manager') && 'windows-latest' || 'ubuntu-latest' }}
     permissions:
       contents: read
       id-token: write

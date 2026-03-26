@@ -135,6 +135,18 @@ def _resolve_retry_settings(
     return fetch_fn, max(1, attempts), max(0.0, sleep_seconds)
 
 
+def _retry_exception_result(
+    namespace: argparse.Namespace,
+    exc: Exception,
+    result: Tuple[int, str],
+) -> Tuple[int, str, List[str]]:
+    if not _is_scoped_analysis(namespace):
+        raise exc
+    open_issues, quality_gate = result
+    findings = [f"Sonar API request failed: {exc}"]
+    return open_issues, quality_gate, findings
+
+
 def load_sonar_findings_with_retry(*args: Any, **kwargs: Any) -> Tuple[int, str, List[str]]:
     if len(args) != 2:
         raise TypeError("load_sonar_findings_with_retry expects argparse namespace and auth header")
@@ -147,13 +159,11 @@ def load_sonar_findings_with_retry(*args: Any, **kwargs: Any) -> Tuple[int, str,
         try:
             open_issues, quality_gate, findings = fetch_fn(namespace, auth)
         except (OSError, RuntimeError, ValueError) as exc:
-            if not _is_scoped_analysis(namespace):
-                raise
-            findings = [f"Sonar API request failed: {exc}"]
-            if attempt != retry_budget - 1:
-                time.sleep(max(0.0, sleep_seconds))
-                continue
-            return open_issues, quality_gate, findings
+            if attempt == retry_budget - 1:
+                return _retry_exception_result(namespace, exc, (open_issues, quality_gate))
+            _retry_exception_result(namespace, exc, (open_issues, quality_gate))
+            time.sleep(max(0.0, sleep_seconds))
+            continue
         if not findings or not _is_scoped_analysis(namespace):
             return open_issues, quality_gate, findings
         if attempt != retry_budget - 1:

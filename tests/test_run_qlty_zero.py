@@ -55,6 +55,7 @@ class RunQltyZeroTests(unittest.TestCase):
         )
         self.assertFalse(run_qlty_zero._smells_output_indicates_findings(""))
         self.assertFalse(run_qlty_zero._smells_output_indicates_findings("no issues"))
+        self.assertFalse(run_qlty_zero._smells_output_indicates_findings("\u001b[32m✔ No issues\u001b[0m"))
         self.assertTrue(run_qlty_zero._smells_output_indicates_findings("one smell"))
 
     def test_render_md_uses_none_when_a_check_has_no_output_tail(self) -> None:

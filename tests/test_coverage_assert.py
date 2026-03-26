@@ -353,6 +353,18 @@ class CoverageAssertTests(unittest.TestCase):
         )
         self.assertIn("branch=`90.00%` (9/10) from `coverage.xml`", markdown)
 
+    def test_build_payload_includes_branch_percent_for_branch_tracked_components(self) -> None:
+        payload = _build_payload(
+            stats=[CoverageStats(name="python", path="coverage.xml", covered=10, total=10, branch_covered=9, branch_total=10)],
+            covered_sources={"pkg/main.py"},
+            min_percent=100.0,
+            branch_min_percent=90.0,
+            status="pass",
+            findings=[],
+        )
+
+        self.assertEqual(payload["components"][0]["branch_percent"], 90.0)
+
     def test_script_entrypoint_handles_import_guard_and_report_failures(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

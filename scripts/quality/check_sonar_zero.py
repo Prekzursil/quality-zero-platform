@@ -137,7 +137,16 @@ def load_sonar_findings_with_retry(*args: Any, **kwargs: Any) -> Tuple[int, str,
     quality_gate = "UNKNOWN"
     findings: List[str] = []
     for attempt in range(retry_budget):
-        open_issues, quality_gate, findings = fetch_fn(namespace, auth)
+        try:
+            open_issues, quality_gate, findings = fetch_fn(namespace, auth)
+        except (OSError, RuntimeError, ValueError) as exc:
+            if not _is_scoped_analysis(namespace):
+                raise
+            findings = [f"Sonar API request failed: {exc}"]
+            if attempt != retry_budget - 1:
+                time.sleep(max(0.0, sleep_seconds))
+                continue
+            return open_issues, quality_gate, findings
         if not findings or not _is_scoped_analysis(namespace):
             return open_issues, quality_gate, findings
         if attempt != retry_budget - 1:

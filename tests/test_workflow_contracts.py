@@ -158,7 +158,8 @@ class WorkflowContractTests(unittest.TestCase):
     def test_scanner_matrix_pins_qlty_actions_to_full_sha(self) -> None:
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
         self.assertIn("qltysh/qlty-action/install@a19242102d17e497f437d7466aa01b528537e899", text)
-        self.assertIn("qlty coverage publish \\", text)
+        self.assertIn('qlty_executable = shutil.which("qlty")', text)
+        self.assertIn('subprocess.run(command, executable=qlty_executable, check=True)', text)
         self.assertIn("job_name: QLTY Zero", text)
         self.assertIn("lane: qlty_zero", text)
         self.assertIn("run_qlty_zero.py", text)

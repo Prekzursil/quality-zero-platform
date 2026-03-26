@@ -173,7 +173,7 @@ class ControlPlaneTests(unittest.TestCase):
 
         push_contexts = active_required_contexts(profile, event_name="push")
         pr_contexts = active_required_contexts(profile, event_name="pull_request")
-        target_contexts = set(profile["required_contexts"]["target"])
+        target_contexts = set(active_required_contexts(profile, event_name="target"))
 
         self.assertIn("QLTY Zero", push_contexts)
         self.assertIn("QLTY Zero", pr_contexts)
@@ -187,18 +187,18 @@ class ControlPlaneTests(unittest.TestCase):
 
         push_contexts = active_required_contexts(profile, event_name="push")
         pr_contexts = active_required_contexts(profile, event_name="pull_request")
-        target_contexts = set(profile["required_contexts"]["target"])
+        target_contexts = set(active_required_contexts(profile, event_name="target"))
 
         self.assertEqual(profile["stack"], "dotnet-wpf")
         self.assertEqual(profile["verify_command"], "bash scripts/verify")
         self.assertEqual(profile["coverage"]["runner"], "windows-latest")
         self.assertEqual(profile["coverage"]["shell"], "pwsh")
         self.assertEqual(
-            [(item["name"], item["path"]) for item in profile["coverage"]["inputs"]],
+            [(item["name"], item["path"], item["format"]) for item in profile["coverage"]["inputs"]],
             [
-                ("app", "coverage/app/coverage.cobertura.xml"),
-                ("core", "coverage/core/coverage.cobertura.xml"),
-                ("storage", "coverage/storage/coverage.cobertura.xml"),
+                ("app", "coverage/app/coverage.cobertura.xml", "xml"),
+                ("core", "coverage/core/coverage.cobertura.xml", "xml"),
+                ("storage", "coverage/storage/coverage.cobertura.xml", "xml"),
             ],
         )
         self.assertEqual(

@@ -6,8 +6,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Dict, Tuple
-from unittest.mock import patch
+from typing import Mapping, Tuple, cast
+from unittest.mock import MagicMock, patch
 
 from scripts.quality import check_required_checks as checks_module
 
@@ -16,9 +16,9 @@ class RequiredChecksTests(unittest.TestCase):
     def _run_main_with_payload(
         self,
         *,
-        payload: Dict[str, object],
+        payload: Mapping[str, object],
         write_report_result: int = 0,
-    ) -> Tuple[int, object]:
+    ) -> Tuple[int, MagicMock]:
         with tempfile.TemporaryDirectory() as tmpdir, patch.object(
             sys,
             "argv",
@@ -39,7 +39,7 @@ class RequiredChecksTests(unittest.TestCase):
             checks_module, "_wait_for_payload", return_value=payload
         ), patch.object(checks_module, "write_report", return_value=write_report_result) as writer:
             result = checks_module.main()
-        return result, writer
+        return result, cast(MagicMock, writer)
 
     def test_parse_args_supports_defaults(self) -> None:
         with patch.object(

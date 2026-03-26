@@ -23,6 +23,7 @@ TOTAL_KEYS = {"total", "totalItems", "total_items", "count", "hits", "open_issue
 CODACY_API_BASE = "https://api.codacy.com"
 CODACY_APP_API_BASE = "https://app.codacy.com/api/v3"
 JSON_ACCEPT_HEADER = "application/json"
+SCOPED_ANALYSIS_RETRY_ATTEMPTS = 24
 
 
 @dataclass(frozen=True)
@@ -270,11 +271,25 @@ def _resolve_codacy_status(args: argparse.Namespace) -> CodacyStatusResult:
         return CodacyStatusResult(status="fail", findings=["CODACY_API_TOKEN is missing."], open_issues=None, pull_request=pull_request)
 
     provider_candidates = _provider_candidates(args.provider)
-    open_issues, findings, _ = _query_codacy_open_issues(
-        _base_query(args, pull_request),
-        token,
-        provider_candidates,
-    )
+    base_query = _base_query(args, pull_request)
+    retry_budget = SCOPED_ANALYSIS_RETRY_ATTEMPTS if pull_request else 1
+    open_issues: int | None = None
+    findings: List[str] = []
+    for attempt in range(retry_budget):
+        open_issues, findings, last_exc = _query_codacy_open_issues(
+            base_query,
+            token,
+            provider_candidates,
+        )
+        retryable_not_found = (
+            bool(pull_request)
+            and isinstance(last_exc, urllib.error.HTTPError)
+            and last_exc.code == 404
+        )
+        if not retryable_not_found or attempt == retry_budget - 1:
+            break
+        import time
+        time.sleep(5.0)
     return CodacyStatusResult(
         status=_codacy_status(findings, getattr(args, "policy_mode", "ratchet")),
         findings=findings,

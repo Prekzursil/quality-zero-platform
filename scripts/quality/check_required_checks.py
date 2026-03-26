@@ -126,11 +126,12 @@ def _evaluate(required: List[str], contexts: Dict[str, Dict[str, str]]) -> Tuple
     return ("pass" if not missing and not failed else "fail", missing, failed)
 
 
-def _has_in_progress_check_runs(contexts: Dict[str, Dict[str, str]]) -> bool:
+def _has_in_progress_check_runs(required: List[str], contexts: Dict[str, Dict[str, str]]) -> bool:
     return any(
-        details.get("state") != "completed"
-        for details in contexts.values()
-        if details.get("source") == "check_run"
+        observed.get("state") != "completed"
+        for context in required
+        for observed in [_resolve_observed_context(context, contexts)]
+        if observed and observed.get("source") == "check_run"
     )
 
 
@@ -158,7 +159,7 @@ def _wait_for_payload(args: argparse.Namespace, required: List[str], token: str)
         final_payload = _collect_payload(args.repo, args.sha, required, token)
         if final_payload["status"] == "pass":
             break
-        if not _has_in_progress_check_runs(final_payload["contexts"]):
+        if not _has_in_progress_check_runs(required, final_payload["contexts"]):
             break
         time.sleep(max(args.poll_seconds, 1))
     return final_payload

@@ -129,6 +129,42 @@ class SonarZeroTests(unittest.TestCase):
         self.assertEqual((open_issues, quality_gate, findings), (0, "OK", []))
         self.assertEqual(attempts, [1, 2])
 
+    def test_retry_returns_failure_findings_when_scoped_api_errors_persist(self) -> None:
+        args = argparse.Namespace(branch="", pull_request="5")
+        attempts: List[int] = []
+
+        def fake_loader(current_args, auth):
+            attempts.append(len(attempts) + 1)
+            raise RuntimeError("HTTP Error 404")
+
+        open_issues, quality_gate, findings = load_sonar_findings_with_retry(
+            args,
+            "auth",
+            fetch_fn=fake_loader,
+            attempts=2,
+            sleep_seconds=0.0,
+        )
+
+        self.assertEqual(open_issues, 0)
+        self.assertEqual(quality_gate, "UNKNOWN")
+        self.assertEqual(findings, ["Sonar API request failed: HTTP Error 404"])
+        self.assertEqual(attempts, [1, 2])
+
+    def test_retry_raises_unscoped_api_errors_without_retrying(self) -> None:
+        args = argparse.Namespace(branch="", pull_request="")
+
+        def fake_loader(current_args, auth):
+            raise RuntimeError("provider down")
+
+        with self.assertRaisesRegex(RuntimeError, "provider down"):
+            load_sonar_findings_with_retry(
+                args,
+                "auth",
+                fetch_fn=fake_loader,
+                attempts=2,
+                sleep_seconds=0.0,
+            )
+
     def test_retry_keyword_only_guards_reject_invalid_invocations(self) -> None:
         args = argparse.Namespace(branch="", pull_request="5")
 

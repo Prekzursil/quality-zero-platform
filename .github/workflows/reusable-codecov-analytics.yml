@@ -24,6 +24,10 @@ on:
         type: string
         required: false
         default: main
+      runner:
+        type: string
+        required: false
+        default: ubuntu-latest
     secrets:
       CODECOV_TOKEN:
         required: false
@@ -31,7 +35,7 @@ on:
 jobs:
   codecov-analytics:
     name: Codecov Analytics
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
     permissions:
       contents: read
       id-token: write

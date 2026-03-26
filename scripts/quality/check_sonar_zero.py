@@ -18,7 +18,7 @@ from scripts.security_helpers import load_json_https
 
 
 SONAR_API_BASE = "https://sonarcloud.io"
-SCOPED_ANALYSIS_RETRY_ATTEMPTS = 8
+SCOPED_ANALYSIS_RETRY_ATTEMPTS = 36
 
 
 def _parse_args() -> argparse.Namespace:

@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -23,6 +24,7 @@ TOTAL_KEYS = {"total", "totalItems", "total_items", "count", "hits", "open_issue
 CODACY_API_BASE = "https://api.codacy.com"
 CODACY_APP_API_BASE = "https://app.codacy.com/api/v3"
 JSON_ACCEPT_HEADER = "application/json"
+SCOPED_ANALYSIS_RETRY_ATTEMPTS = 24
 
 
 @dataclass(frozen=True)
@@ -124,15 +126,18 @@ def _provider_candidates(primary_provider: str) -> List[str]:
 
 
 def build_issues_url(provider: str, owner: str, repo: str, *, pull_request: str = "") -> str:
-    if pull_request:
-        query = urllib.parse.urlencode({"status": "new", "limit": "1"})
-        return (
-            f"{CODACY_APP_API_BASE}/analysis/organizations/{provider}/{owner}/repositories/{repo}"
-            f"/pull-requests/{pull_request}/issues?{query}"
-        )
-
-    query = urllib.parse.urlencode({"limit": "1"})
-    return f"{CODACY_API_BASE}/api/v3/analysis/organizations/{provider}/{owner}/repositories/{repo}/issues/search?{query}"
+    query = [
+        urllib.parse.urlencode({"limit": "1"}),
+        urllib.parse.urlencode({"status": "new", "limit": "1"}),
+    ][bool(pull_request)]
+    pull_request_url = (
+        f"{CODACY_APP_API_BASE}/analysis/organizations/{provider}/{owner}/repositories/{repo}"
+        f"/pull-requests/{pull_request}/issues?{query}"
+    )
+    return [
+        f"{CODACY_API_BASE}/api/v3/analysis/organizations/{provider}/{owner}/repositories/{repo}/issues/search?{query}",
+        pull_request_url,
+    ][bool(pull_request)]
 
 
 def build_repository_analysis_url(provider: str, owner: str, repo: str) -> str:
@@ -140,7 +145,7 @@ def build_repository_analysis_url(provider: str, owner: str, repo: str) -> str:
 
 
 def _request_mode(query: CodacyQuery) -> Tuple[str, Dict[str, Any] | None]:
-    return ("GET", None) if query.pull_request else ("POST", {})
+    return [("POST", {}), ("GET", None)][bool(query.pull_request)]
 
 
 def _query_codacy_public_repository_issues(provider: str, owner: str, repo: str) -> Tuple[int | None, List[str]]:
@@ -200,10 +205,12 @@ def _unauthorized_http_result(
 
 
 def _handle_codacy_http_error(exc: urllib.error.HTTPError, query: CodacyQuery) -> Tuple[int | None, List[str], Exception | None, bool]:
-    if exc.code == 401:
-        return _unauthorized_http_result(exc, query)
-    if exc.code == 404:
-        return None, [], exc, False
+    handler = {
+        401: lambda: _unauthorized_http_result(exc, query),
+        404: lambda: (None, [], exc, False),
+    }.get(exc.code)
+    if handler is not None:
+        return handler()
     return None, _http_error_findings(exc), exc, True
 
 
@@ -244,8 +251,6 @@ def _query_codacy_open_issues(
         open_issues, findings, last_exc, should_return = _query_codacy_candidate(query, token)
         if should_return:
             return open_issues, findings, last_exc
-        if isinstance(last_exc, urllib.error.HTTPError) and last_exc.code == 404:
-            continue
 
     return _not_found_findings(provider_candidates, last_exc)
 
@@ -263,6 +268,30 @@ def _base_query(args: argparse.Namespace, pull_request: str) -> CodacyQuery:
     )
 
 
+def _is_retryable_pr_not_found(base_query: CodacyQuery, last_exc: Exception | None) -> bool:
+    return (
+        bool(base_query.pull_request)
+        and isinstance(last_exc, urllib.error.HTTPError)
+        and last_exc.code == 404
+    )
+
+
+def load_codacy_findings_with_retry(
+    base_query: CodacyQuery,
+    token: str,
+    provider_candidates: List[str],
+) -> Tuple[int | None, List[str]]:
+    retry_budget = SCOPED_ANALYSIS_RETRY_ATTEMPTS if base_query.pull_request else 1
+    for _ in range(max(0, retry_budget - 1)):
+        open_issues, findings, last_exc = _query_codacy_open_issues(base_query, token, provider_candidates)
+        if not _is_retryable_pr_not_found(base_query, last_exc):
+            return open_issues, findings
+        time.sleep(5.0)
+
+    open_issues, findings, _ = _query_codacy_open_issues(base_query, token, provider_candidates)
+    return open_issues, findings
+
+
 def _resolve_codacy_status(args: argparse.Namespace) -> CodacyStatusResult:
     token = (args.token or os.environ.get("CODACY_API_TOKEN", "")).strip()
     pull_request = str(args.pull_request or "").strip()
@@ -270,11 +299,8 @@ def _resolve_codacy_status(args: argparse.Namespace) -> CodacyStatusResult:
         return CodacyStatusResult(status="fail", findings=["CODACY_API_TOKEN is missing."], open_issues=None, pull_request=pull_request)
 
     provider_candidates = _provider_candidates(args.provider)
-    open_issues, findings, _ = _query_codacy_open_issues(
-        _base_query(args, pull_request),
-        token,
-        provider_candidates,
-    )
+    base_query = _base_query(args, pull_request)
+    open_issues, findings = load_codacy_findings_with_retry(base_query, token, provider_candidates)
     return CodacyStatusResult(
         status=_codacy_status(findings, getattr(args, "policy_mode", "ratchet")),
         findings=findings,

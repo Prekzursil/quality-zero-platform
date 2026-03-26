@@ -20,6 +20,7 @@ coverage:
       --cov=env_inspector_core.service_paths \
       --cov=scripts.quality.assert_coverage_100 \
       --cov=scripts.quality.check_sentry_zero \
+      --cov-branch \
       --cov-report=xml:coverage/python-coverage.xml
   inputs:
     - format: xml

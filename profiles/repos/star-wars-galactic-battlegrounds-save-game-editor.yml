@@ -7,7 +7,7 @@ coverage:
     python -m pip install --upgrade pip
     if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
     python -m pip install pytest pytest-cov
-    python -m pytest --cov=. --cov-report=xml:coverage/python-coverage.xml
+    python -m pytest --cov=. --cov-branch --cov-report=xml:coverage/python-coverage.xml
   inputs:
     - format: xml
       name: python

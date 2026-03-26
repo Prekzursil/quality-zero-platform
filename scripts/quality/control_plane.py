@@ -296,7 +296,7 @@ def build_ruleset_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
             {
                 "type": "pull_request",
                 "parameters": {
-                    "required_approving_review_count": 1,
+                    "required_approving_review_count": 0,
                     "dismiss_stale_reviews_on_push": False,
                     "require_code_owner_review": False,
                     "require_last_push_approval": False,

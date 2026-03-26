@@ -190,6 +190,18 @@ class CoverageAssertTests(unittest.TestCase):
         self.assertEqual(branch_status, "fail")
         self.assertTrue(any("branch coverage below 80.00%" in item for item in branch_findings))
 
+        missing_branch_status, missing_branch_findings = evaluate(
+            [CoverageStats(name="no-branch", path="coverage.xml", covered=10, total=10, branch_covered=0, branch_total=0)],
+            CoverageEvaluationRequest(
+                min_percent=100.0,
+                branch_min_percent=100.0,
+                required_sources=["app/main.py"],
+                reported_sources={"app/main.py"},
+            ),
+        )
+        self.assertEqual(missing_branch_status, "fail")
+        self.assertTrue(any("branch coverage data missing" in item for item in missing_branch_findings))
+
     def test_source_normalization_and_required_source_helpers_cover_edge_cases(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -294,7 +306,7 @@ class CoverageAssertTests(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, "No coverage files were provided"):
                 assert_coverage_100.main()
 
-        stats = [CoverageStats(name="python", path="coverage.xml", covered=1, total=1)]
+        stats = [CoverageStats(name="python", path="coverage.xml", covered=1, total=1, branch_covered=1, branch_total=1)]
         with patch.object(assert_coverage_100, "_parse_args", return_value=Namespace(
             xml=[],
             lcov=[],

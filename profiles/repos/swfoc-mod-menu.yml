@@ -33,6 +33,9 @@ trigger:
 legacy_policy_checks:
   - code/snyk
 required_contexts:
+  always:
+    - Chromatic Playwright
+    - Applitools Visual
   target:
     - Chromatic Playwright
     - Applitools Visual

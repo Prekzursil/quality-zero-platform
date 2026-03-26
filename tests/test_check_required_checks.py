@@ -382,9 +382,29 @@ class RequiredChecksTests(unittest.TestCase):
 
     def test_script_entrypoint_raises_system_exit_from_main(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
-        sys_path = [entry for entry in sys.path if entry != str(repo_root)]
-        if "" not in sys_path:
-            sys_path.insert(0, "")
+        without_empty = [entry for entry in sys.path if entry != str(repo_root) and entry != ""]
+
+        for sys_path in (without_empty, ["", *without_empty]):
+            if "" not in sys_path:
+                sys_path.insert(0, "")
+
+            with patch.object(
+                sys,
+                "argv",
+                [
+                    "check_required_checks.py",
+                    "--repo",
+                    "Prekzursil/quality-zero-platform",
+                    "--sha",
+                    "abc123",
+                ],
+            ), patch.object(sys, "path", sys_path), patch.dict(os.environ, {"GH_TOKEN": "token-123"}, clear=False):
+                with self.assertRaisesRegex(SystemExit, "At least one --required-context is required"):
+                    runpy.run_path(str(repo_root / "scripts" / "quality" / "check_required_checks.py"), run_name="__main__")
+
+    def test_script_entrypoint_uses_existing_empty_sys_path_entry(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        sys_path = ["", *(entry for entry in sys.path if entry != str(repo_root) and entry != "")]
 
         with patch.object(
             sys,

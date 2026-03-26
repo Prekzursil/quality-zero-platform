@@ -72,6 +72,8 @@ class ControlPlaneTests(unittest.TestCase):
         pr_contexts = active_required_contexts(profile, event_name="pull_request")
 
         self.assertEqual(profile["stack"], "node-frontend")
+        self.assertEqual(profile["coverage"]["branch_min_percent"], 100.0)
+        self.assertEqual(pbinfo["coverage"]["branch_min_percent"], 100.0)
         self.assertEqual(
             active_required_contexts(profile, event_name="push"),
             [
@@ -84,6 +86,8 @@ class ControlPlaneTests(unittest.TestCase):
                 "Sentry Zero",
                 "DeepScan Zero",
                 "SonarCloud Code Analysis",
+                "Chromatic Playwright",
+                "Applitools Visual",
             ],
         )
         self.assertIn("QLTY Zero", pr_contexts)
@@ -166,6 +170,8 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertIn("QLTY Zero", ruleset_contexts)
         self.assertNotIn("qlty coverage diff", ruleset_contexts)
         self.assertIn("QLTY Zero", [item["context"] for item in payload["rules"][1]["parameters"]["required_status_checks"]])
+        self.assertEqual(payload["rules"][0]["parameters"]["required_approving_review_count"], 0)
+        self.assertFalse(payload["rules"][0]["parameters"]["required_review_thread_resolution"])
 
     def test_quality_zero_platform_requires_qlty_zero(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
@@ -443,7 +449,6 @@ class ControlPlaneTests(unittest.TestCase):
 
     def test_export_profile_script_prints_json_when_output_path_is_not_requested(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            stdout = io.StringIO()
             output_path = Path(tmpdir) / "github-output.txt"
             argv = [
                 "export_profile.py",
@@ -453,17 +458,38 @@ class ControlPlaneTests(unittest.TestCase):
                 str(output_path),
             ]
             repo_root = str(ROOT)
-            sys_path = [entry for entry in sys.path if entry != repo_root]
-            if "" not in sys_path:
-                sys_path.insert(0, "")
+            without_empty = [entry for entry in sys.path if entry != repo_root and entry != ""]
 
-            with patch.object(sys, "argv", argv), patch.object(sys, "path", sys_path), redirect_stdout(stdout):
-                with self.assertRaises(SystemExit) as exc:
-                    runpy.run_path(str(ROOT / "scripts" / "quality" / "export_profile.py"), run_name="__main__")
+            for sys_path in (without_empty, ["", *without_empty]):
+                if "" not in sys_path:
+                    sys_path.insert(0, "")
 
-            self.assertEqual(exc.exception.code, 0)
-            payload = json.loads(stdout.getvalue())
-            self.assertEqual(payload["profile_id"], "quality-zero-platform")
-            self.assertEqual(payload["coverage"]["inputs"][0]["path"], "coverage/platform-coverage.xml")
+                stdout = io.StringIO()
+                with patch.object(sys, "argv", argv), patch.object(sys, "path", sys_path), redirect_stdout(stdout):
+                    with self.assertRaises(SystemExit) as exc:
+                        runpy.run_path(str(ROOT / "scripts" / "quality" / "export_profile.py"), run_name="__main__")
+
+                self.assertEqual(exc.exception.code, 0)
+                payload = json.loads(stdout.getvalue())
+                self.assertEqual(payload["profile_id"], "quality-zero-platform")
+                self.assertEqual(payload["coverage"]["inputs"][0]["path"], "coverage/platform-coverage.xml")
+
+    def test_export_profile_script_handles_existing_empty_sys_path_entry(self) -> None:
+        stdout = io.StringIO()
+        argv = [
+            "export_profile.py",
+            "--repo-slug",
+            "Prekzursil/quality-zero-platform",
+        ]
+        repo_root = str(ROOT)
+        sys_path = ["", *(entry for entry in sys.path if entry != repo_root and entry != "")]
+
+        with patch.object(sys, "argv", argv), patch.object(sys, "path", sys_path), redirect_stdout(stdout):
+            with self.assertRaises(SystemExit) as exc:
+                runpy.run_path(str(ROOT / "scripts" / "quality" / "export_profile.py"), run_name="__main__")
+
+        self.assertEqual(exc.exception.code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["profile_id"], "quality-zero-platform")
 
 

@@ -171,6 +171,29 @@ class RunCoverageGateTests(unittest.TestCase):
             ],
         )
 
+    def test_run_assert_coverage_omits_branch_threshold_when_disabled(self) -> None:
+        temp_dir, repo_dir, platform_dir, _coverage_dir, coverage = self._coverage_assert_fixture()
+        coverage['branch_min_percent'] = None
+        with temp_dir:
+            observed_argv = None
+
+            def fake_main() -> int:
+                nonlocal observed_argv
+                observed_argv = list(sys.argv)
+                return 0
+
+            with patch('scripts.quality.run_coverage_gate.assert_coverage_100.main', side_effect=fake_main):
+                result = run_coverage_gate._run_assert_coverage_100(
+                    coverage,
+                    repo_dir=repo_dir,
+                    platform_dir=platform_dir,
+                )
+
+        self.assertEqual(result, 0)
+        self.assertIsNotNone(observed_argv)
+        observed_argv = observed_argv or []
+        self.assertNotIn('--branch-min-percent', observed_argv)
+
     def test_main_runs_profile_command_and_direct_assertion(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)

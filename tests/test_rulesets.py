@@ -25,6 +25,8 @@ class RulesetPayloadTests(unittest.TestCase):
         self.assertEqual(payload["name"], "quality-zero-platform / pbinfo-get-unsolved")
         self.assertIn("Coverage 100 Gate", contexts)
         self.assertIn("DeepScan", contexts)
+        self.assertEqual(payload["rules"][0]["parameters"]["required_approving_review_count"], 0)
+        self.assertFalse(payload["rules"][0]["parameters"]["required_review_thread_resolution"])
         self.assertEqual(profile["default_branch"], "main")
 
     def test_reframe_ruleset_payload_uses_live_required_now_not_target(self) -> None:
@@ -37,8 +39,8 @@ class RulesetPayloadTests(unittest.TestCase):
 
         self.assertIn("CodeQL", contexts)
         self.assertIn("Codacy Static Code Analysis", contexts)
-        self.assertNotIn("Chromatic Playwright", contexts)
-        self.assertNotIn("Applitools Visual", contexts)
+        self.assertIn("Chromatic Playwright", contexts)
+        self.assertIn("Applitools Visual", contexts)
         self.assertIn("qlty check", contexts)
         self.assertIn("qlty coverage", contexts)
         self.assertIn("qlty coverage diff", contexts)

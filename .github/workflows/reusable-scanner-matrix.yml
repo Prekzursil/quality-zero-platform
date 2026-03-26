@@ -368,7 +368,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           verbose: true
       - name: Publish Qlty coverage
-        if: matrix.lane == 'coverage' && steps.profile.outputs.qlty_enabled == 'true' && steps.profile.outputs.qlty_coverage_files != ''
+        if: matrix.lane == 'coverage' && steps.profile.outputs.qlty_enabled == 'true' && steps.profile.outputs.qlty_coverage_files != '' && runner.os != 'Windows'
         shell: bash
         working-directory: repo
         env:

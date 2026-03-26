@@ -10,6 +10,11 @@ repos:
     rollout: phase2-wave0
     default_branch: main
     notes: Self-governed control-plane repo with wrapper parity and provider baseline checks.
+  - slug: Prekzursil/codex-session-manager
+    profile: codex-session-manager
+    rollout: phase1-wave7
+    default_branch: main
+    notes: Windows WPF desktop repo pending repo-side strict-zero wrapper and coverage-script adoption.
   - slug: Prekzursil/Airline-Reservations-System
     profile: airline-reservations-system
     rollout: phase1-wave4

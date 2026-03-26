@@ -1,0 +1,38 @@
+slug: Prekzursil/codex-session-manager
+stack: dotnet-wpf
+verify_command: bash scripts/verify
+required_contexts:
+  always:
+    - build-test
+    - analyze
+    - scan
+    - dependency-review
+  target:
+    - build-test
+    - analyze
+    - scan
+    - dependency-review
+coverage:
+  runner: windows-latest
+  shell: pwsh
+  command: |
+    dotnet restore CodexSessionManager.sln
+    dotnet build CodexSessionManager.sln --configuration Release --no-restore
+    pwsh -ExecutionPolicy Bypass -File ./scripts/collect-dotnet-coverage.ps1 -Configuration Release
+  inputs:
+    - format: xml
+      name: app
+      path: coverage/app/coverage.cobertura.xml
+    - format: xml
+      name: core
+      path: coverage/core/coverage.cobertura.xml
+    - format: xml
+      name: storage
+      path: coverage/storage/coverage.cobertura.xml
+  require_sources:
+    - src/CodexSessionManager.App/
+    - src/CodexSessionManager.Core/
+    - src/CodexSessionManager.Storage/
+vendors:
+  sonar:
+    project_key: Prekzursil_codex-session-manager

@@ -61,9 +61,9 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(profile["coverage"]["runner"], "windows-latest")
         self.assertEqual(profile["visual_lane"]["kind"], "desktop-adapter")
 
-    def test_inventory_expands_to_14_repos(self) -> None:
+    def test_inventory_expands_to_15_repos(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
-        self.assertEqual(len(inventory["repos"]), 14)
+        self.assertEqual(len(inventory["repos"]), 15)
 
     def test_common_phase1_template_contexts_resolve(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
@@ -173,13 +173,57 @@ class ControlPlaneTests(unittest.TestCase):
 
         push_contexts = active_required_contexts(profile, event_name="push")
         pr_contexts = active_required_contexts(profile, event_name="pull_request")
-        target_contexts = set(profile["required_contexts"]["target"])
+        target_contexts = set(active_required_contexts(profile, event_name="target"))
 
         self.assertIn("QLTY Zero", push_contexts)
         self.assertIn("QLTY Zero", pr_contexts)
         self.assertIn("QLTY Zero", target_contexts)
         self.assertNotIn("Codacy Static Code Analysis", target_contexts)
         self.assertNotIn("DeepScan", target_contexts)
+
+    def test_codex_session_manager_profile_tracks_windows_wpf_rollout_contract(self) -> None:
+        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
+        profile = load_repo_profile(inventory, "Prekzursil/codex-session-manager")
+
+        push_contexts = active_required_contexts(profile, event_name="push")
+        pr_contexts = active_required_contexts(profile, event_name="pull_request")
+        target_contexts = set(active_required_contexts(profile, event_name="target"))
+
+        self.assertEqual(profile["stack"], "dotnet-wpf")
+        self.assertEqual(profile["verify_command"], "bash scripts/verify")
+        self.assertEqual(profile["coverage"]["runner"], "windows-latest")
+        self.assertEqual(profile["coverage"]["shell"], "pwsh")
+        self.assertEqual(
+            [(item["name"], item["path"], item["format"]) for item in profile["coverage"]["inputs"]],
+            [
+                ("app", "coverage/app/coverage.cobertura.xml", "xml"),
+                ("core", "coverage/core/coverage.cobertura.xml", "xml"),
+                ("storage", "coverage/storage/coverage.cobertura.xml", "xml"),
+            ],
+        )
+        self.assertEqual(
+            profile["coverage"]["require_sources"],
+            [
+                "src/CodexSessionManager.App/",
+                "src/CodexSessionManager.Core/",
+                "src/CodexSessionManager.Storage/",
+            ],
+        )
+        self.assertEqual(
+            profile["vendors"]["sonar"]["project_key"],
+            "Prekzursil_codex-session-manager",
+        )
+        self.assertTrue({"build-test", "analyze", "scan", "dependency-review"}.issubset(push_contexts))
+        self.assertTrue({"build-test", "analyze", "scan", "dependency-review"}.issubset(target_contexts))
+        self.assertTrue(
+            {
+                "qlty check",
+                "qlty coverage",
+                "qlty coverage diff",
+                "Codacy Static Code Analysis",
+                "DeepScan",
+            }.issubset(pr_contexts)
+        )
 
     def test_reframe_overlay_adds_visual_and_platform_contexts_to_target(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
@@ -465,4 +509,5 @@ class ControlPlaneTests(unittest.TestCase):
             payload = json.loads(stdout.getvalue())
             self.assertEqual(payload["profile_id"], "quality-zero-platform")
             self.assertEqual(payload["coverage"]["inputs"][0]["path"], "coverage/platform-coverage.xml")
+
 

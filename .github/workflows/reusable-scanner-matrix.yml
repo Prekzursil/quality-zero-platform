@@ -393,13 +393,21 @@ jobs:
               if item.startswith("repo/"):
                   item = item[len("repo/") :]
               items.append(item)
-          candidate_paths = []
+          candidate_roots = [Path.home()]
           if os.name == "nt":
               for env_name in ("USERPROFILE", "HOME"):
                   raw_home = os.environ.get(env_name, "").strip()
-                  if raw_home:
-                      candidate_paths.append(Path(raw_home) / ".qlty" / "bin" / "qlty.exe")
-                      candidate_paths.append(Path(raw_home) / ".qlty" / "bin" / "qlty")
+                  if not raw_home:
+                      continue
+                  candidate_roots.append(Path(raw_home))
+                  if raw_home.startswith("/c/"):
+                      candidate_roots.append(Path("C:/") / raw_home[3:])
+                  elif raw_home.startswith("/mnt/c/"):
+                      candidate_roots.append(Path("C:/") / raw_home[7:])
+          candidate_paths = []
+          for root in dict.fromkeys(candidate_roots):
+              candidate_paths.append(root / ".qlty" / "bin" / "qlty.exe")
+              candidate_paths.append(root / ".qlty" / "bin" / "qlty")
           qlty_executable = next((str(path) for path in candidate_paths if path.exists()), "")
           if not qlty_executable:
               qlty_executable = shutil.which("qlty.exe" if os.name == "nt" else "qlty")

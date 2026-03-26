@@ -25,6 +25,7 @@ coverage:
       --cov=apps/api/app \
       --cov=services/worker \
       --cov=packages/media-core/src/media_core \
+      --cov-branch \
       --cov-report=xml:coverage/python-coverage.xml \
       apps/api/tests services/worker packages/media-core/tests
     npm --prefix apps/web run test:coverage
@@ -52,6 +53,8 @@ required_contexts:
     - Web build
     - Analyze (python)
     - Analyze (typescript)
+    - Chromatic Playwright
+    - Applitools Visual
   pull_request_only:
     - DeepScan
     - CodeQL

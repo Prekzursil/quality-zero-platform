@@ -75,6 +75,7 @@ coverage:
     node: "20"
   inputs: []
   min_percent: 100.0
+  branch_min_percent: 100.0
   assert_mode:
     default: enforce
   policy: whole-project-100

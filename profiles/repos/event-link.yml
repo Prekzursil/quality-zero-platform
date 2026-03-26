@@ -8,6 +8,7 @@ coverage:
     npm --prefix ui ci
     PYTHONPATH=backend pytest backend/tests backend/integration_tests \
       --cov=backend/app \
+      --cov-branch \
       --cov-report=xml:backend/coverage.xml
     npm --prefix ui run test
   inputs:

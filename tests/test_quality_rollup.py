@@ -154,3 +154,26 @@ class QualityRollupTests(unittest.TestCase):
 
         self.assertEqual(contexts["Coverage 100 Gate"]["conclusion"], "success")
         sleep_mock.assert_called_once()
+
+    def test_wait_for_contexts_returns_empty_when_timeout_expires_before_first_poll(self) -> None:
+        with patch.object(
+            build_quality_rollup,
+            "load_check_contexts",
+            return_value={"Coverage 100 Gate": {"state": "in_progress", "conclusion": "", "source": "check_run"}},
+        ), patch("scripts.quality.build_quality_rollup.time.sleep") as sleep_mock, patch(
+            "scripts.quality.build_quality_rollup.time.time",
+            side_effect=[10, 12],
+        ):
+            contexts = build_quality_rollup._wait_for_contexts(
+                build_quality_rollup.ContextWaitRequest(
+                    repo="owner/repo",
+                    sha="abc123",
+                    token=FAKE_GITHUB_CREDENTIAL,
+                    required_contexts=["Coverage 100 Gate"],
+                    timeout_seconds=1,
+                    poll_seconds=0,
+                )
+            )
+
+        self.assertEqual(contexts, {})
+        sleep_mock.assert_not_called()

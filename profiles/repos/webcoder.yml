@@ -9,7 +9,7 @@ coverage:
     mkdir -p coverage
     python -m pip install --upgrade pip
     python -m pip install -r backend/requirements.txt pytest pytest-cov
-    python -m pytest backend --cov=backend --cov-report=xml:backend/coverage.xml
+    python -m pytest backend --cov=backend --cov-branch --cov-report=xml:backend/coverage.xml
     npm --prefix frontend/webcoder_ui ci
     npm --prefix frontend/webcoder_ui test -- --coverage --watch=false
   inputs:
@@ -20,6 +20,9 @@ coverage:
       name: frontend
       path: frontend/webcoder_ui/coverage/lcov.info
 required_contexts:
+  always:
+    - Chromatic Playwright
+    - Applitools Visual
   target:
     - Chromatic Playwright
     - Applitools Visual

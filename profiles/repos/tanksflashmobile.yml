@@ -14,6 +14,9 @@ coverage:
       name: web
       path: apps/web/coverage/lcov.info
 required_contexts:
+  always:
+    - Chromatic Playwright
+    - Applitools Visual
   target:
     - Chromatic Playwright
     - Applitools Visual

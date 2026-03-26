@@ -9,7 +9,9 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, List
+from unittest.mock import patch
 
+from scripts.quality import profile_coverage_normalization
 from scripts.quality.common import (
     ReportSpec,
     _deep_merge,
@@ -358,6 +360,26 @@ class QualityCommonTests(unittest.TestCase):
         self.assertEqual(inferred["require_sources_mode"], "infer")
         self.assertIsNone(inferred["branch_min_percent"])
         self.assertIsNone(normalize_coverage({"branch_min_percent": "bogus"})["branch_min_percent"])
+
+    def test_profile_coverage_normalization_helpers_cover_empty_and_multi_filter_paths(self) -> None:
+        with patch.object(profile_coverage_normalization, "_normalize_source_hint", return_value=""):
+            self.assertEqual(profile_coverage_normalization._extract_cov_hints("--cov=scripts"), [])
+
+        fake_match = type(
+            "FakeMatch",
+            (),
+            {"group": staticmethod(lambda _name: "alpha")},
+        )
+        with patch.object(
+            profile_coverage_normalization,
+            "_GCOVR_FILTER_RE",
+            type("FakeRegex", (), {"finditer": staticmethod(lambda _command: [fake_match(), fake_match()])})(),
+        ), patch.object(
+            profile_coverage_normalization,
+            "_normalize_source_hint",
+            side_effect=["alpha/", ""],
+        ):
+            self.assertEqual(profile_coverage_normalization._extract_gcovr_hints("gcovr --filter placeholder"), ["alpha/"])
 
     def test_normalize_codex_environment_helper_covers_string_inputs(self) -> None:
         self.assertEqual(

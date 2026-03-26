@@ -70,8 +70,13 @@ def _branch_threshold_findings(stats: List["CoverageStats"], branch_min_percent:
     if branch_min_percent is None:
         return []
 
+    findings = [
+        f"{item.name} branch coverage data missing from {item.path}"
+        for item in stats
+        if item.branch_total <= 0
+    ]
     stats_list = [item for item in stats if item.branch_total > 0]
-    findings = _branch_coverage_findings_for_stats(stats_list, branch_min_percent)
+    findings.extend(_branch_coverage_findings_for_stats(stats_list, branch_min_percent))
     combined_total, combined_covered, combined = _combined_branch_coverage(stats_list)
     if combined_total > 0 and combined < branch_min_percent:
         findings.append(

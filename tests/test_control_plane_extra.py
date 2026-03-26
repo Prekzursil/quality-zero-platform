@@ -296,8 +296,9 @@ invalid codacy.dashboard_url
 
         visual_profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
         visual_profile["required_contexts"]["required_now"] = [
-            *visual_profile["required_contexts"]["required_now"],
-            "Chromatic Playwright",
+            item
+            for item in visual_profile["required_contexts"]["required_now"]
+            if item != "Applitools Visual"
         ]
 
         findings = validate_profile(visual_profile)

@@ -294,13 +294,13 @@ class CodacyZeroTests(unittest.TestCase):
                 return None, [], HTTPError("https://api.codacy.com", 404, "Not Found", hdrs=Message(), fp=None)
             return 0, [], None
 
-        with patch.object(check_codacy_zero, "_query_codacy_open_issues", side_effect=fake_query):
+        with patch.object(check_codacy_zero, "SCOPED_ANALYSIS_RETRY_ATTEMPTS", 2), patch.object(
+            check_codacy_zero.time, "sleep", return_value=None
+        ), patch.object(check_codacy_zero, "_query_codacy_open_issues", side_effect=fake_query):
             open_issues, findings = load_codacy_findings_with_retry(
                 self._base_query(pull_request="49"),
                 "token",
                 ["gh"],
-                attempts=2,
-                sleep_seconds=0.0,
             )
 
         self.assertEqual((open_issues, findings), (0, []))
@@ -308,7 +308,9 @@ class CodacyZeroTests(unittest.TestCase):
 
     def test_load_codacy_findings_with_retry_returns_last_findings_after_retry_budget(self) -> None:
         not_found = HTTPError("https://api.codacy.com", 404, "Not Found", hdrs=Message(), fp=None)
-        with patch.object(
+        with patch.object(check_codacy_zero, "SCOPED_ANALYSIS_RETRY_ATTEMPTS", 2), patch.object(
+            check_codacy_zero.time, "sleep", return_value=None
+        ), patch.object(
             check_codacy_zero,
             "_query_codacy_open_issues",
             return_value=(None, ["Codacy API endpoint was not found for providers: gh, github."], not_found),
@@ -317,13 +319,26 @@ class CodacyZeroTests(unittest.TestCase):
                 self._base_query(pull_request="49"),
                 "token",
                 ["gh", "github"],
-                attempts=2,
-                sleep_seconds=0.0,
             )
 
         self.assertIsNone(open_issues)
         self.assertEqual(findings, ["Codacy API endpoint was not found for providers: gh, github."])
         self.assertEqual(query_mock.call_count, 2)
+
+    def test_load_codacy_findings_with_retry_does_not_retry_without_pull_request(self) -> None:
+        with patch.object(
+            check_codacy_zero,
+            "_query_codacy_open_issues",
+            return_value=(0, [], None),
+        ) as query_mock:
+            open_issues, findings = load_codacy_findings_with_retry(
+                self._base_query(),
+                "token",
+                ["gh"],
+            )
+
+        self.assertEqual((open_issues, findings), (0, []))
+        query_mock.assert_called_once()
 
     def test_payload_and_report_helpers(self) -> None:
         payload = _build_payload(

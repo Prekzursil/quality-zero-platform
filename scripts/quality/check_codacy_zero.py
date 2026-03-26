@@ -265,27 +265,27 @@ def _base_query(args: argparse.Namespace, pull_request: str) -> CodacyQuery:
     )
 
 
+def _is_retryable_pr_not_found(base_query: CodacyQuery, last_exc: Exception | None) -> bool:
+    return (
+        bool(base_query.pull_request)
+        and isinstance(last_exc, urllib.error.HTTPError)
+        and last_exc.code == 404
+    )
+
+
 def load_codacy_findings_with_retry(
     base_query: CodacyQuery,
     token: str,
     provider_candidates: List[str],
-    *,
-    attempts: int = SCOPED_ANALYSIS_RETRY_ATTEMPTS,
-    sleep_seconds: float = 5.0,
 ) -> Tuple[int | None, List[str]]:
-    retry_budget = max(1, attempts) if base_query.pull_request else 1
+    retry_budget = SCOPED_ANALYSIS_RETRY_ATTEMPTS if base_query.pull_request else 1
     open_issues: int | None = None
     findings: List[str] = []
     for attempt in range(retry_budget):
         open_issues, findings, last_exc = _query_codacy_open_issues(base_query, token, provider_candidates)
-        retryable_not_found = (
-            bool(base_query.pull_request)
-            and isinstance(last_exc, urllib.error.HTTPError)
-            and last_exc.code == 404
-        )
-        if not retryable_not_found or attempt == retry_budget - 1:
+        if not _is_retryable_pr_not_found(base_query, last_exc) or attempt == retry_budget - 1:
             return open_issues, findings
-        time.sleep(max(0.0, sleep_seconds))
+        time.sleep(5.0)
     return open_issues, findings
 
 

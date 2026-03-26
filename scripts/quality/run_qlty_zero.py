@@ -3,6 +3,7 @@ from __future__ import absolute_import
 
 import argparse
 import os
+import re
 import shutil
 import subprocess  # nosec B404
 import sys
@@ -19,6 +20,7 @@ from scripts.quality.common import utc_timestamp, write_report
 DEFAULT_JSON = "qlty-zero/qlty-zero.json"
 DEFAULT_MD = "qlty-zero/qlty-zero.md"
 _QLTY_EXECUTABLE = "qlty"
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 
 def _parse_args() -> argparse.Namespace:
@@ -77,10 +79,10 @@ def _combine_output(stdout: str, stderr: str) -> str:
 
 
 def _smells_output_indicates_findings(output_tail: str) -> bool:
-    normalized = output_tail.strip().lower()
+    normalized = _ANSI_ESCAPE_RE.sub("", output_tail).strip().lower()
     if not normalized:
         return False
-    return normalized not in {"no smells", "no issues"}
+    return normalized not in {"no smells", "no issues", "✔ no issues"}
 
 
 def _render_md(payload: Mapping[str, Any]) -> str:

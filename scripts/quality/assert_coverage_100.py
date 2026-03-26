@@ -192,7 +192,7 @@ def _build_payload(*args: Any, **kwargs: Any) -> Dict[str, Any]:
         "timestamp_utc": utc_timestamp(),
         "min_percent": min_percent,
         "branch_min_percent": branch_min_percent,
-        "components": [asdict(item) | {"percent": item.percent} for item in stats],
+        "components": [asdict(item) | {"percent": item.percent, "branch_percent": item.branch_percent} for item in stats],
         "covered_sources": sorted(covered_sources),
         "findings": findings,
     }

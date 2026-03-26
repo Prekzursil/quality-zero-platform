@@ -55,6 +55,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install platform dependencies
+        shell: bash
         run: python -m pip install -r platform/requirements-dev.txt
       - name: Export resolved profile
         id: profile
@@ -62,6 +63,7 @@ jobs:
         env:
           REPO_SLUG: ${{ inputs.repo_slug }}
           EVENT_NAME_INPUT: ${{ inputs.event_name }}
+        shell: bash
         run: |
           python platform/scripts/quality/export_profile.py \
             --repo-slug "$REPO_SLUG" \

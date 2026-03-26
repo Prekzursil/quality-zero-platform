@@ -40,6 +40,10 @@ on:
         type: string
         required: false
         default: main
+      coverage_runner:
+        type: string
+        required: false
+        default: ubuntu-latest
     secrets:
       SONAR_TOKEN:
         required: false
@@ -61,7 +65,7 @@ on:
 jobs:
   scanner:
     name: ${{ matrix.job_name }}
-    runs-on: ${{ inputs.repo_slug == 'Prekzursil/SWFOC-Mod-Menu' && 'windows-latest' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.lane == 'coverage' && inputs.coverage_runner || (inputs.repo_slug == 'Prekzursil/SWFOC-Mod-Menu' && 'windows-latest' || 'ubuntu-latest') }}
     permissions:
       contents: read
       id-token: write
@@ -106,6 +110,7 @@ jobs:
         run: python -m pip install -r platform/requirements-dev.txt
       - name: Export resolved profile
         id: profile
+        shell: bash
         env:
           REPO_SLUG: ${{ inputs.repo_slug }}
           EVENT_NAME_INPUT: ${{ inputs.event_name }}
@@ -117,6 +122,7 @@ jobs:
             --github-output "$GITHUB_OUTPUT"
       - name: Install coverage system packages
         if: matrix.lane == 'coverage' && runner.os != 'Windows' && steps.profile.outputs.coverage_system_packages_json != '[]'
+        shell: bash
         run: |
           python - <<'PY'
           import json
@@ -158,6 +164,7 @@ jobs:
         if: steps.profile.outputs.qlty_enabled == 'true' && ((matrix.lane == 'coverage' && steps.profile.outputs.qlty_coverage_files != '') || matrix.lane == 'qlty_zero')
         uses: qltysh/qlty-action/install@a19242102d17e497f437d7466aa01b528537e899
       - name: Run selected lane
+        shell: bash
         env:
           LANE: ${{ matrix.lane }}
           EVENT_NAME: ${{ inputs.event_name }}

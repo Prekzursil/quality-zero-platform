@@ -25,8 +25,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ControlPlaneTests(unittest.TestCase):
+    """Control-plane regression tests for repo profiles, rulesets, and exports."""
+
     @staticmethod
     def _special_repo_profiles() -> Dict[str, dict]:
+        """Load the repo profiles that have custom multi-language or platform overlays."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         return {
             "devextreme": load_repo_profile(inventory, "Prekzursil/DevExtreme-Filter-Go-Language"),
@@ -39,6 +42,7 @@ class ControlPlaneTests(unittest.TestCase):
         }
 
     def _assert_airline_existing_behaviors(self, profile: dict) -> None:
+        """Pin the Airline profile's multi-language coverage contract and thresholds."""
         airline_inputs = {(item["format"], item["name"], item["path"]) for item in profile["coverage"]["inputs"]}
         self.assertEqual(
             airline_inputs,
@@ -60,15 +64,18 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(profile["coverage"]["branch_min_percent"], 100.0)
 
     def _assert_swfoc_existing_behaviors(self, profile: dict) -> None:
+        """Keep the SWFOC profile on its existing visual and non-regression contract."""
         self.assertEqual(profile["coverage"]["assert_mode"]["pull_request"], "non_regression")
         self.assertEqual(profile["coverage"]["runner"], "windows-latest")
         self.assertEqual(profile["visual_lane"]["kind"], "desktop-adapter")
 
     def test_inventory_expands_to_15_repos(self) -> None:
+        """Inventory should continue to expose the full enrolled repo set."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         self.assertEqual(len(inventory["repos"]), 15)
 
     def test_common_phase1_template_contexts_resolve(self) -> None:
+        """Phase-1 overlays should keep their shared required-context defaults."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
         pbinfo = load_repo_profile(inventory, "Prekzursil/pbinfo-get-unsolved")
@@ -101,6 +108,7 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertTrue({"Chromatic Playwright", "Applitools Visual"}.issubset(profile["required_contexts"]["target"]))
 
     def test_phase1_repo_verify_commands_follow_repo_contracts(self) -> None:
+        """Phase-1 repos should keep their repository-specific verify commands and lanes."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
 
         reframe = load_repo_profile(inventory, "Prekzursil/Reframe")
@@ -125,6 +133,7 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(reframe["codex_environment"]["runner_labels"], ["self-hosted", "codex-trusted"])
 
     def test_airline_keeps_deepscan_contexts_pr_only(self) -> None:
+        """Airline should keep native DeepScan and related cloud contexts PR-only."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/Airline-Reservations-System")
 
@@ -147,6 +156,7 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertIn("qlty coverage diff", pr_contexts)
 
     def test_quality_zero_platform_keeps_codacy_native_context_pr_only(self) -> None:
+        """The control-plane repo should not require native Codacy contexts itself."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
 
@@ -161,6 +171,7 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertNotIn("qlty coverage diff", pr_contexts)
 
     def test_quality_zero_platform_requires_controller_qlty_zero_context_on_push_and_ruleset(self) -> None:
+        """QLTY Zero must remain the controller-owned required context on push and rulesets."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
 
@@ -177,6 +188,7 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertFalse(payload["rules"][0]["parameters"]["required_review_thread_resolution"])
 
     def test_quality_zero_platform_requires_qlty_zero(self) -> None:
+        """The control-plane target contexts should continue to include the governed QLTY lane."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
 
@@ -191,6 +203,7 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertNotIn("DeepScan", target_contexts)
 
     def test_reframe_overlay_adds_visual_and_platform_contexts_to_target(self) -> None:
+        """Reframe should retain its visual and platform-specific target context overlay."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/Reframe")
 
@@ -216,6 +229,7 @@ class ControlPlaneTests(unittest.TestCase):
             self.assertIn(name, target_contexts)
 
     def test_special_repo_coverage_profiles_capture_multi_language_inputs(self) -> None:
+        """Special repos should keep their expected multi-language coverage inputs and thresholds."""
         profiles = self._special_repo_profiles()
         reframe_inputs = {(item["format"], item["name"], item["path"]) for item in profiles["reframe"]["coverage"]["inputs"]}
         self.assertEqual(
@@ -244,11 +258,13 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertIn("env_inspector.py", profiles["env_inspector"]["coverage"]["require_sources"])
 
     def test_special_repo_coverage_profiles_capture_existing_behaviors(self) -> None:
+        """Special repos should preserve their bespoke coverage behavior contracts."""
         profiles = self._special_repo_profiles()
         self._assert_airline_existing_behaviors(profiles["airline"])
         self._assert_swfoc_existing_behaviors(profiles["swfoc"])
 
     def test_quality_zero_platform_profile_keeps_controller_specific_contracts(self) -> None:
+        """The control-plane repo should keep its controller-only secret and lane contracts."""
         profile = self._special_repo_profiles()["quality_zero_platform"]
         self.assertNotIn("DEEPSCAN_POLICY_MODE", profile["required_vars"])
         self.assertEqual(profile["github_mutation_lane"], "codex-private-runner")

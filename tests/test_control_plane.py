@@ -49,12 +49,15 @@ class ControlPlaneTests(unittest.TestCase):
             },
         )
         self.assertIn(
-            "python -m pytest -q tests/test_quality_security_scripts.py tests/test_quality_script_coverage.py",
+            "python3 -m pytest -q tests/test_quality_security_scripts.py tests/test_quality_coverage_scripts.py",
             profile["coverage"]["command"],
         )
         self.assertEqual(profile["coverage"]["require_sources"], ["scripts/", "src/", "airline-gui/src/"])
         self.assertIn("--filter '.*/src/.*'", profile["coverage"]["command"])
         self.assertIn("--exclude '.*/build/_deps/.*'", profile["coverage"]["command"])
+        self.assertNotIn("normalize_lcov", profile["coverage"]["command"])
+        self.assertEqual(profile["coverage"]["min_percent"], 100.0)
+        self.assertEqual(profile["coverage"]["branch_min_percent"], 100.0)
 
     def _assert_swfoc_existing_behaviors(self, profile: dict) -> None:
         self.assertEqual(profile["coverage"]["assert_mode"]["pull_request"], "non_regression")

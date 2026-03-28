@@ -423,7 +423,6 @@ jobs:
               os.environ["TARGET_SHA"],
               "--override-branch",
               os.environ["BRANCH_NAME"],
-              "--validate",
               "--output-dir",
               os.environ["RUNNER_TEMP"],
               *items,

@@ -2,6 +2,10 @@ slug: Prekzursil/env-inspector
 stack: python-desktop
 verify_command: make verify
 required_contexts_mode: replace
+issue_policy:
+  mode: zero
+  pr_behavior: absolute
+  main_behavior: absolute
 coverage:
   command: |
     mkdir -p coverage
@@ -14,6 +18,8 @@ coverage:
       --cov=env_inspector \
       --cov=env_inspector_core.service \
       --cov=env_inspector_core.service_listing \
+      --cov=env_inspector_core.service_models \
+      --cov=env_inspector_core.service_mutations \
       --cov=env_inspector_core.service_ops \
       --cov=env_inspector_core.service_privileged \
       --cov=env_inspector_core.service_restore \
@@ -30,6 +36,8 @@ coverage:
     - env_inspector.py
     - env_inspector_core/service.py
     - env_inspector_core/service_listing.py
+    - env_inspector_core/service_models.py
+    - env_inspector_core/service_mutations.py
     - env_inspector_core/service_ops.py
     - env_inspector_core/service_privileged.py
     - env_inspector_core/service_restore.py

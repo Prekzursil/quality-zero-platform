@@ -13,6 +13,27 @@ from scripts.quality import check_required_checks as checks_module
 
 
 class RequiredChecksTests(unittest.TestCase):
+    def _wait_args(self):
+        return type(
+            "Args",
+            (),
+            {
+                "repo": "Prekzursil/quality-zero-platform",
+                "sha": "abc123",
+                "timeout_seconds": 60,
+                "poll_seconds": 5,
+            },
+        )()
+
+    def _success_check_run(self, name: str = "shared-scanner-matrix / Coverage 100 Gate") -> Mapping[str, str]:
+        return {
+            name: {
+                "state": "completed",
+                "conclusion": "success",
+                "source": "check_run",
+            }
+        }
+
     def _run_main_with_payload(
         self,
         *,
@@ -261,24 +282,19 @@ class RequiredChecksTests(unittest.TestCase):
                 "missing": ["Coverage 100 Gate"],
                 "failed": [],
                 "contexts": {
+                    **self._success_check_run(),
                     "shared-scanner-matrix / Coverage 100 Gate": {
                         "state": "in_progress",
                         "conclusion": "",
                         "source": "check_run",
-                    }
+                    },
                 },
             },
             {
                 "status": "pass",
                 "missing": [],
                 "failed": [],
-                "contexts": {
-                    "shared-scanner-matrix / Coverage 100 Gate": {
-                        "state": "completed",
-                        "conclusion": "success",
-                        "source": "check_run",
-                    }
-                },
+                "contexts": self._success_check_run(),
             },
         ]
 
@@ -286,16 +302,7 @@ class RequiredChecksTests(unittest.TestCase):
             checks_module.time, "sleep"
         ) as sleep_mock, patch.object(checks_module.time, "time", side_effect=[0, 1, 2]):
             payload = checks_module._wait_for_payload(
-                type(
-                    "Args",
-                    (),
-                    {
-                        "repo": "Prekzursil/quality-zero-platform",
-                        "sha": "abc123",
-                        "timeout_seconds": 60,
-                        "poll_seconds": 5,
-                    },
-                )(),
+                self._wait_args(),
                 ["Coverage 100 Gate"],
                 "token-123",
             )
@@ -310,24 +317,14 @@ class RequiredChecksTests(unittest.TestCase):
                 "status": "fail",
                 "missing": ["SonarCloud Code Analysis"],
                 "failed": [],
-                "contexts": {
-                    "shared-scanner-matrix / Coverage 100 Gate": {
-                        "state": "completed",
-                        "conclusion": "success",
-                        "source": "check_run",
-                    }
-                },
+                "contexts": self._success_check_run(),
             },
             {
                 "status": "pass",
                 "missing": [],
                 "failed": [],
                 "contexts": {
-                    "shared-scanner-matrix / Coverage 100 Gate": {
-                        "state": "completed",
-                        "conclusion": "success",
-                        "source": "check_run",
-                    },
+                    **self._success_check_run(),
                     "SonarCloud Code Analysis": {
                         "state": "success",
                         "conclusion": "success",
@@ -341,16 +338,7 @@ class RequiredChecksTests(unittest.TestCase):
             checks_module.time, "sleep"
         ) as sleep_mock, patch.object(checks_module.time, "time", side_effect=[0, 1, 2]):
             payload = checks_module._wait_for_payload(
-                type(
-                    "Args",
-                    (),
-                    {
-                        "repo": "Prekzursil/quality-zero-platform",
-                        "sha": "abc123",
-                        "timeout_seconds": 60,
-                        "poll_seconds": 5,
-                    },
-                )(),
+                self._wait_args(),
                 ["Coverage 100 Gate", "SonarCloud Code Analysis"],
                 "token-123",
             )

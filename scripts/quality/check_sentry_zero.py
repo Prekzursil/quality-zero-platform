@@ -20,6 +20,7 @@ SENTRY_API_BASE = "https://sentry.io/api/0"
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for the Sentry zero gate."""
     parser = argparse.ArgumentParser(description="Assert Sentry has zero unresolved issues for configured projects.")
     parser.add_argument("--org", default="")
     parser.add_argument("--project", action="append", default=[])
@@ -30,6 +31,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _request_json(url: str, token: str) -> Tuple[Any, Dict[str, str]]:
+    """Load a Sentry API response using the shared HTTPS helper."""
     return load_json_https(
         url,
         allowed_host_suffixes={"sentry.io"},
@@ -42,6 +44,7 @@ def _request_json(url: str, token: str) -> Tuple[Any, Dict[str, str]]:
 
 
 def _hits_from_headers(headers: Dict[str, str]) -> int | None:
+    """Read Sentry's unresolved issue count from response headers when present."""
     raw = headers.get("x-hits")
     if not raw:
         return None
@@ -52,6 +55,7 @@ def _hits_from_headers(headers: Dict[str, str]) -> int | None:
 
 
 def _collect_projects(args_projects: List[str]) -> List[str]:
+    """Merge CLI and environment-provided project slugs into a deduped list."""
     inputs = list(args_projects)
     for env_name in ("SENTRY_PROJECT", "SENTRY_PROJECT_BACKEND", "SENTRY_PROJECT_WEB"):
         value = str(os.environ.get(env_name, "")).strip()
@@ -61,6 +65,7 @@ def _collect_projects(args_projects: List[str]) -> List[str]:
 
 
 def _render_md(payload: Mapping[str, Any]) -> str:
+    """Render a human-readable Sentry gate report."""
     lines = [
         "# Sentry Zero Gate",
         "",
@@ -83,6 +88,7 @@ def _render_md(payload: Mapping[str, Any]) -> str:
 
 
 def _issues_url(org: str, project_slug: str) -> str:
+    """Build the unresolved-issues endpoint for a Sentry project."""
     org_slug = urllib.parse.quote(org, safe="")
     project_param = urllib.parse.quote(project_slug, safe="")
     query = urllib.parse.urlencode([("query", "is:unresolved"), ("limit", "1"), ("project", project_param)])
@@ -90,6 +96,7 @@ def _issues_url(org: str, project_slug: str) -> str:
 
 
 def _validate_sentry_inputs(token: str, org: str, projects: List[str]) -> List[str]:
+    """Return any input validation findings before calling the Sentry API."""
     findings: List[str] = []
     if not token:
         findings.append("SENTRY_AUTH_TOKEN is missing.")
@@ -100,18 +107,15 @@ def _validate_sentry_inputs(token: str, org: str, projects: List[str]) -> List[s
     return findings
 
 
-def _is_not_found_error(exc: Exception) -> bool:
-    return isinstance(exc, HTTPError) and exc.code == 404
-
-
 def _collect_project_results(org: str, projects: List[str], token: str) -> Tuple[List[Dict[str, Any]], List[str]]:
+    """Load unresolved-issue counts for each configured Sentry project."""
     findings: List[str] = []
     project_results: List[Dict[str, Any]] = []
     for project in projects:
         try:
             payload, headers = _request_json(_issues_url(org, project), token)
-        except Exception as exc:
-            if _is_not_found_error(exc):
+        except HTTPError as exc:
+            if exc.code == 404:
                 project_results.append({"project": project, "unresolved": 0, "state": "not_found"})
                 continue
             raise
@@ -127,6 +131,7 @@ def _collect_project_results(org: str, projects: List[str], token: str) -> Tuple
 
 
 def main() -> int:
+    """Run the Sentry zero gate and write its report payload."""
     args = _parse_args()
     token = (args.token or os.environ.get("SENTRY_AUTH_TOKEN", "")).strip()
     org = (args.org or os.environ.get("SENTRY_ORG", "")).strip()

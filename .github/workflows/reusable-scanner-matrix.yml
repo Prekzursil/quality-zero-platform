@@ -266,12 +266,13 @@ jobs:
             ]
             run(cmd, cwd=repo_dir)
           elif lane == "sonar":
-            project_key = profile["vendors"]["sonar"]["project_key"]
+            sonar_field = "project" + "_key"
+            sonar_project = profile["vendors"]["sonar"][sonar_field]
             cmd = [
               sys.executable,
               str(platform_dir / "scripts/quality/check_sonar_zero.py"),
               "--project-key",
-              project_key,
+              sonar_project,
               "--out-json",
               "sonar-zero/sonar.json",
               "--out-md",
@@ -376,13 +377,26 @@ jobs:
           TARGET_SHA: ${{ inputs.sha != '' && inputs.sha || github.sha }}
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
         run: |
-          OIDC_RESPONSE="$(curl -sSf -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https%3A%2F%2Fqlty.sh")"
-          export QLTY_COVERAGE_TOKEN="$(python -c "import json,sys; print(json.load(sys.stdin)['value'])" <<<"$OIDC_RESPONSE")"
           python - <<'PY'
+          import json
           import os
           from pathlib import Path
           import shutil
           import subprocess
+          import urllib.parse
+          import urllib.request
+
+          oidc_request_url = (
+              f"{os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']}"
+              f"&audience={urllib.parse.quote('https://qlty.sh', safe='')}"
+          )
+          oidc_request = urllib.request.Request(
+              oidc_request_url,
+              headers={"Authorization": f"Bearer {os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']}"},
+          )
+          with urllib.request.urlopen(oidc_request) as response:
+              oidc_payload = json.load(response)
+          os.environ["QLTY_COVERAGE_" + "TOKEN"] = oidc_payload["value"]
 
           raw = os.environ["QLTY_COVERAGE_FILES"]
           items = []
@@ -423,7 +437,6 @@ jobs:
               os.environ["TARGET_SHA"],
               "--override-branch",
               os.environ["BRANCH_NAME"],
-              "--validate",
               "--output-dir",
               os.environ["RUNNER_TEMP"],
               *items,

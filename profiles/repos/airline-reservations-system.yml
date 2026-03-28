@@ -7,6 +7,8 @@ coverage:
     python3 -m pip install --disable-pip-version-check pytest pytest-cov
     mkdir -p coverage/python
     python3 -m pytest -q tests/test_quality_security_scripts.py tests/test_quality_coverage_scripts.py \
+      tests/test_quality_script_main_flows.py tests/test_security_helpers.py \
+      tests/test_static_remediation_guards.py \
       --cov=scripts \
       --cov-branch \
       --cov-report=xml:coverage/python/coverage.xml

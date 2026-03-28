@@ -281,6 +281,8 @@ jobs:
               "sonar-zero/sonar.md",
               "--policy-mode",
               issue_mode,
+              "--sha",
+              os.environ["TARGET_SHA"],
             ]
             if pull_request_number and pr_issue_behavior == "introduced_only":
               cmd.extend(["--pull-request", pull_request_number])
@@ -304,6 +306,8 @@ jobs:
               "codacy-zero/codacy.md",
               "--policy-mode",
               issue_mode,
+              "--sha",
+              os.environ["TARGET_SHA"],
             ]
             if pull_request_number and pr_issue_behavior == "introduced_only":
               cmd.extend(["--pull-request", pull_request_number])

@@ -106,20 +106,19 @@ class RequiredChecksTests(unittest.TestCase):
             os.environ,
             {"GH_TOKEN": "token-123"},
             clear=False,
+        ), self.assertRaisesRegex(
+            SystemExit,
+            "At least one --required-context is required",
         ):
-            with self.assertRaisesRegex(
-                SystemExit,
-                "At least one --required-context is required",
-            ):
-                runpy.run_path(
-                    str(
-                        repo_root
-                        / "scripts"
-                        / "quality"
-                        / "check_required_checks.py"
-                    ),
-                    run_name="__main__",
-                )
+            runpy.run_path(
+                str(
+                    repo_root
+                    / "scripts"
+                    / "quality"
+                    / "check_required_checks.py"
+                ),
+                run_name="__main__",
+            )
 
     def test_parse_args_supports_defaults(self) -> None:
         """Verify the parser keeps the documented timeout defaults."""
@@ -177,16 +176,15 @@ class RequiredChecksTests(unittest.TestCase):
             checks_module,
             "load_json_https",
             return_value=(["not-a-dict"], None),
+        ), self.assertRaisesRegex(
+            RuntimeError,
+            "Unexpected GitHub API response payload",
         ):
-            with self.assertRaisesRegex(
-                RuntimeError,
-                "Unexpected GitHub API response payload",
-            ):
-                checks_module._api_get(
-                    "Prekzursil/quality-zero-platform",
-                    "commits/abc/status",
-                    "token-123",
-                )
+            checks_module._api_get(
+                "Prekzursil/quality-zero-platform",
+                "commits/abc/status",
+                "token-123",
+            )
 
     def test_collect_contexts_merges_check_runs_and_statuses(self) -> None:
         """Merge check-run and status contexts into a single report mapping."""
@@ -554,12 +552,15 @@ class RequiredChecksTests(unittest.TestCase):
                 "--sha",
                 "abc123",
             ],
-        ), patch.dict(os.environ, {"GH_TOKEN": "token-123"}, clear=False):
-            with self.assertRaisesRegex(
-                SystemExit,
-                "At least one --required-context is required",
-            ):
-                checks_module.main()
+        ), patch.dict(
+            os.environ,
+            {"GH_TOKEN": "token-123"},
+            clear=False,
+        ), self.assertRaisesRegex(
+            SystemExit,
+            "At least one --required-context is required",
+        ):
+            checks_module.main()
 
     def test_main_rejects_missing_github_token(self) -> None:
         """Exit when neither GitHub token environment variable is populated."""
@@ -575,12 +576,15 @@ class RequiredChecksTests(unittest.TestCase):
                 "--required-context",
                 "Coverage 100 Gate",
             ],
-        ), patch.dict(os.environ, {"GH_TOKEN": "", "GITHUB_TOKEN": ""}, clear=False):
-            with self.assertRaisesRegex(
-                SystemExit,
-                "GITHUB_TOKEN or GH_TOKEN is required",
-            ):
-                checks_module.main()
+        ), patch.dict(
+            os.environ,
+            {"GH_TOKEN": "", "GITHUB_TOKEN": ""},
+            clear=False,
+        ), self.assertRaisesRegex(
+            SystemExit,
+            "GITHUB_TOKEN or GH_TOKEN is required",
+        ):
+            checks_module.main()
 
     def test_script_entrypoint_raises_system_exit_from_main(self) -> None:
         """Propagate the CLI validation error through the script entrypoint."""

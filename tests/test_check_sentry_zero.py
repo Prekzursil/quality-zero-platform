@@ -239,16 +239,15 @@ class SentryZeroTests(unittest.TestCase):
             sentry_module,
             "_request_json",
             return_value=({"bad": "payload"}, {"x-hits": "0"}),
+        ), self.assertRaisesRegex(
+            RuntimeError,
+            "Unexpected Sentry issues response payload",
         ):
-            with self.assertRaisesRegex(
-                RuntimeError,
-                "Unexpected Sentry issues response payload",
-            ):
-                sentry_module._collect_project_results(
-                    "prekzursil",
-                    ["quality-zero-platform"],
-                    "token-123",
-                )
+            sentry_module._collect_project_results(
+                "prekzursil",
+                ["quality-zero-platform"],
+                "token-123",
+            )
 
         with patch.object(
             sentry_module,
@@ -260,13 +259,12 @@ class SentryZeroTests(unittest.TestCase):
                 hdrs=Message(),
                 fp=None,
             ),
-        ):
-            with self.assertRaises(HTTPError):
-                sentry_module._collect_project_results(
-                    "prekzursil",
-                    ["quality-zero-platform"],
-                    "token-123",
-                )
+        ), self.assertRaises(HTTPError):
+            sentry_module._collect_project_results(
+                "prekzursil",
+                ["quality-zero-platform"],
+                "token-123",
+            )
 
     def test_render_md_includes_project_state_suffixes(self) -> None:
         """Show non-default project states in the human-readable report."""
@@ -431,7 +429,9 @@ class SentryZeroTests(unittest.TestCase):
     def test_run_as_main_raises_system_exit(self) -> None:
         """Execute the script entrypoint to cover the __main__ guard."""
         module_path = Path(sentry_module.__file__).resolve()
-        with tempfile.TemporaryDirectory(dir=str(Path.cwd())) as tmpdir, patch.object(
+        with tempfile.TemporaryDirectory(
+            dir=str(Path.cwd())
+        ) as tmpdir, patch.object(
             sys,
             "argv",
             [
@@ -441,8 +441,11 @@ class SentryZeroTests(unittest.TestCase):
                 "--out-md",
                 str(Path(tmpdir) / "sentry.md"),
             ],
-        ), patch.dict(os.environ, {}, clear=True):
-            with self.assertRaises(SystemExit) as exc_info:
-                runpy.run_path(str(module_path), run_name="__main__")
+        ), patch.dict(
+            os.environ,
+            {},
+            clear=True,
+        ), self.assertRaises(SystemExit) as exc_info:
+            runpy.run_path(str(module_path), run_name="__main__")
 
         self.assertEqual(exc_info.exception.code, 1)

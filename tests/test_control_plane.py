@@ -410,18 +410,11 @@ class ControlPlaneTests(unittest.TestCase):
         for unexpected in ("qlty coverage", "qlty coverage diff"):
             self.assertNotIn(unexpected, push_contexts)
 
-    def test_provider_metadata_tracks_real_qlty_names_and_visual_repo_tokens(
-        self,
-    ) -> None:
+    def test_provider_metadata_tracks_real_qlty_names(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
-
         quality_zero_platform = load_repo_profile(
             inventory, "Prekzursil/quality-zero-platform"
         )
-        reframe = load_repo_profile(inventory, "Prekzursil/Reframe")
-        webcoder = load_repo_profile(inventory, "Prekzursil/WebCoder")
-        swfoc = load_repo_profile(inventory, "Prekzursil/SWFOC-Mod-Menu")
-
         self.assertEqual(
             quality_zero_platform["vendors"]["qlty"]["check_names_actual"],
             ["qlty check", "qlty coverage", "qlty coverage diff"],
@@ -451,6 +444,10 @@ class ControlPlaneTests(unittest.TestCase):
             "defaults_all_languages",
         )
 
+    def test_provider_metadata_tracks_reframe_visual_tokens(self) -> None:
+        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
+        reframe = load_repo_profile(inventory, "Prekzursil/Reframe")
+
         self.assertEqual(reframe["vendors"]["chromatic"]["project_name"], "Reframe")
         self.assertEqual(
             reframe["vendors"]["chromatic"]["token_secret"],
@@ -461,6 +458,12 @@ class ControlPlaneTests(unittest.TestCase):
             "CHROMATIC_PROJECT_TOKEN_REFRAME",
         )
         self.assertEqual(reframe["vendors"]["applitools"]["project_name"], "Reframe")
+
+    def test_provider_metadata_tracks_repo_specific_visual_env_vars(self) -> None:
+        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
+        webcoder = load_repo_profile(inventory, "Prekzursil/WebCoder")
+        swfoc = load_repo_profile(inventory, "Prekzursil/SWFOC-Mod-Menu")
+
         self.assertEqual(
             webcoder["vendors"]["chromatic"]["local_env_var"],
             "CHROMATIC_PROJECT_TOKEN_WEBCODER",

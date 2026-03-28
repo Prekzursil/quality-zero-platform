@@ -23,10 +23,46 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase):
         ruleset_contexts: Set[str],
         target_contexts: Set[str],
     ) -> None:
-        self.assertTrue({"build-test", "analyze", "scan"}.issubset(push_contexts))
-        self.assertTrue({"build-test", "analyze", "scan", "dependency-review"}.issubset(pr_contexts))
         self.assertTrue(
             {
+                "build-test",
+                "analyze",
+                "scan",
+                "Codecov Analytics",
+                "Coverage 100 Gate",
+                "QLTY Zero",
+                "Sonar Zero",
+                "Codacy Zero",
+                "Semgrep Zero",
+                "Sentry Zero",
+                "DeepScan Zero",
+            }.issubset(push_contexts)
+        )
+        self.assertTrue(
+            {
+                "build-test",
+                "analyze",
+                "scan",
+                "dependency-review",
+                "Codecov Analytics",
+                "Coverage 100 Gate",
+                "QLTY Zero",
+                "Sonar Zero",
+                "Codacy Zero",
+                "Semgrep Zero",
+                "Sentry Zero",
+                "DeepScan Zero",
+            }.issubset(pr_contexts)
+        )
+        self.assertTrue(
+            {
+                "shared-scanner-matrix / Coverage 100 Gate",
+                "shared-scanner-matrix / QLTY Zero",
+                "shared-scanner-matrix / Sonar Zero",
+                "shared-scanner-matrix / Codacy Zero",
+                "shared-scanner-matrix / Semgrep Zero",
+                "shared-scanner-matrix / Sentry Zero",
+                "shared-scanner-matrix / DeepScan Zero",
                 "build-test",
                 "analyze",
                 "scan",
@@ -44,6 +80,13 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase):
             "Codacy Static Code Analysis",
             "DeepScan",
             "shared-codecov-analytics / Codecov Analytics",
+            "shared-scanner-matrix / Coverage 100 Gate",
+            "shared-scanner-matrix / QLTY Zero",
+            "shared-scanner-matrix / Sonar Zero",
+            "shared-scanner-matrix / Codacy Zero",
+            "shared-scanner-matrix / Semgrep Zero",
+            "shared-scanner-matrix / Sentry Zero",
+            "shared-scanner-matrix / DeepScan Zero",
             "aggregate-gate / Quality Zero Gate",
             "shared-scanner-matrix / Quality Rollup",
         ):
@@ -80,13 +123,32 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase):
         ruleset_contexts = set(active_required_contexts(profile, event_name="ruleset"))
         target_contexts = set(profile["required_contexts"]["target"])
 
-        for required in ("build-test", "analyze", "scan"):
+        for required in (
+            "build-test",
+            "analyze",
+            "scan",
+            "Codecov Analytics",
+            "Coverage 100 Gate",
+            "QLTY Zero",
+            "Sonar Zero",
+            "Codacy Zero",
+            "Semgrep Zero",
+            "Sentry Zero",
+            "DeepScan Zero",
+        ):
             self.assertIn(required, push_contexts)
             self.assertIn(required, pr_contexts)
         self.assertIn("dependency-review", pr_contexts)
         self.assertNotIn("dependency-review", push_contexts)
 
         for required in (
+            "shared-scanner-matrix / Coverage 100 Gate",
+            "shared-scanner-matrix / QLTY Zero",
+            "shared-scanner-matrix / Sonar Zero",
+            "shared-scanner-matrix / Codacy Zero",
+            "shared-scanner-matrix / Semgrep Zero",
+            "shared-scanner-matrix / Sentry Zero",
+            "shared-scanner-matrix / DeepScan Zero",
             "build-test",
             "analyze",
             "scan",
@@ -102,6 +164,13 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase):
             "qlty check",
             "qlty coverage",
             "qlty coverage diff",
+            "shared-scanner-matrix / Coverage 100 Gate",
+            "shared-scanner-matrix / QLTY Zero",
+            "shared-scanner-matrix / Sonar Zero",
+            "shared-scanner-matrix / Codacy Zero",
+            "shared-scanner-matrix / Semgrep Zero",
+            "shared-scanner-matrix / Sentry Zero",
+            "shared-scanner-matrix / DeepScan Zero",
             "shared-codecov-analytics / Codecov Analytics",
             "aggregate-gate / Quality Zero Gate",
             "shared-scanner-matrix / Quality Rollup",

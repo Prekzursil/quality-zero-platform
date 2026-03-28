@@ -17,10 +17,18 @@ from scripts.security_helpers import load_json_https
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Wait for required GitHub contexts and assert they are successful.")
+    """Parse CLI arguments for the required-context gate."""
+    parser = argparse.ArgumentParser(
+        description="Wait for required GitHub contexts and assert they are successful."
+    )
     parser.add_argument("--repo", required=True, help="owner/repo")
     parser.add_argument("--sha", required=True, help="commit SHA")
-    parser.add_argument("--required-context", action="append", default=[], help="Required context name")
+    parser.add_argument(
+        "--required-context",
+        action="append",
+        default=[],
+        help="Required context name",
+    )
     parser.add_argument("--timeout-seconds", type=int, default=900)
     parser.add_argument("--poll-seconds", type=int, default=20)
     parser.add_argument("--out-json", default="quality-zero-gate/required-checks.json")
@@ -29,6 +37,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _api_get(repo: str, path: str, token: str) -> Dict[str, Any]:
+    """Fetch and validate a JSON payload from the GitHub REST API."""
     payload, _ = load_json_https(
         f"https://api.github.com/repos/{repo}/{path.lstrip('/')}",
         allowed_hosts={"api.github.com"},
@@ -45,6 +54,7 @@ def _api_get(repo: str, path: str, token: str) -> Dict[str, Any]:
 
 
 def _context_details(state: str, conclusion: str, source: str) -> Dict[str, str]:
+    """Build a normalized status record for a discovered context."""
     return {
         "state": state,
         "conclusion": conclusion,
@@ -52,7 +62,10 @@ def _context_details(state: str, conclusion: str, source: str) -> Dict[str, str]
     }
 
 
-def _collect_check_run_contexts(check_runs_payload: Dict[str, Any]) -> Dict[str, Dict[str, str]]:
+def _collect_check_run_contexts(
+    check_runs_payload: Dict[str, Any],
+) -> Dict[str, Dict[str, str]]:
+    """Collect GitHub check-run contexts keyed by their displayed name."""
     contexts: Dict[str, Dict[str, str]] = {}
     for run in check_runs_payload.get("check_runs", []) or []:
         name = str(run.get("name") or "").strip()
@@ -66,7 +79,10 @@ def _collect_check_run_contexts(check_runs_payload: Dict[str, Any]) -> Dict[str,
     return contexts
 
 
-def _collect_status_contexts(status_payload: Dict[str, Any]) -> Dict[str, Dict[str, str]]:
+def _collect_status_contexts(
+    status_payload: Dict[str, Any],
+) -> Dict[str, Dict[str, str]]:
+    """Collect legacy commit-status contexts keyed by their context name."""
     contexts: Dict[str, Dict[str, str]] = {}
     for status in status_payload.get("statuses", []) or []:
         name = str(status.get("context") or "").strip()
@@ -77,7 +93,11 @@ def _collect_status_contexts(status_payload: Dict[str, Any]) -> Dict[str, Dict[s
     return contexts
 
 
-def _collect_contexts(check_runs_payload: Dict[str, Any], status_payload: Dict[str, Any]) -> Dict[str, Dict[str, str]]:
+def _collect_contexts(
+    check_runs_payload: Dict[str, Any],
+    status_payload: Dict[str, Any],
+) -> Dict[str, Dict[str, str]]:
+    """Merge check-run and commit-status contexts into one lookup table."""
     contexts = _collect_check_run_contexts(check_runs_payload)
     contexts.update(_collect_status_contexts(status_payload))
     return contexts
@@ -87,6 +107,7 @@ def _resolve_observed_context(
     context: str,
     contexts: Mapping[str, Dict[str, str]],
 ) -> Dict[str, str] | None:
+    """Resolve a required context by exact name or matrix-job suffix."""
     exact = contexts.get(context)
     if exact:
         return exact
@@ -100,7 +121,11 @@ def _resolve_observed_context(
     return None
 
 
-def _evaluate_observed_context(context: str, observed: Dict[str, str] | None) -> str | None:
+def _evaluate_observed_context(
+    context: str,
+    observed: Dict[str, str] | None,
+) -> str | None:
+    """Return a failure message when an observed context is not successful."""
     if not observed:
         return None
 
@@ -115,18 +140,35 @@ def _evaluate_observed_context(context: str, observed: Dict[str, str] | None) ->
     return failure
 
 
-def _evaluate(required: List[str], contexts: Dict[str, Dict[str, str]]) -> Tuple[str, List[str], List[str]]:
-    missing = [context for context in required if _resolve_observed_context(context, contexts) is None]
+def _evaluate(
+    required: List[str],
+    contexts: Dict[str, Dict[str, str]],
+) -> Tuple[str, List[str], List[str]]:
+    """Return overall gate status plus missing and failed required contexts."""
+    missing = [
+        context
+        for context in required
+        if _resolve_observed_context(context, contexts) is None
+    ]
     failed = [
         failure
         for context in required
-        for failure in [_evaluate_observed_context(context, _resolve_observed_context(context, contexts))]
+        for failure in [
+            _evaluate_observed_context(
+                context,
+                _resolve_observed_context(context, contexts),
+            )
+        ]
         if failure
     ]
     return ("pass" if not missing and not failed else "fail", missing, failed)
 
 
-def _has_in_progress_check_runs(required: List[str], contexts: Dict[str, Dict[str, str]]) -> bool:
+def _has_in_progress_check_runs(
+    required: List[str],
+    contexts: Dict[str, Dict[str, str]],
+) -> bool:
+    """Check whether any required check-run context is still running."""
     return any(
         observed.get("state") != "completed"
         for context in required
@@ -135,7 +177,13 @@ def _has_in_progress_check_runs(required: List[str], contexts: Dict[str, Dict[st
     )
 
 
-def _collect_payload(repo: str, sha: str, required: List[str], token: str) -> Dict[str, Any]:
+def _collect_payload(
+    repo: str,
+    sha: str,
+    required: List[str],
+    token: str,
+) -> Dict[str, Any]:
+    """Fetch the latest GitHub contexts and evaluate the required set."""
     check_runs = _api_get(repo, f"commits/{sha}/check-runs?per_page=100", token)
     statuses = _api_get(repo, f"commits/{sha}/status", token)
     contexts = _collect_contexts(check_runs, statuses)
@@ -152,20 +200,37 @@ def _collect_payload(repo: str, sha: str, required: List[str], token: str) -> Di
     }
 
 
-def _wait_for_payload(args: argparse.Namespace, required: List[str], token: str) -> Dict[str, Any]:
+def _should_keep_polling(required: List[str], payload: Mapping[str, Any]) -> bool:
+    """Keep polling until required contexts either pass or settle in failure."""
+    if payload.get("status") == "pass":
+        return False
+    if payload.get("missing"):
+        return True
+    contexts = payload.get("contexts", {})
+    return isinstance(contexts, dict) and _has_in_progress_check_runs(
+        required,
+        contexts,
+    )
+
+
+def _wait_for_payload(
+    args: argparse.Namespace,
+    required: List[str],
+    token: str,
+) -> Dict[str, Any]:
+    """Poll GitHub until the required contexts settle or the timeout expires."""
     deadline = time.time() + max(args.timeout_seconds, 1)
     final_payload: Dict[str, Any]
     while time.time() <= deadline:
         final_payload = _collect_payload(args.repo, args.sha, required, token)
-        if final_payload["status"] == "pass":
-            break
-        if not _has_in_progress_check_runs(required, final_payload["contexts"]):
+        if not _should_keep_polling(required, final_payload):
             break
         time.sleep(max(args.poll_seconds, 1))
     return final_payload
 
 
 def _render_md(payload: Mapping[str, Any]) -> str:
+    """Render a markdown report for the required-context gate result."""
     lines = [
         "# Quality Zero Gate - Required Contexts",
         "",
@@ -182,8 +247,12 @@ def _render_md(payload: Mapping[str, Any]) -> str:
 
 
 def main() -> int:
+    """Run the required-context gate and write its JSON and markdown reports."""
     args = _parse_args()
-    token = (os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")).strip()
+    token = (
+        os.environ.get("GITHUB_TOKEN", "")
+        or os.environ.get("GH_TOKEN", "")
+    ).strip()
     required = [item.strip() for item in args.required_context if item.strip()]
     if not required:
         raise SystemExit("At least one --required-context is required")

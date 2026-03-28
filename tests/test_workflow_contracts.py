@@ -9,7 +9,10 @@ MUTATION_TEMPLATE_REF = "@7268fee30f1cf796938d97fe460259f27386a8cd"
 
 
 class WorkflowContractTests(unittest.TestCase):
+    """Protect the platform's workflow wrapper and reusable contract invariants."""
+
     def test_reusable_mutation_workflows_do_not_reference_openai_api_key_lane(self) -> None:
+        """Keep mutation workflows on Codex auth instead of deprecated OpenAI secret lanes."""
         workflow_paths = [
             ROOT / ".github" / "workflows" / "reusable-remediation-loop.yml",
             ROOT / ".github" / "workflows" / "reusable-backlog-sweep.yml",
@@ -24,6 +27,7 @@ class WorkflowContractTests(unittest.TestCase):
             self.assertIn("codex_runner_labels_json", text, path.name)
 
     def test_self_wrapper_workflows_do_not_inherit_all_secrets(self) -> None:
+        """Ensure top-level wrappers pass only the secrets they actually need."""
         workflow_paths = [
             ROOT / ".github" / "workflows" / "quality-zero-platform.yml",
             ROOT / ".github" / "workflows" / "quality-zero-gate.yml",
@@ -39,6 +43,7 @@ class WorkflowContractTests(unittest.TestCase):
                 self.assertIn("platform_repository: ${{ github.repository }}", text, path.name)
 
     def test_repo_template_parity_wrappers_pin_controller_and_do_not_inherit_all_secrets(self) -> None:
+        """Keep repo templates pinned to the platform controller SHA and explicit secrets."""
         workflow_paths = [
             ROOT / "templates" / "repo" / ".github" / "workflows" / "quality-zero-platform.yml",
             ROOT / "templates" / "repo" / ".github" / "workflows" / "quality-zero-gate.yml",
@@ -48,17 +53,19 @@ class WorkflowContractTests(unittest.TestCase):
         for path in workflow_paths:
             text = path.read_text(encoding="utf-8")
             self.assertNotIn("secrets: inherit", text, path.name)
-            self.assertIn("@d3aabc77c858e27cb7ade824e9fbf3dd9203f256", text, path.name)
+            self.assertIn("@0e7482ede8d157d5183d41dfe2b575560fbea222", text, path.name)
             self.assertIn("platform_repository: Prekzursil/quality-zero-platform", text, path.name)
             self.assertIn("platform_ref: main", text, path.name)
 
     def test_repo_template_parity_wrappers_set_explicit_top_level_permissions(self) -> None:
+        """Require the published repo templates to declare explicit wrapper permissions."""
         workflow_expectations = {
             "quality-zero-platform.yml": [
                 "permissions:",
                 "  contents: read",
                 "  id-token: write",
                 "  pull-requests: write",
+                "      pull-requests: write",
             ],
             "quality-zero-gate.yml": [
                 "permissions:",
@@ -77,6 +84,7 @@ class WorkflowContractTests(unittest.TestCase):
                 self.assertIn(expected, text, name)
 
     def test_repo_template_mutation_wrappers_pin_controller_and_pass_only_required_inputs_and_secrets(self) -> None:
+        """Verify mutation templates stay pinned and expose only trusted inputs and secrets."""
         workflow_expectations = {
             "quality-zero-backlog.yml": [
                 MUTATION_TEMPLATE_REF,
@@ -109,10 +117,12 @@ class WorkflowContractTests(unittest.TestCase):
                 self.assertIn(expected, text, name)
 
     def test_self_remediation_wrapper_documents_trusted_workflow_run_trigger(self) -> None:
+        """Document the trusted workflow_run trigger for the self-remediation wrapper."""
         text = (ROOT / ".github" / "workflows" / "quality-zero-remediation.yml").read_text(encoding="utf-8")
         self.assertIn("workflow_run: # zizmor: ignore[dangerous-triggers]", text)
 
     def test_self_wrapper_workflows_use_current_ref_for_platform_checkout(self) -> None:
+        """Check self-hosted wrappers out at the current controller ref for the running event."""
         workflow_expectations = {
             "quality-zero-platform.yml": "platform_ref: ${{ github.event.pull_request.head.sha || github.sha }}",
             "quality-zero-gate.yml": "platform_ref: ${{ github.event.pull_request.head.sha || github.sha }}",
@@ -126,6 +136,7 @@ class WorkflowContractTests(unittest.TestCase):
             self.assertIn(expected, text, name)
 
     def test_manual_wrapper_dispatches_do_not_expose_user_supplied_inputs(self) -> None:
+        """Keep manual mutation wrappers free of attacker-controlled workflow_dispatch inputs."""
         workflow_paths = [
             ROOT / ".github" / "workflows" / "quality-zero-remediation.yml",
             ROOT / ".github" / "workflows" / "quality-zero-backlog.yml",
@@ -136,6 +147,7 @@ class WorkflowContractTests(unittest.TestCase):
             self.assertNotIn("workflow_dispatch:\n    inputs:", text, path.name)
 
     def test_mutation_workflows_sanitize_user_controlled_inputs_in_run_blocks(self) -> None:
+        """Reject direct interpolation of untrusted workflow inputs inside shell commands."""
         workflow_paths = [
             ROOT / ".github" / "workflows" / "reusable-remediation-loop.yml",
             ROOT / ".github" / "workflows" / "reusable-backlog-sweep.yml",
@@ -156,6 +168,7 @@ class WorkflowContractTests(unittest.TestCase):
                 self.assertNotIn(f'--artifact "Target SHA: {snippet}"', text, path.name)
 
     def test_scanner_matrix_pins_qlty_actions_to_full_sha(self) -> None:
+        """Pin QLTY and PR creation actions to immutable full SHAs."""
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
         self.assertIn("qltysh/qlty-action/install@a19242102d17e497f437d7466aa01b528537e899", text)
         self.assertIn('qlty_executable = shutil.which("qlty")', text)
@@ -171,6 +184,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c", remediation_text)
 
     def test_scanner_matrix_pins_codecov_upload_and_keeps_token_optional(self) -> None:
+        """Keep Codecov uploads pinned and compatible with optional tokenless OIDC mode."""
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
         self.assertIn("CODECOV_TOKEN:", text)
         self.assertIn("required: false", text)
@@ -196,6 +210,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn('coverage = json.loads(profile_path.read_text(encoding="utf-8")).get("coverage", {})', reusable_text)
 
     def test_scanner_matrix_exports_provider_credentials_to_lane_runtime(self) -> None:
+        """Expose the provider credentials and repo metadata required by scanner lanes."""
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
         for expected in [
             "SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}",
@@ -220,17 +235,20 @@ class WorkflowContractTests(unittest.TestCase):
         )
 
     def test_scanner_matrix_checks_out_repo_at_requested_sha(self) -> None:
+        """Ensure scanner lanes analyze the exact requested commit without persisted credentials."""
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
         self.assertIn("ref: ${{ inputs.sha != '' && inputs.sha || github.sha }}", text)
         self.assertEqual(text.count("persist-credentials: false"), 3)
 
     def test_scanner_matrix_uses_configurable_runner_for_coverage_lane(self) -> None:
+        """Allow the coverage lane to select its dedicated runner configuration."""
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
         self.assertIn("matrix.lane == 'coverage'", text)
         self.assertIn("coverage_runner", text)
         self.assertIn("windows-latest", text)
 
     def test_scanner_matrix_scopes_sonar_and_codacy_zero_to_the_current_pull_request(self) -> None:
+        """Scope PR-aware scanners to the current PR metadata when that context exists."""
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
         self.assertIn('pull_request_number = os.environ.get("PULL_REQUEST_NUMBER", "").strip()', text)
         self.assertIn('branch_name = os.environ.get("BRANCH_NAME", "").strip()', text)
@@ -257,11 +275,13 @@ class WorkflowContractTests(unittest.TestCase):
             self.assertIn(expected, template_text)
 
     def test_semgrep_lane_uses_supported_cli_invocation(self) -> None:
+        """Keep Semgrep on the supported CLI invocation shape."""
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
         self.assertIn('run(["semgrep", "ci"], cwd=repo_dir)', text)
         self.assertNotIn('run(["semgrep", "ci", "--error"], cwd=repo_dir)', text)
 
     def test_reusable_workflows_do_not_inline_inputs_inside_run_blocks(self) -> None:
+        """Reject direct GitHub expression interpolation inside reusable workflow shell blocks."""
         workflow_expectations = {
             "reusable-codecov-analytics.yml": [
                 '--repo-slug "${{ inputs.repo_slug }}"',
@@ -290,12 +310,14 @@ class WorkflowContractTests(unittest.TestCase):
                 self.assertNotIn(snippet, text, f"{name}: {snippet}")
 
     def test_quality_zero_gate_exports_github_token_to_required_check_probe(self) -> None:
+        """Provide the GitHub token to the required-check probe without inline Python blocks."""
         text = (ROOT / ".github" / "workflows" / "reusable-quality-zero-gate.yml").read_text(encoding="utf-8")
         self.assertIn("GITHUB_TOKEN: ${{ github.token }}", text)
         self.assertIn("run_quality_zero_gate.py", text)
         self.assertNotIn("python - <<'PY'", text)
 
     def test_all_flagged_checkout_steps_disable_persisted_credentials(self) -> None:
+        """Require every flagged checkout step to disable persisted credentials."""
         workflow_paths = [
             ROOT / ".github" / "workflows" / "reusable-backlog-sweep.yml",
             ROOT / ".github" / "workflows" / "reusable-remediation-loop.yml",
@@ -313,6 +335,7 @@ class WorkflowContractTests(unittest.TestCase):
             )
 
     def test_mutation_workflows_use_env_indirection_for_codex_auth_file(self) -> None:
+        """Route Codex auth file paths through environment variables instead of inline expressions."""
         workflow_paths = [
             ROOT / ".github" / "workflows" / "reusable-backlog-sweep.yml",
             ROOT / ".github" / "workflows" / "reusable-remediation-loop.yml",
@@ -325,6 +348,7 @@ class WorkflowContractTests(unittest.TestCase):
             self.assertIn('--auth-file "$CODEX_AUTH_FILE"', text, path.name)
 
     def test_parity_wrappers_list_push_pull_request_and_manual_triggers(self) -> None:
+        """Keep self wrappers and published templates aligned on their trigger surfaces."""
         workflow_paths = [
             ROOT / ".github" / "workflows" / "quality-zero-platform.yml",
             ROOT / ".github" / "workflows" / "quality-zero-gate.yml",
@@ -342,6 +366,7 @@ class WorkflowContractTests(unittest.TestCase):
             self.assertIn("branches: [main, master]", text, path.name)
 
     def test_scanner_matrix_builds_quality_rollup_and_posts_sticky_pr_comment(self) -> None:
+        """Preserve the quality rollup artifact and sticky PR comment publishing steps."""
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
         self.assertIn("quality-rollup", text)
         self.assertIn("build_quality_rollup.py", text)
@@ -352,6 +377,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("check_dependabot_alerts.py", text)
 
     def test_admin_dashboard_and_control_plane_admin_workflows_exist_with_expected_triggers(self) -> None:
+        """Assert the admin dashboard and control-plane admin workflows keep their expected controls."""
         dashboard_text = (ROOT / ".github" / "workflows" / "publish-admin-dashboard.yml").read_text(encoding="utf-8")
         self.assertIn("schedule:", dashboard_text)
         self.assertIn("workflow_dispatch:", dashboard_text)
@@ -377,4 +403,3 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("ADMIN_REPO_SLUG: ${{ inputs.repo_slug }}", admin_text)
         self.assertIn('--repo-slug "$ADMIN_REPO_SLUG"', admin_text)
         self.assertNotIn('--repo-slug "${{ inputs.repo_slug }}"', admin_text)
-

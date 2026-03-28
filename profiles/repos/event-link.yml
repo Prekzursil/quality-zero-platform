@@ -8,9 +8,9 @@ coverage:
     - format: xml
       name: backend
       path: backend/coverage.xml
-    - format: lcov
+    - format: xml
       name: frontend
-      path: ui/coverage/lcov.info
+      path: ui/coverage/cobertura-coverage.xml
 vendors:
   sonar:
     project_key: Prekzursil_event-link

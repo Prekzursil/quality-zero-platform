@@ -353,6 +353,7 @@ class ControlPlaneTests(unittest.TestCase):
     def test_quality_zero_platform_keeps_codecov_target_only_until_provider_check_emits(
         self,
     ) -> None:
+        """Codecov should stay target-only until the provider emits a native check."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
 
@@ -365,6 +366,7 @@ class ControlPlaneTests(unittest.TestCase):
     def test_env_inspector_overlay_aligns_push_required_contexts_to_emitted_surface(
         self,
     ) -> None:
+        """Env Inspector push contexts should match the emitted green surface."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/env-inspector")
 
@@ -411,6 +413,7 @@ class ControlPlaneTests(unittest.TestCase):
             self.assertNotIn(unexpected, push_contexts)
 
     def test_provider_metadata_tracks_real_qlty_names(self) -> None:
+        """Provider metadata should expose the expected QLTY names and policy values."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         quality_zero_platform = load_repo_profile(
             inventory, "Prekzursil/quality-zero-platform"
@@ -445,6 +448,7 @@ class ControlPlaneTests(unittest.TestCase):
         )
 
     def test_provider_metadata_tracks_reframe_visual_tokens(self) -> None:
+        """Reframe should keep its expected Chromatic and Applitools metadata."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         reframe = load_repo_profile(inventory, "Prekzursil/Reframe")
 
@@ -460,6 +464,7 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(reframe["vendors"]["applitools"]["project_name"], "Reframe")
 
     def test_provider_metadata_tracks_repo_specific_visual_env_vars(self) -> None:
+        """Repo-specific visual metadata should keep the expected env-var wiring."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         webcoder = load_repo_profile(inventory, "Prekzursil/WebCoder")
         swfoc = load_repo_profile(inventory, "Prekzursil/SWFOC-Mod-Menu")
@@ -474,6 +479,7 @@ class ControlPlaneTests(unittest.TestCase):
         )
 
     def test_visual_pair_validation_flags_single_context(self) -> None:
+        """Removing one visual context should trigger the visual-pair validator."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
         profile["required_contexts"]["target"] = [
@@ -487,6 +493,7 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertTrue(any("visual_pair_required" in item for item in findings))
 
     def test_visual_pair_validation_requires_provider_metadata(self) -> None:
+        """Visual-pair validation should require the expected provider metadata fields."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
 
@@ -527,6 +534,7 @@ class ControlPlaneTests(unittest.TestCase):
         )
 
     def test_validate_profile_flags_invalid_vendor_url(self) -> None:
+        """Invalid provider dashboard URLs should be reported by profile validation."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
         profile["vendors"]["codacy"]["dashboard_url"] = "invalid.example.com"
@@ -540,6 +548,7 @@ class ControlPlaneTests(unittest.TestCase):
     def test_export_profile_emits_coverage_inputs_for_codecov_and_qlty_uploads(
         self,
     ) -> None:
+        """Exported profile output should include the coverage inputs for uploads."""
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "github-output.txt"
             with patch.object(
@@ -571,6 +580,7 @@ class ControlPlaneTests(unittest.TestCase):
     def test_export_profile_emits_airline_coverage_inputs_for_codecov_and_qlty_uploads(
         self,
     ) -> None:
+        """Airline exports should include all three coverage artifacts for uploads."""
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "github-output.txt"
             with patch.object(
@@ -607,6 +617,7 @@ class ControlPlaneTests(unittest.TestCase):
     def test_export_profile_script_prints_json_when_output_path_is_not_requested(
         self,
     ) -> None:
+        """The export script should print JSON when no output path is requested."""
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "github-output.txt"
             argv = [
@@ -626,14 +637,16 @@ class ControlPlaneTests(unittest.TestCase):
                     sys_path.insert(0, "")
 
                 stdout = io.StringIO()
-                with patch.object(sys, "argv", argv), patch.object(
-                    sys, "path", sys_path
-                ), redirect_stdout(stdout):
-                    with self.assertRaises(SystemExit) as exc:
-                        runpy.run_path(
-                            str(ROOT / "scripts" / "quality" / "export_profile.py"),
-                            run_name="__main__",
-                        )
+                with (
+                    patch.object(sys, "argv", argv),
+                    patch.object(sys, "path", sys_path),
+                    redirect_stdout(stdout),
+                    self.assertRaises(SystemExit) as exc,
+                ):
+                    runpy.run_path(
+                        str(ROOT / "scripts" / "quality" / "export_profile.py"),
+                        run_name="__main__",
+                    )
 
                 self.assertEqual(exc.exception.code, 0)
                 payload = json.loads(stdout.getvalue())
@@ -644,6 +657,7 @@ class ControlPlaneTests(unittest.TestCase):
                 )
 
     def test_export_profile_script_handles_existing_empty_sys_path_entry(self) -> None:
+        """The export script should tolerate an existing empty sys.path entry."""
         stdout = io.StringIO()
         argv = [
             "export_profile.py",
@@ -656,14 +670,16 @@ class ControlPlaneTests(unittest.TestCase):
             *(entry for entry in sys.path if entry != repo_root and entry != ""),
         ]
 
-        with patch.object(sys, "argv", argv), patch.object(
-            sys, "path", sys_path
-        ), redirect_stdout(stdout):
-            with self.assertRaises(SystemExit) as exc:
-                runpy.run_path(
-                    str(ROOT / "scripts" / "quality" / "export_profile.py"),
-                    run_name="__main__",
-                )
+        with (
+            patch.object(sys, "argv", argv),
+            patch.object(sys, "path", sys_path),
+            redirect_stdout(stdout),
+            self.assertRaises(SystemExit) as exc,
+        ):
+            runpy.run_path(
+                str(ROOT / "scripts" / "quality" / "export_profile.py"),
+                run_name="__main__",
+            )
 
         self.assertEqual(exc.exception.code, 0)
         payload = json.loads(stdout.getvalue())

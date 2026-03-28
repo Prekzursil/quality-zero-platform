@@ -12,11 +12,14 @@ ROOT = Path(__file__).resolve().parents[1]
 class _AssertionProtocol(Protocol):
     """Structural typing for unittest-style assertion helpers used by mixins."""
 
-    def assertEqual(self, first, second, msg=None) -> None: ...
+    def assertEqual(self, first, second, msg=None) -> None:
+        """Assert that two values are equal."""
 
-    def assertIn(self, member, container, msg=None) -> None: ...
+    def assertIn(self, member, container, msg=None) -> None:
+        """Assert that a member exists in a container."""
 
-    def assertNotIn(self, member, container, msg=None) -> None: ...
+    def assertNotIn(self, member, container, msg=None) -> None:
+        """Assert that a member does not exist in a container."""
 
 
 class ControlPlaneAssertions(_AssertionProtocol):

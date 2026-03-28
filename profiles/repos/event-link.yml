@@ -3,14 +3,7 @@ stack: fullstack-web
 verify_command: bash scripts/verify
 coverage:
   command: |
-    python -m pip install --upgrade pip
-    python -m pip install -r backend/requirements.txt pytest pytest-cov lizard
-    npm --prefix ui ci
-    PYTHONPATH=backend pytest backend/tests backend/integration_tests \
-      --cov=backend/app \
-      --cov-branch \
-      --cov-report=xml:backend/coverage.xml
-    npm --prefix ui run test
+    bash scripts/verify
   inputs:
     - format: xml
       name: backend

@@ -89,14 +89,16 @@ class SentryZeroTests(unittest.TestCase):
             "Bearer token-123",
         )
 
-    def test_hits_projects_validation_and_render_helpers_cover_empty_states(
-        self,
-    ) -> None:
-        """Cover helper branches for hits parsing, project collection, and markdown."""
+    def test_hits_from_headers_handles_valid_invalid_and_missing_values(self) -> None:
+        """Cover the numeric, invalid, and missing x-hits header branches."""
         self.assertEqual(sentry_module._hits_from_headers({"x-hits": "7"}), 7)
         self.assertIsNone(sentry_module._hits_from_headers({"x-hits": "bad"}))
         self.assertIsNone(sentry_module._hits_from_headers({}))
 
+    def test_collect_projects_includes_environment_aliases_without_duplicates(
+        self,
+    ) -> None:
+        """Collect project names from arguments and the Sentry environment aliases."""
         with patch.dict(
             os.environ,
             {
@@ -119,6 +121,9 @@ class SentryZeroTests(unittest.TestCase):
                 "event-link-web",
             ],
         )
+
+    def test_validate_sentry_inputs_reports_missing_configuration(self) -> None:
+        """Return all missing-input findings for an empty Sentry configuration."""
         self.assertEqual(
             sentry_module._validate_sentry_inputs("", "", []),
             [
@@ -127,6 +132,9 @@ class SentryZeroTests(unittest.TestCase):
                 "No Sentry projects configured.",
             ],
         )
+
+    def test_issues_url_and_render_md_cover_empty_state_reporting(self) -> None:
+        """Render the zero-findings markdown shape for empty project results."""
         self.assertEqual(
             sentry_module._issues_url("prek/zursil", "event link"),
             (
@@ -292,8 +300,8 @@ class SentryZeroTests(unittest.TestCase):
         self.assertIn("`quality-zero-platform` unresolved=`0`", markdown)
         self.assertIn("`event-link` unresolved=`0` state=`not_found`", markdown)
 
-    def test_main_handles_missing_inputs_and_runtime_failures(self) -> None:
-        """Return failing reports for config gaps and runtime exceptions."""
+    def test_main_returns_failure_payload_for_missing_inputs(self) -> None:
+        """Return a failing report when the required Sentry inputs are missing."""
         args = Namespace(
             org=str(),
             project=[],
@@ -323,6 +331,8 @@ class SentryZeroTests(unittest.TestCase):
         self.assertIn("SENTRY_ORG is missing.", missing_payload["findings"])
         self.assertIn("No Sentry projects configured.", missing_payload["findings"])
 
+    def test_main_returns_failure_payload_for_runtime_exceptions(self) -> None:
+        """Convert collection-time exceptions into a failing Sentry report."""
         sentry_token = "-".join(["token", "123"])
         ok_args = Namespace(
             org="prekzursil",
@@ -354,8 +364,8 @@ class SentryZeroTests(unittest.TestCase):
             ["Sentry API request failed: provider down"],
         )
 
-    def test_main_returns_success_and_propagates_report_failures(self) -> None:
-        """Return success for clean projects and preserve write_report failures."""
+    def test_main_returns_success_for_clean_projects(self) -> None:
+        """Return success when every configured Sentry project is clean."""
         sentry_token = "-".join(["token", "123"])
         args = Namespace(
             org="prekzursil",
@@ -402,6 +412,16 @@ class SentryZeroTests(unittest.TestCase):
             ],
         )
 
+    def test_main_propagates_write_report_failures(self) -> None:
+        """Preserve write_report failures after a successful Sentry collection."""
+        sentry_token = "-".join(["token", "123"])
+        args = Namespace(
+            org="prekzursil",
+            project=["quality-zero-platform"],
+            token=sentry_token,
+            out_json="sentry-zero/sentry.json",
+            out_md="sentry-zero/sentry.md",
+        )
         with patch.object(
             sentry_module,
             "_parse_args",

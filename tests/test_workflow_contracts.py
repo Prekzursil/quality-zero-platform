@@ -48,7 +48,7 @@ class WorkflowContractTests(unittest.TestCase):
         for path in workflow_paths:
             text = path.read_text(encoding="utf-8")
             self.assertNotIn("secrets: inherit", text, path.name)
-            self.assertIn("@d3aabc77c858e27cb7ade824e9fbf3dd9203f256", text, path.name)
+            self.assertIn("@0e7482ede8d157d5183d41dfe2b575560fbea222", text, path.name)
             self.assertIn("platform_repository: Prekzursil/quality-zero-platform", text, path.name)
             self.assertIn("platform_ref: main", text, path.name)
 
@@ -377,4 +377,3 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("ADMIN_REPO_SLUG: ${{ inputs.repo_slug }}", admin_text)
         self.assertIn('--repo-slug "$ADMIN_REPO_SLUG"', admin_text)
         self.assertNotIn('--repo-slug "${{ inputs.repo_slug }}"', admin_text)
-

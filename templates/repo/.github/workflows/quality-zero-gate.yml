@@ -14,7 +14,7 @@ jobs:
   aggregate-gate:
     permissions:
       contents: read
-    uses: Prekzursil/quality-zero-platform/.github/workflows/reusable-quality-zero-gate.yml@d3aabc77c858e27cb7ade824e9fbf3dd9203f256
+    uses: Prekzursil/quality-zero-platform/.github/workflows/reusable-quality-zero-gate.yml@0e7482ede8d157d5183d41dfe2b575560fbea222
     with:
       repo_slug: ${{ github.repository }}
       event_name: ${{ github.event_name }}

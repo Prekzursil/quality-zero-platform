@@ -61,14 +61,14 @@ class ControlPlaneTests(unittest.TestCase):
                 ("lcov", "cpp", "coverage/cpp/lcov.info"),
             },
         )
-        self.assertIn(
-            (
-                "python3 -m pytest -q "
-                "tests/test_quality_security_scripts.py "
-                "tests/test_quality_coverage_scripts.py"
-            ),
-            profile["coverage"]["command"],
-        )
+        for expected_snippet in (
+            "tests/test_quality_security_scripts.py",
+            "tests/test_quality_coverage_scripts.py",
+            "tests/test_quality_script_main_flows.py",
+            "tests/test_security_helpers.py",
+            "tests/test_static_remediation_guards.py",
+        ):
+            self.assertIn(expected_snippet, profile["coverage"]["command"])
         self.assertEqual(
             profile["coverage"]["require_sources"],
             ["scripts/", "src/", "airline-gui/src/"],

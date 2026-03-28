@@ -21,10 +21,13 @@ class SentryZeroTests(unittest.TestCase):
     """Exercise the Sentry zero gate across parsing, reporting, and error paths."""
 
     def test_spec_import_bootstraps_repo_root_on_sys_path(self) -> None:
-        """Load the module from its file path to cover the repo-root bootstrap branch."""
+        """Load the module from its file path to cover repo-root bootstrapping."""
         module_path = Path(sentry_module.__file__).resolve()
         repo_root = str(module_path.parents[2])
-        spec = importlib.util.spec_from_file_location("check_sentry_zero_bootstrap", module_path)
+        spec = importlib.util.spec_from_file_location(
+            "check_sentry_zero_bootstrap",
+            module_path,
+        )
         if spec is None or spec.loader is None:  # pragma: no cover
             self.fail("Expected a concrete module spec for check_sentry_zero")
         module = importlib.util.module_from_spec(cast(ModuleSpec, spec))
@@ -61,17 +64,35 @@ class SentryZeroTests(unittest.TestCase):
 
     def test_request_json_uses_expected_sentry_request_shape(self) -> None:
         """Send Sentry API requests through the shared HTTPS helper."""
-        with patch.object(sentry_module, "load_json_https", return_value=(["payload"], {"x-hits": "7"})) as loader:
-            payload, headers = sentry_module._request_json("https://sentry.io/api/0/projects/org/app/issues/", "token-123")
+        with patch.object(
+            sentry_module,
+            "load_json_https",
+            return_value=(["payload"], {"x-hits": "7"}),
+        ) as loader:
+            payload, headers = sentry_module._request_json(
+                "https://sentry.io/api/0/projects/org/app/issues/",
+                "token-123",
+            )
 
         self.assertEqual(payload, ["payload"])
         self.assertEqual(headers, {"x-hits": "7"})
-        self.assertEqual(loader.call_args.args[0], "https://sentry.io/api/0/projects/org/app/issues/")
-        self.assertEqual(loader.call_args.kwargs["allowed_host_suffixes"], {"sentry.io"})
-        self.assertEqual(loader.call_args.kwargs["headers"]["Authorization"], "Bearer token-123")
+        self.assertEqual(
+            loader.call_args.args[0],
+            "https://sentry.io/api/0/projects/org/app/issues/",
+        )
+        self.assertEqual(
+            loader.call_args.kwargs["allowed_host_suffixes"],
+            {"sentry.io"},
+        )
+        self.assertEqual(
+            loader.call_args.kwargs["headers"]["Authorization"],
+            "Bearer token-123",
+        )
 
-    def test_hits_projects_validation_and_render_helpers_cover_empty_states(self) -> None:
-        """Cover header parsing, project collection, validation, URL building, and empty markdown states."""
+    def test_hits_projects_validation_and_render_helpers_cover_empty_states(
+        self,
+    ) -> None:
+        """Cover helper branches for hits parsing, project collection, and markdown."""
         self.assertEqual(sentry_module._hits_from_headers({"x-hits": "7"}), 7)
         self.assertIsNone(sentry_module._hits_from_headers({"x-hits": "bad"}))
         self.assertIsNone(sentry_module._hits_from_headers({}))
@@ -85,7 +106,9 @@ class SentryZeroTests(unittest.TestCase):
             },
             clear=False,
         ):
-            projects = sentry_module._collect_projects(["quality-zero-platform", "quality-zero-platform"])
+            projects = sentry_module._collect_projects(
+                ["quality-zero-platform", "quality-zero-platform"]
+            )
 
         self.assertEqual(
             projects,
@@ -106,7 +129,11 @@ class SentryZeroTests(unittest.TestCase):
         )
         self.assertEqual(
             sentry_module._issues_url("prek/zursil", "event link"),
-            "https://sentry.io/api/0/projects/prek%2Fzursil/event%20link/issues/?query=is%3Aunresolved&limit=1&project=event%2520link",
+            (
+                "https://sentry.io/api/0/projects/prek%2Fzursil/"
+                "event%20link/issues/?query=is%3Aunresolved&limit=1"
+                "&project=event%2520link"
+            ),
         )
         markdown = sentry_module._render_md(
             {
@@ -126,11 +153,24 @@ class SentryZeroTests(unittest.TestCase):
         with patch.object(
             sentry_module,
             "_request_json",
-            side_effect=HTTPError("https://sentry.io/api/0/projects/prekzursil/event-link/issues/", 404, "Not Found", hdrs=Message(), fp=None),
+            side_effect=HTTPError(
+                "https://sentry.io/api/0/projects/prekzursil/event-link/issues/",
+                404,
+                "Not Found",
+                hdrs=Message(),
+                fp=None,
+            ),
         ):
-            results, findings = sentry_module._collect_project_results("prekzursil", ["event-link"], "token-123")
+            results, findings = sentry_module._collect_project_results(
+                "prekzursil",
+                ["event-link"],
+                "token-123",
+            )
 
-        self.assertEqual(results, [{"project": "event-link", "unresolved": 0, "state": "not_found"}])
+        self.assertEqual(
+            results,
+            [{"project": "event-link", "unresolved": 0, "state": "not_found"}],
+        )
         self.assertEqual(findings, [])
 
     def test_collect_project_results_marks_present_projects_as_ok(self) -> None:
@@ -140,36 +180,93 @@ class SentryZeroTests(unittest.TestCase):
             "_request_json",
             return_value=([], {"x-hits": "0"}),
         ):
-            results, findings = sentry_module._collect_project_results("prekzursil", ["quality-zero-platform"], "token-123")
+            results, findings = sentry_module._collect_project_results(
+                "prekzursil",
+                ["quality-zero-platform"],
+                "token-123",
+            )
 
-        self.assertEqual(results, [{"project": "quality-zero-platform", "unresolved": 0, "state": "ok"}])
+        self.assertEqual(
+            results,
+            [
+                {
+                    "project": "quality-zero-platform",
+                    "unresolved": 0,
+                    "state": "ok",
+                }
+            ],
+        )
         self.assertEqual(findings, [])
 
-    def test_collect_project_results_uses_payload_length_and_reports_unresolved_issues(self) -> None:
+    def test_collect_project_results_uses_payload_length_and_reports_unresolved_issues(
+        self,
+    ) -> None:
         """Fall back to payload length when Sentry omits the x-hits header."""
         with patch.object(
             sentry_module,
             "_request_json",
             return_value=([{"id": "a"}, {"id": "b"}], {}),
         ):
-            results, findings = sentry_module._collect_project_results("prekzursil", ["quality-zero-platform"], "token-123")
+            results, findings = sentry_module._collect_project_results(
+                "prekzursil",
+                ["quality-zero-platform"],
+                "token-123",
+            )
 
-        self.assertEqual(results, [{"project": "quality-zero-platform", "unresolved": 2, "state": "ok"}])
-        self.assertEqual(findings, ["Sentry project quality-zero-platform has 2 unresolved issues (expected 0)."])
+        self.assertEqual(
+            results,
+            [
+                {
+                    "project": "quality-zero-platform",
+                    "unresolved": 2,
+                    "state": "ok",
+                }
+            ],
+        )
+        self.assertEqual(
+            findings,
+            [
+                "Sentry project quality-zero-platform has 2 unresolved issues "
+                "(expected 0)."
+            ],
+        )
 
-    def test_collect_project_results_validates_payload_and_reraises_non_404_http_errors(self) -> None:
-        """Reject invalid payload shapes and surface non-404 provider failures unchanged."""
-        with patch.object(sentry_module, "_request_json", return_value=({"bad": "payload"}, {"x-hits": "0"})):
-            with self.assertRaisesRegex(RuntimeError, "Unexpected Sentry issues response payload"):
-                sentry_module._collect_project_results("prekzursil", ["quality-zero-platform"], "token-123")
+    def test_collect_project_results_validates_payload_and_reraises_non_404_http_errors(
+        self,
+    ) -> None:
+        """Reject invalid payload shapes and surface non-404 provider failures."""
+        with patch.object(
+            sentry_module,
+            "_request_json",
+            return_value=({"bad": "payload"}, {"x-hits": "0"}),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "Unexpected Sentry issues response payload",
+            ):
+                sentry_module._collect_project_results(
+                    "prekzursil",
+                    ["quality-zero-platform"],
+                    "token-123",
+                )
 
         with patch.object(
             sentry_module,
             "_request_json",
-            side_effect=HTTPError("https://sentry.io/api/0/projects/prekzursil/app/issues/", 500, "Server Error", hdrs=Message(), fp=None),
+            side_effect=HTTPError(
+                "https://sentry.io/api/0/projects/prekzursil/app/issues/",
+                500,
+                "Server Error",
+                hdrs=Message(),
+                fp=None,
+            ),
         ):
             with self.assertRaises(HTTPError):
-                sentry_module._collect_project_results("prekzursil", ["quality-zero-platform"], "token-123")
+                sentry_module._collect_project_results(
+                    "prekzursil",
+                    ["quality-zero-platform"],
+                    "token-123",
+                )
 
     def test_render_md_includes_project_state_suffixes(self) -> None:
         """Show non-default project states in the human-readable report."""
@@ -179,8 +276,16 @@ class SentryZeroTests(unittest.TestCase):
                 "org": "prekzursil",
                 "timestamp_utc": "2026-03-28T00:00:00+00:00",
                 "projects": [
-                    {"project": "quality-zero-platform", "unresolved": 0, "state": "ok"},
-                    {"project": "event-link", "unresolved": 0, "state": "not_found"},
+                    {
+                        "project": "quality-zero-platform",
+                        "unresolved": 0,
+                        "state": "ok",
+                    },
+                    {
+                        "project": "event-link",
+                        "unresolved": 0,
+                        "state": "not_found",
+                    },
                 ],
                 "findings": [],
             }
@@ -190,7 +295,7 @@ class SentryZeroTests(unittest.TestCase):
         self.assertIn("`event-link` unresolved=`0` state=`not_found`", markdown)
 
     def test_main_handles_missing_inputs_and_runtime_failures(self) -> None:
-        """Return failing reports for both missing configuration and runtime exceptions."""
+        """Return failing reports for config gaps and runtime exceptions."""
         args = Namespace(
             org=str(),
             project=[],
@@ -198,8 +303,18 @@ class SentryZeroTests(unittest.TestCase):
             out_json="sentry-zero/sentry.json",
             out_md="sentry-zero/sentry.md",
         )
-        with patch.dict("os.environ", {}, clear=True), patch.object(sentry_module, "_parse_args", return_value=args), patch.object(
-            sentry_module, "write_report", return_value=0
+        with patch.dict(
+            "os.environ",
+            {},
+            clear=True,
+        ), patch.object(
+            sentry_module,
+            "_parse_args",
+            return_value=args,
+        ), patch.object(
+            sentry_module,
+            "write_report",
+            return_value=0,
         ) as write_report_mock:
             result = sentry_module.main()
 
@@ -218,17 +333,28 @@ class SentryZeroTests(unittest.TestCase):
             out_json="sentry-zero/sentry.json",
             out_md="sentry-zero/sentry.md",
         )
-        with patch.object(sentry_module, "_parse_args", return_value=ok_args), patch.object(
+        with patch.object(
+            sentry_module,
+            "_parse_args",
+            return_value=ok_args,
+        ), patch.object(
             sentry_module,
             "_collect_project_results",
             side_effect=RuntimeError("provider down"),
-        ), patch.object(sentry_module, "write_report", return_value=0) as write_report_mock:
+        ), patch.object(
+            sentry_module,
+            "write_report",
+            return_value=0,
+        ) as write_report_mock:
             result = sentry_module.main()
 
         self.assertEqual(result, 1)
         failure_payload = write_report_mock.call_args.args[0]
         self.assertEqual(failure_payload["status"], "fail")
-        self.assertEqual(failure_payload["findings"], ["Sentry API request failed: provider down"])
+        self.assertEqual(
+            failure_payload["findings"],
+            ["Sentry API request failed: provider down"],
+        )
 
     def test_main_returns_success_and_propagates_report_failures(self) -> None:
         """Return success for clean projects and preserve write_report failures."""
@@ -240,23 +366,66 @@ class SentryZeroTests(unittest.TestCase):
             out_json="sentry-zero/sentry.json",
             out_md="sentry-zero/sentry.md",
         )
-        with patch.object(sentry_module, "_parse_args", return_value=args), patch.object(
+        with patch.object(
+            sentry_module,
+            "_parse_args",
+            return_value=args,
+        ), patch.object(
             sentry_module,
             "_collect_project_results",
-            return_value=([{"project": "quality-zero-platform", "unresolved": 0, "state": "ok"}], []),
-        ), patch.object(sentry_module, "write_report", return_value=0) as write_report_mock:
+            return_value=(
+                [
+                    {
+                        "project": "quality-zero-platform",
+                        "unresolved": 0,
+                        "state": "ok",
+                    }
+                ],
+                [],
+            ),
+        ), patch.object(
+            sentry_module,
+            "write_report",
+            return_value=0,
+        ) as write_report_mock:
             result = sentry_module.main()
 
         self.assertEqual(result, 0)
         success_payload = write_report_mock.call_args.args[0]
         self.assertEqual(success_payload["status"], "pass")
-        self.assertEqual(success_payload["projects"], [{"project": "quality-zero-platform", "unresolved": 0, "state": "ok"}])
+        self.assertEqual(
+            success_payload["projects"],
+            [
+                {
+                    "project": "quality-zero-platform",
+                    "unresolved": 0,
+                    "state": "ok",
+                }
+            ],
+        )
 
-        with patch.object(sentry_module, "_parse_args", return_value=args), patch.object(
+        with patch.object(
+            sentry_module,
+            "_parse_args",
+            return_value=args,
+        ), patch.object(
             sentry_module,
             "_collect_project_results",
-            return_value=([{"project": "quality-zero-platform", "unresolved": 0, "state": "ok"}], []),
-        ), patch.object(sentry_module, "write_report", return_value=9):
+            return_value=(
+                [
+                    {
+                        "project": "quality-zero-platform",
+                        "unresolved": 0,
+                        "state": "ok",
+                    }
+                ],
+                [],
+            ),
+        ), patch.object(
+            sentry_module,
+            "write_report",
+            return_value=9,
+        ):
             self.assertEqual(sentry_module.main(), 9)
 
     def test_run_as_main_raises_system_exit(self) -> None:

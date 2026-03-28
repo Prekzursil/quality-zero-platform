@@ -21,7 +21,11 @@ SENTRY_API_BASE = "https://sentry.io/api/0"
 
 def _parse_args() -> argparse.Namespace:
     """Parse CLI arguments for the Sentry zero gate."""
-    parser = argparse.ArgumentParser(description="Assert Sentry has zero unresolved issues for configured projects.")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Assert Sentry has zero unresolved issues for configured projects."
+        )
+    )
     parser.add_argument("--org", default="")
     parser.add_argument("--project", action="append", default=[])
     parser.add_argument("--token", default="")
@@ -79,7 +83,10 @@ def _render_md(payload: Mapping[str, Any]) -> str:
         for item in payload["projects"]:
             state = str(item.get("state") or "ok")
             state_suffix = "" if state == "ok" else f" state=`{state}`"
-            lines.append(f"- `{item['project']}` unresolved=`{item['unresolved']}`{state_suffix}")
+            lines.append(
+                f"- `{item['project']}` unresolved=`{item['unresolved']}`"
+                f"{state_suffix}"
+            )
     else:
         lines.append("- None")
     lines.extend(["", "## Findings"])
@@ -91,7 +98,13 @@ def _issues_url(org: str, project_slug: str) -> str:
     """Build the unresolved-issues endpoint for a Sentry project."""
     org_slug = urllib.parse.quote(org, safe="")
     project_param = urllib.parse.quote(project_slug, safe="")
-    query = urllib.parse.urlencode([("query", "is:unresolved"), ("limit", "1"), ("project", project_param)])
+    query = urllib.parse.urlencode(
+        [
+            ("query", "is:unresolved"),
+            ("limit", "1"),
+            ("project", project_param),
+        ]
+    )
     return f"{SENTRY_API_BASE}/projects/{org_slug}/{project_param}/issues/?{query}"
 
 
@@ -107,7 +120,11 @@ def _validate_sentry_inputs(token: str, org: str, projects: List[str]) -> List[s
     return findings
 
 
-def _collect_project_results(org: str, projects: List[str], token: str) -> Tuple[List[Dict[str, Any]], List[str]]:
+def _collect_project_results(
+    org: str,
+    projects: List[str],
+    token: str,
+) -> Tuple[List[Dict[str, Any]], List[str]]:
     """Load unresolved-issue counts for each configured Sentry project."""
     findings: List[str] = []
     project_results: List[Dict[str, Any]] = []
@@ -116,7 +133,13 @@ def _collect_project_results(org: str, projects: List[str], token: str) -> Tuple
             payload, headers = _request_json(_issues_url(org, project), token)
         except HTTPError as exc:
             if exc.code == 404:
-                project_results.append({"project": project, "unresolved": 0, "state": "not_found"})
+                project_results.append(
+                    {
+                        "project": project,
+                        "unresolved": 0,
+                        "state": "not_found",
+                    }
+                )
                 continue
             raise
         if not isinstance(payload, list):
@@ -125,8 +148,17 @@ def _collect_project_results(org: str, projects: List[str], token: str) -> Tuple
         if unresolved is None:
             unresolved = len(payload)
         if unresolved != 0:
-            findings.append(f"Sentry project {project} has {unresolved} unresolved issues (expected 0).")
-        project_results.append({"project": project, "unresolved": unresolved, "state": "ok"})
+            findings.append(
+                f"Sentry project {project} has {unresolved} unresolved issues "
+                "(expected 0)."
+            )
+        project_results.append(
+            {
+                "project": project,
+                "unresolved": unresolved,
+                "state": "ok",
+            }
+        )
     return project_results, findings
 
 

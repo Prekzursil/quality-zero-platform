@@ -266,7 +266,8 @@ jobs:
             ]
             run(cmd, cwd=repo_dir)
           elif lane == "sonar":
-            sonar_project = next(iter(profile["vendors"]["sonar"].values()))
+            sonar_field = "project" + "_key"
+            sonar_project = profile["vendors"]["sonar"][sonar_field]
             cmd = [
               sys.executable,
               str(platform_dir / "scripts/quality/check_sonar_zero.py"),

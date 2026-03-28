@@ -6,7 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Mapping, Tuple, cast
+from typing import List, Mapping, Tuple, cast
 from unittest.mock import MagicMock, patch
 
 from scripts.quality import check_required_checks as checks_module
@@ -17,6 +17,7 @@ class RequiredChecksTests(unittest.TestCase):
 
     @staticmethod
     def _wait_args():
+        """Build polling arguments for the reusable wait helper tests."""
         return type(
             "Args",
             (),
@@ -32,6 +33,7 @@ class RequiredChecksTests(unittest.TestCase):
     def _success_check_run(
         name: str = "shared-scanner-matrix / Coverage 100 Gate",
     ) -> Mapping[str, Mapping[str, str]]:
+        """Return a successful check-run payload keyed by check name."""
         return {
             name: {
                 "state": "completed",
@@ -40,12 +42,13 @@ class RequiredChecksTests(unittest.TestCase):
             }
         }
 
+    @staticmethod
     def _run_main_with_payload(
-        self,
         *,
         payload: Mapping[str, object],
         write_report_result: int = 0,
     ) -> Tuple[int, MagicMock]:
+        """Execute the gate entrypoint with a mocked payload and writer."""
         with tempfile.TemporaryDirectory() as tmpdir, patch.object(
             sys,
             "argv",
@@ -82,8 +85,9 @@ class RequiredChecksTests(unittest.TestCase):
         self,
         *,
         repo_root: Path,
-        sys_path: list[str],
+        sys_path: List[str],
     ) -> None:
+        """Assert the CLI exits when no required contexts are configured."""
         with patch.object(
             sys,
             "argv",
@@ -118,6 +122,7 @@ class RequiredChecksTests(unittest.TestCase):
                 )
 
     def test_parse_args_supports_defaults(self) -> None:
+        """Verify the parser keeps the documented timeout defaults."""
         with patch.object(
             sys,
             "argv",
@@ -140,6 +145,7 @@ class RequiredChecksTests(unittest.TestCase):
         self.assertEqual(args.poll_seconds, 20)
 
     def test_api_get_uses_expected_github_request_shape(self) -> None:
+        """Ensure GitHub API calls use the expected request envelope."""
         with patch.object(
             checks_module,
             "load_json_https",

@@ -629,7 +629,7 @@ class ControlPlaneTests(unittest.TestCase):
             ]
             repo_root = str(ROOT)
             without_empty = [
-                entry for entry in sys.path if entry != repo_root and entry != ""
+                entry for entry in sys.path if entry not in (repo_root, "")
             ]
 
             for sys_path in (without_empty, ["", *without_empty]):
@@ -667,7 +667,7 @@ class ControlPlaneTests(unittest.TestCase):
         repo_root = str(ROOT)
         sys_path = [
             "",
-            *(entry for entry in sys.path if entry != repo_root and entry != ""),
+            *(entry for entry in sys.path if entry not in (repo_root, "")),
         ]
 
         with (

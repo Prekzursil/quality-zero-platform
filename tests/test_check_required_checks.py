@@ -25,7 +25,7 @@ class RequiredChecksTests(unittest.TestCase):
             },
         )()
 
-    def _success_check_run(self, name: str = "shared-scanner-matrix / Coverage 100 Gate") -> Mapping[str, str]:
+    def _success_check_run(self, name: str = "shared-scanner-matrix / Coverage 100 Gate") -> Mapping[str, Mapping[str, str]]:
         return {
             name: {
                 "state": "completed",

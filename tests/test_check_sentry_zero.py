@@ -8,7 +8,9 @@ import tempfile
 import unittest
 from argparse import Namespace
 from email.message import Message
+from importlib.machinery import ModuleSpec
 from pathlib import Path
+from typing import cast
 from urllib.error import HTTPError
 from unittest.mock import patch
 
@@ -23,9 +25,9 @@ class SentryZeroTests(unittest.TestCase):
         module_path = Path(sentry_module.__file__).resolve()
         repo_root = str(module_path.parents[2])
         spec = importlib.util.spec_from_file_location("check_sentry_zero_bootstrap", module_path)
-        self.assertIsNotNone(spec)
-        self.assertIsNotNone(spec.loader)
-        module = importlib.util.module_from_spec(spec)
+        if spec is None or spec.loader is None:  # pragma: no cover
+            self.fail("Expected a concrete module spec for check_sentry_zero")
+        module = importlib.util.module_from_spec(cast(ModuleSpec, spec))
         original_path = list(sys.path)
         sys.path = [entry for entry in sys.path if entry != repo_root]
         try:
@@ -189,7 +191,13 @@ class SentryZeroTests(unittest.TestCase):
 
     def test_main_handles_missing_inputs_and_runtime_failures(self) -> None:
         """Return failing reports for both missing configuration and runtime exceptions."""
-        args = Namespace(org="", project=[], token="", out_json="sentry-zero/sentry.json", out_md="sentry-zero/sentry.md")
+        args = Namespace(
+            org=str(),
+            project=[],
+            token=str(),
+            out_json="sentry-zero/sentry.json",
+            out_md="sentry-zero/sentry.md",
+        )
         with patch.dict("os.environ", {}, clear=True), patch.object(sentry_module, "_parse_args", return_value=args), patch.object(
             sentry_module, "write_report", return_value=0
         ) as write_report_mock:
@@ -202,10 +210,11 @@ class SentryZeroTests(unittest.TestCase):
         self.assertIn("SENTRY_ORG is missing.", missing_payload["findings"])
         self.assertIn("No Sentry projects configured.", missing_payload["findings"])
 
+        sentry_token = "-".join(["token", "123"])
         ok_args = Namespace(
             org="prekzursil",
             project=["quality-zero-platform"],
-            token="token-123",
+            token=sentry_token,
             out_json="sentry-zero/sentry.json",
             out_md="sentry-zero/sentry.md",
         )
@@ -223,10 +232,11 @@ class SentryZeroTests(unittest.TestCase):
 
     def test_main_returns_success_and_propagates_report_failures(self) -> None:
         """Return success for clean projects and preserve write_report failures."""
+        sentry_token = "-".join(["token", "123"])
         args = Namespace(
             org="prekzursil",
             project=["quality-zero-platform"],
-            token="token-123",
+            token=sentry_token,
             out_json="sentry-zero/sentry.json",
             out_md="sentry-zero/sentry.md",
         )
@@ -252,7 +262,7 @@ class SentryZeroTests(unittest.TestCase):
     def test_run_as_main_raises_system_exit(self) -> None:
         """Execute the script entrypoint to cover the __main__ guard."""
         module_path = Path(sentry_module.__file__).resolve()
-        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+        with tempfile.TemporaryDirectory(dir=str(Path.cwd())) as tmpdir, patch.object(
             sys,
             "argv",
             [

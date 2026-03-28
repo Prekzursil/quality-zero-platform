@@ -7,6 +7,14 @@ required_contexts:
     - build-test
     - analyze
     - scan
+    - Codecov Analytics
+    - Coverage 100 Gate
+    - QLTY Zero
+    - Sonar Zero
+    - Codacy Zero
+    - Semgrep Zero
+    - Sentry Zero
+    - DeepScan Zero
   pull_request_only:
     - dependency-review
   required_now:
@@ -15,6 +23,13 @@ required_contexts:
     - scan
     - dependency-review
     - shared-codecov-analytics / Codecov Analytics
+    - shared-scanner-matrix / Coverage 100 Gate
+    - shared-scanner-matrix / QLTY Zero
+    - shared-scanner-matrix / Sonar Zero
+    - shared-scanner-matrix / Codacy Zero
+    - shared-scanner-matrix / Semgrep Zero
+    - shared-scanner-matrix / Sentry Zero
+    - shared-scanner-matrix / DeepScan Zero
     - aggregate-gate / Quality Zero Gate
     - shared-scanner-matrix / Quality Rollup
   target:
@@ -23,6 +38,13 @@ required_contexts:
     - scan
     - dependency-review
     - shared-codecov-analytics / Codecov Analytics
+    - shared-scanner-matrix / Coverage 100 Gate
+    - shared-scanner-matrix / QLTY Zero
+    - shared-scanner-matrix / Sonar Zero
+    - shared-scanner-matrix / Codacy Zero
+    - shared-scanner-matrix / Semgrep Zero
+    - shared-scanner-matrix / Sentry Zero
+    - shared-scanner-matrix / DeepScan Zero
     - aggregate-gate / Quality Zero Gate
     - shared-scanner-matrix / Quality Rollup
 coverage:

@@ -144,6 +144,7 @@ def _evaluate(
     required: List[str],
     contexts: Dict[str, Dict[str, str]],
 ) -> Tuple[str, List[str], List[str]]:
+    """Return overall gate status plus missing and failed required contexts."""
     missing = [
         context
         for context in required
@@ -167,6 +168,7 @@ def _has_in_progress_check_runs(
     required: List[str],
     contexts: Dict[str, Dict[str, str]],
 ) -> bool:
+    """Check whether any required check-run context is still running."""
     return any(
         observed.get("state") != "completed"
         for context in required
@@ -181,6 +183,7 @@ def _collect_payload(
     required: List[str],
     token: str,
 ) -> Dict[str, Any]:
+    """Fetch the latest GitHub contexts and evaluate the required set."""
     check_runs = _api_get(repo, f"commits/{sha}/check-runs?per_page=100", token)
     statuses = _api_get(repo, f"commits/{sha}/status", token)
     contexts = _collect_contexts(check_runs, statuses)
@@ -198,6 +201,7 @@ def _collect_payload(
 
 
 def _should_keep_polling(required: List[str], payload: Mapping[str, Any]) -> bool:
+    """Keep polling until required contexts either pass or settle in failure."""
     if payload.get("status") == "pass":
         return False
     if payload.get("missing"):
@@ -214,6 +218,7 @@ def _wait_for_payload(
     required: List[str],
     token: str,
 ) -> Dict[str, Any]:
+    """Poll GitHub until the required contexts settle or the timeout expires."""
     deadline = time.time() + max(args.timeout_seconds, 1)
     final_payload: Dict[str, Any]
     while time.time() <= deadline:
@@ -225,6 +230,7 @@ def _wait_for_payload(
 
 
 def _render_md(payload: Mapping[str, Any]) -> str:
+    """Render a markdown report for the required-context gate result."""
     lines = [
         "# Quality Zero Gate - Required Contexts",
         "",
@@ -241,6 +247,7 @@ def _render_md(payload: Mapping[str, Any]) -> str:
 
 
 def main() -> int:
+    """Run the required-context gate and write its JSON and markdown reports."""
     args = _parse_args()
     token = (
         os.environ.get("GITHUB_TOKEN", "")

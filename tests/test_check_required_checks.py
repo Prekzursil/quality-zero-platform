@@ -13,7 +13,10 @@ from scripts.quality import check_required_checks as checks_module
 
 
 class RequiredChecksTests(unittest.TestCase):
-    def _wait_args(self):
+    """Cover required-context gate behavior and report rendering."""
+
+    @staticmethod
+    def _wait_args():
         return type(
             "Args",
             (),
@@ -25,7 +28,10 @@ class RequiredChecksTests(unittest.TestCase):
             },
         )()
 
-    def _success_check_run(self, name: str = "shared-scanner-matrix / Coverage 100 Gate") -> Mapping[str, Mapping[str, str]]:
+    @staticmethod
+    def _success_check_run(
+        name: str = "shared-scanner-matrix / Coverage 100 Gate",
+    ) -> Mapping[str, Mapping[str, str]]:
         return {
             name: {
                 "state": "completed",
@@ -56,11 +62,60 @@ class RequiredChecksTests(unittest.TestCase):
                 "--out-md",
                 str(Path(tmpdir) / "required-checks.md"),
             ],
-        ), patch.dict(os.environ, {"GH_TOKEN": "token-123"}, clear=False), patch.object(
-            checks_module, "_wait_for_payload", return_value=payload
-        ), patch.object(checks_module, "write_report", return_value=write_report_result) as writer:
+        ), patch.dict(
+            os.environ,
+            {"GH_TOKEN": "token-123"},
+            clear=False,
+        ), patch.object(
+            checks_module,
+            "_wait_for_payload",
+            return_value=payload,
+        ), patch.object(
+            checks_module,
+            "write_report",
+            return_value=write_report_result,
+        ) as writer:
             result = checks_module.main()
         return result, cast(MagicMock, writer)
+
+    def _assert_entrypoint_requires_contexts(
+        self,
+        *,
+        repo_root: Path,
+        sys_path: list[str],
+    ) -> None:
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "check_required_checks.py",
+                "--repo",
+                "Prekzursil/quality-zero-platform",
+                "--sha",
+                "abc123",
+            ],
+        ), patch.object(
+            sys,
+            "path",
+            sys_path,
+        ), patch.dict(
+            os.environ,
+            {"GH_TOKEN": "token-123"},
+            clear=False,
+        ):
+            with self.assertRaisesRegex(
+                SystemExit,
+                "At least one --required-context is required",
+            ):
+                runpy.run_path(
+                    str(
+                        repo_root
+                        / "scripts"
+                        / "quality"
+                        / "check_required_checks.py"
+                    ),
+                    run_name="__main__",
+                )
 
     def test_parse_args_supports_defaults(self) -> None:
         with patch.object(
@@ -85,24 +140,56 @@ class RequiredChecksTests(unittest.TestCase):
         self.assertEqual(args.poll_seconds, 20)
 
     def test_api_get_uses_expected_github_request_shape(self) -> None:
-        with patch.object(checks_module, "load_json_https", return_value=({"ok": True}, None)) as loader:
-            payload = checks_module._api_get("Prekzursil/quality-zero-platform", "commits/abc/status", "token-123")
+        with patch.object(
+            checks_module,
+            "load_json_https",
+            return_value=({"ok": True}, None),
+        ) as loader:
+            payload = checks_module._api_get(
+                "Prekzursil/quality-zero-platform",
+                "commits/abc/status",
+                "token-123",
+            )
 
         self.assertEqual(payload, {"ok": True})
-        self.assertEqual(loader.call_args.args[0], "https://api.github.com/repos/Prekzursil/quality-zero-platform/commits/abc/status")
+        self.assertEqual(
+            loader.call_args.args[0],
+            (
+                "https://api.github.com/repos/Prekzursil/"
+                "quality-zero-platform/commits/abc/status"
+            ),
+        )
         self.assertEqual(loader.call_args.kwargs["allowed_hosts"], {"api.github.com"})
-        self.assertEqual(loader.call_args.kwargs["headers"]["Authorization"], "Bearer token-123")
+        self.assertEqual(
+            loader.call_args.kwargs["headers"]["Authorization"],
+            "Bearer token-123",
+        )
 
     def test_api_get_rejects_non_object_payloads(self) -> None:
-        with patch.object(checks_module, "load_json_https", return_value=(["not-a-dict"], None)):
-            with self.assertRaisesRegex(RuntimeError, "Unexpected GitHub API response payload"):
-                checks_module._api_get("Prekzursil/quality-zero-platform", "commits/abc/status", "token-123")
+        with patch.object(
+            checks_module,
+            "load_json_https",
+            return_value=(["not-a-dict"], None),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "Unexpected GitHub API response payload",
+            ):
+                checks_module._api_get(
+                    "Prekzursil/quality-zero-platform",
+                    "commits/abc/status",
+                    "token-123",
+                )
 
     def test_collect_contexts_merges_check_runs_and_statuses(self) -> None:
         contexts = checks_module._collect_contexts(
             {
                 "check_runs": [
-                    {"name": "shared-scanner-matrix / Coverage 100 Gate", "status": "completed", "conclusion": "success"},
+                    {
+                        "name": "shared-scanner-matrix / Coverage 100 Gate",
+                        "status": "completed",
+                        "conclusion": "success",
+                    },
                     {"name": "", "status": "completed", "conclusion": "success"},
                 ]
             },
@@ -126,7 +213,9 @@ class RequiredChecksTests(unittest.TestCase):
         )
 
     def test_collect_status_contexts_skips_blank_names(self) -> None:
-        contexts = checks_module._collect_status_contexts({"statuses": [{"context": "", "state": "success"}]})
+        contexts = checks_module._collect_status_contexts(
+            {"statuses": [{"context": "", "state": "success"}]}
+        )
         self.assertEqual(contexts, {})
 
     def test_evaluate_accepts_reusable_workflow_suffix_matches(self) -> None:
@@ -235,7 +324,9 @@ class RequiredChecksTests(unittest.TestCase):
             )
         )
 
-    def test_has_in_progress_check_runs_ignores_non_required_in_progress_checks(self) -> None:
+    def test_has_in_progress_check_runs_ignores_non_required_in_progress_checks(
+        self,
+    ) -> None:
         self.assertFalse(
             checks_module._has_in_progress_check_runs(
                 ["build-test"],
@@ -259,10 +350,22 @@ class RequiredChecksTests(unittest.TestCase):
             checks_module,
             "_api_get",
             side_effect=[
-                {"check_runs": [{"name": "shared-scanner-matrix / Coverage 100 Gate", "status": "completed", "conclusion": "success"}]},
+                {
+                    "check_runs": [
+                        {
+                            "name": "shared-scanner-matrix / Coverage 100 Gate",
+                            "status": "completed",
+                            "conclusion": "success",
+                        }
+                    ]
+                },
                 {"statuses": [{"context": "DeepScan", "state": "success"}]},
             ],
-        ), patch.object(checks_module, "utc_timestamp", return_value="2026-03-15T00:00:00+00:00"):
+        ), patch.object(
+            checks_module,
+            "utc_timestamp",
+            return_value="2026-03-15T00:00:00+00:00",
+        ):
             payload = checks_module._collect_payload(
                 "Prekzursil/quality-zero-platform",
                 "abc123",
@@ -298,9 +401,18 @@ class RequiredChecksTests(unittest.TestCase):
             },
         ]
 
-        with patch.object(checks_module, "_collect_payload", side_effect=payloads) as collector, patch.object(
-            checks_module.time, "sleep"
-        ) as sleep_mock, patch.object(checks_module.time, "time", side_effect=[0, 1, 2]):
+        with patch.object(
+            checks_module,
+            "_collect_payload",
+            side_effect=payloads,
+        ) as collector, patch.object(
+            checks_module.time,
+            "sleep",
+        ) as sleep_mock, patch.object(
+            checks_module.time,
+            "time",
+            side_effect=[0, 1, 2],
+        ):
             payload = checks_module._wait_for_payload(
                 self._wait_args(),
                 ["Coverage 100 Gate"],
@@ -311,7 +423,9 @@ class RequiredChecksTests(unittest.TestCase):
         self.assertEqual(collector.call_count, 2)
         sleep_mock.assert_called_once_with(5)
 
-    def test_wait_for_payload_keeps_polling_while_required_contexts_are_still_missing(self) -> None:
+    def test_wait_for_payload_keeps_polling_while_required_contexts_are_still_missing(
+        self,
+    ) -> None:
         payloads = [
             {
                 "status": "fail",
@@ -334,9 +448,18 @@ class RequiredChecksTests(unittest.TestCase):
             },
         ]
 
-        with patch.object(checks_module, "_collect_payload", side_effect=payloads) as collector, patch.object(
-            checks_module.time, "sleep"
-        ) as sleep_mock, patch.object(checks_module.time, "time", side_effect=[0, 1, 2]):
+        with patch.object(
+            checks_module,
+            "_collect_payload",
+            side_effect=payloads,
+        ) as collector, patch.object(
+            checks_module.time,
+            "sleep",
+        ) as sleep_mock, patch.object(
+            checks_module.time,
+            "time",
+            side_effect=[0, 1, 2],
+        ):
             payload = checks_module._wait_for_payload(
                 self._wait_args(),
                 ["Coverage 100 Gate", "SonarCloud Code Analysis"],
@@ -347,7 +470,9 @@ class RequiredChecksTests(unittest.TestCase):
         self.assertEqual(collector.call_count, 2)
         sleep_mock.assert_called_once_with(5)
 
-    def test_wait_for_payload_returns_last_failure_when_checks_are_no_longer_running(self) -> None:
+    def test_wait_for_payload_returns_last_failure_when_checks_are_no_longer_running(
+        self,
+    ) -> None:
         payload = {
             "status": "fail",
             "missing": [],
@@ -409,7 +534,10 @@ class RequiredChecksTests(unittest.TestCase):
                 "abc123",
             ],
         ), patch.dict(os.environ, {"GH_TOKEN": "token-123"}, clear=False):
-            with self.assertRaisesRegex(SystemExit, "At least one --required-context is required"):
+            with self.assertRaisesRegex(
+                SystemExit,
+                "At least one --required-context is required",
+            ):
                 checks_module.main()
 
     def test_main_rejects_missing_github_token(self) -> None:
@@ -426,48 +554,39 @@ class RequiredChecksTests(unittest.TestCase):
                 "Coverage 100 Gate",
             ],
         ), patch.dict(os.environ, {"GH_TOKEN": "", "GITHUB_TOKEN": ""}, clear=False):
-            with self.assertRaisesRegex(SystemExit, "GITHUB_TOKEN or GH_TOKEN is required"):
+            with self.assertRaisesRegex(
+                SystemExit,
+                "GITHUB_TOKEN or GH_TOKEN is required",
+            ):
                 checks_module.main()
 
     def test_script_entrypoint_raises_system_exit_from_main(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
-        without_empty = [entry for entry in sys.path if entry != str(repo_root) and entry != ""]
+        without_empty = [
+            entry
+            for entry in sys.path
+            if entry != str(repo_root) and entry != ""
+        ]
 
         for sys_path in (without_empty, ["", *without_empty]):
             if "" not in sys_path:
                 sys_path.insert(0, "")
-
-            with patch.object(
-                sys,
-                "argv",
-                [
-                    "check_required_checks.py",
-                    "--repo",
-                    "Prekzursil/quality-zero-platform",
-                    "--sha",
-                    "abc123",
-                ],
-            ), patch.object(sys, "path", sys_path), patch.dict(os.environ, {"GH_TOKEN": "token-123"}, clear=False):
-                with self.assertRaisesRegex(SystemExit, "At least one --required-context is required"):
-                    runpy.run_path(str(repo_root / "scripts" / "quality" / "check_required_checks.py"), run_name="__main__")
+            self._assert_entrypoint_requires_contexts(
+                repo_root=repo_root,
+                sys_path=sys_path,
+            )
 
     def test_script_entrypoint_uses_existing_empty_sys_path_entry(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
-        sys_path = ["", *(entry for entry in sys.path if entry != str(repo_root) and entry != "")]
+        sys_path = [
+            "",
+            *(entry for entry in sys.path if entry != str(repo_root) and entry != ""),
+        ]
 
-        with patch.object(
-            sys,
-            "argv",
-            [
-                "check_required_checks.py",
-                "--repo",
-                "Prekzursil/quality-zero-platform",
-                "--sha",
-                "abc123",
-            ],
-        ), patch.object(sys, "path", sys_path), patch.dict(os.environ, {"GH_TOKEN": "token-123"}, clear=False):
-            with self.assertRaisesRegex(SystemExit, "At least one --required-context is required"):
-                runpy.run_path(str(repo_root / "scripts" / "quality" / "check_required_checks.py"), run_name="__main__")
+        self._assert_entrypoint_requires_contexts(
+            repo_root=repo_root,
+            sys_path=sys_path,
+        )
 
     def test_main_returns_success_when_report_written_and_payload_passes(self) -> None:
         payload = {

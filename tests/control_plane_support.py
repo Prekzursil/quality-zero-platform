@@ -1,8 +1,7 @@
 from __future__ import absolute_import
 
-import unittest
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Protocol
 
 from scripts.quality.control_plane import load_inventory, load_repo_profile
 
@@ -10,7 +9,17 @@ from scripts.quality.control_plane import load_inventory, load_repo_profile
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class ControlPlaneAssertions(unittest.TestCase):
+class _AssertionProtocol(Protocol):
+    """Structural typing for unittest-style assertion helpers used by mixins."""
+
+    def assertEqual(self, first, second, msg=None) -> None: ...
+
+    def assertIn(self, member, container, msg=None) -> None: ...
+
+    def assertNotIn(self, member, container, msg=None) -> None: ...
+
+
+class ControlPlaneAssertions(_AssertionProtocol):
     """Shared helpers for control-plane regression tests."""
 
     @staticmethod

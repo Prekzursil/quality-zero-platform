@@ -1,5 +1,6 @@
 from __future__ import absolute_import
 
+import unittest
 from pathlib import Path
 from typing import Dict
 
@@ -9,7 +10,7 @@ from scripts.quality.control_plane import load_inventory, load_repo_profile
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class ControlPlaneAssertions:
+class ControlPlaneAssertions(unittest.TestCase):
     """Shared helpers for control-plane regression tests."""
 
     @staticmethod

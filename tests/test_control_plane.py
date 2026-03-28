@@ -29,21 +29,30 @@ class ControlPlaneTests(unittest.TestCase):
 
     @staticmethod
     def _special_repo_profiles() -> Dict[str, dict]:
-        """Load the repo profiles that have custom multi-language or platform overlays."""
+        """Load repo profiles that have custom multi-language or platform overlays."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         return {
-            "devextreme": load_repo_profile(inventory, "Prekzursil/DevExtreme-Filter-Go-Language"),
+            "devextreme": load_repo_profile(
+                inventory, "Prekzursil/DevExtreme-Filter-Go-Language"
+            ),
             "reframe": load_repo_profile(inventory, "Prekzursil/Reframe"),
             "momentstudio": load_repo_profile(inventory, "Prekzursil/momentstudio"),
             "env_inspector": load_repo_profile(inventory, "Prekzursil/env-inspector"),
-            "airline": load_repo_profile(inventory, "Prekzursil/Airline-Reservations-System"),
+            "airline": load_repo_profile(
+                inventory, "Prekzursil/Airline-Reservations-System"
+            ),
             "swfoc": load_repo_profile(inventory, "Prekzursil/SWFOC-Mod-Menu"),
-            "quality_zero_platform": load_repo_profile(inventory, "Prekzursil/quality-zero-platform"),
+            "quality_zero_platform": load_repo_profile(
+                inventory, "Prekzursil/quality-zero-platform"
+            ),
         }
 
     def _assert_airline_existing_behaviors(self, profile: dict) -> None:
         """Pin the Airline profile's multi-language coverage contract and thresholds."""
-        airline_inputs = {(item["format"], item["name"], item["path"]) for item in profile["coverage"]["inputs"]}
+        airline_inputs = {
+            (item["format"], item["name"], item["path"])
+            for item in profile["coverage"]["inputs"]
+        }
         self.assertEqual(
             airline_inputs,
             {
@@ -53,10 +62,17 @@ class ControlPlaneTests(unittest.TestCase):
             },
         )
         self.assertIn(
-            "python3 -m pytest -q tests/test_quality_security_scripts.py tests/test_quality_coverage_scripts.py",
+            (
+                "python3 -m pytest -q "
+                "tests/test_quality_security_scripts.py "
+                "tests/test_quality_coverage_scripts.py"
+            ),
             profile["coverage"]["command"],
         )
-        self.assertEqual(profile["coverage"]["require_sources"], ["scripts/", "src/", "airline-gui/src/"])
+        self.assertEqual(
+            profile["coverage"]["require_sources"],
+            ["scripts/", "src/", "airline-gui/src/"],
+        )
         self.assertIn("--filter '.*/src/.*'", profile["coverage"]["command"])
         self.assertIn("--exclude '.*/build/_deps/.*'", profile["coverage"]["command"])
         self.assertNotIn("normalize_lcov", profile["coverage"]["command"])
@@ -65,7 +81,10 @@ class ControlPlaneTests(unittest.TestCase):
 
     def _assert_swfoc_existing_behaviors(self, profile: dict) -> None:
         """Keep the SWFOC profile on its existing visual and non-regression contract."""
-        self.assertEqual(profile["coverage"]["assert_mode"]["pull_request"], "non_regression")
+        self.assertEqual(
+            profile["coverage"]["assert_mode"]["pull_request"],
+            "non_regression",
+        )
         self.assertEqual(profile["coverage"]["runner"], "windows-latest")
         self.assertEqual(profile["visual_lane"]["kind"], "desktop-adapter")
 
@@ -101,14 +120,27 @@ class ControlPlaneTests(unittest.TestCase):
             ],
         )
         self.assertIn("QLTY Zero", pr_contexts)
-        self.assertTrue({"qlty check", "qlty coverage", "qlty coverage diff"}.issubset(pr_contexts))
         self.assertTrue(
-            {"QLTY Zero", "qlty check", "qlty coverage", "qlty coverage diff"}.issubset(pbinfo["required_contexts"]["target"])
+            {"qlty check", "qlty coverage", "qlty coverage diff"}.issubset(
+                pr_contexts
+            )
         )
-        self.assertTrue({"Chromatic Playwright", "Applitools Visual"}.issubset(profile["required_contexts"]["target"]))
+        self.assertTrue(
+            {
+                "QLTY Zero",
+                "qlty check",
+                "qlty coverage",
+                "qlty coverage diff",
+            }.issubset(pbinfo["required_contexts"]["target"])
+        )
+        self.assertTrue(
+            {"Chromatic Playwright", "Applitools Visual"}.issubset(
+                profile["required_contexts"]["target"]
+            )
+        )
 
     def test_phase1_repo_verify_commands_follow_repo_contracts(self) -> None:
-        """Phase-1 repos should keep their repository-specific verify commands and lanes."""
+        """Phase-1 repos should keep their repo-specific verify commands and lanes."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
 
         reframe = load_repo_profile(inventory, "Prekzursil/Reframe")
@@ -122,15 +154,23 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertEqual(
             swfoc["verify_command"],
             (
-                "dotnet test tests/SwfocTrainer.Tests/SwfocTrainer.Tests.csproj -c Release "
-                '--no-build --filter "FullyQualifiedName!~SwfocTrainer.Tests.Profiles.Live'
+                "dotnet test tests/SwfocTrainer.Tests/"
+                "SwfocTrainer.Tests.csproj -c Release "
+                '--no-build --filter '
+                '"FullyQualifiedName!~SwfocTrainer.Tests.Profiles.Live'
                 '&FullyQualifiedName!~RuntimeAttachSmokeTests"'
             ),
         )
         self.assertEqual(reframe["codex_environment"]["mode"], "automatic")
         self.assertEqual(tanks["codex_environment"]["verify_command"], "make verify")
-        self.assertEqual(reframe["codex_environment"]["auth_file"], "~/.codex/auth.json")
-        self.assertEqual(reframe["codex_environment"]["runner_labels"], ["self-hosted", "codex-trusted"])
+        self.assertEqual(
+            reframe["codex_environment"]["auth_file"],
+            "~/.codex/auth.json",
+        )
+        self.assertEqual(
+            reframe["codex_environment"]["runner_labels"],
+            ["self-hosted", "codex-trusted"],
+        )
 
     def test_airline_keeps_deepscan_contexts_pr_only(self) -> None:
         """Airline should keep native DeepScan and related cloud contexts PR-only."""
@@ -170,8 +210,10 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertNotIn("qlty coverage", pr_contexts)
         self.assertNotIn("qlty coverage diff", pr_contexts)
 
-    def test_quality_zero_platform_requires_controller_qlty_zero_context_on_push_and_ruleset(self) -> None:
-        """QLTY Zero must remain the controller-owned required context on push and rulesets."""
+    def test_quality_zero_platform_requires_qlty_zero_context_on_push_and_ruleset(
+        self,
+    ) -> None:
+        """QLTY Zero must remain required on push and rulesets."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
 
@@ -183,12 +225,27 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertIn("QLTY Zero", profile["required_contexts"]["target"])
         self.assertIn("QLTY Zero", ruleset_contexts)
         self.assertNotIn("qlty coverage diff", ruleset_contexts)
-        self.assertIn("QLTY Zero", [item["context"] for item in payload["rules"][1]["parameters"]["required_status_checks"]])
-        self.assertEqual(payload["rules"][0]["parameters"]["required_approving_review_count"], 0)
-        self.assertFalse(payload["rules"][0]["parameters"]["required_review_thread_resolution"])
+        self.assertIn(
+            "QLTY Zero",
+            [
+                item["context"]
+                for item in payload["rules"][1]["parameters"][
+                    "required_status_checks"
+                ]
+            ],
+        )
+        self.assertEqual(
+            payload["rules"][0]["parameters"]["required_approving_review_count"],
+            0,
+        )
+        self.assertFalse(
+            payload["rules"][0]["parameters"][
+                "required_review_thread_resolution"
+            ]
+        )
 
     def test_quality_zero_platform_requires_qlty_zero(self) -> None:
-        """The control-plane target contexts should continue to include the governed QLTY lane."""
+        """The control-plane target contexts should keep the governed QLTY lane."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
 
@@ -203,7 +260,7 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertNotIn("DeepScan", target_contexts)
 
     def test_reframe_overlay_adds_visual_and_platform_contexts_to_target(self) -> None:
-        """Reframe should retain its visual and platform-specific target context overlay."""
+        """Reframe should retain its visual and platform-specific target overlay."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/Reframe")
 
@@ -229,9 +286,12 @@ class ControlPlaneTests(unittest.TestCase):
             self.assertIn(name, target_contexts)
 
     def test_special_repo_coverage_profiles_capture_multi_language_inputs(self) -> None:
-        """Special repos should keep their expected multi-language coverage inputs and thresholds."""
+        """Special repos should keep their expected multi-language coverage inputs."""
         profiles = self._special_repo_profiles()
-        reframe_inputs = {(item["format"], item["name"], item["path"]) for item in profiles["reframe"]["coverage"]["inputs"]}
+        reframe_inputs = {
+            (item["format"], item["name"], item["path"])
+            for item in profiles["reframe"]["coverage"]["inputs"]
+        }
         self.assertEqual(
             reframe_inputs,
             {
@@ -240,7 +300,8 @@ class ControlPlaneTests(unittest.TestCase):
             },
         )
         momentstudio_inputs = {
-            (item["format"], item["name"], item["path"]) for item in profiles["momentstudio"]["coverage"]["inputs"]
+            (item["format"], item["name"], item["path"])
+            for item in profiles["momentstudio"]["coverage"]["inputs"]
         }
         self.assertEqual(
             momentstudio_inputs,
@@ -249,13 +310,19 @@ class ControlPlaneTests(unittest.TestCase):
                 ("lcov", "frontend", "frontend/coverage/lcov.info"),
             },
         )
-        self.assertIn('grep -vE "/ent($|/)"', profiles["devextreme"]["coverage"]["command"])
+        self.assertIn(
+            'grep -vE "/ent($|/)"',
+            profiles["devextreme"]["coverage"]["command"],
+        )
         self.assertIn(
             "go test $packages -coverprofile=coverage/go-coverage.out -covermode=count",
             profiles["devextreme"]["coverage"]["command"],
         )
         self.assertEqual(profiles["env_inspector"]["coverage"]["min_percent"], 100.0)
-        self.assertIn("env_inspector.py", profiles["env_inspector"]["coverage"]["require_sources"])
+        self.assertIn(
+            "env_inspector.py",
+            profiles["env_inspector"]["coverage"]["require_sources"],
+        )
 
     def test_special_repo_coverage_profiles_capture_existing_behaviors(self) -> None:
         """Special repos should preserve their bespoke coverage behavior contracts."""
@@ -263,8 +330,10 @@ class ControlPlaneTests(unittest.TestCase):
         self._assert_airline_existing_behaviors(profiles["airline"])
         self._assert_swfoc_existing_behaviors(profiles["swfoc"])
 
-    def test_quality_zero_platform_profile_keeps_controller_specific_contracts(self) -> None:
-        """The control-plane repo should keep its controller-only secret and lane contracts."""
+    def test_quality_zero_platform_profile_keeps_controller_specific_contracts(
+        self,
+    ) -> None:
+        """The control-plane repo should keep its controller-only secret contracts."""
         profile = self._special_repo_profiles()["quality_zero_platform"]
         self.assertNotIn("DEEPSCAN_POLICY_MODE", profile["required_vars"])
         self.assertEqual(profile["github_mutation_lane"], "codex-private-runner")
@@ -281,7 +350,9 @@ class ControlPlaneTests(unittest.TestCase):
             },
         )
 
-    def test_quality_zero_platform_keeps_codecov_target_only_until_provider_check_emits(self) -> None:
+    def test_quality_zero_platform_keeps_codecov_target_only_until_provider_check_emits(
+        self,
+    ) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
 
@@ -291,7 +362,9 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertNotIn("Codecov Analytics", pr_contexts)
         self.assertIn("Codecov Analytics", target_contexts)
 
-    def test_env_inspector_overlay_aligns_push_required_contexts_to_emitted_surface(self) -> None:
+    def test_env_inspector_overlay_aligns_push_required_contexts_to_emitted_surface(
+        self,
+    ) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/env-inspector")
 
@@ -337,10 +410,14 @@ class ControlPlaneTests(unittest.TestCase):
         for unexpected in ("qlty coverage", "qlty coverage diff"):
             self.assertNotIn(unexpected, push_contexts)
 
-    def test_provider_metadata_tracks_real_qlty_names_and_visual_repo_tokens(self) -> None:
+    def test_provider_metadata_tracks_real_qlty_names_and_visual_repo_tokens(
+        self,
+    ) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
 
-        quality_zero_platform = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
+        quality_zero_platform = load_repo_profile(
+            inventory, "Prekzursil/quality-zero-platform"
+        )
         reframe = load_repo_profile(inventory, "Prekzursil/Reframe")
         webcoder = load_repo_profile(inventory, "Prekzursil/WebCoder")
         swfoc = load_repo_profile(inventory, "Prekzursil/SWFOC-Mod-Menu")
@@ -349,24 +426,58 @@ class ControlPlaneTests(unittest.TestCase):
             quality_zero_platform["vendors"]["qlty"]["check_names_actual"],
             ["qlty check", "qlty coverage", "qlty coverage diff"],
         )
-        self.assertEqual(quality_zero_platform["vendors"]["qlty"]["gate_context"], "qlty check")
-        self.assertEqual(quality_zero_platform["vendors"]["qlty"]["coverage_context"], "qlty coverage")
-        self.assertEqual(quality_zero_platform["vendors"]["qlty"]["diff_coverage_context"], "qlty coverage diff")
-        self.assertEqual(quality_zero_platform["vendors"]["qlty"]["diff_coverage_percent"], 100)
-        self.assertEqual(quality_zero_platform["vendors"]["qlty"]["total_coverage_policy"], "fail_on_any_drop")
-        self.assertEqual(quality_zero_platform["vendors"]["codacy"]["profile_mode"], "defaults_all_languages")
+        self.assertEqual(
+            quality_zero_platform["vendors"]["qlty"]["gate_context"],
+            "qlty check",
+        )
+        self.assertEqual(
+            quality_zero_platform["vendors"]["qlty"]["coverage_context"],
+            "qlty coverage",
+        )
+        self.assertEqual(
+            quality_zero_platform["vendors"]["qlty"]["diff_coverage_context"],
+            "qlty coverage diff",
+        )
+        self.assertEqual(
+            quality_zero_platform["vendors"]["qlty"]["diff_coverage_percent"],
+            100,
+        )
+        self.assertEqual(
+            quality_zero_platform["vendors"]["qlty"]["total_coverage_policy"],
+            "fail_on_any_drop",
+        )
+        self.assertEqual(
+            quality_zero_platform["vendors"]["codacy"]["profile_mode"],
+            "defaults_all_languages",
+        )
 
         self.assertEqual(reframe["vendors"]["chromatic"]["project_name"], "Reframe")
-        self.assertEqual(reframe["vendors"]["chromatic"]["token_secret"], "CHROMATIC_PROJECT_TOKEN")
-        self.assertEqual(reframe["vendors"]["chromatic"]["local_env_var"], "CHROMATIC_PROJECT_TOKEN_REFRAME")
+        self.assertEqual(
+            reframe["vendors"]["chromatic"]["token_secret"],
+            "CHROMATIC_PROJECT_TOKEN",
+        )
+        self.assertEqual(
+            reframe["vendors"]["chromatic"]["local_env_var"],
+            "CHROMATIC_PROJECT_TOKEN_REFRAME",
+        )
         self.assertEqual(reframe["vendors"]["applitools"]["project_name"], "Reframe")
-        self.assertEqual(webcoder["vendors"]["chromatic"]["local_env_var"], "CHROMATIC_PROJECT_TOKEN_WEBCODER")
-        self.assertEqual(swfoc["vendors"]["chromatic"]["local_env_var"], "CHROMATIC_PROJECT_TOKEN_SWFOC_MOD_MENU")
+        self.assertEqual(
+            webcoder["vendors"]["chromatic"]["local_env_var"],
+            "CHROMATIC_PROJECT_TOKEN_WEBCODER",
+        )
+        self.assertEqual(
+            swfoc["vendors"]["chromatic"]["local_env_var"],
+            "CHROMATIC_PROJECT_TOKEN_SWFOC_MOD_MENU",
+        )
 
     def test_visual_pair_validation_flags_single_context(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
-        profile["required_contexts"]["target"] = [name for name in profile["required_contexts"]["target"] if name != "Applitools Visual"]
+        profile["required_contexts"]["target"] = [
+            name
+            for name in profile["required_contexts"]["target"]
+            if name != "Applitools Visual"
+        ]
 
         findings = validate_profile(profile)
 
@@ -384,19 +495,31 @@ class ControlPlaneTests(unittest.TestCase):
         findings = validate_profile(profile)
 
         self.assertIn(
-            "Prekzursil/TanksFlashMobile: visual_pair_required requires chromatic.project_name",
+            (
+                "Prekzursil/TanksFlashMobile: visual_pair_required "
+                "requires chromatic.project_name"
+            ),
             findings,
         )
         self.assertIn(
-            "Prekzursil/TanksFlashMobile: visual_pair_required requires chromatic.token_secret",
+            (
+                "Prekzursil/TanksFlashMobile: visual_pair_required "
+                "requires chromatic.token_secret"
+            ),
             findings,
         )
         self.assertIn(
-            "Prekzursil/TanksFlashMobile: visual_pair_required requires chromatic.local_env_var",
+            (
+                "Prekzursil/TanksFlashMobile: visual_pair_required "
+                "requires chromatic.local_env_var"
+            ),
             findings,
         )
         self.assertIn(
-            "Prekzursil/TanksFlashMobile: visual_pair_required requires applitools.project_name",
+            (
+                "Prekzursil/TanksFlashMobile: visual_pair_required "
+                "requires applitools.project_name"
+            ),
             findings,
         )
 
@@ -407,9 +530,13 @@ class ControlPlaneTests(unittest.TestCase):
 
         findings = validate_profile(profile)
 
-        self.assertTrue(any("invalid codacy.dashboard_url" in item for item in findings))
+        self.assertTrue(
+            any("invalid codacy.dashboard_url" in item for item in findings)
+        )
 
-    def test_export_profile_emits_coverage_inputs_for_codecov_and_qlty_uploads(self) -> None:
+    def test_export_profile_emits_coverage_inputs_for_codecov_and_qlty_uploads(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "github-output.txt"
             with patch.object(
@@ -429,10 +556,18 @@ class ControlPlaneTests(unittest.TestCase):
 
             output = output_path.read_text(encoding="utf-8")
             self.assertIn("codecov_enabled=true", output)
-            self.assertIn("coverage_input_files=repo/coverage/platform-coverage.xml", output)
-            self.assertIn("qlty_coverage_files=repo/coverage/platform-coverage.xml", output)
+            self.assertIn(
+                "coverage_input_files=repo/coverage/platform-coverage.xml",
+                output,
+            )
+            self.assertIn(
+                "qlty_coverage_files=repo/coverage/platform-coverage.xml",
+                output,
+            )
 
-    def test_export_profile_emits_all_airline_coverage_inputs_for_codecov_and_qlty_uploads(self) -> None:
+    def test_export_profile_emits_airline_coverage_inputs_for_codecov_and_qlty_uploads(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "github-output.txt"
             with patch.object(
@@ -466,7 +601,9 @@ class ControlPlaneTests(unittest.TestCase):
                 output,
             )
 
-    def test_export_profile_script_prints_json_when_output_path_is_not_requested(self) -> None:
+    def test_export_profile_script_prints_json_when_output_path_is_not_requested(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "github-output.txt"
             argv = [
@@ -477,21 +614,31 @@ class ControlPlaneTests(unittest.TestCase):
                 str(output_path),
             ]
             repo_root = str(ROOT)
-            without_empty = [entry for entry in sys.path if entry != repo_root and entry != ""]
+            without_empty = [
+                entry for entry in sys.path if entry != repo_root and entry != ""
+            ]
 
             for sys_path in (without_empty, ["", *without_empty]):
                 if "" not in sys_path:
                     sys_path.insert(0, "")
 
                 stdout = io.StringIO()
-                with patch.object(sys, "argv", argv), patch.object(sys, "path", sys_path), redirect_stdout(stdout):
+                with patch.object(sys, "argv", argv), patch.object(
+                    sys, "path", sys_path
+                ), redirect_stdout(stdout):
                     with self.assertRaises(SystemExit) as exc:
-                        runpy.run_path(str(ROOT / "scripts" / "quality" / "export_profile.py"), run_name="__main__")
+                        runpy.run_path(
+                            str(ROOT / "scripts" / "quality" / "export_profile.py"),
+                            run_name="__main__",
+                        )
 
                 self.assertEqual(exc.exception.code, 0)
                 payload = json.loads(stdout.getvalue())
                 self.assertEqual(payload["profile_id"], "quality-zero-platform")
-                self.assertEqual(payload["coverage"]["inputs"][0]["path"], "coverage/platform-coverage.xml")
+                self.assertEqual(
+                    payload["coverage"]["inputs"][0]["path"],
+                    "coverage/platform-coverage.xml",
+                )
 
     def test_export_profile_script_handles_existing_empty_sys_path_entry(self) -> None:
         stdout = io.StringIO()
@@ -501,11 +648,19 @@ class ControlPlaneTests(unittest.TestCase):
             "Prekzursil/quality-zero-platform",
         ]
         repo_root = str(ROOT)
-        sys_path = ["", *(entry for entry in sys.path if entry != repo_root and entry != "")]
+        sys_path = [
+            "",
+            *(entry for entry in sys.path if entry != repo_root and entry != ""),
+        ]
 
-        with patch.object(sys, "argv", argv), patch.object(sys, "path", sys_path), redirect_stdout(stdout):
+        with patch.object(sys, "argv", argv), patch.object(
+            sys, "path", sys_path
+        ), redirect_stdout(stdout):
             with self.assertRaises(SystemExit) as exc:
-                runpy.run_path(str(ROOT / "scripts" / "quality" / "export_profile.py"), run_name="__main__")
+                runpy.run_path(
+                    str(ROOT / "scripts" / "quality" / "export_profile.py"),
+                    run_name="__main__",
+                )
 
         self.assertEqual(exc.exception.code, 0)
         payload = json.loads(stdout.getvalue())

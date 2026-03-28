@@ -172,6 +172,7 @@ class RequiredChecksTests(unittest.TestCase):
         )
 
     def test_api_get_rejects_non_object_payloads(self) -> None:
+        """Reject GitHub API payloads that are not JSON objects."""
         with patch.object(
             checks_module,
             "load_json_https",
@@ -188,6 +189,7 @@ class RequiredChecksTests(unittest.TestCase):
                 )
 
     def test_collect_contexts_merges_check_runs_and_statuses(self) -> None:
+        """Merge check-run and status contexts into a single report mapping."""
         contexts = checks_module._collect_contexts(
             {
                 "check_runs": [
@@ -219,12 +221,14 @@ class RequiredChecksTests(unittest.TestCase):
         )
 
     def test_collect_status_contexts_skips_blank_names(self) -> None:
+        """Ignore status entries that do not declare a context name."""
         contexts = checks_module._collect_status_contexts(
             {"statuses": [{"context": "", "state": "success"}]}
         )
         self.assertEqual(contexts, {})
 
     def test_evaluate_accepts_reusable_workflow_suffix_matches(self) -> None:
+        """Treat reusable workflow check names as satisfying required suffixes."""
         status, missing, failed = checks_module._evaluate(
             ["Coverage 100 Gate", "Semgrep Zero"],
             {
@@ -246,6 +250,7 @@ class RequiredChecksTests(unittest.TestCase):
         self.assertEqual(failed, [])
 
     def test_evaluate_reports_pending_and_failed_contexts(self) -> None:
+        """Report both missing contexts and non-success check conclusions."""
         status, missing, failed = checks_module._evaluate(
             ["Coverage 100 Gate", "DeepScan", "Missing Context"],
             {
@@ -273,6 +278,7 @@ class RequiredChecksTests(unittest.TestCase):
         )
 
     def test_evaluate_reports_completed_check_run_failures(self) -> None:
+        """Surface completed check runs that finished with a failure conclusion."""
         status, missing, failed = checks_module._evaluate(
             ["Coverage 100 Gate"],
             {
@@ -289,6 +295,7 @@ class RequiredChecksTests(unittest.TestCase):
         self.assertEqual(failed, ["Coverage 100 Gate: conclusion=failure"])
 
     def test_evaluate_accepts_successful_status_contexts(self) -> None:
+        """Accept successful legacy status contexts as passing requirements."""
         status, missing, failed = checks_module._evaluate(
             ["DeepScan"],
             {
@@ -305,6 +312,7 @@ class RequiredChecksTests(unittest.TestCase):
         self.assertEqual(failed, [])
 
     def test_has_in_progress_check_runs_detects_active_check_runs(self) -> None:
+        """Flag required check runs that are still in progress."""
         self.assertTrue(
             checks_module._has_in_progress_check_runs(
                 ["Coverage 100 Gate"],
@@ -333,6 +341,7 @@ class RequiredChecksTests(unittest.TestCase):
     def test_has_in_progress_check_runs_ignores_non_required_in_progress_checks(
         self,
     ) -> None:
+        """Ignore unrelated in-progress checks when required ones already passed."""
         self.assertFalse(
             checks_module._has_in_progress_check_runs(
                 ["build-test"],
@@ -352,6 +361,7 @@ class RequiredChecksTests(unittest.TestCase):
         )
 
     def test_collect_payload_assembles_context_report(self) -> None:
+        """Build a normalized payload that includes merged required-check status."""
         with patch.object(
             checks_module,
             "_api_get",
@@ -385,6 +395,7 @@ class RequiredChecksTests(unittest.TestCase):
         self.assertEqual(payload["timestamp_utc"], "2026-03-15T00:00:00+00:00")
 
     def test_wait_for_payload_polls_until_required_contexts_pass(self) -> None:
+        """Keep polling until required checks move from pending to passing."""
         payloads = [
             {
                 "status": "fail",
@@ -432,6 +443,7 @@ class RequiredChecksTests(unittest.TestCase):
     def test_wait_for_payload_keeps_polling_while_required_contexts_are_still_missing(
         self,
     ) -> None:
+        """Continue polling when required contexts have not appeared yet."""
         payloads = [
             {
                 "status": "fail",
@@ -479,6 +491,7 @@ class RequiredChecksTests(unittest.TestCase):
     def test_wait_for_payload_returns_last_failure_when_checks_are_no_longer_running(
         self,
     ) -> None:
+        """Return the last failing payload once required checks stop changing."""
         payload = {
             "status": "fail",
             "missing": [],
@@ -514,6 +527,7 @@ class RequiredChecksTests(unittest.TestCase):
         self.assertEqual(result, payload)
 
     def test_render_md_lists_missing_and_failed_contexts(self) -> None:
+        """Render markdown output with both missing and failing context details."""
         markdown = checks_module._render_md(
             {
                 "status": "fail",
@@ -529,6 +543,7 @@ class RequiredChecksTests(unittest.TestCase):
         self.assertIn("DeepScan: state=failure", markdown)
 
     def test_main_rejects_missing_required_contexts(self) -> None:
+        """Require at least one check context before the CLI can run."""
         with patch.object(
             sys,
             "argv",
@@ -547,6 +562,7 @@ class RequiredChecksTests(unittest.TestCase):
                 checks_module.main()
 
     def test_main_rejects_missing_github_token(self) -> None:
+        """Exit when neither GitHub token environment variable is populated."""
         with patch.object(
             sys,
             "argv",
@@ -567,6 +583,7 @@ class RequiredChecksTests(unittest.TestCase):
                 checks_module.main()
 
     def test_script_entrypoint_raises_system_exit_from_main(self) -> None:
+        """Propagate the CLI validation error through the script entrypoint."""
         repo_root = Path(__file__).resolve().parents[1]
         without_empty = [
             entry
@@ -583,6 +600,7 @@ class RequiredChecksTests(unittest.TestCase):
             )
 
     def test_script_entrypoint_uses_existing_empty_sys_path_entry(self) -> None:
+        """Reuse an existing empty sys.path entry when bootstrapping the script."""
         repo_root = Path(__file__).resolve().parents[1]
         sys_path = [
             "",
@@ -595,6 +613,7 @@ class RequiredChecksTests(unittest.TestCase):
         )
 
     def test_main_returns_success_when_report_written_and_payload_passes(self) -> None:
+        """Return zero when the payload passes and report writing succeeds."""
         payload = {
             "status": "pass",
             "repo": "Prekzursil/quality-zero-platform",
@@ -609,6 +628,7 @@ class RequiredChecksTests(unittest.TestCase):
         writer.assert_called_once()
 
     def test_main_returns_failure_when_payload_is_not_green(self) -> None:
+        """Return one when the collected payload still contains failures."""
         payload = {
             "status": "fail",
             "repo": "Prekzursil/quality-zero-platform",
@@ -622,6 +642,7 @@ class RequiredChecksTests(unittest.TestCase):
         self.assertEqual(result, 1)
 
     def test_main_returns_write_report_exit_code_when_report_write_fails(self) -> None:
+        """Bubble up a non-zero report writer exit code to the CLI caller."""
         payload = {
             "status": "pass",
             "repo": "Prekzursil/quality-zero-platform",

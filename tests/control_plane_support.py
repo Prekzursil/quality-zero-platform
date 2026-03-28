@@ -47,10 +47,10 @@ class ControlPlaneAssertions:
             },
         )
         for expected_snippet in (
+            "python3 -m venv .venv-pytest",
+            ". .venv-pytest/bin/activate",
             "tests/test_quality_security_scripts.py",
             "tests/test_quality_coverage_scripts.py",
-            "tests/test_quality_script_main_flows.py",
-            "tests/test_security_helpers.py",
             "tests/test_static_remediation_guards.py",
         ):
             self.assertIn(expected_snippet, profile["coverage"]["command"])
@@ -58,8 +58,10 @@ class ControlPlaneAssertions:
             profile["coverage"]["require_sources"],
             ["scripts/", "src/", "airline-gui/src/"],
         )
-        self.assertIn("--filter '.*/src/.*'", profile["coverage"]["command"])
-        self.assertIn("--exclude '.*/build/_deps/.*'", profile["coverage"]["command"])
+        self.assertIn("--filter '^src/'", profile["coverage"]["command"])
+        self.assertIn("--exclude '^build/_deps/'", profile["coverage"]["command"])
+        self.assertIn("--exclude-throw-branches", profile["coverage"]["command"])
+        self.assertIn("--exclude-unreachable-branches", profile["coverage"]["command"])
         self.assertNotIn("normalize_lcov", profile["coverage"]["command"])
         self.assertEqual(profile["coverage"]["min_percent"], 100.0)
         self.assertEqual(profile["coverage"]["branch_min_percent"], 100.0)

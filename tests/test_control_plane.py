@@ -106,6 +106,15 @@ class ControlPlaneTests(ControlPlaneAssertions, unittest.TestCase):
         push_contexts = active_required_contexts(profile, event_name="push")
         pr_contexts = active_required_contexts(profile, event_name="pull_request")
 
+        for required in (
+            "DeepSource: JavaScript",
+            "DeepSource: Python",
+            "DeepSource: C & C++",
+            "DeepSource: Shell",
+            "DeepSource: Secrets",
+        ):
+            self.assertIn(required, push_contexts)
+            self.assertIn(required, pr_contexts)
         self.assertNotIn("DeepScan Zero", push_contexts)
         self.assertNotIn("DeepScan", push_contexts)
         self.assertNotIn("Codacy Static Code Analysis", push_contexts)
@@ -184,3 +193,19 @@ class ControlPlaneTests(ControlPlaneAssertions, unittest.TestCase):
         self.assertIn("QLTY Zero", target_contexts)
         self.assertNotIn("Codacy Static Code Analysis", target_contexts)
         self.assertNotIn("DeepScan", target_contexts)
+
+    def test_airline_target_contexts_include_deepsource_contracts(self) -> None:
+        """Airline should enforce the owned DeepSource contexts in target rulesets."""
+        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
+        profile = load_repo_profile(inventory, "Prekzursil/Airline-Reservations-System")
+        target_contexts = set(profile["required_contexts"]["target"])
+
+        self.assertTrue(
+            {
+                "DeepSource: JavaScript",
+                "DeepSource: Python",
+                "DeepSource: C & C++",
+                "DeepSource: Shell",
+                "DeepSource: Secrets",
+            }.issubset(target_contexts)
+        )

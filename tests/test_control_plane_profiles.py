@@ -187,6 +187,17 @@ class ControlPlaneProfileTests(ControlPlaneAssertions, unittest.TestCase):
         self.assertEqual(profile["coverage"]["min_percent"], 100.0)
         self.assertEqual(profile["coverage"]["branch_min_percent"], 100.0)
         self.assertEqual(profile["coverage"]["command"].strip(), "bash scripts/verify")
+        self.assertEqual(
+            profile["coverage"]["inputs"],
+            [
+                {"format": "xml", "name": "backend", "path": "backend/coverage.xml"},
+                {
+                    "format": "xml",
+                    "name": "frontend",
+                    "path": "ui/coverage/cobertura-coverage.xml",
+                },
+            ],
+        )
 
     def test_provider_metadata_tracks_real_qlty_names(self) -> None:
         """Provider metadata should expose the expected QLTY names and policy values."""

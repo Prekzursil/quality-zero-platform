@@ -152,14 +152,21 @@ def _collect_payload(repo: str, sha: str, required: List[str], token: str) -> Di
     }
 
 
+def _should_keep_polling(required: List[str], payload: Mapping[str, Any]) -> bool:
+    if payload.get("status") == "pass":
+        return False
+    if payload.get("missing"):
+        return True
+    contexts = payload.get("contexts", {})
+    return isinstance(contexts, dict) and _has_in_progress_check_runs(required, contexts)
+
+
 def _wait_for_payload(args: argparse.Namespace, required: List[str], token: str) -> Dict[str, Any]:
     deadline = time.time() + max(args.timeout_seconds, 1)
     final_payload: Dict[str, Any]
     while time.time() <= deadline:
         final_payload = _collect_payload(args.repo, args.sha, required, token)
-        if final_payload["status"] == "pass":
-            break
-        if not _has_in_progress_check_runs(required, final_payload["contexts"]):
+        if not _should_keep_polling(required, final_payload):
             break
         time.sleep(max(args.poll_seconds, 1))
     return final_payload

@@ -7,6 +7,7 @@ import sys
 import urllib.parse
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Tuple
+from urllib.error import HTTPError
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -71,7 +72,9 @@ def _render_md(payload: Mapping[str, Any]) -> str:
     ]
     if payload.get("projects"):
         for item in payload["projects"]:
-            lines.append(f"- `{item['project']}` unresolved=`{item['unresolved']}`")
+            state = str(item.get("state") or "ok")
+            state_suffix = "" if state == "ok" else f" state=`{state}`"
+            lines.append(f"- `{item['project']}` unresolved=`{item['unresolved']}`{state_suffix}")
     else:
         lines.append("- None")
     lines.extend(["", "## Findings"])
@@ -97,11 +100,21 @@ def _validate_sentry_inputs(token: str, org: str, projects: List[str]) -> List[s
     return findings
 
 
+def _is_not_found_error(exc: Exception) -> bool:
+    return isinstance(exc, HTTPError) and exc.code == 404
+
+
 def _collect_project_results(org: str, projects: List[str], token: str) -> Tuple[List[Dict[str, Any]], List[str]]:
     findings: List[str] = []
     project_results: List[Dict[str, Any]] = []
     for project in projects:
-        payload, headers = _request_json(_issues_url(org, project), token)
+        try:
+            payload, headers = _request_json(_issues_url(org, project), token)
+        except Exception as exc:
+            if _is_not_found_error(exc):
+                project_results.append({"project": project, "unresolved": 0, "state": "not_found"})
+                continue
+            raise
         if not isinstance(payload, list):
             raise RuntimeError("Unexpected Sentry issues response payload")
         unresolved = _hits_from_headers(headers)
@@ -109,7 +122,7 @@ def _collect_project_results(org: str, projects: List[str], token: str) -> Tuple
             unresolved = len(payload)
         if unresolved != 0:
             findings.append(f"Sentry project {project} has {unresolved} unresolved issues (expected 0).")
-        project_results.append({"project": project, "unresolved": unresolved})
+        project_results.append({"project": project, "unresolved": unresolved, "state": "ok"})
     return project_results, findings
 
 

@@ -304,12 +304,73 @@ class RequiredChecksTests(unittest.TestCase):
         self.assertEqual(collector.call_count, 2)
         sleep_mock.assert_called_once_with(5)
 
+    def test_wait_for_payload_keeps_polling_while_required_contexts_are_still_missing(self) -> None:
+        payloads = [
+            {
+                "status": "fail",
+                "missing": ["SonarCloud Code Analysis"],
+                "failed": [],
+                "contexts": {
+                    "shared-scanner-matrix / Coverage 100 Gate": {
+                        "state": "completed",
+                        "conclusion": "success",
+                        "source": "check_run",
+                    }
+                },
+            },
+            {
+                "status": "pass",
+                "missing": [],
+                "failed": [],
+                "contexts": {
+                    "shared-scanner-matrix / Coverage 100 Gate": {
+                        "state": "completed",
+                        "conclusion": "success",
+                        "source": "check_run",
+                    },
+                    "SonarCloud Code Analysis": {
+                        "state": "success",
+                        "conclusion": "success",
+                        "source": "status",
+                    },
+                },
+            },
+        ]
+
+        with patch.object(checks_module, "_collect_payload", side_effect=payloads) as collector, patch.object(
+            checks_module.time, "sleep"
+        ) as sleep_mock, patch.object(checks_module.time, "time", side_effect=[0, 1, 2]):
+            payload = checks_module._wait_for_payload(
+                type(
+                    "Args",
+                    (),
+                    {
+                        "repo": "Prekzursil/quality-zero-platform",
+                        "sha": "abc123",
+                        "timeout_seconds": 60,
+                        "poll_seconds": 5,
+                    },
+                )(),
+                ["Coverage 100 Gate", "SonarCloud Code Analysis"],
+                "token-123",
+            )
+
+        self.assertEqual(payload["status"], "pass")
+        self.assertEqual(collector.call_count, 2)
+        sleep_mock.assert_called_once_with(5)
+
     def test_wait_for_payload_returns_last_failure_when_checks_are_no_longer_running(self) -> None:
         payload = {
             "status": "fail",
-            "missing": ["Coverage 100 Gate"],
-            "failed": [],
-            "contexts": {},
+            "missing": [],
+            "failed": ["Coverage 100 Gate: conclusion=failure"],
+            "contexts": {
+                "shared-scanner-matrix / Coverage 100 Gate": {
+                    "state": "completed",
+                    "conclusion": "failure",
+                    "source": "check_run",
+                }
+            },
         }
         with patch.object(
             checks_module,

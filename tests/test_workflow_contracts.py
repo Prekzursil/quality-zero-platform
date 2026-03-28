@@ -59,6 +59,7 @@ class WorkflowContractTests(unittest.TestCase):
                 "  contents: read",
                 "  id-token: write",
                 "  pull-requests: write",
+                "      pull-requests: write",
             ],
             "quality-zero-gate.yml": [
                 "permissions:",

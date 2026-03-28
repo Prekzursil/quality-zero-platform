@@ -41,6 +41,7 @@ class CodacyQuery:
     owner: str
     repo: str
     pull_request: str = ""
+    sha: str = ""
 
 
 def _parse_args() -> argparse.Namespace:
@@ -50,6 +51,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--repo", required=True)
     parser.add_argument("--policy-mode", default="ratchet")
     parser.add_argument("--pull-request", default="")
+    parser.add_argument("--sha", default="")
     parser.add_argument("--token", default="")
     parser.add_argument("--out-json", default="codacy-zero/codacy.json")
     parser.add_argument("--out-md", default="codacy-zero/codacy.md")
@@ -144,6 +146,13 @@ def build_repository_analysis_url(provider: str, owner: str, repo: str) -> str:
     return f"{CODACY_APP_API_BASE}/analysis/organizations/{provider}/{owner}/repositories/{repo}"
 
 
+def build_pull_request_analysis_url(provider: str, owner: str, repo: str, pull_request: str) -> str:
+    return (
+        f"{CODACY_APP_API_BASE}/analysis/organizations/{provider}/{owner}/repositories/{repo}"
+        f"/pull-requests/{pull_request}"
+    )
+
+
 def _request_mode(query: CodacyQuery) -> Tuple[str, Dict[str, Any] | None]:
     return [("POST", {}), ("GET", None)][bool(query.pull_request)]
 
@@ -227,6 +236,7 @@ def _provider_query(base_query: CodacyQuery, provider: str) -> CodacyQuery:
         owner=base_query.owner,
         repo=base_query.repo,
         pull_request=base_query.pull_request,
+        sha=base_query.sha,
     )
 
 
@@ -265,6 +275,7 @@ def _base_query(args: argparse.Namespace, pull_request: str) -> CodacyQuery:
         owner=urllib.parse.quote(args.owner.strip(), safe=""),
         repo=urllib.parse.quote(args.repo.strip(), safe=""),
         pull_request=pull_request,
+        sha=str(getattr(args, "sha", "") or "").strip().lower(),
     )
 
 
@@ -276,20 +287,88 @@ def _is_retryable_pr_not_found(base_query: CodacyQuery, last_exc: Exception | No
     )
 
 
+def _request_analysis_status(url: str, token: str) -> Dict[str, Any]:
+    payload, _ = load_json_https(
+        url.rstrip("/"),
+        allowed_host_suffixes={"codacy.com"},
+        headers={
+            "Accept": JSON_ACCEPT_HEADER,
+            "User-Agent": "quality-zero-platform",
+            **({"api-token": token} if token else {}),
+        },
+    )
+    if not isinstance(payload, dict):
+        raise RuntimeError("Unexpected Codacy analysis status payload")
+    return payload
+
+
+def _analysis_pending_message(query: CodacyQuery, token: str) -> str | None:
+    target_sha = str(query.sha or "").strip().lower()
+    if not target_sha:
+        return None
+
+    if query.pull_request:
+        payload = _request_analysis_status(
+            build_pull_request_analysis_url(query.provider, query.owner, query.repo, query.pull_request),
+            token,
+        )
+        if bool(payload.get("isAnalysing")):
+            return f"Codacy is still analysing pull request {query.pull_request}."
+        pull_request = payload.get("pullRequest") or {}
+        observed_sha = str(pull_request.get("headCommitSha") or "").strip().lower()
+        if not observed_sha:
+            return f"Codacy analysis for pull request {query.pull_request} is not available yet."
+        if observed_sha != target_sha:
+            return (
+                f"Codacy analysis for pull request {query.pull_request} is still on {observed_sha[:12]} "
+                f"(waiting for {target_sha[:12]})."
+            )
+        return None
+
+    payload = _request_analysis_status(build_repository_analysis_url(query.provider, query.owner, query.repo), token)
+    repository = payload.get("data") or {}
+    last_analysed_commit = repository.get("lastAnalysedCommit") or {}
+    observed_sha = str(last_analysed_commit.get("sha") or "").strip().lower()
+    if not observed_sha:
+        return "Codacy repository analysis is not available yet."
+    if observed_sha != target_sha:
+        return (
+            f"Codacy repository analysis is still on {observed_sha[:12]} "
+            f"(waiting for {target_sha[:12]})."
+        )
+    if not str(last_analysed_commit.get("endedAnalysis") or "").strip():
+        return "Codacy repository analysis has not finished yet."
+    return None
+
+
 def load_codacy_findings_with_retry(
     base_query: CodacyQuery,
     token: str,
     provider_candidates: List[str],
+    *,
+    pending_fn: Any = _analysis_pending_message,
+    sleep_seconds: float = 5.0,
 ) -> Tuple[int | None, List[str]]:
-    retry_budget = SCOPED_ANALYSIS_RETRY_ATTEMPTS if base_query.pull_request else 1
-    for _ in range(max(0, retry_budget - 1)):
+    retry_budget = SCOPED_ANALYSIS_RETRY_ATTEMPTS if (base_query.pull_request or base_query.sha) else 1
+    open_issues: int | None = None
+    findings: List[str] = []
+    pending_message: str | None = None
+    for attempt in range(retry_budget):
         open_issues, findings, last_exc = _query_codacy_open_issues(base_query, token, provider_candidates)
-        if not _is_retryable_pr_not_found(base_query, last_exc):
+        retry_requested = _is_retryable_pr_not_found(base_query, last_exc)
+        try:
+            pending_message = pending_fn(base_query, token)
+        except (OSError, RuntimeError, ValueError) as exc:
+            pending_message = f"Codacy analysis status request failed: {exc}"
+        if not retry_requested and pending_message is None:
             return open_issues, findings
-        time.sleep(5.0)
+        if attempt != retry_budget - 1:
+            time.sleep(max(0.0, sleep_seconds))
 
-    open_issues, findings, _ = _query_codacy_open_issues(base_query, token, provider_candidates)
-    return open_issues, findings
+    final_findings = list(findings)
+    if pending_message is not None and pending_message not in final_findings:
+        final_findings.append(pending_message)
+    return open_issues, final_findings
 
 
 def _resolve_codacy_status(args: argparse.Namespace) -> CodacyStatusResult:

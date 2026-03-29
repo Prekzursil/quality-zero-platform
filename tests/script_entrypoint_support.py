@@ -7,6 +7,7 @@ import runpy
 import sys
 import tempfile
 from pathlib import Path
+from typing import Dict
 from unittest.mock import patch
 
 
@@ -37,3 +38,25 @@ def run_script_entrypoint_failure(script_relative_path: str) -> int:
         finally:
             os.chdir(previous)
     raise AssertionError(f"{script_relative_path} did not exit")
+
+
+def assert_main_reports_provider_failure(
+    test_case,
+    module,
+    config: Dict[str, object],
+) -> None:
+    """Assert that one provider-backed main() path reports a request failure."""
+    with patch.dict("os.environ", config["env"], clear=False), patch.object(
+        module,
+        "_parse_args",
+        return_value=config["args"],
+    ), patch.object(
+        module,
+        str(config["operation_name"]),
+        side_effect=RuntimeError(str(config["failure_message"])),
+    ), patch.object(module, "write_report", return_value=0) as write_report_mock:
+        test_case.assertEqual(module.main(), 1)
+    test_case.assertEqual(
+        write_report_mock.call_args.args[0]["findings"],
+        [str(config["expected_finding"])],
+    )

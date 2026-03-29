@@ -10,9 +10,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Mapping
 
+from scripts.security_helpers import load_json_https
+
 DEFAULT_COVERAGE_JSON = "coverage-100/coverage.json"
 DEFAULT_COVERAGE_MD = "coverage-100/coverage.md"
 NONE_BULLET = "- None"
+GITHUB_API_BASE = "https://api.github.com"
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +32,23 @@ class ReportSpec:
 def utc_timestamp() -> str:
     """Handle utc timestamp."""
     return datetime.now(timezone.utc).isoformat()
+
+
+def github_commit_status_payload(repo: str, sha: str, token: str) -> Dict[str, Any]:
+    """Fetch the GitHub status payload for one commit."""
+    payload, _ = load_json_https(
+        f"{GITHUB_API_BASE}/repos/{repo}/commits/{sha}/status",
+        allowed_hosts={"api.github.com"},
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "quality-zero-platform",
+        },
+    )
+    if not isinstance(payload, dict):
+        raise RuntimeError("Unexpected GitHub status response payload")
+    return payload
 
 
 def dedupe_strings(items: Iterable[str | None]) -> List[str]:

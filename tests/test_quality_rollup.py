@@ -12,6 +12,26 @@ from scripts.quality import build_quality_rollup, post_pr_quality_comment
 FAKE_GITHUB_CREDENTIAL = "gh-auth-placeholder"
 
 
+def pending_then_success_contexts():
+    """Return one minimal pending-then-success context sequence."""
+    return [
+        {
+            "Coverage 100 Gate": {
+                "state": "in_progress",
+                "conclusion": "",
+                "source": "check_run",
+            },
+        },
+        {
+            "Coverage 100 Gate": {
+                "state": "completed",
+                "conclusion": "success",
+                "source": "check_run",
+            },
+        },
+    ]
+
+
 def exercise_wait_for_contexts(responses):
     """Handle exercise wait for contexts."""
     with patch.object(
@@ -224,24 +244,9 @@ class QualityRollupTests(unittest.TestCase):
 
     def test_wait_for_contexts_polls_until_pending_contexts_settle(self) -> None:
         """Cover wait for contexts polls until pending contexts settle."""
-        responses = [
-            {
-                "Coverage 100 Gate": {
-                    "state": "in_progress",
-                    "conclusion": "",
-                    "source": "check_run",
-                },
-            },
-            {
-                "Coverage 100 Gate": {
-                    "state": "completed",
-                    "conclusion": "success",
-                    "source": "check_run",
-                },
-            },
-        ]
-
-        contexts, sleep_mock = exercise_wait_for_contexts(responses)
+        contexts, sleep_mock = exercise_wait_for_contexts(
+            pending_then_success_contexts()
+        )
 
         self.assertEqual(contexts["Coverage 100 Gate"]["conclusion"], "success")
         sleep_mock.assert_called_once()

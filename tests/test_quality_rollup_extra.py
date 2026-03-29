@@ -7,10 +7,14 @@ import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
+from urllib.error import HTTPError
 from unittest.mock import patch
 
 from scripts.quality import build_quality_rollup, post_pr_quality_comment
-from tests.test_quality_rollup import exercise_wait_for_contexts
+from tests.test_quality_rollup import (
+    exercise_wait_for_contexts,
+    pending_then_success_contexts,
+)
 
 FAKE_GITHUB_CREDENTIAL = "gh-auth-placeholder"
 
@@ -217,23 +221,9 @@ class QualityRollupExtraTests(unittest.TestCase):
         )
         self.assertEqual(rollup["status"], "pending")
 
-        responses = [
-            {
-                "Coverage 100 Gate": {
-                    "state": "in_progress",
-                    "conclusion": "",
-                    "source": "check_run",
-                }
-            },
-            {
-                "Coverage 100 Gate": {
-                    "state": "completed",
-                    "conclusion": "success",
-                    "source": "check_run",
-                }
-            },
-        ]
-        contexts, sleep_mock = exercise_wait_for_contexts(responses)
+        contexts, sleep_mock = exercise_wait_for_contexts(
+            pending_then_success_contexts()
+        )
         self.assertEqual(contexts["Coverage 100 Gate"]["conclusion"], "success")
         sleep_mock.assert_called_once()
 
@@ -363,6 +353,46 @@ class QualityRollupExtraTests(unittest.TestCase):
             ):
                 post_pr_quality_comment.main()
             self.assertIn("Unable to post PR comment: boom", str(exc.exception))
+
+    def test_post_pr_comment_main_wraps_http_errors(self) -> None:
+        """Cover post pr comment main wraps HTTP errors."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            markdown = Path(temp_dir) / "note.md"
+            markdown.write_text("# Rollup\n", encoding="utf-8")
+            args = Namespace(
+                repo="owner/repo", pull_request="12", markdown_file=str(markdown)
+            )
+            http_error = HTTPError(
+                url="https://api.github.com/repos/owner/repo/issues/comments",
+                code=502,
+                msg="Bad Gateway",
+                hdrs=None,
+                fp=None,
+            )
+
+            with (
+                patch.object(
+                    post_pr_quality_comment,
+                    "parse_args",
+                    return_value=args,
+                ),
+                patch.dict(
+                    "os.environ",
+                    {"GITHUB_TOKEN": FAKE_GITHUB_CREDENTIAL},
+                    clear=False,
+                ),
+                patch.object(
+                    post_pr_quality_comment,
+                    "upsert_comment",
+                    side_effect=http_error,
+                ),
+                self.assertRaises(SystemExit) as exc,
+            ):
+                post_pr_quality_comment.main()
+            self.assertIn(
+                "Unable to post PR comment: HTTP Error 502",
+                str(exc.exception),
+            )
 
     def test_post_pr_comment_main_returns_zero_on_success(self) -> None:
         """Cover post pr comment main returns zero on success."""

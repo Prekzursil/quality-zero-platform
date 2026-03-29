@@ -12,12 +12,15 @@ from typing import Any, Dict, List, Mapping, Tuple
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.quality.common import utc_timestamp, write_report
+from scripts.quality.common import (
+    github_commit_status_payload,
+    utc_timestamp,
+    write_report,
+)
 from scripts.security_helpers import load_json_https, normalize_https_url
 
 TOTAL_KEYS = {"total", "totalItems", "total_items", "count", "hits", "open_issues"}
 DEEPSCAN_STATUS_CONTEXT = "DeepScan"
-GITHUB_API_BASE = "https://api.github.com"
 
 
 def _parse_args() -> argparse.Namespace:
@@ -80,19 +83,7 @@ def _request_json(url: str, token: str) -> Dict[str, Any]:
 
 def _github_status_payload(repo: str, sha: str, token: str) -> Dict[str, Any]:
     """Handle github status payload."""
-    payload, _ = load_json_https(
-        f"{GITHUB_API_BASE}/repos/{repo}/commits/{sha}/status",
-        allowed_hosts={"api.github.com"},
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {token}",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "quality-zero-platform",
-        },
-    )
-    if not isinstance(payload, dict):
-        raise RuntimeError("Unexpected GitHub status response payload")
-    return payload
+    return github_commit_status_payload(repo, sha, token)
 
 
 def _render_md(payload: Mapping[str, Any]) -> str:

@@ -159,6 +159,49 @@ class BranchGapRemediationTests(unittest.TestCase):
             control_plane_vendors._provider_env_suffix("Repo---Name___Test"),
             "REPO_NAME_TEST",
         )
+        self.assertIsNone(control_plane_vendors._joined_vendor_env_parts("not-a-list"))
+        self.assertIsNone(
+            control_plane_vendors._joined_vendor_env_parts(["", " ", "\t"])
+        )
+
+        visual_vendors = {
+            "chromatic": {
+                "token_secret_parts": ["CHROMATIC", "PROJECT", "TOKEN"],
+                "local_env_var_parts": ["CHROMATIC", "LOCAL", "TOKEN"],
+            }
+        }
+        control_plane_vendors._finalize_visual_vendors(
+            {"visual_pair_required": True, "repo_name": "quality-zero-platform"},
+            visual_vendors,
+        )
+        self.assertEqual(
+            visual_vendors["chromatic"]["token_secret"],
+            "CHROMATIC_PROJECT_TOKEN",
+        )
+        self.assertEqual(
+            visual_vendors["chromatic"]["local_env_var"],
+            "CHROMATIC_LOCAL_TOKEN",
+        )
+        self.assertIn("applitools", visual_vendors)
+
+        fallback_visual_vendors = {
+            "chromatic": {
+                "token_secret_parts": [],
+                "local_env_var_parts": ["", " "],
+            }
+        }
+        control_plane_vendors._finalize_visual_vendors(
+            {"visual_pair_required": True, "repo_name": "quality-zero-platform"},
+            fallback_visual_vendors,
+        )
+        self.assertEqual(
+            fallback_visual_vendors["chromatic"]["token_secret"],
+            "CHROMATIC_PROJECT_TOKEN",
+        )
+        self.assertEqual(
+            fallback_visual_vendors["chromatic"]["local_env_var"],
+            "CHROMATIC_PROJECT_TOKEN_QUALITY_ZERO_PLATFORM",
+        )
 
     def test_post_pr_quality_comment_create_and_update_paths(self) -> None:
         """Cover both update and create flows for PR quality comments."""

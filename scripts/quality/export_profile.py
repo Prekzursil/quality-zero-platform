@@ -49,12 +49,8 @@ def _json_output(key: str, value: object) -> str:
 def _profile_output_lines(profile: Dict[str, Any], event_name: str) -> List[str]:
     """Handle profile output lines."""
     contexts = active_required_contexts(profile, event_name=event_name)
-    coverage = profile.get("coverage", {})
     codex_environment = profile.get("codex_environment", {})
-    issue_policy = profile.get("issue_policy", {})
-    setup = coverage.get("setup", {})
-    java = setup.get("java", {})
-    coverage_input_files = _coverage_input_files(coverage)
+    coverage_input_files = _coverage_input_files(profile.get("coverage", {}))
     enabled_scanners = profile.get("enabled_scanners", {})
     codecov_enabled = str(bool(enabled_scanners.get("codecov", False))).lower()
     qlty_enabled = str(bool(enabled_scanners.get("qlty", False))).lower()
@@ -63,10 +59,7 @@ def _profile_output_lines(profile: Dict[str, Any], event_name: str) -> List[str]
         *_required_context_output_lines(profile, contexts),
         *_codex_environment_output_lines(codex_environment),
         *_coverage_output_lines(
-            coverage,
-            issue_policy,
-            java,
-            setup,
+            profile,
             coverage_input_files,
             codecov_enabled,
             qlty_enabled,
@@ -122,15 +115,16 @@ def _codex_environment_output_lines(codex_environment: Dict[str, Any]) -> List[s
 
 
 def _coverage_output_lines(
-    coverage: Dict[str, Any],
-    issue_policy: Dict[str, Any],
-    java: Dict[str, Any],
-    setup: Dict[str, Any],
+    profile: Dict[str, Any],
     coverage_input_files: str,
     codecov_enabled: str,
     qlty_enabled: str,
 ) -> List[str]:
     """Return the coverage-related fields exported for one profile."""
+    coverage = profile.get("coverage", {})
+    issue_policy = profile.get("issue_policy", {})
+    setup = coverage.get("setup", {})
+    java = setup.get("java", {})
     return [
         _json_output("coverage_json", coverage),
         _json_output("issue_policy_json", issue_policy),

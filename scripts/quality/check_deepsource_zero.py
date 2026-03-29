@@ -45,6 +45,16 @@ class StatusPollRequest:
     poll_seconds: int
 
 
+@dataclass(frozen=True)
+class VisibleZeroInputs:
+    """Describe the resolved inputs needed for one visible-zero evaluation."""
+
+    token: str
+    repo: str
+    sha: str
+    issues_url: str
+
+
 def _parse_args() -> argparse.Namespace:
     """Parse CLI arguments for the DeepSource visible-zero gate."""
     parser = argparse.ArgumentParser(
@@ -228,34 +238,33 @@ def _render_md(payload: Mapping[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _visible_zero_inputs(
-    args: argparse.Namespace,
-) -> Tuple[str, str, str, str]:
+def _visible_zero_inputs(args: argparse.Namespace) -> VisibleZeroInputs:
     """Return the resolved runtime inputs for one visible-zero check."""
     try:
         issues_url = _issues_url(args)
     except ValueError:
         issues_url = ""
-    return (
-        (
+    return VisibleZeroInputs(
+        token=(
             os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")
         ).strip(),
-        _github_repo(args),
-        _github_sha(args),
-        issues_url,
+        repo=_github_repo(args),
+        sha=_github_sha(args),
+        issues_url=issues_url,
     )
 
 
 def _evaluate_visible_zero(
     args: argparse.Namespace,
-    *,
-    token: str,
-    repo: str,
-    sha: str,
-    issues_url: str,
+    inputs: VisibleZeroInputs,
 ) -> Tuple[List[Dict[str, Any]], int, List[str], str]:
     """Return the status contexts, issue count, findings, and gate status."""
-    findings = _validate_inputs(repo, sha, issues_url, token)
+    findings = _validate_inputs(
+        inputs.repo,
+        inputs.sha,
+        inputs.issues_url,
+        inputs.token,
+    )
     statuses: List[Dict[str, Any]] = []
     open_issues = 0
     status = "fail"
@@ -264,16 +273,16 @@ def _evaluate_visible_zero(
     try:
         statuses, findings = _wait_for_status_contexts(
             StatusPollRequest(
-                repo=repo,
-                sha=sha,
-                token=token,
+                repo=inputs.repo,
+                sha=inputs.sha,
+                token=inputs.token,
                 prefix=args.status_prefix,
                 timeout_seconds=args.timeout_seconds,
                 poll_seconds=args.poll_seconds,
             )
         )
         if not findings:
-            open_issues, findings = _evaluate_visible_issues(issues_url)
+            open_issues, findings = _evaluate_visible_issues(inputs.issues_url)
         status = "pass" if not findings else "fail"
     except (OSError, RuntimeError, ValueError) as exc:  # pragma: no cover
         findings.append(f"DeepSource request failed: {exc}")
@@ -283,19 +292,13 @@ def _evaluate_visible_zero(
 def main() -> int:
     """Run the DeepSource visible-zero gate."""
     args = _parse_args()
-    token, repo, sha, issues_url = _visible_zero_inputs(args)
-    statuses, open_issues, findings, status = _evaluate_visible_zero(
-        args,
-        token=token,
-        repo=repo,
-        sha=sha,
-        issues_url=issues_url,
-    )
+    inputs = _visible_zero_inputs(args)
+    statuses, open_issues, findings, status = _evaluate_visible_zero(args, inputs)
 
     payload = {
         "status": status,
         "open_issues": open_issues,
-        "issues_url": issues_url,
+        "issues_url": inputs.issues_url,
         "status_contexts": [
             str(item.get("context") or "").strip()
             for item in statuses

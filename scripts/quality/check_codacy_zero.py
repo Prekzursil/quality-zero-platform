@@ -30,7 +30,6 @@ from scripts.quality.codacy_zero_io import (
     _mapping_or_empty,
     _preferred_text,
     _request_mode,
-    _write_codacy_report,
     build_issues_url,
     build_pull_request_analysis_url,
     build_repository_analysis_url,
@@ -161,7 +160,6 @@ def _build_retry_config(
 ) -> CodacyRetryConfig:
     """Build the retry configuration for one Codacy zero-gate lookup."""
     return _build_retry_config_base(
-        query,
         provider_candidates,
         attempts=(
             SCOPED_ANALYSIS_RETRY_ATTEMPTS

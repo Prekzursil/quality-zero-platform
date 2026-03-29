@@ -7,7 +7,7 @@ import urllib.parse
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Mapping, Sequence, Tuple
 
-from scripts.quality.common import utc_timestamp, write_report
+from scripts.quality.common import utc_timestamp
 
 CODACY_API_BASE = "https://api.codacy.com"
 CODACY_APP_API_BASE = "https://app.codacy.com/api/v3"
@@ -63,7 +63,6 @@ def _preferred_text(*values: Any) -> str:
 
 
 def _build_retry_config(
-    query: CodacyQuery,
     provider_candidates: Sequence[str],
     *,
     attempts: int,
@@ -177,15 +176,3 @@ def _render_md(payload: Mapping[str, Any]) -> str:
     ]
     lines.extend([f"- {item}" for item in payload.get("findings", [])] or ["- None"])
     return "\n".join(lines) + "\n"
-
-
-def _write_codacy_report(args: argparse.Namespace, payload: Mapping[str, Any]) -> int:
-    """Persist the Codacy gate payload in JSON and Markdown formats."""
-    return write_report(
-        payload,
-        out_json=args.out_json,
-        out_md=args.out_md,
-        default_json="codacy-zero/codacy.json",
-        default_md="codacy-zero/codacy.md",
-        render_md=_render_md,
-    )

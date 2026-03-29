@@ -17,8 +17,8 @@ def _marker(*parts: str) -> str:
 class CodacyZeroAnalysisMainTests(unittest.TestCase):
     """Codacy main-entry and not-found tests."""
 
+    @staticmethod
     def _build_args(
-        self,
         *,
         pull_request: str = "",
         token: str | None = None,

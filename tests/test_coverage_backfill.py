@@ -457,7 +457,8 @@ class CoverageBackfillTests(unittest.TestCase):
             completed.stderr or completed.stdout,
         )
 
-    def _invalid_contract_profile(self) -> dict:
+    @staticmethod
+    def _invalid_contract_profile() -> dict:
         """Return a minimally invalid contract profile for validation tests."""
         return {
             "slug": "owner/repo",
@@ -490,10 +491,11 @@ class CoverageBackfillTests(unittest.TestCase):
             },
         }
 
-    def _invalid_contract_profile_findings(self) -> List[str]:
+    @staticmethod
+    def _invalid_contract_profile_findings() -> List[str]:
         """Return the validation findings for the baseline invalid profile."""
         return profile_contract_validation.validate_profile(
-            self._invalid_contract_profile(),
+            CoverageBackfillTests._invalid_contract_profile(),
             active_required_contexts_fn=lambda _profile, event_name: ["Chromatic"],
         )
 

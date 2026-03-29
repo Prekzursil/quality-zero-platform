@@ -12,7 +12,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
-    def _load_profile(self) -> dict:
+    """Validate the codex-session-manager rollout contract."""
+
+    @staticmethod
+    def _load_profile() -> dict:
+        """Load the governed profile used by this test class."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         return load_repo_profile(inventory, "Prekzursil/codex-session-manager")
 
@@ -24,6 +28,7 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
         ruleset_contexts: Set[str],
         target_contexts: Set[str],
     ) -> None:
+        """Assert the event-specific context contract for the repo."""
         self._assert_context_subset(
             push_contexts,
             self._zero_gate_provider_contexts() | {"build-test", "analyze", "scan"},
@@ -71,6 +76,7 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
             self.assertNotIn(unexpected, pr_contexts)
 
     def _assert_profile_shape(self, profile: dict) -> None:
+        """Assert the repo profile still matches the WPF rollout shape."""
         self.assertEqual(profile["stack"], "dotnet-wpf")
         self.assertEqual(profile["verify_command"], "bash scripts/verify")
         self.assertEqual(profile["coverage"]["runner"], "windows-latest")
@@ -95,6 +101,7 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
         self.assertEqual(profile["vendors"]["sonar"]["project_key"], "Prekzursil_codex-session-manager")
 
     def test_codex_session_manager_uses_repo_specific_required_contexts(self) -> None:
+        """Check the repo emits the expected PR, push, and ruleset contexts."""
         profile = self._load_profile()
 
         pr_contexts = active_required_contexts(profile, event_name="pull_request")
@@ -150,6 +157,7 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
             self.assertNotIn(unexpected, pr_contexts)
 
     def test_codex_session_manager_profile_validation_accepts_emitted_required_now_contexts(self) -> None:
+        """Check validation accepts the emitted required-now contexts."""
         findings = validate_profile(self._load_profile())
         self.assertEqual(
             [item for item in findings if "required_contexts.required_now" in item],
@@ -157,6 +165,7 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
         )
 
     def test_codex_session_manager_profile_tracks_windows_wpf_rollout_contract(self) -> None:
+        """Check the repo profile still tracks the Windows WPF rollout contract."""
         profile = self._load_profile()
 
         push_contexts = active_required_contexts(profile, event_name="push")

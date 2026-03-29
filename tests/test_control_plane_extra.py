@@ -42,6 +42,8 @@ CONTROL_PLANE_PATH = ROOT / "scripts" / "quality" / "control_plane.py"
 
 
 class ControlPlaneExtraTests(unittest.TestCase):
+    """Exercise the extra control-plane contract helpers."""
+
     _INVALID_PROFILE_FINDINGS_BLOCK = """\
 verify_command is required
 github_mutation_lane must be codex-private-runner
@@ -63,7 +65,9 @@ coverage.assert_mode.default must be enforce, evidence_only, or non_regression
 invalid codacy.dashboard_url
 """
 
-    def _build_invalid_profile(self) -> Dict[str, Any]:
+    @staticmethod
+    def _build_invalid_profile() -> Dict[str, Any]:
+        """Build a deliberately invalid profile for validation tests."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
         profile["verify_command"] = ""
@@ -97,10 +101,12 @@ invalid codacy.dashboard_url
 
     @staticmethod
     def _invalid_profile_findings() -> List[str]:
+        """Return the expected invalid-profile findings."""
         return ControlPlaneExtraTests._INVALID_PROFILE_FINDINGS_BLOCK.strip().splitlines()
 
     @staticmethod
     def _expected_issue_policy() -> Dict[str, str]:
+        """Return the expected ratchet-era issue policy shape."""
         return {
             "mode": "ratchet",
             "pr_behavior": "introduced_only",
@@ -110,6 +116,7 @@ invalid codacy.dashboard_url
 
     @staticmethod
     def _expected_python_only_setup() -> Dict[str, Any]:
+        """Return the expected coverage setup after Python-only normalization."""
         return {
             "python": "3.12",
             "node": "",
@@ -121,6 +128,7 @@ invalid codacy.dashboard_url
         }
 
     def test_normalize_coverage_helpers_filter_invalid_entries_and_support_legacy_path(self) -> None:
+        """Check the coverage helper wrappers handle invalid and legacy inputs."""
         self.assertEqual(repo_root(), ROOT)
         self.assertEqual(_normalize_coverage_inputs("not-a-list"), [])
         normalized = _normalize_coverage_inputs(
@@ -141,6 +149,7 @@ invalid codacy.dashboard_url
         )
 
     def test_normalize_java_setup_and_assert_mode_support_shortcuts(self) -> None:
+        """Check the Java and assert-mode shortcuts normalize correctly."""
         self.assertEqual(
             _normalize_java_setup("21"),
             {"distribution": "temurin", "version": "21"},
@@ -151,6 +160,7 @@ invalid codacy.dashboard_url
         )
 
     def test_required_context_normalization_wrappers_cover_helper_paths(self) -> None:
+        """Check required-context wrappers cover the merge and replace paths."""
         self.assertEqual(
             _normalize_required_contexts({"always": ["Coverage 100 Gate"], "pull_request_only": ["QLTY Zero"]}),
             {
@@ -171,6 +181,7 @@ invalid codacy.dashboard_url
         )
 
     def test_coverage_helper_wrappers_cover_helper_paths(self) -> None:
+        """Check the coverage and Codex helper wrappers cover helper paths."""
         self.assertEqual(
             _normalize_coverage_setup({"python": " 3.12 "}),
             self._expected_python_only_setup(),
@@ -189,6 +200,7 @@ invalid codacy.dashboard_url
         )
 
     def test_inventory_override_wrappers_cover_helper_paths(self) -> None:
+        """Check inventory overrides still layer cleanly onto a merged profile."""
         merged = _apply_inventory_overrides(
             {"verify_command": "bash scripts/verify"},
             {
@@ -212,6 +224,7 @@ invalid codacy.dashboard_url
         self.assertEqual(merged["required_contexts_mode"], expected.required_contexts_mode)
 
     def test_load_stack_and_profile_resolution_raise_on_invalid_inventory_entries(self) -> None:
+        """Check stack and profile resolution reject malformed inventory entries."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             inventory_path = root / "inventory" / "repos.yml"
@@ -238,6 +251,7 @@ invalid codacy.dashboard_url
                 load_repo_profile(inventory, "Example/Repo")
 
     def test_yaml_and_inventory_helpers_reject_non_mapping_payloads(self) -> None:
+        """Check YAML and inventory loaders reject non-mapping payloads."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             mapping_path = root / "mapping.yml"
@@ -251,12 +265,14 @@ invalid codacy.dashboard_url
                 load_inventory(inventory_path)
 
     def test_validate_profile_collects_contract_and_url_findings(self) -> None:
+        """Check validation reports every expected contract finding."""
         profile = self._build_invalid_profile()
         findings = validate_profile(profile)
         for fragment in self._invalid_profile_findings():
             self.assertTrue(any(fragment in item for item in findings), fragment)
 
     def test_validate_profile_shape_rejects_unknown_keys(self) -> None:
+        """Check profile-shape validation rejects unknown keys."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
         profile["unexpected"] = True
@@ -268,6 +284,7 @@ invalid codacy.dashboard_url
         self.assertTrue(any("unexpected coverage key `mystery`" in item for item in findings))
 
     def test_validate_profile_shape_allows_command_shell_before_normalization(self) -> None:
+        """Check profile-shape validation still allows the legacy command shell key."""
         findings = profile_shape.validate_profile_shape(
             {
                 "slug": "Prekzursil/codex-session-manager",
@@ -281,6 +298,7 @@ invalid codacy.dashboard_url
         self.assertFalse(any("unexpected coverage key `command_shell`" in item for item in findings))
 
     def test_additional_contract_validators_cover_repo_lookup_target_and_runner_label_edges(self) -> None:
+        """Check the repo lookup, target, and runner-label edge cases."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         with self.assertRaisesRegex(KeyError, "Repo Missing/Repo not found"):
             load_repo_profile(inventory, "Missing/Repo")
@@ -296,6 +314,7 @@ invalid codacy.dashboard_url
         self.assertTrue(any("required_contexts.target is missing Coverage 100 Gate" in item for item in findings))
 
     def test_visual_pair_and_optional_validators_cover_remaining_branches(self) -> None:
+        """Check the remaining visual-pair and optional-validator branches."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
 
         plain_profile = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
@@ -326,6 +345,7 @@ invalid codacy.dashboard_url
         self.assertEqual([item for item in validate_profile(non_visual) if "visual_pair_required" in item], [])
 
     def test_main_print_modes_emit_expected_json(self) -> None:
+        """Check the CLI emits JSON for profile, ruleset, and contexts modes."""
         outputs: List[Any] = []
         for mode in ("profile", "ruleset", "contexts"):
             buffer = io.StringIO()
@@ -353,6 +373,7 @@ invalid codacy.dashboard_url
         self.assertIn("Coverage 100 Gate", contexts_payload)
 
     def test_script_entrypoint_inserts_repo_root_when_missing(self) -> None:
+        """Check the script entrypoint restores the repository root on sys.path."""
         root_text = str(ROOT)
         original_sys_path = list(sys.path)
         trimmed_sys_path = [item for item in original_sys_path if item != root_text]

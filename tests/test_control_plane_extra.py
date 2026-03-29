@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, cast, Dict, List
 from unittest.mock import patch
 
+from scripts.quality import profile_shape
 from scripts.quality.control_plane import (
     InventoryOverrides,
     _apply_inventory_overrides,
@@ -266,6 +267,19 @@ invalid codacy.dashboard_url
 
         self.assertTrue(any("unexpected profile key `unexpected`" in item for item in findings))
         self.assertTrue(any("unexpected coverage key `mystery`" in item for item in findings))
+
+    def test_validate_profile_shape_allows_command_shell_before_normalization(self) -> None:
+        findings = profile_shape.validate_profile_shape(
+            {
+                "slug": "Prekzursil/codex-session-manager",
+                "coverage": {
+                    "command_shell": "pwsh",
+                },
+            },
+            slug="Prekzursil/codex-session-manager",
+        )
+
+        self.assertFalse(any("unexpected coverage key `command_shell`" in item for item in findings))
 
     def test_additional_contract_validators_cover_repo_lookup_target_and_runner_label_edges(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")

@@ -20,6 +20,8 @@ from scripts.quality.coverage_paths import _coverage_source_candidates
 
 
 class _NoCloseResponse:
+    """Minimal response stub that leaves the in-memory payload readable."""
+
     def __init__(self, payload, headers=None, *, status=200, reason="OK"):
         self._payload = payload
         self._headers = dict(headers or {})
@@ -27,6 +29,7 @@ class _NoCloseResponse:
         self.reason = reason
 
     def read(self):
+        """Return the stored payload without closing the stubbed response."""
         return self._payload
 
     @property
@@ -35,10 +38,13 @@ class _NoCloseResponse:
 
 
 class BranchGapRemediationTests(unittest.TestCase):
+    """Pin low-risk fixes for recently added branch-gap regression helpers."""
+
     AUTH_TOKEN = "-".join(["auth", "token"])
 
     @staticmethod
     def _write_admin_repo(root: Path) -> Tuple[Path, Path]:
+        """Create a minimal admin repo fixture and return its inventory paths."""
         (root / "inventory").mkdir(parents=True, exist_ok=True)
         (root / "profiles" / "repos").mkdir(parents=True, exist_ok=True)
         inventory_path = root / "inventory" / "repos.yml"
@@ -58,6 +64,7 @@ class BranchGapRemediationTests(unittest.TestCase):
         return inventory_path, profile_path
 
     def test_control_plane_admin_noop_paths(self) -> None:
+        """Keep admin enrollment helpers idempotent for existing values."""
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             inventory_path, profile_path = self._write_admin_repo(root)
@@ -95,6 +102,7 @@ class BranchGapRemediationTests(unittest.TestCase):
         self.assertEqual(profile_text.count("Coverage 100 Gate"), 1)
 
     def test_control_plane_vendors_existing_values_and_suffix(self) -> None:
+        """Preserve vendor URLs while still deriving fallback suffixes."""
         vendor = {"dashboard_url": "https://app.codacy.com/gh/Prekzursil/example/dashboard"}
         control_plane_vendors._ensure_vendor_url(
             vendor,
@@ -108,9 +116,24 @@ class BranchGapRemediationTests(unittest.TestCase):
         control_plane_vendors._finalize_sonar_vendor(vendors)
         self.assertNotIn("dashboard_url", vendors["sonar"])
 
+        parts_vendor = {
+            "sonar": {
+                "project_key": "",
+                "project_key_parts": ["Prekzursil", "quality-zero-platform"],
+                "project_key_separator": ":",
+            }
+        }
+        control_plane_vendors._finalize_sonar_vendor(parts_vendor)
+        self.assertEqual(parts_vendor["sonar"]["project_key"], "Prekzursil:quality-zero-platform")
+        self.assertEqual(
+            parts_vendor["sonar"]["dashboard_url"],
+            "https://sonarcloud.io/project/overview?id=Prekzursil%3Aquality-zero-platform",
+        )
+
         self.assertEqual(control_plane_vendors._provider_env_suffix("Repo---Name___Test"), "REPO_NAME_TEST")
 
     def test_post_pr_quality_comment_create_and_update_paths(self) -> None:
+        """Cover both update and create flows for PR quality comments."""
         with patch.object(
             post_pr_quality_comment,
             "_github_request",
@@ -139,6 +162,7 @@ class BranchGapRemediationTests(unittest.TestCase):
         self.assertEqual(request_mock.call_args_list[1].kwargs["method"], "POST")
 
     def test_export_profile_main_skips_github_output_when_unset(self) -> None:
+        """Skip GitHub output emission when the caller leaves it unset."""
         profile = {"profile_id": "example", "coverage": {"inputs": []}}
         with patch.object(export_profile, "_parse_args", return_value=Namespace(
             inventory="",
@@ -158,6 +182,7 @@ class BranchGapRemediationTests(unittest.TestCase):
         self.assertEqual(json.loads(stdout.getvalue())["profile_id"], "example")
 
     def test_coverage_source_candidates_and_profile_hint_helpers_cover_false_branches(self) -> None:
+        """Cover helper branches for source discovery and profile hints."""
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             (root / "src").mkdir()
@@ -204,7 +229,10 @@ class BranchGapRemediationTests(unittest.TestCase):
         self.assertEqual(findings, ["Codacy API endpoint was not found for providers: gh."])
         self.assertIsNone(exc)
 
-        with patch("scripts.quality.check_codacy_zero._query_codacy_candidate", return_value=(None, [], RuntimeError("boom"), False)):
+        with patch(
+            "scripts.quality.check_codacy_zero.codacy_zero_support.query_codacy_open_issues",
+            return_value=(None, ["Codacy API endpoint was not found for providers: gh."], RuntimeError("boom")),
+        ) as query_mock:
             open_issues, findings, exc = check_codacy_zero._query_codacy_open_issues(
                 check_codacy_zero.CodacyQuery("gh", "Prekzursil", "quality-zero-platform"),
                 "api-token",
@@ -213,6 +241,7 @@ class BranchGapRemediationTests(unittest.TestCase):
         self.assertIsNone(open_issues)
         self.assertIn("Codacy API endpoint was not found for providers: gh.", findings)
         self.assertIsInstance(exc, RuntimeError)
+        query_mock.assert_called_once()
 
         with patch.object(check_deepscan_zero, "_request_json", return_value={"total": 0}):
             open_issues, source_url, findings = check_deepscan_zero._evaluate_open_issues_mode(

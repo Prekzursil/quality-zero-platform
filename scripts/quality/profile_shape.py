@@ -38,13 +38,21 @@ TOP_LEVEL_KEYS: Set[str] = {
     "owner",
 }
 NESTED_KEYS: Dict[str, Set[str]] = {
-    "codex_environment": {"mode", "verify_command", "auth_file", "network_profile", "methods", "runner_labels"},
+    "codex_environment": {
+        "mode",
+        "verify_command",
+        "auth_file",
+        "network_profile",
+        "methods",
+        "runner_labels",
+    },
     "required_contexts": {"always", "pull_request_only", "required_now", "target"},
     "issue_policy": {"mode", "pr_behavior", "main_behavior", "baseline_ref"},
     "deps": {"enabled", "policy", "scope"},
     "coverage": {
         "runner",
         "shell",
+        "command_shell",
         "command",
         "inputs",
         "artifact_path",
@@ -64,6 +72,7 @@ NESTED_KEYS: Dict[str, Set[str]] = {
 
 
 def validate_profile_shape(profile: Mapping[str, Any], *, slug: str) -> List[str]:
+    """Report unexpected top-level and nested profile keys."""
     findings: List[str] = []
     unexpected = sorted(set(profile) - TOP_LEVEL_KEYS)
     findings.extend(f"{slug}: unexpected profile key `{key}`" for key in unexpected)
@@ -73,6 +82,8 @@ def validate_profile_shape(profile: Mapping[str, Any], *, slug: str) -> List[str
         if not isinstance(section, dict):
             continue
         extra = sorted(set(section) - allowed_keys)
-        findings.extend(f"{slug}: unexpected {section_name} key `{key}`" for key in extra)
+        findings.extend(
+            f"{slug}: unexpected {section_name} key `{key}`" for key in extra
+        )
 
     return findings

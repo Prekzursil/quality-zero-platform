@@ -12,7 +12,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
-    def _load_profile(self) -> dict:
+    """Validate the codex-session-manager rollout contract."""
+
+    @staticmethod
+    def _load_profile() -> dict:
+        """Load the governed profile used by this test class."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         return load_repo_profile(inventory, "Prekzursil/codex-session-manager")
 
@@ -24,14 +28,22 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
         ruleset_contexts: Set[str],
         target_contexts: Set[str],
     ) -> None:
+        """Assert the event-specific context contract for the repo."""
         self._assert_context_subset(
             push_contexts,
             self._zero_gate_provider_contexts() | {"build-test", "analyze", "scan"},
         )
         self._assert_context_subset(
             pr_contexts,
-            self._zero_gate_provider_contexts()
-            | {"build-test", "analyze", "scan", "dependency-review"},
+            self._shared_zero_gate_contexts()
+            | {
+                "build-test",
+                "analyze",
+                "scan",
+                "dependency-review",
+                "aggregate-gate / Quality Zero Gate",
+                "shared-scanner-matrix / Quality Rollup",
+            },
         )
         self._assert_context_subset(
             ruleset_contexts,
@@ -47,25 +59,24 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
         )
         self.assertTrue(ruleset_contexts.issubset(target_contexts))
         for unexpected in (
+            "Codecov Analytics",
+            "Coverage 100 Gate",
+            "QLTY Zero",
+            "Sonar Zero",
+            "Codacy Zero",
+            "Semgrep Zero",
+            "Sentry Zero",
+            "DeepScan Zero",
             "qlty check",
             "qlty coverage",
             "qlty coverage diff",
             "Codacy Static Code Analysis",
             "DeepScan",
-            "shared-codecov-analytics / Codecov Analytics",
-            "shared-scanner-matrix / Coverage 100 Gate",
-            "shared-scanner-matrix / QLTY Zero",
-            "shared-scanner-matrix / Sonar Zero",
-            "shared-scanner-matrix / Codacy Zero",
-            "shared-scanner-matrix / Semgrep Zero",
-            "shared-scanner-matrix / Sentry Zero",
-            "shared-scanner-matrix / DeepScan Zero",
-            "aggregate-gate / Quality Zero Gate",
-            "shared-scanner-matrix / Quality Rollup",
         ):
             self.assertNotIn(unexpected, pr_contexts)
 
     def _assert_profile_shape(self, profile: dict) -> None:
+        """Assert the repo profile still matches the WPF rollout shape."""
         self.assertEqual(profile["stack"], "dotnet-wpf")
         self.assertEqual(profile["verify_command"], "bash scripts/verify")
         self.assertEqual(profile["coverage"]["runner"], "windows-latest")
@@ -90,6 +101,7 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
         self.assertEqual(profile["vendors"]["sonar"]["project_key"], "Prekzursil_codex-session-manager")
 
     def test_codex_session_manager_uses_repo_specific_required_contexts(self) -> None:
+        """Check the repo emits the expected PR, push, and ruleset contexts."""
         profile = self._load_profile()
 
         pr_contexts = active_required_contexts(profile, event_name="pull_request")
@@ -103,8 +115,15 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
             "scan",
         }:
             self.assertIn(required, push_contexts)
+        for required in self._shared_zero_gate_contexts() | {
+            "build-test",
+            "analyze",
+            "scan",
+            "dependency-review",
+            "aggregate-gate / Quality Zero Gate",
+            "shared-scanner-matrix / Quality Rollup",
+        }:
             self.assertIn(required, pr_contexts)
-        self.assertIn("dependency-review", pr_contexts)
         self.assertNotIn("dependency-review", push_contexts)
 
         for required in self._shared_zero_gate_contexts() | {
@@ -122,21 +141,23 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
             "qlty check",
             "qlty coverage",
             "qlty coverage diff",
-            "shared-scanner-matrix / Coverage 100 Gate",
-            "shared-scanner-matrix / QLTY Zero",
-            "shared-scanner-matrix / Sonar Zero",
-            "shared-scanner-matrix / Codacy Zero",
-            "shared-scanner-matrix / Semgrep Zero",
-            "shared-scanner-matrix / Sentry Zero",
-            "shared-scanner-matrix / DeepScan Zero",
-            "shared-codecov-analytics / Codecov Analytics",
-            "aggregate-gate / Quality Zero Gate",
-            "shared-scanner-matrix / Quality Rollup",
         ):
             self.assertNotIn(unexpected, push_contexts)
             self.assertNotIn(unexpected, pr_contexts)
+        for unexpected in (
+            "Codecov Analytics",
+            "Coverage 100 Gate",
+            "QLTY Zero",
+            "Sonar Zero",
+            "Codacy Zero",
+            "Semgrep Zero",
+            "Sentry Zero",
+            "DeepScan Zero",
+        ):
+            self.assertNotIn(unexpected, pr_contexts)
 
     def test_codex_session_manager_profile_validation_accepts_emitted_required_now_contexts(self) -> None:
+        """Check validation accepts the emitted required-now contexts."""
         findings = validate_profile(self._load_profile())
         self.assertEqual(
             [item for item in findings if "required_contexts.required_now" in item],
@@ -144,6 +165,7 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
         )
 
     def test_codex_session_manager_profile_tracks_windows_wpf_rollout_contract(self) -> None:
+        """Check the repo profile still tracks the Windows WPF rollout contract."""
         profile = self._load_profile()
 
         push_contexts = active_required_contexts(profile, event_name="push")

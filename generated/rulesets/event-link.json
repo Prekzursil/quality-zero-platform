@@ -40,6 +40,18 @@
             "integration_id": null
           },
           {
+            "context": "qlty check",
+            "integration_id": null
+          },
+          {
+            "context": "qlty coverage",
+            "integration_id": null
+          },
+          {
+            "context": "qlty coverage diff",
+            "integration_id": null
+          },
+          {
             "context": "Sonar Zero",
             "integration_id": null
           },
@@ -64,10 +76,6 @@
             "integration_id": null
           },
           {
-            "context": "DeepSource Visible Zero",
-            "integration_id": null
-          },
-          {
             "context": "Codacy Static Code Analysis",
             "integration_id": null
           },
@@ -76,15 +84,7 @@
             "integration_id": null
           },
           {
-            "context": "qlty check",
-            "integration_id": null
-          },
-          {
-            "context": "qlty coverage",
-            "integration_id": null
-          },
-          {
-            "context": "qlty coverage diff",
+            "context": "DeepSource Visible Zero",
             "integration_id": null
           }
         ],

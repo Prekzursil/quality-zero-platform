@@ -25,6 +25,9 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
         profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
         pbinfo = load_repo_profile(inventory, "Prekzursil/pbinfo-get-unsolved")
         pr_contexts = active_required_contexts(profile, event_name="pull_request")
+        merge_group_contexts = active_required_contexts(
+            profile, event_name="merge_group"
+        )
 
         self.assertEqual(profile["stack"], "node-frontend")
         self.assertEqual(profile["coverage"]["branch_min_percent"], 100.0)
@@ -64,6 +67,7 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
                 profile["required_contexts"]["target"]
             )
         )
+        self.assertEqual(pr_contexts, merge_group_contexts)
 
     def test_phase1_repo_verify_commands_follow_repo_contracts(self) -> None:
         """Phase-1 repos should keep their repo-specific verify commands and lanes."""
@@ -154,15 +158,31 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
 
         push_contexts = active_required_contexts(profile, event_name="push")
         ruleset_contexts = active_required_contexts(profile, event_name="ruleset")
+        merge_group_contexts = active_required_contexts(
+            profile, event_name="merge_group"
+        )
         payload = build_ruleset_payload(profile)
 
+        self.assertIn("Codecov Analytics", push_contexts)
         self.assertIn("QLTY Zero", push_contexts)
         self.assertIn("DeepSource Visible Zero", push_contexts)
+        self.assertIn("Codecov Analytics", profile["required_contexts"]["target"])
         self.assertIn("QLTY Zero", profile["required_contexts"]["target"])
         self.assertIn("DeepSource Visible Zero", profile["required_contexts"]["target"])
+        self.assertIn("Codecov Analytics", ruleset_contexts)
         self.assertIn("QLTY Zero", ruleset_contexts)
         self.assertIn("DeepSource Visible Zero", ruleset_contexts)
+        self.assertEqual(ruleset_contexts, merge_group_contexts)
         self.assertNotIn("qlty coverage diff", ruleset_contexts)
+        self.assertIn(
+            "Codecov Analytics",
+            [
+                item["context"]
+                for item in payload["rules"][1]["parameters"][
+                    "required_status_checks"
+                ]
+            ],
+        )
         self.assertIn(
             "QLTY Zero",
             [
@@ -200,6 +220,9 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
         pr_contexts = active_required_contexts(profile, event_name="pull_request")
         target_contexts = set(profile["required_contexts"]["target"])
 
+        self.assertIn("Codecov Analytics", push_contexts)
+        self.assertIn("Codecov Analytics", pr_contexts)
+        self.assertIn("Codecov Analytics", target_contexts)
         self.assertIn("QLTY Zero", push_contexts)
         self.assertIn("QLTY Zero", pr_contexts)
         self.assertIn("QLTY Zero", target_contexts)
@@ -223,4 +246,28 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
                 "DeepSource: Shell",
                 "DeepSource: Secrets",
             }.issubset(target_contexts)
+        )
+
+    def test_active_required_contexts_falls_back_to_required_now_for_other_events(
+        self,
+    ) -> None:
+        """Unknown events should keep the required-now contract."""
+        profile = {
+            "required_contexts": {
+                "always": ["Coverage 100 Gate"],
+                "pull_request_only": ["SonarCloud Code Analysis"],
+                "required_now": [
+                    "Coverage 100 Gate",
+                    "SonarCloud Code Analysis",
+                ],
+                "target": ["Coverage 100 Gate"],
+            }
+        }
+
+        self.assertEqual(
+            active_required_contexts(profile, event_name="workflow_dispatch"),
+            [
+                "Coverage 100 Gate",
+                "SonarCloud Code Analysis",
+            ],
         )

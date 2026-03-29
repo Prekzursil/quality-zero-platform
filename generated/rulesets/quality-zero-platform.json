@@ -32,6 +32,10 @@
             "integration_id": null
           },
           {
+            "context": "Codecov Analytics",
+            "integration_id": null
+          },
+          {
             "context": "QLTY Zero",
             "integration_id": null
           },

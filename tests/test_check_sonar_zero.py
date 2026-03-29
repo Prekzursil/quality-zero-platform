@@ -73,14 +73,13 @@ class SonarZeroTests(unittest.TestCase):
             check_sonar_zero,
             "write_report",
             return_value=scenario.get("write_report_result", 0),
-        ) as write_report_mock:
-            with patch.object(
-                check_sonar_zero,
-                "load_sonar_findings_with_retry",
-                return_value=scenario.get("load_result"),
-                side_effect=scenario.get("load_side_effect"),
-            ):
-                self.assertEqual(check_sonar_zero.main(), scenario["expected_code"])
+        ) as write_report_mock, patch.object(
+            check_sonar_zero,
+            "load_sonar_findings_with_retry",
+            return_value=scenario.get("load_result"),
+            side_effect=scenario.get("load_side_effect"),
+        ):
+            self.assertEqual(check_sonar_zero.main(), scenario["expected_code"])
         payload = write_report_mock.call_args.args[0]
         expected_findings = scenario.get("expected_findings")
         if expected_findings is not None:

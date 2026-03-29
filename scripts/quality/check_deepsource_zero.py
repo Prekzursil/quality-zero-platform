@@ -31,6 +31,8 @@ DEEPSOURCE_STATUS_PREFIX = "DeepSource"
 DEFAULT_TIMEOUT_SECONDS = 900
 DEFAULT_POLL_SECONDS = 20
 GITHUB_API_BASE = "https://api.github.com"
+
+
 @dataclass(frozen=True)
 class StatusPollRequest:
     """Describe the GitHub status contexts required for a DeepSource check."""

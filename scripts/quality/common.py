@@ -42,40 +42,56 @@ def safe_output_path(raw: str, fallback: str, base: Path | None = None) -> Path:
     """Resolve an output path inside the workspace root."""
     root = (base or Path.cwd()).resolve()
     candidate = Path((raw or "").strip() or fallback)
-    resolved = candidate.resolve(strict=False) if candidate.is_absolute() else (root / candidate).resolve(strict=False)
+    resolved = (
+        candidate.resolve(strict=False)
+        if candidate.is_absolute()
+        else (root / candidate).resolve(strict=False)
+    )
     if os.path.commonpath([str(root), str(resolved)]) != str(root):
         raise ValueError(f"Output path escapes workspace root: {candidate}")
     return resolved
 
 
 def _raise_write_report_type_error(message: str) -> None:
+    """Raise the canonical ``write_report`` type error."""
     raise TypeError(message)
 
 
 def _validate_report_spec_args(args: Any, kwargs: Any) -> ReportSpec | None:
+    """Validate positional ``write_report`` arguments."""
     if args and isinstance(args[0], ReportSpec):
         if len(args) != 1 or kwargs:
-            _raise_write_report_type_error("write_report expects a ReportSpec or legacy keyword arguments")
+            _raise_write_report_type_error(
+                "write_report expects a ReportSpec or legacy keyword arguments"
+            )
         return args[0]
 
     if args:
-        _raise_write_report_type_error("write_report expects a ReportSpec or legacy keyword arguments")
+        _raise_write_report_type_error(
+            "write_report expects a ReportSpec or legacy keyword arguments"
+        )
     return None
 
 
 def _pop_report_kwargs(kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract legacy ``write_report`` keyword arguments."""
     required = ("out_json", "out_md", "default_json", "default_md", "render_md")
     missing = [key for key in required if key not in kwargs]
     if missing:
-        _raise_write_report_type_error(f"Missing required report parameter: {missing[0]}")
+        _raise_write_report_type_error(
+            f"Missing required report parameter: {missing[0]}"
+        )
 
     values = {key: kwargs.pop(key) for key in required}
     if kwargs:
-        _raise_write_report_type_error(f"Unexpected write_report parameters: {', '.join(sorted(kwargs))}")
+        _raise_write_report_type_error(
+            f"Unexpected write_report parameters: {', '.join(sorted(kwargs))}"
+        )
     return values
 
 
 def _resolve_report_spec(*args: Any, **kwargs: Any) -> ReportSpec:
+    """Resolve the active report spec from positional or legacy arguments."""
     spec = _validate_report_spec_args(args, kwargs)
     if spec is not None:
         return spec
@@ -83,6 +99,7 @@ def _resolve_report_spec(*args: Any, **kwargs: Any) -> ReportSpec:
 
 
 def _report_spec_from_kwargs(values: Mapping[str, Any]) -> ReportSpec:
+    """Build a ``ReportSpec`` from normalized legacy keyword values."""
     return ReportSpec(
         out_json=str(values["out_json"]),
         out_md=str(values["out_md"]),
@@ -104,7 +121,10 @@ def write_report(payload: Mapping[str, Any], *args: Any, **kwargs: Any) -> int:
 
     json_path.parent.mkdir(parents=True, exist_ok=True)
     md_path.parent.mkdir(parents=True, exist_ok=True)
-    json_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")  # NOSONAR
+    json_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )  # NOSONAR
     md_path.write_text(spec.render_md(payload), encoding="utf-8")  # NOSONAR
     print(md_path.read_text(encoding="utf-8"), end="")
     return 0
@@ -112,12 +132,17 @@ def write_report(payload: Mapping[str, Any], *args: Any, **kwargs: Any) -> int:
 
 def normalize_required_contexts(raw: Mapping[str, Any] | None) -> Dict[str, List[str]]:
     """Normalize required status contexts."""
-    from scripts.quality.profile_normalization import normalize_required_contexts as impl
+    from scripts.quality.profile_normalization import (
+        normalize_required_contexts as impl,
+    )
 
     return impl(raw)
 
 
-def merge_required_contexts(base: Mapping[str, Any] | None, overlay: Mapping[str, Any] | None) -> Dict[str, List[str]]:
+def merge_required_contexts(
+    base: Mapping[str, Any] | None,
+    overlay: Mapping[str, Any] | None,
+) -> Dict[str, List[str]]:
     """Merge two required-context payloads."""
     from scripts.quality.profile_normalization import merge_required_contexts as impl
 
@@ -154,7 +179,9 @@ def normalize_coverage_setup(raw_setup: Any) -> Dict[str, Any]:
 
 def normalize_coverage_assert_mode(raw_assert_mode: Any) -> Dict[str, str]:
     """Normalize coverage assert-mode configuration."""
-    from scripts.quality.profile_normalization import normalize_coverage_assert_mode as impl
+    from scripts.quality.profile_normalization import (
+        normalize_coverage_assert_mode as impl,
+    )
 
     return impl(raw_assert_mode)
 
@@ -180,9 +207,15 @@ def normalize_deps(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
     return impl(raw)
 
 
-def normalize_codex_environment(raw: Mapping[str, Any] | None, *, verify_command: str) -> Dict[str, Any]:
+def normalize_codex_environment(
+    raw: Mapping[str, Any] | None,
+    *,
+    verify_command: str,
+) -> Dict[str, Any]:
     """Normalize Codex environment configuration."""
-    from scripts.quality.profile_normalization import normalize_codex_environment as impl
+    from scripts.quality.profile_normalization import (
+        normalize_codex_environment as impl,
+    )
 
     return impl(raw, verify_command=verify_command)
 
@@ -194,9 +227,14 @@ def finalize_vendors(profile: Mapping[str, Any] | None) -> Dict[str, Any]:
 
 
 def _deep_merge(base: Any, overlay: Any) -> Any:
+    """Recursively merge two mapping-like values using overlay precedence."""
     if isinstance(base, dict) and isinstance(overlay, dict):
         merged = deepcopy(base)
         for key, value in overlay.items():
-            merged[key] = _deep_merge(merged[key], value) if key in merged else deepcopy(value)
+            merged[key] = (
+                _deep_merge(merged[key], value)
+                if key in merged
+                else deepcopy(value)
+            )
         return merged
     return deepcopy(overlay)

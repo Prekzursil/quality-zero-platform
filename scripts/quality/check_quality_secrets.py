@@ -19,35 +19,68 @@ NONE_BULLET = "- None"
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Validate required quality-gate secrets and variables.")
-    parser.add_argument("--required-secret", action="append", default=[], help="Required secret env var name")
-    parser.add_argument("--conditional-secret", action="append", default=[], help="Conditional secret env var name")
-    parser.add_argument("--required-var", action="append", default=[], help="Required variable env var name")
-    parser.add_argument("--conditional-var", action="append", default=[], help="Conditional variable env var name")
+    """Parse CLI arguments for the quality-secrets preflight."""
+    parser = argparse.ArgumentParser(
+        description="Validate required quality-gate secrets and variables."
+    )
+    parser.add_argument(
+        "--required-secret",
+        action="append",
+        default=[],
+        help="Required secret env var name",
+    )
+    parser.add_argument(
+        "--conditional-secret",
+        action="append",
+        default=[],
+        help="Conditional secret env var name",
+    )
+    parser.add_argument(
+        "--required-var",
+        action="append",
+        default=[],
+        help="Required variable env var name",
+    )
+    parser.add_argument(
+        "--conditional-var",
+        action="append",
+        default=[],
+        help="Conditional variable env var name",
+    )
     parser.add_argument("--out-json", default="quality-secrets/secrets.json")
     parser.add_argument("--out-md", default="quality-secrets/secrets.md")
     return parser.parse_args()
 
 
 def _append_missing_section(lines: List[str], title: str, items: List[str]) -> None:
+    """Append a titled list of missing environment names to the report."""
     lines.extend(["", title])
     lines.extend([f"- `{item}`" for item in items] or [NONE_BULLET])
 
 
 def _render_md(payload: Mapping[str, Any]) -> str:
+    """Render the Markdown report for the secrets preflight payload."""
     lines = [
         "# Quality Secrets Preflight",
         "",
         f"- Status: `{payload['status']}`",
         f"- Timestamp (UTC): `{payload['timestamp_utc']}`",
     ]
-    _append_missing_section(lines, "## Missing secrets", payload.get("missing_secrets", []))
+    _append_missing_section(
+        lines,
+        "## Missing secrets",
+        payload.get("missing_secrets", []),
+    )
     _append_missing_section(
         lines,
         "## Missing conditional secrets",
         payload.get("missing_conditional_secrets", []),
     )
-    _append_missing_section(lines, "## Missing variables", payload.get("missing_vars", []))
+    _append_missing_section(
+        lines,
+        "## Missing variables",
+        payload.get("missing_vars", []),
+    )
     _append_missing_section(
         lines,
         "## Missing conditional variables",
@@ -57,6 +90,7 @@ def _render_md(payload: Mapping[str, Any]) -> str:
 
 
 def _missing_env_names(names: List[str]) -> List[str]:
+    """Return the env-var names that are unset or blank in the environment."""
     return [name for name in names if not str(os.environ.get(name, "")).strip()]
 
 
@@ -67,6 +101,7 @@ def _build_payload(
     required_vars: List[str],
     conditional_vars: List[str],
 ) -> Dict[str, Any]:
+    """Build the report payload for the current environment snapshot."""
     missing_secrets = _missing_env_names(required_secrets)
     missing_conditional_secrets = _missing_env_names(conditional_secrets)
     missing_vars = _missing_env_names(required_vars)

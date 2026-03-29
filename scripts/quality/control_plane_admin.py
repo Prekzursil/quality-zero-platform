@@ -16,6 +16,7 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
 
 
 def _load_yaml(path: Path) -> Dict[str, Any]:
+    """Load a YAML mapping from disk and reject non-mapping payloads."""
     payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(payload, dict):
         raise ValueError(f"Expected mapping at {path}")
@@ -23,6 +24,7 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
 
 
 def _write_yaml(path: Path, payload: Dict[str, Any]) -> None:
+    """Write a YAML mapping to disk, creating parent directories as needed."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
 
@@ -71,10 +73,17 @@ def enroll_repo(*, repo_root: Path, request: EnrollmentRequest) -> None:
 
 
 def _profile_path(repo_root: Path, profile_id: str) -> Path:
+    """Return the repo-profile YAML path for the given profile id."""
     return repo_root / "profiles" / "repos" / f"{profile_id}.yml"
 
 
-def set_scanner(*, repo_root: Path, profile_id: str, scanner: str, enabled: bool) -> None:
+def set_scanner(
+    *,
+    repo_root: Path,
+    profile_id: str,
+    scanner: str,
+    enabled: bool,
+) -> None:
     """Enable or disable a scanner in a repository profile."""
     path = _profile_path(repo_root, profile_id)
     payload = _load_yaml(path)
@@ -83,7 +92,13 @@ def set_scanner(*, repo_root: Path, profile_id: str, scanner: str, enabled: bool
     _write_yaml(path, payload)
 
 
-def set_issue_policy(*, repo_root: Path, profile_id: str, mode: str, baseline_ref: str = "") -> None:
+def set_issue_policy(
+    *,
+    repo_root: Path,
+    profile_id: str,
+    mode: str,
+    baseline_ref: str = "",
+) -> None:
     """Update the issue policy for a repository profile."""
     path = _profile_path(repo_root, profile_id)
     payload = _load_yaml(path)
@@ -95,7 +110,13 @@ def set_issue_policy(*, repo_root: Path, profile_id: str, mode: str, baseline_re
     _write_yaml(path, payload)
 
 
-def set_coverage_mode(*, repo_root: Path, profile_id: str, event_name: str, mode: str) -> None:
+def set_coverage_mode(
+    *,
+    repo_root: Path,
+    profile_id: str,
+    event_name: str,
+    mode: str,
+) -> None:
     """Set the coverage assertion mode for one event type."""
     path = _profile_path(repo_root, profile_id)
     payload = _load_yaml(path)
@@ -127,7 +148,9 @@ def set_required_context(
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments for the admin helper."""
-    parser = argparse.ArgumentParser(description="Mutate inventory or profile YAML for admin PR workflows.")
+    parser = argparse.ArgumentParser(
+        description="Mutate inventory or profile YAML for admin PR workflows."
+    )
     parser.add_argument("--repo-root", default=".")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -145,17 +168,33 @@ def parse_args() -> argparse.Namespace:
 
     issue_policy = subparsers.add_parser("set-issue-policy")
     issue_policy.add_argument("--profile-id", required=True)
-    issue_policy.add_argument("--mode", choices=("zero", "ratchet", "audit"), required=True)
+    issue_policy.add_argument(
+        "--mode",
+        choices=("zero", "ratchet", "audit"),
+        required=True,
+    )
     issue_policy.add_argument("--baseline-ref", default="")
 
     coverage = subparsers.add_parser("set-coverage-mode")
     coverage.add_argument("--profile-id", required=True)
-    coverage.add_argument("--event-name", choices=("default", "push", "pull_request"), required=True)
-    coverage.add_argument("--mode", choices=("enforce", "evidence_only", "non_regression"), required=True)
+    coverage.add_argument(
+        "--event-name",
+        choices=("default", "push", "pull_request"),
+        required=True,
+    )
+    coverage.add_argument(
+        "--mode",
+        choices=("enforce", "evidence_only", "non_regression"),
+        required=True,
+    )
 
     required_context = subparsers.add_parser("set-required-context")
     required_context.add_argument("--profile-id", required=True)
-    required_context.add_argument("--context-set", choices=("always", "pull_request_only", "required_now", "target"), required=True)
+    required_context.add_argument(
+        "--context-set",
+        choices=("always", "pull_request_only", "required_now", "target"),
+        required=True,
+    )
     required_context.add_argument("--context-name", required=True)
     required_context.add_argument("--present", choices=("true", "false"), required=True)
     return parser.parse_args()
@@ -177,9 +216,19 @@ def main() -> int:
             ),
         )
     elif args.command == "set-scanner":
-        set_scanner(repo_root=repo_root, profile_id=args.profile_id, scanner=args.scanner, enabled=args.enabled == "true")
+        set_scanner(
+            repo_root=repo_root,
+            profile_id=args.profile_id,
+            scanner=args.scanner,
+            enabled=args.enabled == "true",
+        )
     elif args.command == "set-issue-policy":
-        set_issue_policy(repo_root=repo_root, profile_id=args.profile_id, mode=args.mode, baseline_ref=args.baseline_ref)
+        set_issue_policy(
+            repo_root=repo_root,
+            profile_id=args.profile_id,
+            mode=args.mode,
+            baseline_ref=args.baseline_ref,
+        )
     elif args.command == "set-required-context":
         set_required_context(
             repo_root=repo_root,
@@ -192,7 +241,12 @@ def main() -> int:
         )
     else:
         event_name = "default" if args.event_name == "default" else args.event_name
-        set_coverage_mode(repo_root=repo_root, profile_id=args.profile_id, event_name=event_name, mode=args.mode)
+        set_coverage_mode(
+            repo_root=repo_root,
+            profile_id=args.profile_id,
+            event_name=event_name,
+            mode=args.mode,
+        )
     return 0
 
 

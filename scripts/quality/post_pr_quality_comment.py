@@ -96,7 +96,9 @@ def main() -> int:
             body=render_comment_body(markdown),
             token=token,
         )
-    except (HTTPError, OSError, RuntimeError, ValueError) as exc:
+    except HTTPError as exc:
+        raise SystemExit(f"Unable to post PR comment: {exc}") from exc
+    except (OSError, RuntimeError, ValueError) as exc:
         raise SystemExit(f"Unable to post PR comment: {exc}") from exc
     return 0
 

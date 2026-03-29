@@ -72,7 +72,11 @@ class RunCodexExecTests(unittest.TestCase):
             return build_codex_command(args)
 
     @staticmethod
-    def _run_main_with_patched_subprocess(args: Namespace, completed: SimpleNamespace):
+    @staticmethod
+    def _run_main_with_patched_subprocess(
+        args: Namespace,
+        completed: SimpleNamespace,
+    ):
         """Handle run main with patched subprocess."""
         json_log = Path(args.json_log)
         with patch(

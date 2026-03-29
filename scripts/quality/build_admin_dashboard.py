@@ -111,16 +111,23 @@ def _render_dashboard_page(payload: Mapping[str, Any], rows: str) -> str:
   <meta charset="utf-8">
   <title>Quality Zero Control Plane</title>
   <style>
-    body {{ font-family: Arial, sans-serif; margin: 2rem; background: #f7f7f7; color: #111; }}
+    body {{
+      font-family: Arial, sans-serif; margin: 2rem; background: #f7f7f7; color: #111;
+    }}
     table {{ border-collapse: collapse; width: 100%; background: white; }}
-    th, td {{ border: 1px solid #ddd; padding: 0.5rem; text-align: left; vertical-align: top; }}
+    th, td {{
+      border: 1px solid #ddd; padding: 0.5rem; text-align: left; vertical-align: top;
+    }}
     th {{ background: #eee; }}
     .meta {{ margin-bottom: 1rem; }}
   </style>
 </head>
 <body>
   <h1>Quality Zero Control Plane</h1>
-  <p class="meta">Generated at {payload.get('generated_at', '')}. Governed repos: {payload.get('repo_count', 0)}.</p>
+  <p class="meta">
+    Generated at {payload.get('generated_at', '')}. Governed repos:
+    {payload.get('repo_count', 0)}.
+  </p>
   <table>
     <thead>
       <tr>
@@ -215,7 +222,10 @@ def _compute_health(workflow_runs: List[Mapping[str, Any]], *, filter_fn=None) -
 def _live_health(token: str, repo_slug: str, default_branch: str) -> Dict[str, Any]:
     """Handle live health."""
     runs = _github_payload(
-        f"{GITHUB_API_BASE}/repos/{repo_slug}/actions/runs?branch={default_branch}&per_page=20",
+        (
+            f"{GITHUB_API_BASE}/repos/{repo_slug}/actions/runs"
+            f"?branch={default_branch}&per_page=20"
+        ),
         token,
     )
     rulesets = _github_payload(f"{GITHUB_API_BASE}/repos/{repo_slug}/rulesets", token)

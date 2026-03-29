@@ -35,7 +35,8 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
         page = build_admin_dashboard._render_dashboard_page(
             {"generated_at": "now", "repo_count": 1}, row
         )
-        self.assertIn("Governed repos: 1", page)
+        self.assertIn("Governed repos:", page)
+        self.assertIn("\n    1.\n", page)
 
         runs = [
             {"event": "push", "conclusion": "success"},

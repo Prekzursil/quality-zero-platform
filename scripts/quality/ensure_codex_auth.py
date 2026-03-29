@@ -54,8 +54,10 @@ def _resolve_auth_payload(args: argparse.Namespace) -> Dict[str, str]:
         return {"auth_file": str(auth_path), "source": args.bootstrap_env_var}
 
     raise SystemExit(
-        "Codex account auth is missing. Seed the trusted private runner once with `codex login` "
-        f"or provide {args.bootstrap_env_var} as a repository secret for bootstrap."
+        "Codex account auth is missing. Seed the trusted private runner once "
+        "with `codex login` "
+        f"or provide {args.bootstrap_env_var} as a repository secret for "
+        "bootstrap."
     )
 
 

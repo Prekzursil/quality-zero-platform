@@ -21,7 +21,8 @@ ROOT = Path(__file__).resolve().parents[1]
 class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
     """Codex Session Manager Control Plane Tests."""
 
-    def _load_profile(self) -> dict:
+    @staticmethod
+    def _load_profile() -> dict:
         """Handle load profile."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         return load_repo_profile(inventory, "Prekzursil/codex-session-manager")
@@ -155,10 +156,10 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
             self.assertNotIn(unexpected, push_contexts)
             self.assertNotIn(unexpected, pr_contexts)
 
-    def test_codex_session_manager_profile_validation_accepts_emitted_required_now_contexts(
+    def test_codex_session_manager_profile_validation_accepts_required_now_contexts(
         self,
     ) -> None:
-        """Cover codex session manager profile validation accepts emitted required now contexts."""
+        """Cover profile validation accepts emitted required-now contexts."""
         findings = validate_profile(self._load_profile())
         self.assertEqual(
             [item for item in findings if "required_contexts.required_now" in item],

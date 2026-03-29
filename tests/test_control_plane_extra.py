@@ -67,7 +67,8 @@ coverage.assert_mode.default must be enforce, evidence_only, or non_regression
 invalid codacy.dashboard_url
 """
 
-    def _build_invalid_profile(self) -> Dict[str, Any]:
+    @staticmethod
+    def _build_invalid_profile() -> Dict[str, Any]:
         """Handle build invalid profile."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
@@ -133,7 +134,7 @@ invalid codacy.dashboard_url
     def test_normalize_coverage_helpers_filter_invalid_entries_and_support_legacy_path(
         self,
     ) -> None:
-        """Cover normalize coverage helpers filter invalid entries and support legacy path."""
+        """Cover normalize coverage helpers and legacy path."""
         self.assertEqual(repo_root(), ROOT)
         self.assertEqual(_normalize_coverage_inputs("not-a-list"), [])
         normalized = _normalize_coverage_inputs(
@@ -251,7 +252,7 @@ invalid codacy.dashboard_url
     def test_load_stack_and_profile_resolution_raise_on_invalid_inventory_entries(
         self,
     ) -> None:
-        """Cover load stack and profile resolution raise on invalid inventory entries."""
+        """Cover load stack and profile resolution invalid entries."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             inventory_path = root / "inventory" / "repos.yml"
@@ -336,10 +337,10 @@ invalid codacy.dashboard_url
             any("unexpected coverage key `command_shell`" in item for item in findings)
         )
 
-    def test_additional_contract_validators_cover_repo_lookup_target_and_runner_label_edges(
+    def test_additional_contract_validators_cover_lookup_edges(
         self,
     ) -> None:
-        """Cover additional contract validators cover repo lookup target and runner label edges."""
+        """Cover additional contract validators cover lookup edges."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         with self.assertRaisesRegex(KeyError, "Repo Missing/Repo not found"):
             load_repo_profile(inventory, "Missing/Repo")
@@ -385,7 +386,10 @@ invalid codacy.dashboard_url
 
         self.assertTrue(
             any(
-                "visual_pair_required needs both Chromatic and Applitools contexts in required_now"
+                (
+                    "visual_pair_required needs both Chromatic and "
+                    "Applitools contexts in required_now"
+                )
                 in item
                 for item in findings
             )

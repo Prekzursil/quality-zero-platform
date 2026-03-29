@@ -12,7 +12,8 @@ from scripts.quality import control_plane_admin
 class ControlPlaneAdminTests(unittest.TestCase):
     """Control Plane Admin Tests."""
 
-    def _write_repo(self, root: Path) -> None:
+    @staticmethod
+    def _write_repo(root: Path) -> None:
         """Handle write repo."""
         (root / "inventory").mkdir(parents=True, exist_ok=True)
         (root / "profiles" / "repos").mkdir(parents=True, exist_ok=True)

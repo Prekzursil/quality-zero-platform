@@ -34,7 +34,9 @@ TOTAL_KEYS = {
 CODACY_API_BASE = "https://api.codacy.com"
 CODACY_APP_API_BASE = "https://app.codacy.com/api/v3"
 JSON_ACCEPT_HEADER = "application/json"
-SCOPED_ANALYSIS_RETRY_ATTEMPTS = 72
+# Codacy's PR-scoped issue view can lag several minutes behind GitHub on large
+# or long-lived branches, so the default retry window needs to cover that drift.
+SCOPED_ANALYSIS_RETRY_ATTEMPTS = 180
 
 
 @dataclass(frozen=True)

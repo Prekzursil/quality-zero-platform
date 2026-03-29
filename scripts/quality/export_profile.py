@@ -49,15 +49,28 @@ def _json_output(key: str, value: object) -> str:
 def _profile_output_lines(profile: Dict[str, Any], event_name: str) -> List[str]:
     """Handle profile output lines."""
     contexts = active_required_contexts(profile, event_name=event_name)
-    coverage = profile.get("coverage", {})
     codex_environment = profile.get("codex_environment", {})
-    issue_policy = profile.get("issue_policy", {})
-    setup = coverage.get("setup", {})
-    java = setup.get("java", {})
-    coverage_input_files = _coverage_input_files(coverage)
+    coverage_input_files = _coverage_input_files(profile.get("coverage", {}))
     enabled_scanners = profile.get("enabled_scanners", {})
     codecov_enabled = str(bool(enabled_scanners.get("codecov", False))).lower()
     qlty_enabled = str(bool(enabled_scanners.get("qlty", False))).lower()
+    return [
+        *_profile_identity_output_lines(profile),
+        *_required_context_output_lines(profile, contexts),
+        *_codex_environment_output_lines(codex_environment),
+        *_coverage_output_lines(
+            profile,
+            coverage_input_files,
+            codecov_enabled,
+            qlty_enabled,
+        ),
+        _json_output("enabled_scanners_json", profile.get("enabled_scanners", {})),
+        _json_output("vendors_json", profile.get("vendors", {})),
+    ]
+
+
+def _profile_identity_output_lines(profile: Dict[str, Any]) -> List[str]:
+    """Return the base identity fields exported for one profile."""
     return [
         f"verify_command={profile['verify_command']}",
         f"default_branch={profile['default_branch']}",
@@ -66,6 +79,14 @@ def _profile_output_lines(profile: Dict[str, Any], event_name: str) -> List[str]
         f"github_mutation_lane={profile['github_mutation_lane']}",
         f"codex_auth_lane={profile['codex_auth_lane']}",
         f"provider_ui_mode={profile['provider_ui_mode']}",
+    ]
+
+
+def _required_context_output_lines(
+    profile: Dict[str, Any], contexts: List[str]
+) -> List[str]:
+    """Return the required-context fields exported for one profile."""
+    return [
         _json_output("required_contexts_json", contexts),
         _json_output(
             "required_contexts_required_now_json",
@@ -79,11 +100,32 @@ def _profile_output_lines(profile: Dict[str, Any], event_name: str) -> List[str]
             "conditional_secrets_json", profile.get("conditional_secrets", [])
         ),
         _json_output("required_vars_json", profile["required_vars"]),
+    ]
+
+
+def _codex_environment_output_lines(codex_environment: Dict[str, Any]) -> List[str]:
+    """Return the Codex runner fields exported for one profile."""
+    return [
         _json_output("codex_environment_json", codex_environment),
         f"codex_auth_file={codex_environment.get('auth_file', '')}",
         _json_output(
             "codex_runner_labels_json", codex_environment.get("runner_labels", [])
         ),
+    ]
+
+
+def _coverage_output_lines(
+    profile: Dict[str, Any],
+    coverage_input_files: str,
+    codecov_enabled: str,
+    qlty_enabled: str,
+) -> List[str]:
+    """Return the coverage-related fields exported for one profile."""
+    coverage = profile.get("coverage", {})
+    issue_policy = profile.get("issue_policy", {})
+    setup = coverage.get("setup", {})
+    java = setup.get("java", {})
+    return [
         _json_output("coverage_json", coverage),
         _json_output("issue_policy_json", issue_policy),
         f"coverage_runner={coverage.get('runner', 'ubuntu-latest')}",
@@ -99,8 +141,6 @@ def _profile_output_lines(profile: Dict[str, Any], event_name: str) -> List[str]
         f"coverage_input_files={coverage_input_files}",
         f"qlty_enabled={qlty_enabled}",
         f"qlty_coverage_files={coverage_input_files}",
-        _json_output("enabled_scanners_json", profile.get("enabled_scanners", {})),
-        _json_output("vendors_json", profile.get("vendors", {})),
     ]
 
 

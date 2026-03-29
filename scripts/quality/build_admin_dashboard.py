@@ -9,7 +9,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Set
+from typing import Any, Dict, List, Mapping, Sequence, Set
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -193,15 +193,15 @@ def _github_payload(url: str, token: str) -> Any:
 
 
 def _select_runs(
-    workflow_runs: List[Mapping[str, Any]], *, filter_fn=None
+    workflow_runs: Sequence[Mapping[str, Any]], *, filter_fn=None
 ) -> List[Mapping[str, Any]]:
     """Handle select runs."""
     if filter_fn is None:
-        return workflow_runs
+        return list(workflow_runs)
     return [item for item in workflow_runs if filter_fn(item)]
 
 
-def _run_conclusions(workflow_runs: List[Mapping[str, Any]]) -> Set[str]:
+def _run_conclusions(workflow_runs: Sequence[Mapping[str, Any]]) -> Set[str]:
     """Handle run conclusions."""
     return {
         str(item.get("conclusion") or "")
@@ -210,7 +210,9 @@ def _run_conclusions(workflow_runs: List[Mapping[str, Any]]) -> Set[str]:
     }
 
 
-def _compute_health(workflow_runs: List[Mapping[str, Any]], *, filter_fn=None) -> str:
+def _compute_health(
+    workflow_runs: Sequence[Mapping[str, Any]], *, filter_fn=None
+) -> str:
     """Handle compute health."""
     runs = _select_runs(workflow_runs, filter_fn=filter_fn)
     if not runs:

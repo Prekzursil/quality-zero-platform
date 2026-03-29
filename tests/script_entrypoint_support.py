@@ -34,7 +34,11 @@ def run_script_entrypoint_failure(script_relative_path: str) -> int:
             try:
                 runpy.run_path(str(script_path), run_name="__main__")
             except SystemExit as exc:
-                return int(exc.code)
+                if exc.code is None:
+                    return 0
+                if isinstance(exc.code, int):
+                    return exc.code
+                return 1
         finally:
             os.chdir(previous)
     raise AssertionError(f"{script_relative_path} did not exit")

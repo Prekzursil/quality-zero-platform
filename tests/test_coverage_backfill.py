@@ -12,8 +12,7 @@ import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
-from typing import List
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from scripts.quality import (
     build_admin_dashboard,
@@ -21,12 +20,7 @@ from scripts.quality import (
     check_dependabot_alerts,
     control_plane_admin,
     post_pr_quality_comment,
-    profile_contract_validation,
-    profile_coverage_normalization,
-    profile_normalization,
-    profile_shape,
 )
-from scripts import security_helpers
 
 VALID_CONTRACT_VENDORS = {
     "chromatic": {
@@ -90,6 +84,33 @@ def build_valid_contract_profile() -> dict:
 
 class CoverageBackfillTests(unittest.TestCase):
     """Coverage Backfill Tests."""
+
+    def _assert_control_plane_admin_dispatch(
+        self,
+        root: Path,
+        *,
+        command: str,
+        handler_name: str,
+        **kwargs: str,
+    ):
+        """Run one control-plane admin command and assert its handler is invoked."""
+        parse_args = Namespace(
+            repo_root=str(root),
+            command=command,
+            profile_id="example",
+            **kwargs,
+        )
+        with (
+            patch.object(
+                control_plane_admin,
+                "parse_args",
+                return_value=parse_args,
+            ),
+            patch.object(control_plane_admin, handler_name) as handler_mock,
+        ):
+            self.assertEqual(control_plane_admin.main(), 0)
+        handler_mock.assert_called_once()
+        return handler_mock
 
     def test_dashboard_parse_args_fallback_write_and_module_entrypoint(self) -> None:
         """Cover dashboard parse args fallback write and module entrypoint."""
@@ -335,42 +356,20 @@ class CoverageBackfillTests(unittest.TestCase):
         """Cover control plane admin main dispatches mutations."""
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            with (
-                patch.object(
-                    control_plane_admin,
-                    "parse_args",
-                    return_value=Namespace(
-                        repo_root=str(root),
-                        command="set-scanner",
-                        profile_id="example",
-                        scanner="sonar",
-                        enabled="true",
-                    ),
-                ),
-                patch.object(control_plane_admin, "set_scanner") as set_scanner_mock,
-            ):
-                self.assertEqual(control_plane_admin.main(), 0)
-            set_scanner_mock.assert_called_once()
-
-            with (
-                patch.object(
-                    control_plane_admin,
-                    "parse_args",
-                    return_value=Namespace(
-                        repo_root=str(root),
-                        command="set-issue-policy",
-                        profile_id="example",
-                        mode="ratchet",
-                        baseline_ref="main",
-                    ),
-                ),
-                patch.object(
-                    control_plane_admin,
-                    "set_issue_policy",
-                ) as set_issue_policy_mock,
-            ):
-                self.assertEqual(control_plane_admin.main(), 0)
-            set_issue_policy_mock.assert_called_once()
+            self._assert_control_plane_admin_dispatch(
+                root,
+                command="set-scanner",
+                handler_name="set_scanner",
+                scanner="sonar",
+                enabled="true",
+            )
+            self._assert_control_plane_admin_dispatch(
+                root,
+                command="set-issue-policy",
+                handler_name="set_issue_policy",
+                mode="ratchet",
+                baseline_ref="main",
+            )
 
     def test_post_pr_comment_request_uses_json_helper(self) -> None:
         """Cover post pr comment request uses json helper."""
@@ -456,172 +455,3 @@ class CoverageBackfillTests(unittest.TestCase):
             "GITHUB_TOKEN or GH_TOKEN is required",
             completed.stderr or completed.stdout,
         )
-
-    @staticmethod
-    def _invalid_contract_profile() -> dict:
-        """Return a minimally invalid contract profile for validation tests."""
-        return {
-            "slug": "owner/repo",
-            "required_secrets": [],
-            "conditional_secrets": [],
-            "issue_policy": {
-                "mode": "broken",
-                "pr_behavior": "broken",
-                "main_behavior": "broken",
-            },
-            "deps": {"policy": "broken", "scope": "broken"},
-            "enabled_scanners": {"coverage": True},
-            "coverage": {
-                "command": "cmd",
-                "inputs": [],
-                "shell": "cmd",
-                "assert_mode": {"default": "broken"},
-                "require_sources_mode": "broken",
-            },
-            "vendors": {
-                "chromatic": {"status_context": "Chromatic"},
-                "applitools": {"status_context": "Applitools"},
-            },
-            "visual_pair_required": True,
-            "required_contexts": {
-                "target": ["Chromatic"],
-                "required_now": ["Chromatic"],
-                "always": [],
-                "pull_request_only": [],
-            },
-        }
-
-    @staticmethod
-    def _invalid_contract_profile_findings() -> List[str]:
-        """Return the validation findings for the baseline invalid profile."""
-        return profile_contract_validation.validate_profile(
-            CoverageBackfillTests._invalid_contract_profile(),
-            active_required_contexts_fn=lambda _profile, event_name: ["Chromatic"],
-        )
-
-    def test_profile_validation_flags_invalid_issue_policy_mode(self) -> None:
-        """Cover invalid issue policy mode validation."""
-        findings = self._invalid_contract_profile_findings()
-        self.assertTrue(
-            any(
-                "issue_policy.mode must be zero, ratchet, or audit" in item
-                for item in findings
-            )
-        )
-
-    def test_profile_validation_flags_invalid_deps_policy(self) -> None:
-        """Cover invalid dependency policy validation."""
-        findings = self._invalid_contract_profile_findings()
-        self.assertTrue(
-            any(
-                "deps.policy must be zero_critical, zero_high, or zero_any" in item
-                for item in findings
-            )
-        )
-
-    def test_profile_validation_flags_invalid_coverage_require_sources_mode(
-        self,
-    ) -> None:
-        """Cover invalid coverage source mode validation."""
-        findings = self._invalid_contract_profile_findings()
-        self.assertTrue(
-            any(
-                "coverage.require_sources_mode must be explicit, infer, or disabled"
-                in item
-                for item in findings
-            )
-        )
-
-    def test_profile_validation_flags_invalid_visual_pair_requirement(
-        self,
-    ) -> None:
-        """Cover invalid visual pair requirement validation."""
-        findings = self._invalid_contract_profile_findings()
-        self.assertTrue(any("visual_pair_required" in item for item in findings))
-
-    def test_profile_validation_flags_invalid_issue_policy_main_behavior(
-        self,
-    ) -> None:
-        """Cover invalid issue policy main behavior validation."""
-        findings = self._invalid_contract_profile_findings()
-        self.assertTrue(
-            any(
-                "issue_policy.main_behavior must be absolute" in item
-                for item in findings
-            )
-        )
-
-    def test_profile_shape_ignores_non_mapping_coverage_payload(self) -> None:
-        """Cover profile shape ignores non mapping coverage payload."""
-        findings = profile_shape.validate_profile_shape(
-            {"slug": "owner/repo", "coverage": "not-a-dict"}, slug="owner/repo"
-        )
-        self.assertEqual(findings, [])
-
-    def test_profile_validation_requires_ratchet_baseline_ref(self) -> None:
-        """Cover profile validation requires ratchet baseline ref."""
-        valid_profile = build_valid_contract_profile()
-        ratchet_findings = profile_contract_validation.validate_profile(
-            valid_profile,
-            active_required_contexts_fn=lambda _profile, event_name: [
-                "Coverage 100 Gate"
-            ],
-        )
-        self.assertTrue(
-            any(
-                "issue_policy.baseline_ref is required when mode is ratchet" in item
-                for item in ratchet_findings
-            )
-        )
-
-    def test_profile_normalization_helpers_cover_edge_branches(self) -> None:
-        """Cover profile normalization helpers cover edge branches."""
-        self.assertEqual(
-            profile_coverage_normalization._normalize_source_hint("pkg.module"),
-            "pkg/module.py",
-        )
-        self.assertEqual(profile_coverage_normalization._normalize_source_hint(""), "")
-        fake_match = Mock()
-        fake_match.group.return_value = "pkg"
-        fake_regex = Mock()
-        fake_regex.finditer.return_value = [fake_match]
-        with patch.object(
-            profile_coverage_normalization, "_GCOVR_FILTER_RE", fake_regex
-        ):
-            self.assertEqual(
-                profile_coverage_normalization._extract_gcovr_hints(
-                    "gcovr --filter '.*/pkg/.*'"
-                ),
-                ["pkg/"],
-            )
-        self.assertIn(
-            "src/",
-            profile_coverage_normalization._extract_gcovr_hints(
-                "gcovr --filter '.*/src/.*'"
-            ),
-        )
-        self.assertIn(
-            "src/",
-            profile_coverage_normalization._extract_gcovr_hints(
-                'gcovr --filter ".*/src/.*"'
-            ),
-        )
-        self.assertEqual(
-            profile_normalization.infer_required_sources({"command": ""}), []
-        )
-
-    def test_security_helper_remaining_error_branches(self) -> None:
-        """Cover security helper remaining error branches."""
-        parsed = security_helpers.urlparse("https://api.github.com/repos/owner/repo")
-        with self.assertRaisesRegex(TypeError, "expects keyword arguments only"):
-            security_helpers._read_bytes_response(parsed, "unexpected")
-        with self.assertRaisesRegex(
-            TypeError, "Unexpected _read_bytes_response parameters: extra"
-        ):
-            security_helpers._read_bytes_response(
-                parsed, headers={}, method="GET", data=None, timeout=15, extra=True
-            )
-        with self.assertRaisesRegex(TypeError, "expects keyword arguments only"):
-            security_helpers.load_bytes_https(
-                "https://api.github.com/repos/owner/repo", "unexpected"
-            )

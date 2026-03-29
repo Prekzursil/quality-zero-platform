@@ -205,7 +205,6 @@ jobs:
           pull_request_number = os.environ.get("PULL_REQUEST_NUMBER", "").strip()
           issue_policy = profile.get("issue_policy", {})
           issue_mode = str(issue_policy.get("mode", "ratchet")).strip() or "ratchet"
-          pr_issue_behavior = str(issue_policy.get("pr_behavior", "introduced_only")).strip() or "introduced_only"
           repo_dir = root / "repo"
           platform_dir = root / "platform"
 
@@ -282,7 +281,7 @@ jobs:
               "--sha",
               os.environ["TARGET_SHA"],
             ]
-            if pull_request_number and pr_issue_behavior == "introduced_only":
+            if pull_request_number:
               cmd.extend(["--pull-request", pull_request_number])
             elif branch_name:
               cmd.extend(["--branch", branch_name])
@@ -307,7 +306,7 @@ jobs:
               "--sha",
               os.environ["TARGET_SHA"],
             ]
-            if pull_request_number and pr_issue_behavior == "introduced_only":
+            if pull_request_number:
               cmd.extend(["--pull-request", pull_request_number])
             run(cmd, cwd=repo_dir)
           elif lane == "semgrep":

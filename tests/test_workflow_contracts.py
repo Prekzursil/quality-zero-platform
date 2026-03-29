@@ -257,8 +257,10 @@ class WorkflowContractTests(unittest.TestCase):
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
         self.assertIn('pull_request_number = os.environ.get("PULL_REQUEST_NUMBER", "").strip()', text)
         self.assertIn('branch_name = os.environ.get("BRANCH_NAME", "").strip()', text)
+        self.assertIn('if pull_request_number:', text)
         self.assertIn('cmd.extend(["--pull-request", pull_request_number])', text)
         self.assertIn('cmd.extend(["--branch", branch_name])', text)
+        self.assertNotIn('if pull_request_number and pr_issue_behavior == "introduced_only":', text)
         wrapper_text = (ROOT / ".github" / "workflows" / "quality-zero-platform.yml").read_text(encoding="utf-8")
         for expected in [
             "branch_name: ${{ github.head_ref || github.ref_name }}",

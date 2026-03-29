@@ -202,13 +202,17 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
     ) -> None:
         """Cover visible-zero inputs when the issues URL cannot be resolved."""
         args = Namespace(repo="Prekzursil/quality-zero-platform", sha="abc123")
-        with patch.dict("os.environ", {"GH_TOKEN": "token"}, clear=True), patch.object(
+        with patch.dict(
+            "os.environ",
+            {"GH_TOKEN": self._status_poll_token()},
+            clear=True,
+        ), patch.object(
             check_deepsource_zero,
             "_issues_url",
             side_effect=ValueError("missing issues url"),
         ):
             inputs = check_deepsource_zero._visible_zero_inputs(args)
-        self.assertEqual(inputs.token, "token")
+        self.assertEqual(inputs.token, self._status_poll_token())
         self.assertEqual(inputs.repo, "Prekzursil/quality-zero-platform")
         self.assertEqual(inputs.sha, "abc123")
         self.assertEqual(inputs.issues_url, "")
@@ -388,7 +392,7 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
         )
         self._assert_main_result(
             {
-                "env": {"GITHUB_TOKEN": "token"},
+                "env": {"GITHUB_TOKEN": self._status_poll_token()},
                 "wait_result": (
                     [{"context": "DeepSource: Python", "state": "success"}],
                     [],
@@ -400,7 +404,7 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
         )
         self._assert_main_result(
             {
-                "env": {"GITHUB_TOKEN": "token"},
+                "env": {"GITHUB_TOKEN": self._status_poll_token()},
                 "wait_result": (
                     [{"context": "DeepSource: Python", "state": "failure"}],
                     ["DeepSource: Python GitHub status is failure (expected success)."],
@@ -413,7 +417,7 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
         )
         self._assert_main_result(
             {
-                "env": {"GITHUB_TOKEN": "token"},
+                "env": {"GITHUB_TOKEN": self._status_poll_token()},
                 "wait_result": (
                     [{"context": "DeepSource: Python", "state": "success"}],
                     [],
@@ -429,7 +433,7 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
             self,
             check_deepsource_zero,
             {
-                "env": {"GITHUB_TOKEN": "token"},
+                "env": {"GITHUB_TOKEN": self._status_poll_token()},
                 "args": self._main_args(),
                 "operation_name": "_wait_for_status_contexts",
                 "failure_message": "provider timeout",

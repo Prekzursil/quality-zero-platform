@@ -52,27 +52,18 @@ def _repo_contract_lines(profile: dict) -> List[str]:
         f"- GitHub mutation lane: `{github_mutation_lane}`",
         f"- Codex auth lane: `{profile.get('codex_auth_lane', 'chatgpt-account')}`",
         f"- Provider UI mode: `{provider_ui_mode}`",
+        f"- Codex environment mode: `{codex_environment.get('mode', 'automatic')}`",
         (
-            f"- Codex environment mode: "
-            f"`{codex_environment.get('mode', 'automatic')}`"
-        ),
-        (
-            f"- Codex environment verify command: "
+            "- Codex environment verify command: "
             f"`{codex_environment.get('verify_command', profile['verify_command'])}`"
         ),
+        f"- Codex auth file: `{codex_environment.get('auth_file', '~/.codex/auth.json')}`",
         (
-            f"- Codex auth file: "
-            f"`{codex_environment.get('auth_file', '~/.codex/auth.json')}`"
-        ),
-        (
-            f"- Codex environment network profile: "
+            "- Codex environment network profile: "
             f"`{codex_environment.get('network_profile', 'unrestricted')}`"
         ),
         f"- Codex environment methods: `{codex_environment.get('methods', 'all')}`",
-        (
-            f"- Codex runner labels: "
-            f"`{', '.join(codex_environment.get('runner_labels', []))}`"
-        ),
+        f"- Codex runner labels: `{', '.join(codex_environment.get('runner_labels', []))}`",
         f"- Default branch: `{profile['default_branch']}`",
         f"- Preserve public check names: `{profile['preserve_public_check_names']}`",
     ]

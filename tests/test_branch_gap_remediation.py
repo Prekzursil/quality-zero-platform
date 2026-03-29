@@ -9,7 +9,7 @@ import unittest
 from argparse import Namespace
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Tuple
+from typing import Any, Dict, Tuple, cast
 from urllib.parse import urlparse
 from unittest.mock import patch
 
@@ -387,7 +387,8 @@ class BranchGapRemediationTests(unittest.TestCase):
             "DeepScan",
         )
         self.assertIsNotNone(status)
-        self.assertEqual(status["context"], "DeepScan")
+        status_payload = cast(Dict[str, Any], status)
+        self.assertEqual(status_payload["context"], "DeepScan")
 
     def test_required_checks_and_sonar_helpers_cover_remaining_branches(self) -> None:
         """Cover required checks and sonar helpers cover remaining branches."""

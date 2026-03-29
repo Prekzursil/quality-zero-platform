@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Dict
 from unittest.mock import patch
 
+ENVIRON_KEY = "os.environ"
+
 
 def run_script_entrypoint_failure(script_relative_path: str) -> int:
     """Run a script as ``__main__`` and return its exit code."""
@@ -31,7 +33,7 @@ def run_script_entrypoint_failure(script_relative_path: str) -> int:
             "raise SystemExit(255)",
         ]
     )
-    with tempfile.TemporaryDirectory() as tmp, patch.dict("os.environ", {}, clear=True):
+    with tempfile.TemporaryDirectory() as tmp, patch.dict(ENVIRON_KEY, {}, clear=True):
         completed = subprocess.run(
             [sys.executable, "-c", bootstrap, str(script_path)],
             cwd=Path(tmp),
@@ -54,7 +56,7 @@ def assert_in_process_entrypoint_failure(test_case, script_relative_path: str) -
         sys.path[:] = [entry for entry in sys.path if entry != repo_root]
         with (
             patch.object(sys, "argv", [script_path.name]),
-            patch.dict("os.environ", {}, clear=True),
+            patch.dict(ENVIRON_KEY, {}, clear=True),
             test_case.assertRaises(SystemExit) as exit_info,
         ):
             runpy.run_path(str(script_path), run_name="__main__")
@@ -71,7 +73,7 @@ def assert_main_reports_provider_failure(
     config: Dict[str, object],
 ) -> None:
     """Assert that one provider-backed main() path reports a request failure."""
-    with patch.dict("os.environ", config["env"], clear=False), patch.object(
+    with patch.dict(ENVIRON_KEY, config["env"], clear=False), patch.object(
         module,
         "_parse_args",
         return_value=config["args"],

@@ -31,6 +31,7 @@ def _ensure_vendor_url(
             allowed_host_suffixes=allowed_host_suffixes,
         )
 
+
 def _normalize_sonar_project_key_parts(raw_parts: Any) -> List[str]:
     """Return the non-empty Sonar project-key parts in first-seen order."""
     return [str(item).strip() for item in raw_parts if str(item).strip()]
@@ -129,6 +130,7 @@ def _finalize_codecov_vendor(
         ),
         allowed_host_suffixes={"codecov.io"},
     )
+
 
 def _finalize_qlty_vendor(
     vendors: Dict[str, Any],

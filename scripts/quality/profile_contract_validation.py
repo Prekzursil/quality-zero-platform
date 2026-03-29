@@ -137,7 +137,8 @@ def _validate_required_context_sets(
 ) -> List[str]:
     """Validate the relationship between always, target, and required-now checks."""
     findings: List[str] = []
-    if not active_required_contexts_fn(profile, event_name="ruleset"):
+    ruleset_contexts = set(active_required_contexts_fn(profile, event_name="ruleset"))
+    if not ruleset_contexts:
         findings.append(f"{profile['slug']}: at least one required context is required")
     pr_context_defaults = dedupe_strings(
         [
@@ -163,13 +164,12 @@ def _validate_required_context_sets(
             f"{profile['slug']}: required_contexts.target is missing "
             f"{', '.join(missing_target)}"
         )
-    ruleset_contexts = set(active_required_contexts_fn(profile, event_name="ruleset"))
     missing_ruleset_target = [
         name
         for name in target_contexts
         if not _contains_required_context(ruleset_contexts, name)
     ]
-    if target_contexts and missing_ruleset_target:
+    if missing_ruleset_target:
         findings.append(
             f"{profile['slug']}: emitted ruleset contexts are missing "
             f"{', '.join(missing_ruleset_target)}"

@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
+from typing import Any, List, Mapping
 from unittest.mock import patch
 
 from scripts.quality import build_admin_dashboard
@@ -38,7 +39,7 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
         self.assertIn("Governed repos:", page)
         self.assertIn("\n    1.\n", page)
 
-        runs = [
+        runs: List[Mapping[str, Any]] = [
             {"event": "push", "conclusion": "success"},
             {"event": "pull_request", "conclusion": "failure"},
         ]

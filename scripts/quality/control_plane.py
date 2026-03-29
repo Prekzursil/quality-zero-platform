@@ -302,6 +302,23 @@ def _finalize_repo_profile(merged: Dict[str, Any], repo_slug: str) -> Dict[str, 
         merged.get("conditional_secrets", [])
     )
     merged["required_vars"] = dedupe_strings(merged.get("required_vars", []))
+    _finalize_normalized_profile_sections(merged)
+    merged["visual_pair_required"] = bool(merged.get("visual_pair_required", False))
+    merged["visual_lane"] = normalize_visual_lane(merged.get("visual_lane", {}))
+    merged["ruleset_mode"] = str(
+        merged.get("ruleset_mode", "strict-zero-phase1")
+    ).strip()
+    merged["preserve_public_check_names"] = bool(
+        merged.get("preserve_public_check_names", True)
+    )
+    vendor_source = _deep_merge(merged.get("vendors", {}), merged.get("providers", {}))
+    merged["vendors"] = finalize_vendors(merged, vendor_source)
+    merged["providers"] = deepcopy(merged["vendors"])
+    return merged
+
+
+def _finalize_normalized_profile_sections(merged: Dict[str, Any]) -> None:
+    """Normalize the shared profile sections after merge resolution."""
     merged["required_contexts"] = common_normalize_required_contexts(
         merged.get("required_contexts", {})
     )
@@ -316,18 +333,6 @@ def _finalize_repo_profile(merged: Dict[str, Any], repo_slug: str) -> Dict[str, 
         merged.get("codex_environment", {}),
         verify_command=merged["verify_command"],
     )
-    merged["visual_pair_required"] = bool(merged.get("visual_pair_required", False))
-    merged["visual_lane"] = normalize_visual_lane(merged.get("visual_lane", {}))
-    merged["ruleset_mode"] = str(
-        merged.get("ruleset_mode", "strict-zero-phase1")
-    ).strip()
-    merged["preserve_public_check_names"] = bool(
-        merged.get("preserve_public_check_names", True)
-    )
-    vendor_source = _deep_merge(merged.get("vendors", {}), merged.get("providers", {}))
-    merged["vendors"] = finalize_vendors(merged, vendor_source)
-    merged["providers"] = deepcopy(merged["vendors"])
-    return merged
 
 
 def load_repo_profile(inventory: Dict[str, Any], repo_slug: str) -> Dict[str, Any]:
@@ -364,12 +369,9 @@ def active_required_contexts(profile: Dict[str, Any], *, event_name: str) -> Lis
         if item not in always
     ]
 
-    if event_name == "ruleset":
-        return target or required_now or dedupe_strings([*always, *pr_only])
-
-    if event_name in {"pull_request", "pull_request_target", "merge_group"}:
-        return target or required_now or dedupe_strings([*always, *pr_only])
-
+    target_contexts = target or required_now or dedupe_strings([*always, *pr_only])
+    if event_name in {"ruleset", "pull_request", "pull_request_target", "merge_group"}:
+        return target_contexts
     if event_name == "push":
         return always
 

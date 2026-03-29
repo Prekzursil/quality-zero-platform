@@ -224,13 +224,12 @@ def build_issues_url(
         f"{provider}/{owner}/repositories/{repo}"
         f"/pull-requests/{pull_request}/issues?{query}"
     )
-    return [
-        (
-            f"{CODACY_API_BASE}/api/v3/analysis/organizations/"
-            f"{provider}/{owner}/repositories/{repo}/issues/search?{query}"
-        ),
-        pull_request_url,
-    ][bool(pull_request)]
+    if pull_request:
+        return pull_request_url
+    return (
+        f"{CODACY_API_BASE}/api/v3/analysis/organizations/"
+        f"{provider}/{owner}/repositories/{repo}/issues/search?{query}"
+    )
 
 
 def build_repository_analysis_url(provider: str, owner: str, repo: str) -> str:

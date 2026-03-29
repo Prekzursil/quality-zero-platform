@@ -8,6 +8,7 @@ from argparse import Namespace
 from unittest.mock import patch
 
 from scripts.quality import check_deepsource_zero
+from scripts.quality.deepsource_html import human_count_to_int
 from tests.script_entrypoint_support import (
     assert_main_reports_provider_failure,
     run_script_entrypoint_failure,
@@ -65,9 +66,9 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
             ),
             854,
         )
-        self.assertEqual(check_deepsource_zero._human_count_to_int("854"), 854)
-        self.assertIsNone(check_deepsource_zero._human_count_to_int(""))
-        self.assertIsNone(check_deepsource_zero._human_count_to_int("bogus"))
+        self.assertEqual(human_count_to_int("854"), 854)
+        self.assertIsNone(human_count_to_int(""))
+        self.assertIsNone(human_count_to_int("bogus"))
 
         statuses = check_deepsource_zero._status_contexts(
             {
@@ -196,11 +197,12 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
             "_github_status_payload",
             side_effect=payloads,
         ), patch("scripts.quality.check_deepsource_zero.time.sleep") as sleep_mock:
+            token_value = "status-token"
             statuses, findings = check_deepsource_zero._wait_for_status_contexts(
                 check_deepsource_zero.StatusPollRequest(
                     repo="Prekzursil/quality-zero-platform",
                     sha="abc123",
-                    token="token",
+                    token=token_value,
                     prefix="DeepSource",
                     timeout_seconds=2,
                     poll_seconds=0,

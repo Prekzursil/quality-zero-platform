@@ -272,17 +272,28 @@ def _evaluate_deepscan_policy(
     return _evaluate_open_issues_mode(open_issues_url, token)
 
 
-def main() -> int:
-    """Handle main."""
-    args = _parse_args()
-    token = (args.token or os.environ.get("DEEPSCAN_API_TOKEN", "")).strip()
-    github_token = (
-        os.environ.get("GITHUB_TOKEN", "").strip()
-        or os.environ.get("GH_TOKEN", "").strip()
+def _deepscan_inputs(args: argparse.Namespace) -> Tuple[str, str, str, str]:
+    """Return the resolved token inputs for one DeepScan run."""
+    return (
+        (args.token or os.environ.get("DEEPSCAN_API_TOKEN", "")).strip(),
+        (
+            os.environ.get("GITHUB_TOKEN", "").strip()
+            or os.environ.get("GH_TOKEN", "").strip()
+        ),
+        _policy_mode(args),
+        os.environ.get("DEEPSCAN_OPEN_ISSUES_URL", "").strip(),
     )
-    policy_mode = _policy_mode(args)
-    open_issues_url = os.environ.get("DEEPSCAN_OPEN_ISSUES_URL", "").strip()
 
+
+def _evaluate_deepscan_args(
+    args: argparse.Namespace,
+    *,
+    token: str,
+    github_token: str,
+    policy_mode: str,
+    open_issues_url: str,
+) -> Tuple[int | None, str, List[str], str]:
+    """Return the DeepScan gate result for one invocation."""
     findings = _validate_deepscan_inputs(
         token=token,
         policy_mode=policy_mode,
@@ -293,20 +304,34 @@ def main() -> int:
     )
     open_issues: int | None = None
     source_url = open_issues_url
-
     status = "fail"
-    if not findings:
-        try:
-            open_issues, source_url, findings = _evaluate_deepscan_policy(
-                args,
-                policy_mode=policy_mode,
-                token=token,
-                github_token=github_token,
-                open_issues_url=open_issues_url,
-            )
-            status = "pass" if not findings else "fail"
-        except (OSError, RuntimeError, ValueError) as exc:  # pragma: no cover
-            findings.append(f"DeepScan API request failed: {exc}")
+    if findings:
+        return open_issues, source_url, findings, status
+    try:
+        open_issues, source_url, findings = _evaluate_deepscan_policy(
+            args,
+            policy_mode=policy_mode,
+            token=token,
+            github_token=github_token,
+            open_issues_url=open_issues_url,
+        )
+        status = "pass" if not findings else "fail"
+    except (OSError, RuntimeError, ValueError) as exc:  # pragma: no cover
+        findings.append(f"DeepScan API request failed: {exc}")
+    return open_issues, source_url, findings, status
+
+
+def main() -> int:
+    """Handle main."""
+    args = _parse_args()
+    token, github_token, policy_mode, open_issues_url = _deepscan_inputs(args)
+    open_issues, source_url, findings, status = _evaluate_deepscan_args(
+        args,
+        token=token,
+        github_token=github_token,
+        policy_mode=policy_mode,
+        open_issues_url=open_issues_url,
+    )
 
     payload = {
         "status": status,

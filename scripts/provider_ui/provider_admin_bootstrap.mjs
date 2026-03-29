@@ -352,9 +352,11 @@ function reportCliError(error) {
 }
 
 if (isCliEntrypoint(import.meta.url)) {
-  try {
-    await main();
-  } catch (error) {
-    reportCliError(error);
-  }
+  void (async function runCli() {
+    try {
+      await main();
+    } catch (error) {
+      reportCliError(error);
+    }
+  })();
 }

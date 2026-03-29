@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from argparse import Namespace
+from email.message import Message
 from pathlib import Path
 from urllib.error import HTTPError
 from unittest.mock import patch
@@ -368,7 +369,7 @@ class QualityRollupExtraTests(unittest.TestCase):
                 url="https://api.github.com/repos/owner/repo/issues/comments",
                 code=502,
                 msg="Bad Gateway",
-                hdrs=None,
+                hdrs=Message(),
                 fp=None,
             )
 

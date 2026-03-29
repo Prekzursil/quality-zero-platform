@@ -386,21 +386,13 @@ class CodacyZeroTests(unittest.TestCase):
             patch.object(
                 check_codacy_zero,
                 "_request_json",
-                return_value={
-                    "analyzed": True,
-                    "data": [{"commitIssue": {"commitInfo": {}}}],
-                },
+                return_value={"analyzed": False},
             ),
         ):
-            with patch.object(
-                check_codacy_zero,
-                "_request_json",
-                return_value={"analyzed": False},
-            ):
-                self.assertEqual(
-                    check_codacy_zero._analysis_pending_message(pr_query, "token"),
-                    "Codacy issues for pull request 5 are not available yet.",
-                )
+            self.assertEqual(
+                check_codacy_zero._analysis_pending_message(pr_query, "token"),
+                "Codacy issues for pull request 5 are not available yet.",
+            )
         with (
             patch.object(
                 check_codacy_zero,
@@ -728,16 +720,18 @@ class CodacyZeroTests(unittest.TestCase):
     def test_query_candidate_and_helpers(self) -> None:
         """Cover query candidate and helpers."""
         query = self._base_query()
-        with patch(
-            "scripts.quality.check_codacy_zero._query_codacy_provider",
+        with patch.object(
+            check_codacy_zero,
+            "_query_codacy_provider",
             return_value=(0, []),
         ):
             self.assertEqual(
                 _query_codacy_candidate(query, "token"),
                 (0, [], None, True),
             )
-        with patch(
-            "scripts.quality.check_codacy_zero._query_codacy_provider",
+        with patch.object(
+            check_codacy_zero,
+            "_query_codacy_provider",
             side_effect=RuntimeError("provider broke"),
         ):
             open_issues, findings, exc, should_return = _query_codacy_candidate(

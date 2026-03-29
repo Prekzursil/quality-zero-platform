@@ -30,8 +30,15 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
         )
         self._assert_context_subset(
             pr_contexts,
-            self._zero_gate_provider_contexts()
-            | {"build-test", "analyze", "scan", "dependency-review"},
+            self._shared_zero_gate_contexts()
+            | {
+                "build-test",
+                "analyze",
+                "scan",
+                "dependency-review",
+                "aggregate-gate / Quality Zero Gate",
+                "shared-scanner-matrix / Quality Rollup",
+            },
         )
         self._assert_context_subset(
             ruleset_contexts,
@@ -47,21 +54,19 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
         )
         self.assertTrue(ruleset_contexts.issubset(target_contexts))
         for unexpected in (
+            "Codecov Analytics",
+            "Coverage 100 Gate",
+            "QLTY Zero",
+            "Sonar Zero",
+            "Codacy Zero",
+            "Semgrep Zero",
+            "Sentry Zero",
+            "DeepScan Zero",
             "qlty check",
             "qlty coverage",
             "qlty coverage diff",
             "Codacy Static Code Analysis",
             "DeepScan",
-            "shared-codecov-analytics / Codecov Analytics",
-            "shared-scanner-matrix / Coverage 100 Gate",
-            "shared-scanner-matrix / QLTY Zero",
-            "shared-scanner-matrix / Sonar Zero",
-            "shared-scanner-matrix / Codacy Zero",
-            "shared-scanner-matrix / Semgrep Zero",
-            "shared-scanner-matrix / Sentry Zero",
-            "shared-scanner-matrix / DeepScan Zero",
-            "aggregate-gate / Quality Zero Gate",
-            "shared-scanner-matrix / Quality Rollup",
         ):
             self.assertNotIn(unexpected, pr_contexts)
 
@@ -103,8 +108,15 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
             "scan",
         }:
             self.assertIn(required, push_contexts)
+        for required in self._shared_zero_gate_contexts() | {
+            "build-test",
+            "analyze",
+            "scan",
+            "dependency-review",
+            "aggregate-gate / Quality Zero Gate",
+            "shared-scanner-matrix / Quality Rollup",
+        }:
             self.assertIn(required, pr_contexts)
-        self.assertIn("dependency-review", pr_contexts)
         self.assertNotIn("dependency-review", push_contexts)
 
         for required in self._shared_zero_gate_contexts() | {
@@ -122,18 +134,19 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
             "qlty check",
             "qlty coverage",
             "qlty coverage diff",
-            "shared-scanner-matrix / Coverage 100 Gate",
-            "shared-scanner-matrix / QLTY Zero",
-            "shared-scanner-matrix / Sonar Zero",
-            "shared-scanner-matrix / Codacy Zero",
-            "shared-scanner-matrix / Semgrep Zero",
-            "shared-scanner-matrix / Sentry Zero",
-            "shared-scanner-matrix / DeepScan Zero",
-            "shared-codecov-analytics / Codecov Analytics",
-            "aggregate-gate / Quality Zero Gate",
-            "shared-scanner-matrix / Quality Rollup",
         ):
             self.assertNotIn(unexpected, push_contexts)
+            self.assertNotIn(unexpected, pr_contexts)
+        for unexpected in (
+            "Codecov Analytics",
+            "Coverage 100 Gate",
+            "QLTY Zero",
+            "Sonar Zero",
+            "Codacy Zero",
+            "Semgrep Zero",
+            "Sentry Zero",
+            "DeepScan Zero",
+        ):
             self.assertNotIn(unexpected, pr_contexts)
 
     def test_codex_session_manager_profile_validation_accepts_emitted_required_now_contexts(self) -> None:

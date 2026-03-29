@@ -268,13 +268,25 @@ def load_repo_profile(inventory: Dict[str, Any], repo_slug: str) -> Dict[str, An
 
 def active_required_contexts(profile: Dict[str, Any], *, event_name: str) -> List[str]:
     required_contexts = profile["required_contexts"]
-    if event_name == "ruleset":
-        return dedupe_strings(required_contexts.get("required_now", []))
+    target = dedupe_strings(required_contexts.get("target", []))
+    required_now = dedupe_strings(required_contexts.get("required_now", []))
+    always = dedupe_strings(required_contexts.get("always", []))
+    pr_only = [
+        item
+        for item in dedupe_strings(required_contexts.get("pull_request_only", []))
+        if item not in always
+    ]
 
-    required = list(required_contexts["always"])
-    if event_name in {"pull_request", "pull_request_target"}:
-        required.extend(required_contexts["pull_request_only"])
-    return dedupe_strings(required)
+    if event_name == "ruleset":
+        return target or required_now or dedupe_strings([*always, *pr_only])
+
+    if event_name in {"pull_request", "pull_request_target", "merge_group"}:
+        return target or required_now or dedupe_strings([*always, *pr_only])
+
+    if event_name == "push":
+        return always
+
+    return required_now or always
 
 
 def build_ruleset_payload(profile: Dict[str, Any]) -> Dict[str, Any]:

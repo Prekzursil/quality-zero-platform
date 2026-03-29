@@ -111,24 +111,26 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
         self.assertEqual(
             profile["issue_policy"],
             {
-                "mode": "ratchet",
-                "pr_behavior": "introduced_only",
+                "mode": "zero",
+                "pr_behavior": "absolute",
                 "main_behavior": "absolute",
-                "baseline_ref": "main",
+                "baseline_ref": "",
             },
         )
 
-    def test_quality_zero_platform_keeps_codecov_target_only_until_provider_check_emits(
+    def test_quality_zero_platform_requires_codecov_in_push_pr_and_target(
         self,
     ) -> None:
-        """Codecov should stay target-only until the provider emits a native check."""
+        """Codecov should be part of the self-governed merge and push contract."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
 
+        push_contexts = active_required_contexts(profile, event_name="push")
         pr_contexts = active_required_contexts(profile, event_name="pull_request")
         target_contexts = profile["required_contexts"]["target"]
 
-        self.assertNotIn("Codecov Analytics", pr_contexts)
+        self.assertIn("Codecov Analytics", push_contexts)
+        self.assertIn("Codecov Analytics", pr_contexts)
         self.assertIn("Codecov Analytics", target_contexts)
 
     def test_env_inspector_overlay_aligns_push_required_contexts_to_emitted_surface(

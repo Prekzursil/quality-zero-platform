@@ -32,9 +32,10 @@ enabled_scanners:
   deepscan: true
   qlty: true
 issue_policy:
-  mode: ratchet
-  pr_behavior: introduced_only
+  mode: zero
+  pr_behavior: absolute
   main_behavior: absolute
+  baseline_ref: ""
 required_contexts:
   always:
     - Coverage 100 Gate

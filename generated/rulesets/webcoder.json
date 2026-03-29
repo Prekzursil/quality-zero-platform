@@ -40,6 +40,18 @@
             "integration_id": null
           },
           {
+            "context": "qlty check",
+            "integration_id": null
+          },
+          {
+            "context": "qlty coverage",
+            "integration_id": null
+          },
+          {
+            "context": "qlty coverage diff",
+            "integration_id": null
+          },
+          {
             "context": "Sonar Zero",
             "integration_id": null
           },
@@ -64,14 +76,6 @@
             "integration_id": null
           },
           {
-            "context": "Chromatic Playwright",
-            "integration_id": null
-          },
-          {
-            "context": "Applitools Visual",
-            "integration_id": null
-          },
-          {
             "context": "Codacy Static Code Analysis",
             "integration_id": null
           },
@@ -80,15 +84,11 @@
             "integration_id": null
           },
           {
-            "context": "qlty check",
+            "context": "Chromatic Playwright",
             "integration_id": null
           },
           {
-            "context": "qlty coverage",
-            "integration_id": null
-          },
-          {
-            "context": "qlty coverage diff",
+            "context": "Applitools Visual",
             "integration_id": null
           }
         ],

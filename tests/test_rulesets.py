@@ -29,7 +29,7 @@ class RulesetPayloadTests(unittest.TestCase):
         self.assertFalse(payload["rules"][0]["parameters"]["required_review_thread_resolution"])
         self.assertEqual(profile["default_branch"], "main")
 
-    def test_reframe_ruleset_payload_uses_live_required_now_not_target(self) -> None:
+    def test_reframe_ruleset_payload_uses_target_contract(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/Reframe")
         payload = build_ruleset_payload(profile)
@@ -97,4 +97,5 @@ class RulesetPayloadTests(unittest.TestCase):
         self.assertNotIn("qlty coverage diff", profile["required_contexts"]["target"])
         self.assertNotIn("Codacy Static Code Analysis", profile["required_contexts"]["target"])
         self.assertNotIn("DeepScan", profile["required_contexts"]["target"])
+        self.assertIn("Codecov Analytics", contexts)
         self.assertIn("QLTY Zero", contexts)

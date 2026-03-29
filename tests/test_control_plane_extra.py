@@ -53,7 +53,6 @@ codex_environment.auth_file is required
 codex_environment.network_profile must be unrestricted
 codex_environment.methods must be all
 codex_environment.runner_labels is required
-at least one required context is required
 required_contexts.required_now is missing
 OPENAI_API_KEY must not be part of required_secrets
 conditional_secrets duplicates required_secrets
@@ -309,9 +308,9 @@ invalid codacy.dashboard_url
         self.assertEqual(_validate_vendor_urls(plain_profile), [])
 
         visual_profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
-        visual_profile["required_contexts"]["required_now"] = [
+        visual_profile["required_contexts"]["target"] = [
             item
-            for item in visual_profile["required_contexts"]["required_now"]
+            for item in visual_profile["required_contexts"]["target"]
             if item != "Applitools Visual"
         ]
 
@@ -319,7 +318,7 @@ invalid codacy.dashboard_url
 
         self.assertTrue(
             any(
-                "visual_pair_required needs both Chromatic and Applitools contexts in required_now" in item
+                "visual_pair_required needs both Chromatic and Applitools contexts in ruleset" in item
                 for item in findings
             )
         )

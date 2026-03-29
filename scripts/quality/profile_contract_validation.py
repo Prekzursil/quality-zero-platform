@@ -139,7 +139,7 @@ def _validate_required_context_sets(
     findings: List[str] = []
     if not active_required_contexts_fn(profile, event_name="ruleset"):
         findings.append(f"{profile['slug']}: at least one required context is required")
-    pr_contexts = dedupe_strings(
+    pr_context_defaults = dedupe_strings(
         [
             *profile["required_contexts"].get("always", []),
             *profile["required_contexts"].get("pull_request_only", []),
@@ -148,7 +148,7 @@ def _validate_required_context_sets(
     required_now = set(profile["required_contexts"].get("required_now", []))
     missing_required_now = [
         name
-        for name in pr_contexts
+        for name in pr_context_defaults
         if not _contains_required_context(required_now, name)
     ]
     if missing_required_now:
@@ -162,6 +162,17 @@ def _validate_required_context_sets(
         findings.append(
             f"{profile['slug']}: required_contexts.target is missing "
             f"{', '.join(missing_target)}"
+        )
+    ruleset_contexts = set(active_required_contexts_fn(profile, event_name="ruleset"))
+    missing_ruleset_target = [
+        name
+        for name in target_contexts
+        if not _contains_required_context(ruleset_contexts, name)
+    ]
+    if target_contexts and missing_ruleset_target:
+        findings.append(
+            f"{profile['slug']}: emitted ruleset contexts are missing "
+            f"{', '.join(missing_ruleset_target)}"
         )
     return findings
 
@@ -243,7 +254,7 @@ def _validate_visual_pair_contract(
     ruleset_contexts = set(active_required_contexts_fn(profile, event_name="ruleset"))
     target_contexts = set(profile["required_contexts"].get("target", []))
     paired_contexts = [
-        (ruleset_contexts, "required_now"),
+        (ruleset_contexts, "ruleset"),
         (target_contexts, "target"),
     ]
     findings.extend(

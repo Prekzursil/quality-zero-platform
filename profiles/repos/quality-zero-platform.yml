@@ -5,6 +5,7 @@ required_contexts_mode: replace
 required_contexts:
   always:
     - Coverage 100 Gate
+    - Codecov Analytics
     - QLTY Zero
     - Sonar Zero
     - Codacy Zero

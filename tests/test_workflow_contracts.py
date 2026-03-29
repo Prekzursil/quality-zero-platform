@@ -42,8 +42,8 @@ class WorkflowContractTests(unittest.TestCase):
             if path.name in {"quality-zero-platform.yml", "quality-zero-gate.yml"}:
                 self.assertIn("platform_repository: ${{ github.repository }}", text, path.name)
 
-    def test_repo_template_parity_wrappers_pin_controller_and_do_not_inherit_all_secrets(self) -> None:
-        """Keep repo templates pinned to the platform controller SHA and explicit secrets."""
+    def test_repo_template_parity_wrappers_float_to_main_and_do_not_inherit_all_secrets(self) -> None:
+        """Keep repo templates floating on main with explicit secrets only."""
         workflow_paths = [
             ROOT / "templates" / "repo" / ".github" / "workflows" / "quality-zero-platform.yml",
             ROOT / "templates" / "repo" / ".github" / "workflows" / "quality-zero-gate.yml",
@@ -53,9 +53,11 @@ class WorkflowContractTests(unittest.TestCase):
         for path in workflow_paths:
             text = path.read_text(encoding="utf-8")
             self.assertNotIn("secrets: inherit", text, path.name)
-            self.assertIn("@0e7482ede8d157d5183d41dfe2b575560fbea222", text, path.name)
+            self.assertIn("@main", text, path.name)
             self.assertIn("platform_repository: Prekzursil/quality-zero-platform", text, path.name)
             self.assertIn("platform_ref: main", text, path.name)
+            self.assertIn("merge_group:", text, path.name)
+            self.assertIn("checks_requested", text, path.name)
 
     def test_repo_template_parity_wrappers_set_explicit_top_level_permissions(self) -> None:
         """Require the published repo templates to declare explicit wrapper permissions."""
@@ -134,6 +136,22 @@ class WorkflowContractTests(unittest.TestCase):
         for name, expected in workflow_expectations.items():
             text = (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
             self.assertIn(expected, text, name)
+
+    def test_wrapper_triplets_support_merge_group(self) -> None:
+        """Ensure merge queue events receive the required wrapper statuses."""
+        workflow_paths = [
+            ROOT / ".github" / "workflows" / "quality-zero-platform.yml",
+            ROOT / ".github" / "workflows" / "quality-zero-gate.yml",
+            ROOT / ".github" / "workflows" / "codecov-analytics.yml",
+            ROOT / "templates" / "repo" / ".github" / "workflows" / "quality-zero-platform.yml",
+            ROOT / "templates" / "repo" / ".github" / "workflows" / "quality-zero-gate.yml",
+            ROOT / "templates" / "repo" / ".github" / "workflows" / "codecov-analytics.yml",
+        ]
+
+        for path in workflow_paths:
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("merge_group:", text, path.name)
+            self.assertIn("checks_requested", text, path.name)
 
     def test_manual_wrapper_dispatches_do_not_expose_user_supplied_inputs(self) -> None:
         """Keep manual mutation wrappers free of attacker-controlled workflow_dispatch inputs."""

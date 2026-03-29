@@ -208,7 +208,7 @@ class CoverageBackfillTests(unittest.TestCase):
                 patch.dict("os.environ", {}, clear=True),
                 self.assertRaises(SystemExit) as result,
             ):
-                    runpy.run_path(str(script_path), run_name="__main__")
+                runpy.run_path(str(script_path), run_name="__main__")
             self.assertEqual(result.exception.code, 0)
 
     def test_dependabot_parse_render_invalid_payload_and_module_entrypoint(self) -> None:
@@ -224,7 +224,7 @@ class CoverageBackfillTests(unittest.TestCase):
             patch.object(check_dependabot_alerts, "load_json_https", return_value=({"bad": True}, {})),
             self.assertRaisesRegex(RuntimeError, "Unexpected Dependabot alerts payload"),
         ):
-                check_dependabot_alerts._request_alerts("owner/repo", "token", scope="runtime")
+            check_dependabot_alerts._request_alerts("owner/repo", "token", scope="runtime")
 
         script_path = Path(check_dependabot_alerts.__file__).resolve()
         root_text = str(script_path.parents[2])
@@ -235,7 +235,7 @@ class CoverageBackfillTests(unittest.TestCase):
             patch.dict("os.environ", {}, clear=True),
             self.assertRaises(SystemExit) as result,
         ):
-                runpy.run_path(str(script_path), run_name="__main__")
+            runpy.run_path(str(script_path), run_name="__main__")
         self.assertEqual(result.exception.code, 1)
 
     def test_control_plane_admin_load_yaml_rejects_non_mapping(self) -> None:
@@ -283,7 +283,7 @@ class CoverageBackfillTests(unittest.TestCase):
                     patch.dict("os.environ", {}, clear=True),
                     self.assertRaises(SystemExit) as result,
                 ):
-                        runpy.run_path(str(script_path), run_name="__main__")
+                    runpy.run_path(str(script_path), run_name="__main__")
                 self.assertEqual(result.exception.code, 0)
             finally:
                 sys.path[:] = original_sys_path
@@ -369,7 +369,7 @@ class CoverageBackfillTests(unittest.TestCase):
                 ),
                 self.assertRaises(SystemExit) as result,
             ):
-                    runpy.run_path(str(script_path), run_name="__main__")
+                runpy.run_path(str(script_path), run_name="__main__")
             self.assertEqual(str(result.exception), "GITHUB_TOKEN or GH_TOKEN is required")
 
     def test_post_pr_comment_subprocess_bootstraps_repo_root(self) -> None:

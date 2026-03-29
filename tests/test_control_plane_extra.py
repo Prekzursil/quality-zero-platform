@@ -396,7 +396,7 @@ invalid codacy.dashboard_url
             contextlib.redirect_stdout(buffer),
             self.assertRaises(SystemExit) as result,
         ):
-                runpy.run_path(str(CONTROL_PLANE_PATH), run_name="__main__")
+            runpy.run_path(str(CONTROL_PLANE_PATH), run_name="__main__")
 
         self.assertEqual(result.exception.code, 0)
         self.assertIn("Coverage 100 Gate", json.loads(buffer.getvalue()))

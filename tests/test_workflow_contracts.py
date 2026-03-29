@@ -171,6 +171,10 @@ class WorkflowContractTests(unittest.TestCase):
         """Pin QLTY and PR creation actions to immutable full SHAs."""
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
         self.assertIn("qltysh/qlty-action/install@a19242102d17e497f437d7466aa01b528537e899", text)
+        self.assertIn(
+            "matrix.lane == 'qlty_zero' || (matrix.lane == 'coverage' && steps.profile.outputs.qlty_coverage_files != '' && runner.os != 'Windows')",
+            text,
+        )
         self.assertIn('qlty_executable = shutil.which("qlty")', text)
         self.assertIn("normalize_coverage_for_qlty.py", text)
         self.assertIn('subprocess.run(command, executable=qlty_executable, check=True)', text)

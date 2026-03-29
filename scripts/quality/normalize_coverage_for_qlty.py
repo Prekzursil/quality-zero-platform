@@ -10,7 +10,10 @@ import shutil
 import sys
 from typing import Dict, Iterable, List
 
-from scripts.quality.coverage_paths import _coverage_source_candidates, _normalize_source_path
+from scripts.quality.coverage_paths import (
+    _coverage_source_candidates,
+    _normalize_source_path,
+)
 
 
 _XML_FILENAME_RE = re.compile(
@@ -95,7 +98,13 @@ def _copy_report(path: Path, out_path: Path) -> Path:
     return out_path
 
 
-def normalize_xml_report(path: Path, repo_dir: Path, out_dir: Path, *, report_id: int) -> Dict[str, object]:
+def normalize_xml_report(
+    path: Path,
+    repo_dir: Path,
+    out_dir: Path,
+    *,
+    report_id: int,
+) -> Dict[str, object]:
     """Rewrite Cobertura-style XML reports to repo-relative paths."""
 
     text = path.read_text(encoding="utf-8")
@@ -127,7 +136,12 @@ def normalize_xml_report(path: Path, repo_dir: Path, out_dir: Path, *, report_id
     }
 
 
-def normalize_lcov_report(path: Path, out_dir: Path, *, report_id: int) -> Dict[str, object]:
+def normalize_lcov_report(
+    path: Path,
+    out_dir: Path,
+    *,
+    report_id: int,
+) -> Dict[str, object]:
     """Rewrite LCOV source file entries to repo-relative paths."""
 
     rewritten = 0
@@ -151,7 +165,12 @@ def normalize_lcov_report(path: Path, out_dir: Path, *, report_id: int) -> Dict[
     }
 
 
-def normalize_reports(inputs: Iterable[str], *, repo_dir: Path, out_dir: Path) -> List[Dict[str, object]]:
+def normalize_reports(
+    inputs: Iterable[str],
+    *,
+    repo_dir: Path,
+    out_dir: Path,
+) -> List[Dict[str, object]]:
     """Normalize every declared coverage input into deterministic temp artifacts."""
 
     normalized: List[Dict[str, object]] = []
@@ -160,11 +179,31 @@ def normalize_reports(inputs: Iterable[str], *, repo_dir: Path, out_dir: Path) -
         for index, raw_input in enumerate(inputs, start=1):
             path = (repo_dir / raw_input).resolve()
             if _is_xml_report(path):
-                normalized.append(normalize_xml_report(path, repo_dir, out_dir, report_id=index))
+                normalized.append(
+                    normalize_xml_report(
+                        path,
+                        repo_dir,
+                        out_dir,
+                        report_id=index,
+                    )
+                )
             elif _is_lcov_report(path):
-                normalized.append(normalize_lcov_report(path, out_dir, report_id=index))
+                normalized.append(
+                    normalize_lcov_report(
+                        path,
+                        out_dir,
+                        report_id=index,
+                    )
+                )
             else:
-                copied = _copy_report(path, _output_path(out_dir, report_id=index, extension=".artifact"))
+                copied = _copy_report(
+                    path,
+                    _output_path(
+                        out_dir,
+                        report_id=index,
+                        extension=".artifact",
+                    ),
+                )
                 normalized.append(
                     {
                         "input": path.as_posix(),

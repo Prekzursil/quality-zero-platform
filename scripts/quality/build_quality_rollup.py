@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Build one markdown and JSON summary for the governed quality lanes."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -32,6 +34,7 @@ LANE_CONTEXTS = {
     "codacy": "Codacy Zero",
     "sentry": "Sentry Zero",
     "deepscan": "DeepScan Zero",
+    "deepsource_visible": "DeepSource Visible Zero",
     "deps": "Dependency Alerts",
     "secrets": "Quality Secrets Preflight",
 }
@@ -42,6 +45,7 @@ LANE_ARTIFACT_PATHS = {
     "codacy": "codacy-zero/codacy.json",
     "sentry": "sentry-zero/sentry.json",
     "deepscan": "deepscan-zero/deepscan.json",
+    "deepsource_visible": "deepsource-visible-zero/deepsource.json",
     "deps": "deps-zero/deps.json",
     "secrets": "quality-secrets/secrets.json",
 }
@@ -49,6 +53,8 @@ LANE_ARTIFACT_PATHS = {
 
 @dataclass(frozen=True)
 class ContextWaitRequest:
+    """Describe the status contexts that must settle before rollup."""
+
     repo: str
     sha: str
     token: str
@@ -58,7 +64,10 @@ class ContextWaitRequest:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build one aggregated strict-zero rollup.")
+    """Parse CLI arguments for the quality rollup builder."""
+    parser = argparse.ArgumentParser(
+        description="Build one aggregated strict-zero rollup."
+    )
     parser.add_argument("--profile-json", required=True)
     parser.add_argument("--repo", required=True)
     parser.add_argument("--sha", required=True)
@@ -69,6 +78,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def _github_payload(repo: str, path: str, token: str) -> Dict[str, Any]:
+    """Fetch one GitHub API payload used by the rollup script."""
     payload, _ = load_json_https(
         f"{GITHUB_API_BASE}/repos/{repo}/commits/{path}",
         allowed_hosts={"api.github.com"},
@@ -85,12 +95,14 @@ def _github_payload(repo: str, path: str, token: str) -> Dict[str, Any]:
 
 
 def load_check_contexts(repo: str, sha: str, token: str) -> Dict[str, Dict[str, str]]:
+    """Load both check-run and status contexts for the target SHA."""
     check_runs = _github_payload(repo, f"{sha}/check-runs?per_page=100", token)
     statuses = _github_payload(repo, f"{sha}/status", token)
     return _collect_contexts(check_runs, statuses)
 
 
 def load_lane_payloads(artifacts_root: Path) -> Dict[str, Dict[str, Any]]:
+    """Load per-lane artifacts that were published by scanner jobs."""
     payloads: Dict[str, Dict[str, Any]] = {}
     for lane, relative_path in LANE_ARTIFACT_PATHS.items():
         artifact_dir = artifacts_root / f"{lane}-artifacts"
@@ -102,6 +114,7 @@ def load_lane_payloads(artifacts_root: Path) -> Dict[str, Dict[str, Any]]:
 
 
 def _lane_detail(payload: Mapping[str, Any]) -> str:
+    """Summarize the first meaningful detail from one lane payload."""
     findings = payload.get("findings", [])
     if isinstance(findings, list) and findings:
         return str(findings[0])
@@ -116,7 +129,11 @@ def _lane_detail(payload: Mapping[str, Any]) -> str:
     return "No findings."
 
 
-def _status_from_context(context_name: str, contexts: Mapping[str, Dict[str, str]]) -> str:
+def _status_from_context(
+    context_name: str,
+    contexts: Mapping[str, Dict[str, str]],
+) -> str:
+    """Resolve a normalized pass, fail, pending, or missing status."""
     details = _resolve_observed_context(context_name, contexts)
     if not details:
         return "missing"
@@ -129,11 +146,15 @@ def _status_from_context(context_name: str, contexts: Mapping[str, Dict[str, str
 
 
 def _wait_for_contexts(request: ContextWaitRequest) -> Dict[str, Dict[str, str]]:
+    """Poll GitHub until the required contexts stop being pending or missing."""
     deadline = time.time() + max(request.timeout_seconds, 1)
     final_contexts: Dict[str, Dict[str, str]] = {}
     while time.time() <= deadline:
         final_contexts = load_check_contexts(request.repo, request.sha, request.token)
-        statuses = [_status_from_context(context_name, final_contexts) for context_name in request.required_contexts]
+        statuses = [
+            _status_from_context(context_name, final_contexts)
+            for context_name in request.required_contexts
+        ]
         if "pending" not in statuses and "missing" not in statuses:
             break
         time.sleep(max(request.poll_seconds, 0))
@@ -147,6 +168,7 @@ def _build_rollup_row(
     lane_payloads: Mapping[str, Dict[str, Any]],
     contexts: Mapping[str, Dict[str, str]],
 ) -> Dict[str, str]:
+    """Build one row for the markdown and JSON rollup outputs."""
     lane = reverse_map.get(context_name)
     lane_payload = lane_payloads.get(lane or "")
     status = (
@@ -169,6 +191,7 @@ def build_rollup(
     contexts: Mapping[str, Dict[str, str]],
     sha: str,
 ) -> Dict[str, Any]:
+    """Build the aggregated strict-zero rollup payload."""
     required_contexts = sorted(profile.get("active_required_contexts", []))
     rows: List[Dict[str, str]] = []
     overall = "pass"
@@ -195,6 +218,7 @@ def build_rollup(
 
 
 def render_markdown(payload: Mapping[str, Any]) -> str:
+    """Render the aggregated quality rollup as a markdown table."""
     lines = [
         "# Quality Rollup",
         "",
@@ -207,14 +231,19 @@ def render_markdown(payload: Mapping[str, Any]) -> str:
         "| --- | --- | --- |",
     ]
     for item in payload.get("contexts", []):
-        lines.append(f"| `{item['context']}` | `{item['status']}` | {item['detail']} |")
+        lines.append(
+            f"| `{item['context']}` | `{item['status']}` | {item['detail']} |"
+        )
     return "\n".join(lines) + "\n"
 
 
 def main() -> int:
+    """Run the quality rollup generator."""
     args = parse_args()
     profile = json.loads(Path(args.profile_json).read_text(encoding="utf-8"))
-    token = (os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")).strip()
+    token = (
+        os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")
+    ).strip()
     required_contexts = sorted(profile.get("active_required_contexts", []))
     contexts = (
         _wait_for_contexts(
@@ -229,7 +258,12 @@ def main() -> int:
         else {}
     )
     lane_payloads = load_lane_payloads(Path(args.artifacts_dir))
-    payload = build_rollup(profile=profile, lane_payloads=lane_payloads, contexts=contexts, sha=args.sha)
+    payload = build_rollup(
+        profile=profile,
+        lane_payloads=lane_payloads,
+        contexts=contexts,
+        sha=args.sha,
+    )
     return_code = write_report(
         payload,
         out_json=args.out_json,

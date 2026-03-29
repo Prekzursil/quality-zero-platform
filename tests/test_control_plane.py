@@ -40,6 +40,7 @@ class ControlPlaneTests(ControlPlaneAssertions, unittest.TestCase):
                 "Semgrep Zero",
                 "Sentry Zero",
                 "DeepScan Zero",
+                "DeepSource Visible Zero",
                 "SonarCloud Code Analysis",
                 "Chromatic Playwright",
                 "Applitools Visual",
@@ -148,11 +149,23 @@ class ControlPlaneTests(ControlPlaneAssertions, unittest.TestCase):
         payload = build_ruleset_payload(profile)
 
         self.assertIn("QLTY Zero", push_contexts)
+        self.assertIn("DeepSource Visible Zero", push_contexts)
         self.assertIn("QLTY Zero", profile["required_contexts"]["target"])
+        self.assertIn("DeepSource Visible Zero", profile["required_contexts"]["target"])
         self.assertIn("QLTY Zero", ruleset_contexts)
+        self.assertIn("DeepSource Visible Zero", ruleset_contexts)
         self.assertNotIn("qlty coverage diff", ruleset_contexts)
         self.assertIn(
             "QLTY Zero",
+            [
+                item["context"]
+                for item in payload["rules"][1]["parameters"][
+                    "required_status_checks"
+                ]
+            ],
+        )
+        self.assertIn(
+            "DeepSource Visible Zero",
             [
                 item["context"]
                 for item in payload["rules"][1]["parameters"][
@@ -182,5 +195,8 @@ class ControlPlaneTests(ControlPlaneAssertions, unittest.TestCase):
         self.assertIn("QLTY Zero", push_contexts)
         self.assertIn("QLTY Zero", pr_contexts)
         self.assertIn("QLTY Zero", target_contexts)
+        self.assertIn("DeepSource Visible Zero", push_contexts)
+        self.assertIn("DeepSource Visible Zero", pr_contexts)
+        self.assertIn("DeepSource Visible Zero", target_contexts)
         self.assertNotIn("Codacy Static Code Analysis", target_contexts)
         self.assertNotIn("DeepScan", target_contexts)

@@ -109,7 +109,6 @@ def normalize_https_url(
     strip_query: bool = False,
 ) -> str:
     """Validate and normalize external URLs used by control-plane scripts."""
-
     parsed = urlparse((raw_url or "").strip())
     _require_https_scheme(parsed, raw_url)
     hostname = _normalize_hostname(parsed, raw_url)

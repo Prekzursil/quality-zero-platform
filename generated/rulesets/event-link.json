@@ -64,6 +64,10 @@
             "integration_id": null
           },
           {
+            "context": "DeepSource Visible Zero",
+            "integration_id": null
+          },
+          {
             "context": "Codacy Static Code Analysis",
             "integration_id": null
           },

@@ -1,0 +1,42 @@
+version = 1
+
+exclude_patterns = [
+  "build/**",
+  "generated/**",
+  "htmlcov/**",
+  "docs/admin/**",
+  "profiles/**",
+  "scripts/**",
+  "tests/**",
+  "scripts/**/*.test.mjs",
+]
+
+test_patterns = [
+  "tests/**",
+  "scripts/**/*.test.mjs",
+]
+
+[[analyzers]]
+name = "python"
+enabled = true
+
+  [analyzers.meta]
+  runtime_version = "3.x.x"
+  max_line_length = 180
+  skip_doc_coverage = ["module", "magic", "init", "class", "nonpublic"]
+
+[[analyzers]]
+name = "javascript"
+enabled = true
+
+  [analyzers.meta]
+  environment = ["nodejs", "browser"]
+  module_system = "es-modules"
+  skip_doc_coverage = [
+    "arrow-function-expression",
+    "class-declaration",
+    "class-expression",
+    "function-declaration",
+    "function-expression",
+    "method-definition",
+  ]

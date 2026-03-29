@@ -1,6 +1,13 @@
 slug: Prekzursil/event-link
 stack: fullstack-web
 verify_command: bash scripts/verify
+required_contexts:
+  always:
+    - DeepSource Visible Zero
+  target:
+    - DeepSource Visible Zero
+enabled_scanners:
+  deepsource_visible: true
 coverage:
   command: |
     bash scripts/verify

@@ -121,12 +121,13 @@ def _run_codex_exec(
     """Run codex with a static literal argv list and prompt text passed via stdin."""
     executable_path = _resolved_codex_executable_path()
     command = build_codex_command(args)
+    argv = [executable_path, *command[1:]]
     # Safe-by-construction: a fixed literal executable name, explicit argv,
     # shell=False, validated tokens as plain arguments, and prompt content
     # flowing only through stdin.
     # nosemgrep
     return subprocess.run(  # nosec B603
-        ["codex", *command[1:]],
+        argv,
         executable=executable_path,
         input=prompt_text,
         text=True,

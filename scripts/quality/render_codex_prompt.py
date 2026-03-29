@@ -44,6 +44,7 @@ def _repo_contract_lines(profile: dict) -> List[str]:
     """Handle repo contract lines."""
     codex_environment = profile.get("codex_environment", {})
     codex_auth_file = codex_environment.get("auth_file", "~/.codex/auth.json")
+    runner_labels = ", ".join(codex_environment.get("runner_labels", []))
     github_mutation_lane = profile.get("github_mutation_lane", "codex-private-runner")
     provider_ui_mode = profile.get("provider_ui_mode", "playwright-manual-login")
     return [
@@ -64,7 +65,7 @@ def _repo_contract_lines(profile: dict) -> List[str]:
             f"`{codex_environment.get('network_profile', 'unrestricted')}`"
         ),
         f"- Codex environment methods: `{codex_environment.get('methods', 'all')}`",
-        f"- Codex runner labels: `{', '.join(codex_environment.get('runner_labels', []))}`",
+        f"- Codex runner labels: `{runner_labels}`",
         f"- Default branch: `{profile['default_branch']}`",
         f"- Preserve public check names: `{profile['preserve_public_check_names']}`",
     ]

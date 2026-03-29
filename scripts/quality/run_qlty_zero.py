@@ -138,11 +138,12 @@ def cast_mapping(value: Any) -> Mapping[str, Any]:
 def _run_qlty_check(repo_dir: Path) -> subprocess.CompletedProcess[str]:
     """Handle run qlty check."""
     executable_path = _resolved_qlty_executable_path()
+    argv = [executable_path, "check", "--all", "--fail-level", "note", "--summary"]
     # Safe-by-construction: a fixed literal executable name, explicit argv,
     # shell=False, and an absolute executable path supplied separately.
     # nosemgrep
     return subprocess.run(  # nosec B603
-        ["qlty", "check", "--all", "--fail-level", "note", "--summary"],
+        argv,
         executable=executable_path,
         cwd=repo_dir,
         shell=False,
@@ -155,11 +156,12 @@ def _run_qlty_check(repo_dir: Path) -> subprocess.CompletedProcess[str]:
 def _run_qlty_smells(repo_dir: Path) -> subprocess.CompletedProcess[str]:
     """Handle run qlty smells."""
     executable_path = _resolved_qlty_executable_path()
+    argv = [executable_path, "smells", "--all", "--quiet", "--no-snippets"]
     # Safe-by-construction: a fixed literal executable name, explicit argv,
     # shell=False, and an absolute executable path supplied separately.
     # nosemgrep
     return subprocess.run(  # nosec B603
-        ["qlty", "smells", "--all", "--quiet", "--no-snippets"],
+        argv,
         executable=executable_path,
         cwd=repo_dir,
         shell=False,

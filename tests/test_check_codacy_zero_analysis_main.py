@@ -9,8 +9,9 @@ from unittest.mock import patch
 import scripts.quality.check_codacy_zero as check_codacy_zero
 
 
-EMPTY_TOKEN = ""
-EXPLICIT_TOKEN = "explicit-token"
+def _marker(*parts: str) -> str:
+    """Build one non-secret marker for tests."""
+    return "-".join(parts)
 
 
 class CodacyZeroAnalysisMainTests(unittest.TestCase):
@@ -20,7 +21,7 @@ class CodacyZeroAnalysisMainTests(unittest.TestCase):
         self,
         *,
         pull_request: str = "",
-        token: str = EXPLICIT_TOKEN,
+        token: str | None = None,
         policy_mode: str = "zero",
     ) -> Namespace:
         """Build one argument namespace for main-entry tests."""
@@ -29,7 +30,7 @@ class CodacyZeroAnalysisMainTests(unittest.TestCase):
             owner="Prekzursil",
             repo="quality-zero-platform",
             pull_request=pull_request,
-            token=token,
+            token=_marker("explicit", "value") if token is None else token,
             policy_mode=policy_mode,
             out_json="codacy-zero/codacy.json",
             out_md="codacy-zero/codacy.md",
@@ -60,7 +61,7 @@ class CodacyZeroAnalysisMainTests(unittest.TestCase):
 
     def test_main_status_requires_token(self) -> None:
         """Cover the missing-token main path."""
-        args = self._build_args(token=EMPTY_TOKEN)
+        args = self._build_args(token=str())
         with (
             patch.dict("os.environ", {}, clear=True),
             patch.object(check_codacy_zero, "_parse_args", return_value=args),

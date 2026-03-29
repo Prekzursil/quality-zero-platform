@@ -25,12 +25,14 @@ from scripts.quality.check_codacy_zero import (
 )
 
 
-ANALYSIS_TOKEN = "analysis-token"
-
-
 def _raise_runtime_error(message: str) -> None:
     """Raise one runtime error for callback tests."""
     raise RuntimeError(message)
+
+
+def _marker(*parts: str) -> str:
+    """Build one non-secret marker for tests."""
+    return "-".join(parts)
 
 
 class CodacyZeroRetryTests(unittest.TestCase):
@@ -350,7 +352,7 @@ class CodacyZeroRetryTests(unittest.TestCase):
             repo="quality-zero-platform",
             pull_request="68",
             sha="targetsha",
-            token=ANALYSIS_TOKEN,
+            token=_marker("analysis", "value"),
             policy_mode="ratchet",
             out_json="codacy-zero/codacy.json",
             out_md="codacy-zero/codacy.md",

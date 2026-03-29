@@ -240,6 +240,14 @@ _pending_analysis_message = codacy_zero_support.pending_analysis_message
 _final_retry_findings = codacy_zero_support.final_retry_findings
 
 
+def _retryable_pr_not_found(
+    base_query: CodacyQuery,
+    last_exc: Exception | None,
+) -> bool:
+    """Return whether Codacy should retry one not-found PR response."""
+    return codacy_zero_support.is_retryable_pr_not_found(base_query, last_exc)
+
+
 def _unauthorized_http_result(
     exc: urllib.error.HTTPError,
     query: CodacyQuery,
@@ -476,7 +484,7 @@ def load_codacy_findings_with_retry(
         config,
         deps=codacy_zero_support.CodacyRetryDeps(
             query_open_issues=_query_codacy_open_issues,
-            retryable_pr_not_found=codacy_zero_support.is_retryable_pr_not_found,
+            retryable_pr_not_found=_retryable_pr_not_found,
             pending_message_fn=_pending_analysis_message,
             final_findings_fn=_final_retry_findings,
             sleep_fn=time.sleep,

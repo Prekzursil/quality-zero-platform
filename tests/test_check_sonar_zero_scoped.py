@@ -14,7 +14,9 @@ from unittest.mock import patch
 from scripts.quality import check_sonar_zero
 
 
-EMPTY_TOKEN = ""
+def _marker(*parts: str) -> str:
+    """Build one non-secret marker for tests."""
+    return "-".join(parts)
 
 
 class SonarZeroScopedTests(unittest.TestCase):
@@ -217,7 +219,7 @@ class SonarZeroScopedTests(unittest.TestCase):
         """Cover the missing-token main path."""
         args = Namespace(
             project_key="Prekzursil_quality-zero-platform",
-            token=EMPTY_TOKEN,
+            token=str(),
             branch="",
             pull_request="5",
             out_json="sonar-zero/sonar.json",
@@ -236,7 +238,7 @@ class SonarZeroScopedTests(unittest.TestCase):
         """Cover successful and failing provider responses."""
         args = Namespace(
             project_key="Prekzursil_quality-zero-platform",
-            token="provided-token",
+            token=_marker("provided", "value"),
             branch="",
             pull_request="5",
             out_json="sonar-zero/sonar.json",

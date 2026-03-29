@@ -56,6 +56,26 @@
             "integration_id": null
           },
           {
+            "context": "DeepSource: JavaScript",
+            "integration_id": null
+          },
+          {
+            "context": "DeepSource: Python",
+            "integration_id": null
+          },
+          {
+            "context": "DeepSource: C & C++",
+            "integration_id": null
+          },
+          {
+            "context": "DeepSource: Shell",
+            "integration_id": null
+          },
+          {
+            "context": "DeepSource: Secrets",
+            "integration_id": null
+          },
+          {
             "context": "SonarCloud Code Analysis",
             "integration_id": null
           },

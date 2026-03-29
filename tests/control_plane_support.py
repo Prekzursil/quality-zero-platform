@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 from pathlib import Path
-from typing import Dict, Protocol
+from typing import Collection, Dict, Protocol, Set
 
 from scripts.quality.control_plane import load_inventory, load_repo_profile
 
@@ -24,6 +24,39 @@ class _AssertionProtocol(Protocol):
 
 class ControlPlaneAssertions(_AssertionProtocol):
     """Shared helpers for control-plane regression tests."""
+
+    @staticmethod
+    def _zero_gate_provider_contexts() -> Set[str]:
+        return {
+            "Codecov Analytics",
+            "Coverage 100 Gate",
+            "QLTY Zero",
+            "Sonar Zero",
+            "Codacy Zero",
+            "Semgrep Zero",
+            "Sentry Zero",
+            "DeepScan Zero",
+        }
+
+    @staticmethod
+    def _shared_zero_gate_contexts() -> Set[str]:
+        return {
+            "shared-codecov-analytics / Codecov Analytics",
+            "shared-scanner-matrix / Coverage 100 Gate",
+            "shared-scanner-matrix / QLTY Zero",
+            "shared-scanner-matrix / Sonar Zero",
+            "shared-scanner-matrix / Codacy Zero",
+            "shared-scanner-matrix / Semgrep Zero",
+            "shared-scanner-matrix / Sentry Zero",
+            "shared-scanner-matrix / DeepScan Zero",
+        }
+
+    def _assert_context_subset(
+        self,
+        contexts: Collection[str],
+        expected_contexts: Collection[str],
+    ) -> None:
+        self.assertEqual(set(expected_contexts) - set(contexts), set())
 
     @staticmethod
     def _special_repo_profiles() -> Dict[str, dict]:

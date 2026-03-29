@@ -1,6 +1,6 @@
 from __future__ import absolute_import
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Set, Tuple, Union
 
 from scripts.quality.common import dedupe_strings
 from scripts.quality.profile_shape import validate_profile_shape
@@ -58,6 +58,18 @@ def _validate_control_plane_lanes(profile: Dict[str, Any], *, active_required_co
     return findings
 
 
+def _matches_required_context(actual_context: str, expected_context: str) -> bool:
+    current = str(actual_context or "").strip()
+    expected = str(expected_context or "").strip()
+    return bool(current) and bool(expected) and (
+        current == expected or current.rsplit(" / ", 1)[-1] == expected
+    )
+
+
+def _contains_required_context(contexts: Union[List[str], Set[str]], expected_context: str) -> bool:
+    return any(_matches_required_context(actual_context, expected_context) for actual_context in contexts)
+
+
 def _validate_required_context_sets(profile: Dict[str, Any], *, active_required_contexts_fn) -> List[str]:
     findings: List[str] = []
     if not active_required_contexts_fn(profile, event_name="ruleset"):
@@ -66,7 +78,7 @@ def _validate_required_context_sets(profile: Dict[str, Any], *, active_required_
         [*profile["required_contexts"].get("always", []), *profile["required_contexts"].get("pull_request_only", [])]
     )
     required_now = set(profile["required_contexts"].get("required_now", []))
-    missing_required_now = [name for name in pr_contexts if name not in required_now]
+    missing_required_now = [name for name in pr_contexts if not _contains_required_context(required_now, name)]
     if missing_required_now:
         findings.append(
             f"{profile['slug']}: required_contexts.required_now is missing {', '.join(missing_required_now)}"

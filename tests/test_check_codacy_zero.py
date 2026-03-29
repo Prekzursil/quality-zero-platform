@@ -15,8 +15,10 @@ from unittest.mock import patch
 import scripts.quality.check_codacy_zero as check_codacy_zero
 from scripts.quality.check_codacy_zero import (
     CodacyQuery,
+    CodacyRetryConfig,
     CodacyStatusResult,
     _build_payload,
+    _build_retry_config,
     _query_codacy_candidate,
     _query_codacy_open_issues,
     _query_codacy_provider,
@@ -34,6 +36,21 @@ class CodacyZeroTests(unittest.TestCase):
     @staticmethod
     def _base_query(*, provider: str = "gh", pull_request: str = "") -> CodacyQuery:
         return CodacyQuery(provider, "Prekzursil", "quality-zero-platform", pull_request=pull_request)
+
+    @staticmethod
+    def _retry_config(
+        provider_candidates: Tuple[str, ...],
+        *,
+        attempts: int = 1,
+        pending_fn=check_codacy_zero._analysis_pending_message,
+        sleep_seconds: float = 0.0,
+    ) -> CodacyRetryConfig:
+        return CodacyRetryConfig(
+            provider_candidates=provider_candidates,
+            attempts=attempts,
+            pending_fn=pending_fn,
+            sleep_seconds=sleep_seconds,
+        )
 
     def test_build_urls_and_request_mode(self) -> None:
         self.assertEqual(_request_mode(self._base_query()), ("POST", {}))
@@ -100,6 +117,85 @@ class CodacyZeroTests(unittest.TestCase):
                 _query_codacy_provider(self._base_query(), "token"),
                 (2, ["Codacy reports 2 open issues (expected 0)."]),
             )
+
+    def test_retry_config_builder_and_pending_helpers_cover_analysis_paths(self) -> None:
+        unscoped = _build_retry_config(self._base_query(), ["gh"])
+        self.assertEqual(unscoped.attempts, 1)
+        self.assertEqual(unscoped.provider_candidates, ("gh",))
+        scoped = _build_retry_config(
+            CodacyQuery("gh", "Prekzursil", "quality-zero-platform", pull_request="5", sha="targetsha"),
+            ["gh", "github"],
+            sleep_seconds=-1.0,
+        )
+        self.assertEqual(scoped.attempts, check_codacy_zero.SCOPED_ANALYSIS_RETRY_ATTEMPTS)
+        self.assertEqual(scoped.sleep_seconds, 0.0)
+
+        with patch("scripts.quality.check_codacy_zero.load_json_https", return_value=("bad", {})):
+            with self.assertRaisesRegex(RuntimeError, "Unexpected Codacy analysis status payload"):
+                check_codacy_zero._request_analysis_status("https://app.codacy.com/api/v3/test", "token")
+        with patch("scripts.quality.check_codacy_zero.load_json_https", return_value=({"data": {}}, {})):
+            self.assertEqual(
+                check_codacy_zero._request_analysis_status("https://app.codacy.com/api/v3/test", "token"),
+                {"data": {}},
+            )
+
+        pr_query = CodacyQuery("gh", "Prekzursil", "quality-zero-platform", pull_request="5", sha="targetsha")
+        with patch.object(check_codacy_zero, "_request_analysis_status", return_value={"isAnalysing": True}):
+            self.assertEqual(
+                check_codacy_zero._analysis_pending_message(pr_query, "token"),
+                "Codacy is still analysing pull request 5.",
+            )
+        with patch.object(check_codacy_zero, "_request_analysis_status", return_value={"pullRequest": {}}):
+            self.assertEqual(
+                check_codacy_zero._analysis_pending_message(pr_query, "token"),
+                "Codacy analysis for pull request 5 is not available yet.",
+            )
+        with patch.object(
+            check_codacy_zero,
+            "_request_analysis_status",
+            return_value={"pullRequest": {"headCommitSha": "oldsha"}},
+        ):
+            self.assertEqual(
+                check_codacy_zero._analysis_pending_message(pr_query, "token"),
+                "Codacy analysis for pull request 5 is still on oldsha (waiting for targetsha).",
+            )
+        with patch.object(
+            check_codacy_zero,
+            "_request_analysis_status",
+            return_value={"pullRequest": {"headCommitSha": "targetsha"}},
+        ):
+            self.assertIsNone(check_codacy_zero._analysis_pending_message(pr_query, "token"))
+
+        repo_query = CodacyQuery("gh", "Prekzursil", "quality-zero-platform", sha="targetsha")
+        with patch.object(check_codacy_zero, "_request_analysis_status", return_value={"data": {}}):
+            self.assertEqual(
+                check_codacy_zero._analysis_pending_message(repo_query, "token"),
+                "Codacy analysis for repository is not available yet.",
+            )
+        with patch.object(
+            check_codacy_zero,
+            "_request_analysis_status",
+            return_value={"data": {"lastAnalysedCommit": {"sha": "oldsha"}}},
+        ):
+            self.assertEqual(
+                check_codacy_zero._analysis_pending_message(repo_query, "token"),
+                "Codacy analysis for repository is still on oldsha (waiting for targetsha).",
+            )
+        with patch.object(
+            check_codacy_zero,
+            "_request_analysis_status",
+            return_value={"data": {"lastAnalysedCommit": {"sha": "targetsha"}}},
+        ):
+            self.assertEqual(
+                check_codacy_zero._analysis_pending_message(repo_query, "token"),
+                "Codacy repository analysis has not finished yet.",
+            )
+        with patch.object(
+            check_codacy_zero,
+            "_request_analysis_status",
+            return_value={"data": {"lastAnalysedCommit": {"sha": "targetsha", "endedAnalysis": "done"}}},
+        ):
+            self.assertIsNone(check_codacy_zero._analysis_pending_message(repo_query, "token"))
 
     def test_open_issue_query_paths(self) -> None:
         responses = [Exception("sentinel"), {"total": 0}]
@@ -311,7 +407,7 @@ class CodacyZeroTests(unittest.TestCase):
             open_issues, findings = load_codacy_findings_with_retry(
                 self._base_query(pull_request="49"),
                 "token",
-                ["gh"],
+                self._retry_config(("gh",), attempts=2),
             )
 
         self.assertEqual((open_issues, findings), (0, []))
@@ -329,7 +425,7 @@ class CodacyZeroTests(unittest.TestCase):
             open_issues, findings = load_codacy_findings_with_retry(
                 self._base_query(pull_request="49"),
                 "token",
-                ["gh", "github"],
+                self._retry_config(("gh", "github"), attempts=2),
             )
 
         self.assertIsNone(open_issues)
@@ -352,9 +448,11 @@ class CodacyZeroTests(unittest.TestCase):
             open_issues, findings = load_codacy_findings_with_retry(
                 base_query,
                 "token",
-                ["gh"],
-                pending_fn=lambda _query, _token: pending_responses.pop(0),
-                sleep_seconds=0.0,
+                self._retry_config(
+                    ("gh",),
+                    attempts=2,
+                    pending_fn=lambda _query, _token: pending_responses.pop(0),
+                ),
             )
 
         self.assertEqual((open_issues, findings), (0, []))
@@ -371,9 +469,10 @@ class CodacyZeroTests(unittest.TestCase):
             open_issues, findings = load_codacy_findings_with_retry(
                 base_query,
                 "token",
-                ["gh"],
-                pending_fn=lambda _query, _token: "Codacy repository analysis is not available yet.",
-                sleep_seconds=0.0,
+                self._retry_config(
+                    ("gh",),
+                    pending_fn=lambda _query, _token: "Codacy repository analysis is not available yet.",
+                ),
             )
 
         self.assertEqual(open_issues, 0)
@@ -388,7 +487,7 @@ class CodacyZeroTests(unittest.TestCase):
             open_issues, findings = load_codacy_findings_with_retry(
                 self._base_query(),
                 "token",
-                ["gh"],
+                self._retry_config(("gh",)),
             )
 
         self.assertEqual((open_issues, findings), (0, []))
@@ -403,12 +502,30 @@ class CodacyZeroTests(unittest.TestCase):
             open_issues, findings = load_codacy_findings_with_retry(
                 self._base_query(pull_request="49"),
                 "token",
-                ["gh"],
+                self._retry_config(("gh",), attempts=2),
             )
 
         self.assertEqual((open_issues, findings), (0, []))
         query_mock.assert_called_once()
         sleep_mock.assert_not_called()
+
+    def test_load_codacy_findings_with_retry_reports_pending_status_failures(self) -> None:
+        with patch.object(
+            check_codacy_zero,
+            "_query_codacy_open_issues",
+            return_value=(0, [], None),
+        ):
+            open_issues, findings = load_codacy_findings_with_retry(
+                CodacyQuery("gh", "Prekzursil", "quality-zero-platform", sha="targetsha"),
+                "token",
+                self._retry_config(
+                    ("gh",),
+                    pending_fn=lambda _query, _token: (_ for _ in ()).throw(RuntimeError("status broke")),
+                ),
+            )
+
+        self.assertEqual(open_issues, 0)
+        self.assertEqual(findings, ["Codacy analysis status request failed: status broke"])
 
     def test_payload_and_report_helpers(self) -> None:
         payload = _build_payload(

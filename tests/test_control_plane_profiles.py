@@ -151,23 +151,17 @@ class ControlPlaneProfileTests(ControlPlaneAssertions, unittest.TestCase):
                 "DeepScan Zero",
             ],
         )
-        self.assertTrue(
-            {
-                "Coverage 100 Gate",
-                "Codecov Analytics",
-                "QLTY Zero",
-                "Sonar Zero",
-                "Codacy Zero",
-                "Semgrep Zero",
-                "Sentry Zero",
-                "DeepScan Zero",
+        self._assert_context_subset(
+            pr_contexts,
+            self._zero_gate_provider_contexts()
+            | {
                 "SonarCloud Code Analysis",
                 "Codacy Static Code Analysis",
                 "DeepScan",
                 "qlty check",
                 "qlty coverage",
                 "qlty coverage diff",
-            }.issubset(pr_contexts)
+            },
         )
         self.assertIn("Codecov Analytics", target_contexts)
         self.assertIn("QLTY Zero", target_contexts)

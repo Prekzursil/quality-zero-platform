@@ -85,6 +85,52 @@ class SonarZeroTests(unittest.TestCase):
         ):
             self.assertEqual(check_sonar_zero._load_sonar_findings(ratchet_args, "auth"), (6, "OK", []))
 
+    def test_revision_helpers_and_pending_message_cover_scoped_paths(self) -> None:
+        args = Namespace(project_key="project", branch="main", pull_request="", sha="targetsha")
+        with patch.object(
+            check_sonar_zero,
+            "_request_json",
+            return_value={"branches": [{"name": "main", "commit": {"sha": "oldsha"}}]},
+        ):
+            self.assertEqual(check_sonar_zero._load_branch_analysis_revision(args, "auth"), "oldsha")
+            self.assertEqual(
+                check_sonar_zero._scoped_analysis_pending_message(args, "auth"),
+                "Sonar analysis for branch main is still on oldsha (waiting for targetsha).",
+            )
+
+        with patch.object(
+            check_sonar_zero,
+            "_request_json",
+            return_value={"branches": [{"name": "other", "commit": {"sha": "oldsha"}}]},
+        ):
+            self.assertEqual(check_sonar_zero._load_branch_analysis_revision(args, "auth"), "")
+            self.assertEqual(
+                check_sonar_zero._scoped_analysis_pending_message(args, "auth"),
+                "Sonar analysis for branch main is not available yet.",
+            )
+
+        pr_args = Namespace(project_key="project", branch="", pull_request="5", sha="targetsha")
+        with patch.object(
+            check_sonar_zero,
+            "_request_json",
+            return_value={"pullRequests": [{"key": "5", "commit": {"sha": "targetsha"}}]},
+        ):
+            self.assertEqual(check_sonar_zero._load_pull_request_analysis_revision(pr_args, "auth"), "targetsha")
+            self.assertIsNone(check_sonar_zero._scoped_analysis_pending_message(pr_args, "auth"))
+        with patch.object(
+            check_sonar_zero,
+            "_request_json",
+            return_value={"pullRequests": [{"key": "other", "commit": {"sha": "oldsha"}}]},
+        ):
+            self.assertEqual(check_sonar_zero._load_pull_request_analysis_revision(pr_args, "auth"), "")
+
+        self.assertIsNone(
+            check_sonar_zero._scoped_analysis_pending_message(
+                Namespace(project_key="project", branch="", pull_request="", sha=""),
+                "auth",
+            )
+        )
+
     def test_retry_waits_for_pr_scoped_findings_to_settle(self) -> None:
         args = argparse.Namespace(branch="", pull_request="5")
         responses = [
@@ -224,6 +270,21 @@ class SonarZeroTests(unittest.TestCase):
 
         self.assertEqual((open_issues, quality_gate, findings), (3, "ERROR", ["Sonar reports 3 open issues (expected 0)."]))
         self.assertEqual(attempts, [1])
+
+    def test_retry_reports_pending_status_failures(self) -> None:
+        args = argparse.Namespace(branch="main", pull_request="", sha="targetsha")
+        open_issues, quality_gate, findings = load_sonar_findings_with_retry(
+            args,
+            "auth",
+            fetch_fn=lambda _args, _auth: (0, "OK", []),
+            pending_fn=lambda _args, _auth: (_ for _ in ()).throw(RuntimeError("pending broke")),
+            attempts=1,
+            sleep_seconds=0.0,
+        )
+
+        self.assertEqual(open_issues, 0)
+        self.assertEqual(quality_gate, "OK")
+        self.assertEqual(findings, ["Sonar analysis status request failed: pending broke"])
 
     def test_retry_returns_last_scoped_result_after_retry_budget_is_exhausted(self) -> None:
         args = argparse.Namespace(branch="", pull_request="5")

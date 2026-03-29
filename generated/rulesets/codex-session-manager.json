@@ -48,6 +48,34 @@
             "integration_id": null
           },
           {
+            "context": "shared-scanner-matrix / Coverage 100 Gate",
+            "integration_id": null
+          },
+          {
+            "context": "shared-scanner-matrix / QLTY Zero",
+            "integration_id": null
+          },
+          {
+            "context": "shared-scanner-matrix / Sonar Zero",
+            "integration_id": null
+          },
+          {
+            "context": "shared-scanner-matrix / Codacy Zero",
+            "integration_id": null
+          },
+          {
+            "context": "shared-scanner-matrix / Semgrep Zero",
+            "integration_id": null
+          },
+          {
+            "context": "shared-scanner-matrix / Sentry Zero",
+            "integration_id": null
+          },
+          {
+            "context": "shared-scanner-matrix / DeepScan Zero",
+            "integration_id": null
+          },
+          {
             "context": "aggregate-gate / Quality Zero Gate",
             "integration_id": null
           },

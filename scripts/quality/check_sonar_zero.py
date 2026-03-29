@@ -163,18 +163,24 @@ def _load_pull_request_analysis_revision(args: argparse.Namespace, auth: str) ->
     return str(commit.get("sha") or "").strip().lower()
 
 
+def _scoped_analysis_label(args: argparse.Namespace) -> str:
+    if str(getattr(args, "pull_request", "") or "").strip():
+        return f"pull request {args.pull_request}"
+    return f"branch {args.branch}"
+
+
+def _load_scoped_analysis_revision(args: argparse.Namespace, auth: str) -> str:
+    if str(getattr(args, "pull_request", "") or "").strip():
+        return _load_pull_request_analysis_revision(args, auth)
+    return _load_branch_analysis_revision(args, auth)
+
+
 def _scoped_analysis_pending_message(args: argparse.Namespace, auth: str) -> str | None:
     target_sha = _target_sha(args)
     if not _is_scoped_analysis(args) or not target_sha:
         return None
-
-    if str(getattr(args, "pull_request", "") or "").strip():
-        revision = _load_pull_request_analysis_revision(args, auth)
-        scope_label = f"pull request {args.pull_request}"
-    else:
-        revision = _load_branch_analysis_revision(args, auth)
-        scope_label = f"branch {args.branch}"
-
+    scope_label = _scoped_analysis_label(args)
+    revision = _load_scoped_analysis_revision(args, auth)
     if not revision:
         return f"Sonar analysis for {scope_label} is not available yet."
     if revision != target_sha:
@@ -210,6 +216,28 @@ def _retry_exception_result(
     return open_issues, quality_gate, findings
 
 
+def _pending_analysis_message(namespace: argparse.Namespace, auth: str, pending_fn: Any) -> str | None:
+    try:
+        return pending_fn(namespace, auth)
+    except (OSError, RuntimeError, ValueError) as exc:
+        return f"Sonar analysis status request failed: {exc}"
+
+
+def _should_retry_scoped_analysis(
+    namespace: argparse.Namespace,
+    findings: List[str],
+    pending_message: str | None,
+) -> bool:
+    return _is_scoped_analysis(namespace) and (bool(findings) or pending_message is not None)
+
+
+def _final_retry_findings(findings: List[str], pending_message: str | None) -> List[str]:
+    final_findings = list(findings)
+    if pending_message is not None and pending_message not in final_findings:
+        final_findings.append(pending_message)
+    return final_findings
+
+
 def load_sonar_findings_with_retry(*args: Any, **kwargs: Any) -> Tuple[int, str, List[str]]:
     if len(args) != 2:
         raise TypeError("load_sonar_findings_with_retry expects argparse namespace and auth header")
@@ -228,19 +256,12 @@ def load_sonar_findings_with_retry(*args: Any, **kwargs: Any) -> Tuple[int, str,
             _retry_exception_result(namespace, exc, (open_issues, quality_gate))
             time.sleep(max(0.0, sleep_seconds))
             continue
-        try:
-            pending_message = pending_fn(namespace, auth)
-        except (OSError, RuntimeError, ValueError) as exc:
-            pending_message = f"Sonar analysis status request failed: {exc}"
-        should_retry = _is_scoped_analysis(namespace) and (bool(findings) or pending_message is not None)
-        if not should_retry:
+        pending_message = _pending_analysis_message(namespace, auth, pending_fn)
+        if not _should_retry_scoped_analysis(namespace, findings, pending_message):
             return open_issues, quality_gate, findings
         if attempt != retry_budget - 1:
             time.sleep(max(0.0, sleep_seconds))
-    final_findings = list(findings)
-    if pending_message is not None and pending_message not in final_findings:
-        final_findings.append(pending_message)
-    return open_issues, quality_gate, final_findings
+    return open_issues, quality_gate, _final_retry_findings(findings, pending_message)
 
 
 def main() -> int:

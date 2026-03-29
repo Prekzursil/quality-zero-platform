@@ -12,7 +12,7 @@ import urllib.error
 import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Sequence, Tuple
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -55,6 +55,19 @@ class CodacyQuery:
     repo: str
     pull_request: str = ""
     sha: str = ""
+
+
+CodacyPendingFn = Callable[[CodacyQuery, str], str | None]
+
+
+@dataclass(frozen=True)
+class CodacyRetryConfig:
+    """Describe the retry settings for one Codacy zero-gate lookup."""
+
+    provider_candidates: Tuple[str, ...]
+    attempts: int
+    pending_fn: CodacyPendingFn
+    sleep_seconds: float
 
 
 def _parse_args() -> argparse.Namespace:
@@ -160,6 +173,22 @@ def _render_md(payload: Mapping[str, Any]) -> str:
 def _provider_candidates(primary_provider: str) -> List[str]:
     """Return provider aliases to try when querying Codacy."""
     return list(dict.fromkeys([primary_provider, "gh", "github"]))
+
+
+def _build_retry_config(
+    query: CodacyQuery,
+    provider_candidates: Sequence[str],
+    *,
+    pending_fn: CodacyPendingFn | None = None,
+    sleep_seconds: float = 5.0,
+) -> CodacyRetryConfig:
+    attempts = SCOPED_ANALYSIS_RETRY_ATTEMPTS if (query.pull_request or query.sha) else 1
+    return CodacyRetryConfig(
+        provider_candidates=tuple(provider_candidates),
+        attempts=max(1, attempts),
+        pending_fn=pending_fn or _analysis_pending_message,
+        sleep_seconds=max(0.0, sleep_seconds),
+    )
 
 
 def build_issues_url(
@@ -419,6 +448,43 @@ def _request_analysis_status(url: str, token: str) -> Dict[str, Any]:
     return payload
 
 
+def _sha_wait_message(scope_label: str, observed_sha: str, target_sha: str) -> str | None:
+    if not observed_sha:
+        return f"Codacy analysis for {scope_label} is not available yet."
+    if observed_sha != target_sha:
+        return (
+            f"Codacy analysis for {scope_label} is still on {observed_sha[:12]} "
+            f"(waiting for {target_sha[:12]})."
+        )
+    return None
+
+
+def _pull_request_pending_message(payload: Dict[str, Any], query: CodacyQuery, target_sha: str) -> str | None:
+    if bool(payload.get("isAnalysing")):
+        return f"Codacy is still analysing pull request {query.pull_request}."
+    pull_request = payload.get("pullRequest") or {}
+    return _sha_wait_message(
+        f"pull request {query.pull_request}",
+        str(pull_request.get("headCommitSha") or "").strip().lower(),
+        target_sha,
+    )
+
+
+def _repository_pending_message(payload: Dict[str, Any], target_sha: str) -> str | None:
+    repository = payload.get("data") or {}
+    last_analysed_commit = repository.get("lastAnalysedCommit") or {}
+    pending_message = _sha_wait_message(
+        "repository",
+        str(last_analysed_commit.get("sha") or "").strip().lower(),
+        target_sha,
+    )
+    if pending_message is not None:
+        return pending_message
+    if not str(last_analysed_commit.get("endedAnalysis") or "").strip():
+        return "Codacy repository analysis has not finished yet."
+    return None
+
+
 def _analysis_pending_message(query: CodacyQuery, token: str) -> str | None:
     target_sha = str(query.sha or "").strip().lower()
     if not target_sha:
@@ -429,72 +495,55 @@ def _analysis_pending_message(query: CodacyQuery, token: str) -> str | None:
             build_pull_request_analysis_url(query.provider, query.owner, query.repo, query.pull_request),
             token,
         )
-        if bool(payload.get("isAnalysing")):
-            return f"Codacy is still analysing pull request {query.pull_request}."
-        pull_request = payload.get("pullRequest") or {}
-        observed_sha = str(pull_request.get("headCommitSha") or "").strip().lower()
-        if not observed_sha:
-            return f"Codacy analysis for pull request {query.pull_request} is not available yet."
-        if observed_sha != target_sha:
-            return (
-                f"Codacy analysis for pull request {query.pull_request} is still on {observed_sha[:12]} "
-                f"(waiting for {target_sha[:12]})."
-            )
-        return None
+        return _pull_request_pending_message(payload, query, target_sha)
+    payload = _request_analysis_status(
+        build_repository_analysis_url(query.provider, query.owner, query.repo),
+        token,
+    )
+    return _repository_pending_message(payload, target_sha)
 
-    payload = _request_analysis_status(build_repository_analysis_url(query.provider, query.owner, query.repo), token)
-    repository = payload.get("data") or {}
-    last_analysed_commit = repository.get("lastAnalysedCommit") or {}
-    observed_sha = str(last_analysed_commit.get("sha") or "").strip().lower()
-    if not observed_sha:
-        return "Codacy repository analysis is not available yet."
-    if observed_sha != target_sha:
-        return (
-            f"Codacy repository analysis is still on {observed_sha[:12]} "
-            f"(waiting for {target_sha[:12]})."
-        )
-    if not str(last_analysed_commit.get("endedAnalysis") or "").strip():
-        return "Codacy repository analysis has not finished yet."
-    return None
+
+def _pending_analysis_message(config: CodacyRetryConfig, query: CodacyQuery, token: str) -> str | None:
+    try:
+        return config.pending_fn(query, token)
+    except (OSError, RuntimeError, ValueError) as exc:
+        return f"Codacy analysis status request failed: {exc}"
+
+
+def _final_retry_findings(
+    open_issues: int | None,
+    findings: List[str],
+    pending_message: str | None,
+) -> Tuple[int | None, List[str]]:
+    final_findings = list(findings)
+    if pending_message is not None and pending_message not in final_findings:
+        final_findings.append(pending_message)
+    return open_issues, final_findings
 
 
 def load_codacy_findings_with_retry(
     base_query: CodacyQuery,
     token: str,
-    provider_candidates: List[str],
-    *,
-    pending_fn: Any = _analysis_pending_message,
-    sleep_seconds: float = 5.0,
+    retry_config: CodacyRetryConfig | None = None,
 ) -> Tuple[int | None, List[str]]:
     """Load Codacy findings, retrying short-lived PR and analysis-lag states."""
-    retry_budget = (
-        SCOPED_ANALYSIS_RETRY_ATTEMPTS
-        if (base_query.pull_request or base_query.sha)
-        else 1
-    )
+    config = retry_config or _build_retry_config(base_query, _provider_candidates(base_query.provider))
     open_issues: int | None = None
     findings: List[str] = []
     pending_message: str | None = None
-    for attempt in range(retry_budget):
+    for attempt in range(config.attempts):
         open_issues, findings, last_exc = _query_codacy_open_issues(
             base_query,
             token,
-            provider_candidates,
+            list(config.provider_candidates),
         )
         retry_requested = _is_retryable_pr_not_found(base_query, last_exc)
-        try:
-            pending_message = pending_fn(base_query, token)
-        except (OSError, RuntimeError, ValueError) as exc:
-            pending_message = f"Codacy analysis status request failed: {exc}"
+        pending_message = _pending_analysis_message(config, base_query, token)
         if not retry_requested and pending_message is None:
             return open_issues, findings
-        if attempt != retry_budget - 1:
-            time.sleep(max(0.0, sleep_seconds))
-
-    final_findings = list(findings)
-    if pending_message is not None and pending_message not in final_findings:
-        final_findings.append(pending_message)
-    return open_issues, final_findings
+        if attempt != config.attempts - 1:
+            time.sleep(config.sleep_seconds)
+    return _final_retry_findings(open_issues, findings, pending_message)
 
 
 def _resolve_codacy_status(args: argparse.Namespace) -> CodacyStatusResult:
@@ -514,7 +563,7 @@ def _resolve_codacy_status(args: argparse.Namespace) -> CodacyStatusResult:
     open_issues, findings = load_codacy_findings_with_retry(
         base_query,
         token,
-        provider_candidates,
+        _build_retry_config(base_query, provider_candidates),
     )
     return CodacyStatusResult(
         status=_codacy_status(findings, getattr(args, "policy_mode", "ratchet")),

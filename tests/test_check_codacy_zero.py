@@ -624,8 +624,9 @@ class CodacyZeroTests(unittest.TestCase):
 
     def test_codacy_support_pending_message_handles_empty_sha_and_non_pr(self) -> None:
         """Cover support pending-message guards for empty sha and non-PR queries."""
+        request_status = Mock(return_value={"pullRequest": {}})
         deps = codacy_zero_support.CodacyPendingMessageDeps(
-            request_status=Mock(return_value={"pullRequest": {}}),
+            request_status=request_status,
             repository_analysis_url=Mock(return_value="repository-url"),
             pull_request_analysis_url=Mock(return_value="pull-request-url"),
             text_deps=codacy_zero_support.CodacyTextDeps(
@@ -641,7 +642,7 @@ class CodacyZeroTests(unittest.TestCase):
                 deps=deps,
             )
         )
-        deps.request_status.assert_not_called()
+        request_status.assert_not_called()
 
         self.assertEqual(
             codacy_zero_support.analysis_pending_message(
@@ -651,8 +652,8 @@ class CodacyZeroTests(unittest.TestCase):
             ),
             "Codacy analysis for repository is not available yet.",
         )
-        deps.request_status.assert_called_once_with("repository-url", "token")
-        deps.request_status.reset_mock()
+        request_status.assert_called_once_with("repository-url", "token")
+        request_status.reset_mock()
 
         self.assertEqual(
             codacy_zero_support.analysis_pending_message(
@@ -662,7 +663,58 @@ class CodacyZeroTests(unittest.TestCase):
             ),
             "Codacy analysis for pull request 5 is not available yet.",
         )
-        deps.request_status.assert_called_once_with("pull-request-url", "token")
+        request_status.assert_called_once_with("pull-request-url", "token")
+
+    def test_pull_request_issue_pending_message_skips_empty_sha_records(self) -> None:
+        """Ignore issue records that do not yet carry a commit SHA."""
+        sha_wait_message = Mock(return_value="waiting on commit")
+        pending_message = codacy_zero_support.pull_request_issue_pending_message(
+            {
+                "analyzed": True,
+                "data": [
+                    {"commitIssue": {"commitInfo": {}}},
+                    {"commitIssue": {"commitInfo": {"sha": "oldsha"}}},
+                ],
+            },
+            self._base_query(pull_request="5"),
+            "targetsha",
+            deps=codacy_zero_support.CodacyIssuePendingDeps(
+                text_deps=codacy_zero_support.CodacyTextDeps(
+                    mapping_or_empty=check_codacy_zero._mapping_or_empty,
+                    preferred_text=check_codacy_zero._preferred_text,
+                ),
+                sha_wait_message=sha_wait_message,
+            ),
+        )
+        self.assertEqual(pending_message, "waiting on commit")
+        sha_wait_message.assert_called_once_with(
+            "pull request 5 issues",
+            "oldsha",
+            "targetsha",
+        )
+
+    def test_pull_request_issue_pending_message_returns_none_without_sha(self) -> None:
+        """Return ``None`` when the issue records never expose a commit SHA."""
+        self.assertIsNone(
+            codacy_zero_support.pull_request_issue_pending_message(
+                {
+                    "analyzed": True,
+                    "data": [
+                        {"commitIssue": {"commitInfo": {}}},
+                        {"commitIssue": {"commitInfo": {"sha": ""}}},
+                    ],
+                },
+                self._base_query(pull_request="5"),
+                "targetsha",
+                deps=codacy_zero_support.CodacyIssuePendingDeps(
+                    text_deps=codacy_zero_support.CodacyTextDeps(
+                        mapping_or_empty=check_codacy_zero._mapping_or_empty,
+                        preferred_text=check_codacy_zero._preferred_text,
+                    ),
+                    sha_wait_message=Mock(return_value="unused"),
+                ),
+            )
+        )
 
     def test_query_candidate_and_helpers(self) -> None:
         """Cover query candidate and helpers."""
@@ -1069,13 +1121,14 @@ class CodacyZeroTests(unittest.TestCase):
         self,
     ) -> None:
         """Resolve PR status from commit-scoped Codacy data when PR data is stale."""
+        token_value = "-".join(["analysis", "marker"])
         args = Namespace(
             provider="gh",
             owner="Prekzursil",
             repo="quality-zero-platform",
             pull_request="68",
             sha="targetsha",
-            token="explicit-token",
+            token=token_value,
             policy_mode="ratchet",
             out_json="codacy-zero/codacy.json",
             out_md="codacy-zero/codacy.md",

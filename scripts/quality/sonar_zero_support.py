@@ -2,6 +2,7 @@
 
 from __future__ import absolute_import
 
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Tuple
 
 
@@ -10,6 +11,94 @@ RequestFn = Callable[[str, str], Dict[str, Any]]
 RetryFetchFn = Callable[[Any, str], Tuple[int, str, List[str]]]
 SleepFn = Callable[[float], None]
 TextFn = Callable[..., str]
+RetryExceptionFn = Callable[
+    [Any, Exception, Tuple[int, str]],
+    Tuple[int, str, List[str]],
+]
+PendingMessageFn = Callable[[Any, str, PendingFn], str | None]
+ShouldRetryFn = Callable[[Any, List[str], str | None], bool]
+FinalFindingsFn = Callable[[List[str], str | None], List[str]]
+
+
+@dataclass(frozen=True)
+class AnalysisRevisionConfig:
+    """Configuration needed to resolve one Sonar analysis revision."""
+
+    request_json: RequestFn
+    mapping_or_empty: Callable[[Any], Dict[str, Any]]
+    named_entry: Callable[
+        [Iterable[Mapping[str, Any]], str, str],
+        Mapping[str, Any] | None,
+    ]
+    preferred_text: TextFn
+    sonar_api_base: str
+    url_quote: Callable[..., str]
+    analysis_path: str
+    entries_key: str
+    entry_key: str
+    target_value: str
+
+
+@dataclass(frozen=True)
+class ScopedAnalysisLoaders:
+    """Loaders for the active Sonar branch or pull request scope."""
+
+    load_pull_request_revision: Callable[[Any, str], str]
+    load_branch_revision: Callable[[Any, str], str]
+
+
+@dataclass(frozen=True)
+class ScopedAnalysisCallbacks:
+    """Callbacks used while checking whether a Sonar scope is still settling."""
+
+    is_scoped_analysis: Callable[[Any], bool]
+    target_sha: Callable[[Any], str]
+    scope_label: Callable[[Any], str]
+    load_revision: Callable[[Any, str], str]
+
+
+@dataclass(frozen=True)
+class RetrySettings:
+    """Timing and callback defaults for a Sonar retry loop."""
+
+    fetch_fn: RetryFetchFn
+    pending_fn: PendingFn
+    attempts: int
+    sleep_seconds: float
+
+
+@dataclass(frozen=True)
+class RetryHandlers:
+    """Callbacks used while retrying a Sonar findings lookup."""
+
+    retry_exception: RetryExceptionFn
+    pending_message_fn: PendingMessageFn
+    should_retry: ShouldRetryFn
+    final_findings_fn: FinalFindingsFn
+    sleep_fn: SleepFn
+
+
+def _load_analysis_revision(
+    args: Any,
+    auth: str,
+    *,
+    config: AnalysisRevisionConfig,
+) -> str:
+    """Load the currently indexed commit SHA for one Sonar scope."""
+    payload = config.request_json(
+        f"{config.sonar_api_base}/api/{config.analysis_path}?project="
+        f"{config.url_quote(args.project_key, safe='')}",
+        auth,
+    )
+    entry = config.named_entry(
+        list(payload.get(config.entries_key) or []),
+        config.entry_key,
+        config.preferred_text(config.target_value),
+    )
+    if entry is None:
+        return ""
+    commit = config.mapping_or_empty(entry.get("commit"))
+    return config.preferred_text(commit.get("sha")).lower()
 
 
 def find_named_entry(
@@ -30,67 +119,25 @@ def load_branch_analysis_revision(
     args: Any,
     auth: str,
     *,
-    request_json: RequestFn,
-    mapping_or_empty: Callable[[Any], Dict[str, Any]],
-    named_entry: Callable[
-        [Iterable[Mapping[str, Any]], str, str],
-        Mapping[str, Any] | None,
-    ],
-    preferred_text: TextFn,
-    sonar_api_base: str,
-    url_quote: Callable[..., str],
+    config: AnalysisRevisionConfig,
 ) -> str:
     """Load the currently indexed commit SHA for one Sonar branch."""
-    payload = request_json(
-        f"{sonar_api_base}/api/project_branches/list?project="
-        f"{url_quote(args.project_key, safe='')}",
-        auth,
-    )
-    branch_entry = named_entry(
-        list(payload.get("branches") or []),
-        "name",
-        preferred_text(args.branch),
-    )
-    if branch_entry is None:
-        return ""
-    commit = mapping_or_empty(branch_entry.get("commit"))
-    return preferred_text(commit.get("sha")).lower()
+    return _load_analysis_revision(args, auth, config=config)
 
 
 def load_pull_request_analysis_revision(
     args: Any,
     auth: str,
     *,
-    request_json: RequestFn,
-    mapping_or_empty: Callable[[Any], Dict[str, Any]],
-    named_entry: Callable[
-        [Iterable[Mapping[str, Any]], str, str],
-        Mapping[str, Any] | None,
-    ],
-    preferred_text: TextFn,
-    sonar_api_base: str,
-    url_quote: Callable[..., str],
+    config: AnalysisRevisionConfig,
 ) -> str:
     """Load the currently indexed commit SHA for one Sonar pull request."""
-    payload = request_json(
-        f"{sonar_api_base}/api/project_pull_requests/list?project="
-        f"{url_quote(args.project_key, safe='')}",
-        auth,
-    )
-    pull_request_entry = named_entry(
-        list(payload.get("pullRequests") or []),
-        "key",
-        preferred_text(args.pull_request),
-    )
-    if pull_request_entry is None:
-        return ""
-    commit = mapping_or_empty(pull_request_entry.get("commit"))
-    return preferred_text(commit.get("sha")).lower()
+    return _load_analysis_revision(args, auth, config=config)
 
 
-def scoped_analysis_label(args: Any, *, preferred_text: TextFn) -> str:
+def scoped_analysis_label(args: Any) -> str:
     """Return the current Sonar branch or pull-request scope label."""
-    if preferred_text(getattr(args, "pull_request", "")):
+    if str(getattr(args, "pull_request", "")).strip():
         return f"pull request {args.pull_request}"
     return f"branch {args.branch}"
 
@@ -99,31 +146,26 @@ def load_scoped_analysis_revision(
     args: Any,
     auth: str,
     *,
-    preferred_text: TextFn,
-    load_pull_request_revision: Callable[[Any, str], str],
-    load_branch_revision: Callable[[Any, str], str],
+    loaders: ScopedAnalysisLoaders,
 ) -> str:
     """Load the current Sonar analysis SHA for the active scope."""
-    if preferred_text(getattr(args, "pull_request", "")):
-        return load_pull_request_revision(args, auth)
-    return load_branch_revision(args, auth)
+    if str(getattr(args, "pull_request", "")).strip():
+        return loaders.load_pull_request_revision(args, auth)
+    return loaders.load_branch_revision(args, auth)
 
 
 def scoped_analysis_pending_message(
     args: Any,
     auth: str,
     *,
-    is_scoped_analysis: Callable[[Any], bool],
-    target_sha: Callable[[Any], str],
-    scope_label: Callable[[Any], str],
-    load_revision: Callable[[Any, str], str],
+    callbacks: ScopedAnalysisCallbacks,
 ) -> str | None:
     """Return the current Sonar pending-analysis message for the active scope."""
-    current_target_sha = target_sha(args)
-    if not is_scoped_analysis(args) or not current_target_sha:
+    current_target_sha = callbacks.target_sha(args)
+    if not callbacks.is_scoped_analysis(args) or not current_target_sha:
         return None
-    current_scope_label = scope_label(args)
-    revision = load_revision(args, auth)
+    current_scope_label = callbacks.scope_label(args)
+    revision = callbacks.load_revision(args, auth)
     if not revision:
         return f"Sonar analysis for {current_scope_label} is not available yet."
     if revision != current_target_sha:
@@ -137,18 +179,13 @@ def scoped_analysis_pending_message(
 def resolve_retry_settings(
     retry_kwargs: Mapping[str, Any],
     *,
-    default_fetch_fn: RetryFetchFn,
-    default_pending_fn: PendingFn,
-    default_attempts: int,
-    default_sleep_seconds: float,
-) -> Tuple[Any, Any, int, float]:
+    defaults: RetrySettings,
+) -> RetrySettings:
     """Resolve the retry callbacks and timing budget for one Sonar lookup."""
-    fetch_fn = retry_kwargs.get("fetch_fn", default_fetch_fn)
-    pending_fn = retry_kwargs.get("pending_fn", default_pending_fn)
-    attempts = int(retry_kwargs.get("attempts", default_attempts))
-    sleep_seconds = float(
-        retry_kwargs.get("sleep_seconds", default_sleep_seconds)
-    )
+    fetch_fn = retry_kwargs.get("fetch_fn", defaults.fetch_fn)
+    pending_fn = retry_kwargs.get("pending_fn", defaults.pending_fn)
+    attempts = int(retry_kwargs.get("attempts", defaults.attempts))
+    sleep_seconds = float(retry_kwargs.get("sleep_seconds", defaults.sleep_seconds))
     unexpected = sorted(
         set(retry_kwargs) - {"fetch_fn", "pending_fn", "attempts", "sleep_seconds"}
     )
@@ -157,7 +194,12 @@ def resolve_retry_settings(
         raise TypeError(
             f"Unexpected load_sonar_findings_with_retry parameters: {names}"
         )
-    return fetch_fn, pending_fn, max(1, attempts), max(0.0, sleep_seconds)
+    return RetrySettings(
+        fetch_fn=fetch_fn,
+        pending_fn=pending_fn,
+        attempts=max(1, attempts),
+        sleep_seconds=max(0.0, sleep_seconds),
+    )
 
 
 def retry_exception_result(
@@ -215,40 +257,37 @@ def load_sonar_findings_with_retry(
     namespace: Any,
     auth: str,
     *,
-    fetch_fn: RetryFetchFn,
-    pending_fn: PendingFn,
-    retry_budget: int,
-    sleep_seconds: float,
-    retry_exception: Callable[
-        [Any, Exception, Tuple[int, str]],
-        Tuple[int, str, List[str]],
-    ],
-    pending_message_fn: Callable[[Any, str, PendingFn], str | None],
-    should_retry: Callable[[Any, List[str], str | None], bool],
-    final_findings_fn: Callable[[List[str], str | None], List[str]],
-    sleep_fn: SleepFn,
+    settings: RetrySettings,
+    handlers: RetryHandlers,
 ) -> Tuple[int, str, List[str]]:
     """Retry Sonar findings while the scoped analysis is still settling."""
     open_issues = 0
     quality_gate = "UNKNOWN"
     findings: List[str] = []
     pending_message: str | None = None
-    for attempt in range(retry_budget):
+    for attempt in range(settings.attempts):
         try:
-            open_issues, quality_gate, findings = fetch_fn(namespace, auth)
+            open_issues, quality_gate, findings = settings.fetch_fn(namespace, auth)
         except (OSError, RuntimeError, ValueError) as exc:
-            if attempt == retry_budget - 1:
-                return retry_exception(
+            if attempt == settings.attempts - 1:
+                return handlers.retry_exception(
                     namespace,
                     exc,
                     (open_issues, quality_gate),
                 )
-            retry_exception(namespace, exc, (open_issues, quality_gate))
-            sleep_fn(max(0.0, sleep_seconds))
+            handlers.retry_exception(namespace, exc, (open_issues, quality_gate))
+            handlers.sleep_fn(max(0.0, settings.sleep_seconds))
             continue
-        pending_message = pending_message_fn(namespace, auth, pending_fn)
-        if not should_retry(namespace, findings, pending_message):
+        pending_message = handlers.pending_message_fn(
+            namespace,
+            auth,
+            settings.pending_fn,
+        )
+        if not handlers.should_retry(namespace, findings, pending_message):
             return open_issues, quality_gate, findings
-        if attempt != retry_budget - 1:
-            sleep_fn(max(0.0, sleep_seconds))
-    return open_issues, quality_gate, final_findings_fn(findings, pending_message)
+        if attempt != settings.attempts - 1:
+            handlers.sleep_fn(max(0.0, settings.sleep_seconds))
+    return open_issues, quality_gate, handlers.final_findings_fn(
+        findings,
+        pending_message,
+    )

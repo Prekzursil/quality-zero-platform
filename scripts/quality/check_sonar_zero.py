@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""CLI wrapper for the Sonar zero gate."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -8,7 +10,7 @@ import sys
 import time
 import urllib.parse
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -37,6 +39,7 @@ def _preferred_text(*values: Any) -> str:
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for the Sonar zero gate."""
     parser = argparse.ArgumentParser(
         description=(
             "Assert SonarCloud has zero open issues and a passing quality gate."
@@ -54,10 +57,12 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _auth_header(token: str) -> str:
+    """Build the basic-auth header SonarCloud expects for token auth."""
     return "Basic " + base64.b64encode(f"{token}:".encode("utf-8")).decode("ascii")
 
 
 def _request_json(url: str, auth_header: str) -> Dict[str, Any]:
+    """Request one Sonar JSON payload and validate its top-level shape."""
     payload, _ = load_json_https(
         url.rstrip("/"),
         allowed_host_suffixes={"sonarcloud.io"},
@@ -105,6 +110,7 @@ def _build_sonar_query(
 
 
 def _load_open_issues(args: argparse.Namespace, auth: str) -> int:
+    """Load the open-issue count for the selected Sonar scope."""
     issues_query = {
         "componentKeys": args.project_key,
         "resolved": "false",
@@ -124,6 +130,7 @@ def _load_open_issues(args: argparse.Namespace, auth: str) -> int:
 
 
 def _load_quality_gate(args: argparse.Namespace, auth: str) -> str:
+    """Load the Sonar quality-gate status for the selected scope."""
     gate_query = _build_sonar_query(
         args.project_key,
         branch=args.branch,
@@ -142,6 +149,7 @@ def _load_sonar_findings(
     args: argparse.Namespace,
     auth: str,
 ) -> Tuple[int, str, List[str]]:
+    """Load Sonar issue and quality-gate findings for one scope."""
     open_issues = _load_open_issues(args, auth)
     quality_gate = _load_quality_gate(args, auth)
     findings: List[str] = []
@@ -157,6 +165,7 @@ def _load_sonar_findings(
 
 
 def _is_scoped_analysis(args: argparse.Namespace) -> bool:
+    """Return whether the Sonar query targets a branch or pull request."""
     return bool(
         _preferred_text(
             getattr(args, "branch", ""),
@@ -166,11 +175,12 @@ def _is_scoped_analysis(args: argparse.Namespace) -> bool:
 
 
 def _target_sha(args: argparse.Namespace) -> str:
+    """Return the normalized target SHA used for scoped-analysis settling."""
     return _preferred_text(getattr(args, "sha", "")).lower()
 
 
 def _find_named_entry(
-    items: List[Mapping[str, Any]],
+    items: Iterable[Mapping[str, Any]],
     key: str,
     value: str,
 ) -> Mapping[str, Any] | None:
@@ -183,17 +193,39 @@ def _find_named_entry(
     )
 
 
-def _load_branch_analysis_revision(args: argparse.Namespace, auth: str) -> str:
-    """Load the currently indexed commit SHA for one Sonar branch."""
-    return sonar_zero_support.load_branch_analysis_revision(
-        args,
-        auth,
+def _analysis_revision_config(
+    *,
+    analysis_path: str,
+    entries_key: str,
+    entry_key: str,
+    target_value: str,
+) -> sonar_zero_support.AnalysisRevisionConfig:
+    """Build the Sonar revision lookup configuration for one scope."""
+    return sonar_zero_support.AnalysisRevisionConfig(
         request_json=_request_json,
         mapping_or_empty=_mapping_or_empty,
         named_entry=_find_named_entry,
         preferred_text=_preferred_text,
         sonar_api_base=SONAR_API_BASE,
         url_quote=urllib.parse.quote,
+        analysis_path=analysis_path,
+        entries_key=entries_key,
+        entry_key=entry_key,
+        target_value=target_value,
+    )
+
+
+def _load_branch_analysis_revision(args: argparse.Namespace, auth: str) -> str:
+    """Load the currently indexed commit SHA for one Sonar branch."""
+    return sonar_zero_support.load_branch_analysis_revision(
+        args,
+        auth,
+        config=_analysis_revision_config(
+            analysis_path="project_branches/list",
+            entries_key="branches",
+            entry_key="name",
+            target_value=_preferred_text(getattr(args, "branch", "")),
+        ),
     )
 
 
@@ -202,20 +234,25 @@ def _load_pull_request_analysis_revision(args: argparse.Namespace, auth: str) ->
     return sonar_zero_support.load_pull_request_analysis_revision(
         args,
         auth,
-        request_json=_request_json,
-        mapping_or_empty=_mapping_or_empty,
-        named_entry=_find_named_entry,
-        preferred_text=_preferred_text,
-        sonar_api_base=SONAR_API_BASE,
-        url_quote=urllib.parse.quote,
+        config=_analysis_revision_config(
+            analysis_path="project_pull_requests/list",
+            entries_key="pullRequests",
+            entry_key="key",
+            target_value=_preferred_text(getattr(args, "pull_request", "")),
+        ),
     )
 
 
 def _scoped_analysis_label(args: argparse.Namespace) -> str:
     """Return the current Sonar branch or pull-request scope label."""
-    return sonar_zero_support.scoped_analysis_label(
-        args,
-        preferred_text=_preferred_text,
+    return sonar_zero_support.scoped_analysis_label(args)
+
+
+def _scoped_analysis_loaders() -> sonar_zero_support.ScopedAnalysisLoaders:
+    """Build the loaders for the active Sonar scope."""
+    return sonar_zero_support.ScopedAnalysisLoaders(
+        load_pull_request_revision=_load_pull_request_analysis_revision,
+        load_branch_revision=_load_branch_analysis_revision,
     )
 
 
@@ -224,9 +261,17 @@ def _load_scoped_analysis_revision(args: argparse.Namespace, auth: str) -> str:
     return sonar_zero_support.load_scoped_analysis_revision(
         args,
         auth,
-        preferred_text=_preferred_text,
-        load_pull_request_revision=_load_pull_request_analysis_revision,
-        load_branch_revision=_load_branch_analysis_revision,
+        loaders=_scoped_analysis_loaders(),
+    )
+
+
+def _scoped_analysis_callbacks() -> sonar_zero_support.ScopedAnalysisCallbacks:
+    """Build the callbacks used to evaluate Sonar scope settling."""
+    return sonar_zero_support.ScopedAnalysisCallbacks(
+        is_scoped_analysis=_is_scoped_analysis,
+        target_sha=_target_sha,
+        scope_label=_scoped_analysis_label,
+        load_revision=_load_scoped_analysis_revision,
     )
 
 
@@ -235,23 +280,22 @@ def _scoped_analysis_pending_message(args: argparse.Namespace, auth: str) -> str
     return sonar_zero_support.scoped_analysis_pending_message(
         args,
         auth,
-        is_scoped_analysis=_is_scoped_analysis,
-        target_sha=_target_sha,
-        scope_label=_scoped_analysis_label,
-        load_revision=_load_scoped_analysis_revision,
+        callbacks=_scoped_analysis_callbacks(),
     )
 
 
 def _resolve_retry_settings(
     retry_kwargs: Mapping[str, Any],
-) -> Tuple[Any, Any, int, float]:
+) -> sonar_zero_support.RetrySettings:
     """Resolve the retry callbacks and timing budget for one Sonar lookup."""
     return sonar_zero_support.resolve_retry_settings(
         retry_kwargs,
-        default_fetch_fn=_load_sonar_findings,
-        default_pending_fn=_scoped_analysis_pending_message,
-        default_attempts=SCOPED_ANALYSIS_RETRY_ATTEMPTS,
-        default_sleep_seconds=5.0,
+        defaults=sonar_zero_support.RetrySettings(
+            fetch_fn=_load_sonar_findings,
+            pending_fn=_scoped_analysis_pending_message,
+            attempts=SCOPED_ANALYSIS_RETRY_ATTEMPTS,
+            sleep_seconds=5.0,
+        ),
     )
 
 
@@ -272,7 +316,7 @@ def _retry_exception_result(
 def _pending_analysis_message(
     namespace: argparse.Namespace,
     auth: str,
-    pending_fn: Any,
+    pending_fn: sonar_zero_support.PendingFn,
 ) -> str | None:
     """Return a resilient pending-analysis message from the configured callback."""
     return sonar_zero_support.pending_analysis_message(namespace, auth, pending_fn)
@@ -300,6 +344,17 @@ def _final_retry_findings(
     return sonar_zero_support.final_retry_findings(findings, pending_message)
 
 
+def _retry_handlers() -> sonar_zero_support.RetryHandlers:
+    """Build the retry callbacks for the Sonar findings loop."""
+    return sonar_zero_support.RetryHandlers(
+        retry_exception=_retry_exception_result,
+        pending_message_fn=_pending_analysis_message,
+        should_retry=_should_retry_scoped_analysis,
+        final_findings_fn=_final_retry_findings,
+        sleep_fn=time.sleep,
+    )
+
+
 def load_sonar_findings_with_retry(
     *args: Any,
     **kwargs: Any,
@@ -311,23 +366,17 @@ def load_sonar_findings_with_retry(
             "and auth header"
         )
     namespace, auth = args
-    fetch_fn, pending_fn, retry_budget, sleep_seconds = _resolve_retry_settings(kwargs)
+    retry_settings = _resolve_retry_settings(kwargs)
     return sonar_zero_support.load_sonar_findings_with_retry(
         namespace,
         auth,
-        fetch_fn=fetch_fn,
-        pending_fn=pending_fn,
-        retry_budget=retry_budget,
-        sleep_seconds=sleep_seconds,
-        retry_exception=_retry_exception_result,
-        pending_message_fn=_pending_analysis_message,
-        should_retry=_should_retry_scoped_analysis,
-        final_findings_fn=_final_retry_findings,
-        sleep_fn=time.sleep,
+        settings=retry_settings,
+        handlers=_retry_handlers(),
     )
 
 
 def main() -> int:
+    """Execute the Sonar zero gate CLI."""
     args = _parse_args()
     token = _preferred_text(args.token, os.environ.get("SONAR_TOKEN", ""))
     findings: List[str] = []

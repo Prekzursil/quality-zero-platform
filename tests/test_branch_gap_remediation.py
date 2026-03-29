@@ -108,6 +108,20 @@ class BranchGapRemediationTests(unittest.TestCase):
         control_plane_vendors._finalize_sonar_vendor(vendors)
         self.assertNotIn("dashboard_url", vendors["sonar"])
 
+        parts_vendor = {
+            "sonar": {
+                "project_key": "",
+                "project_key_parts": ["Prekzursil", "quality-zero-platform"],
+                "project_key_separator": ":",
+            }
+        }
+        control_plane_vendors._finalize_sonar_vendor(parts_vendor)
+        self.assertEqual(parts_vendor["sonar"]["project_key"], "Prekzursil:quality-zero-platform")
+        self.assertEqual(
+            parts_vendor["sonar"]["dashboard_url"],
+            "https://sonarcloud.io/project/overview?id=Prekzursil%3Aquality-zero-platform",
+        )
+
         self.assertEqual(control_plane_vendors._provider_env_suffix("Repo---Name___Test"), "REPO_NAME_TEST")
 
     def test_post_pr_quality_comment_create_and_update_paths(self) -> None:
@@ -204,7 +218,10 @@ class BranchGapRemediationTests(unittest.TestCase):
         self.assertEqual(findings, ["Codacy API endpoint was not found for providers: gh."])
         self.assertIsNone(exc)
 
-        with patch("scripts.quality.check_codacy_zero._query_codacy_candidate", return_value=(None, [], RuntimeError("boom"), False)):
+        with patch(
+            "scripts.quality.check_codacy_zero.codacy_zero_support.query_codacy_open_issues",
+            return_value=(None, ["Codacy API endpoint was not found for providers: gh."], RuntimeError("boom")),
+        ) as query_mock:
             open_issues, findings, exc = check_codacy_zero._query_codacy_open_issues(
                 check_codacy_zero.CodacyQuery("gh", "Prekzursil", "quality-zero-platform"),
                 "api-token",
@@ -213,6 +230,7 @@ class BranchGapRemediationTests(unittest.TestCase):
         self.assertIsNone(open_issues)
         self.assertIn("Codacy API endpoint was not found for providers: gh.", findings)
         self.assertIsInstance(exc, RuntimeError)
+        query_mock.assert_called_once()
 
         with patch.object(check_deepscan_zero, "_request_json", return_value={"total": 0}):
             open_issues, source_url, findings = check_deepscan_zero._evaluate_open_issues_mode(

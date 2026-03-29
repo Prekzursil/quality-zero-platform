@@ -343,8 +343,10 @@ def _unauthorized_http_result(
     return codacy_zero_support.unauthorized_http_result(
         exc,
         query,
-        public_fallback=_fallback_public_issues,
-        error_findings=_http_error_findings,
+        deps=codacy_zero_support.CodacyHttpErrorDeps(
+            public_fallback=_fallback_public_issues,
+            error_findings=_http_error_findings,
+        ),
     )
 
 
@@ -356,8 +358,10 @@ def _handle_codacy_http_error(
     return codacy_zero_support.handle_codacy_http_error(
         exc,
         query,
-        public_fallback=_fallback_public_issues,
-        error_findings=_http_error_findings,
+        deps=codacy_zero_support.CodacyHttpErrorDeps(
+            public_fallback=_fallback_public_issues,
+            error_findings=_http_error_findings,
+        ),
     )
 
 
@@ -382,8 +386,13 @@ def _query_codacy_candidate(
     return codacy_zero_support.query_codacy_candidate(
         query,
         token,
-        query_provider=_query_codacy_provider,
-        http_error_handler=_handle_codacy_http_error,
+        deps=codacy_zero_support.CodacyCandidateDeps(
+            query_provider=_query_codacy_provider,
+            http_error_deps=codacy_zero_support.CodacyHttpErrorDeps(
+                public_fallback=_fallback_public_issues,
+                error_findings=_http_error_findings,
+            ),
+        ),
     )
 
 
@@ -397,9 +406,11 @@ def _query_codacy_open_issues(
         base_query,
         token,
         provider_candidates,
-        provider_query_builder=_provider_query,
-        query_candidate=_query_codacy_candidate,
-        not_found_builder=_not_found_findings,
+        deps=codacy_zero_support.CodacyQueryOpenIssuesDeps(
+            provider_query_builder=_provider_query,
+            query_candidate=_query_codacy_candidate,
+            not_found_builder=_not_found_findings,
+        ),
     )
 
 
@@ -458,8 +469,10 @@ def _pull_request_pending_message(
         payload,
         query,
         target_sha,
-        mapping_or_empty=_mapping_or_empty,
-        preferred_text=_preferred_text,
+        text_deps=codacy_zero_support.CodacyTextDeps(
+            mapping_or_empty=_mapping_or_empty,
+            preferred_text=_preferred_text,
+        ),
     )
 
 
@@ -468,8 +481,10 @@ def _repository_pending_message(payload: Dict[str, Any], target_sha: str) -> str
     return codacy_zero_support.repository_pending_message(
         payload,
         target_sha,
-        mapping_or_empty=_mapping_or_empty,
-        preferred_text=_preferred_text,
+        text_deps=codacy_zero_support.CodacyTextDeps(
+            mapping_or_empty=_mapping_or_empty,
+            preferred_text=_preferred_text,
+        ),
     )
 
 
@@ -478,11 +493,15 @@ def _analysis_pending_message(query: CodacyQuery, token: str) -> str | None:
     return codacy_zero_support.analysis_pending_message(
         query,
         token,
-        request_status=_request_analysis_status,
-        pull_request_analysis_url=build_pull_request_analysis_url,
-        repository_analysis_url=build_repository_analysis_url,
-        mapping_or_empty=_mapping_or_empty,
-        preferred_text=_preferred_text,
+        deps=codacy_zero_support.CodacyPendingMessageDeps(
+            request_status=_request_analysis_status,
+            pull_request_analysis_url=build_pull_request_analysis_url,
+            repository_analysis_url=build_repository_analysis_url,
+            text_deps=codacy_zero_support.CodacyTextDeps(
+                mapping_or_empty=_mapping_or_empty,
+                preferred_text=_preferred_text,
+            ),
+        ),
     )
 
 
@@ -525,11 +544,13 @@ def load_codacy_findings_with_retry(
         base_query,
         token,
         config,
-        query_open_issues=_query_codacy_open_issues,
-        retryable_pr_not_found=_is_retryable_pr_not_found,
-        pending_message_fn=_pending_analysis_message,
-        final_findings_fn=_final_retry_findings,
-        sleep_fn=time.sleep,
+        deps=codacy_zero_support.CodacyRetryDeps(
+            query_open_issues=_query_codacy_open_issues,
+            retryable_pr_not_found=_is_retryable_pr_not_found,
+            pending_message_fn=_pending_analysis_message,
+            final_findings_fn=_final_retry_findings,
+            sleep_fn=time.sleep,
+        ),
     )
 
 

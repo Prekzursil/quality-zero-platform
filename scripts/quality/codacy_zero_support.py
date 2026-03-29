@@ -2,14 +2,12 @@
 
 from __future__ import absolute_import
 
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Tuple
 import urllib.error
 
 
-CodacyCandidateFn = Callable[
-    [Any, Any],
-    Tuple[int | None, List[str], Exception | None, bool],
-]
+CodacyCandidateFn = Callable[..., Tuple[int | None, List[str], Exception | None, bool]]
 CodacyPendingFn = Callable[[Any, str], str | None]
 CodacyQueryBuilderFn = Callable[[Any, str], Any]
 CodacyRequestFn = Callable[[str, str], Dict[str, Any]]
@@ -27,6 +25,63 @@ LoadJsonHttpsFn = Callable[..., Tuple[Any, Dict[str, Any]]]
 ProviderFn = Callable[[str, str, str], Tuple[int | None, List[str]]]
 QueryProviderFn = Callable[[Any, str], Tuple[int | None, List[str]]]
 TextFn = Callable[..., str]
+
+
+@dataclass(frozen=True)
+class CodacyHttpErrorDeps:
+    """Bundle Codacy HTTP error handlers into one dependency object."""
+
+    public_fallback: IssuesFallbackFn
+    error_findings: Callable[[urllib.error.HTTPError], List[str]]
+
+
+@dataclass(frozen=True)
+class CodacyQueryOpenIssuesDeps:
+    """Bundle query helpers for provider-candidate lookup."""
+
+    provider_query_builder: CodacyQueryBuilderFn
+    query_candidate: CodacyCandidateFn
+    not_found_builder: FindingsFn
+
+
+@dataclass(frozen=True)
+class CodacyTextDeps:
+    """Bundle text normalization helpers used by analysis status messages."""
+
+    mapping_or_empty: Callable[[Any], Dict[str, Any]]
+    preferred_text: TextFn
+
+
+@dataclass(frozen=True)
+class CodacyPendingMessageDeps:
+    """Bundle pending-analysis helpers for Codacy status checks."""
+
+    request_status: CodacyRequestFn
+    pull_request_analysis_url: Callable[[str, str, str, str], str]
+    repository_analysis_url: Callable[[str, str, str], str]
+    text_deps: CodacyTextDeps
+
+
+@dataclass(frozen=True)
+class CodacyCandidateDeps:
+    """Bundle query helpers for one Codacy provider candidate."""
+
+    query_provider: QueryProviderFn
+    http_error_deps: CodacyHttpErrorDeps
+
+
+@dataclass(frozen=True)
+class CodacyRetryDeps:
+    """Bundle retry helpers for the Codacy zero-gate loop."""
+
+    query_open_issues: IssuesFn
+    retryable_pr_not_found: Callable[[Any, Exception | None], bool]
+    pending_message_fn: Callable[[Any, Any, str], str | None]
+    final_findings_fn: Callable[
+        [int | None, List[str], str | None],
+        Tuple[int | None, List[str]],
+    ]
+    sleep_fn: CodacySleepFn
 
 
 def fallback_public_issues(
@@ -61,38 +116,35 @@ def unauthorized_http_result(
     exc: urllib.error.HTTPError,
     query: Any,
     *,
-    public_fallback: IssuesFallbackFn,
-    error_findings: Callable[[urllib.error.HTTPError], List[str]],
+    deps: CodacyHttpErrorDeps,
 ) -> Tuple[int | None, List[str], Exception | None, bool]:
     """Handle unauthorized Codacy responses with a public fallback when possible."""
-    if fallback := public_fallback(query):
+    if fallback := deps.public_fallback(query):
         open_issues, findings, last_exc = fallback
         if last_exc is None:
             return open_issues, findings, None, True
         return None, [], last_exc, False
-    return None, error_findings(exc), exc, True
+    return None, deps.error_findings(exc), exc, True
 
 
 def handle_codacy_http_error(
     exc: urllib.error.HTTPError,
     query: Any,
     *,
-    public_fallback: IssuesFallbackFn,
-    error_findings: Callable[[urllib.error.HTTPError], List[str]],
+    deps: CodacyHttpErrorDeps,
 ) -> Tuple[int | None, List[str], Exception | None, bool]:
     """Translate one Codacy HTTP error into the gate's fallback behavior."""
     handler = {
         401: lambda: unauthorized_http_result(
             exc,
             query,
-            public_fallback=public_fallback,
-            error_findings=error_findings,
+            deps=deps,
         ),
         404: lambda: (None, [], exc, False),
     }.get(exc.code)
     if handler is not None:
         return handler()
-    return None, error_findings(exc), exc, True
+    return None, deps.error_findings(exc), exc, True
 
 
 def not_found_findings(
@@ -100,12 +152,11 @@ def not_found_findings(
     last_exc: Exception | None,
 ) -> Tuple[int | None, List[str], Exception | None]:
     """Build the finding payload for provider aliases that all returned 404."""
-    findings = [
-        (
-            "Codacy API endpoint was not found for providers: "
-            f"{', '.join(str(item) for item in provider_candidates)}."
-        )
-    ]
+    message = (
+        "Codacy API endpoint was not found for providers: "
+        f"{', '.join(str(item) for item in provider_candidates)}."
+    )
+    findings = [message]
     if last_exc is not None:
         findings.append(f"Last Codacy API error: {last_exc}")
     return None, findings, last_exc
@@ -126,17 +177,13 @@ def query_codacy_candidate(
     query: Any,
     token: Any,
     *,
-    query_provider: QueryProviderFn,
-    http_error_handler: Callable[
-        [urllib.error.HTTPError, Any],
-        Tuple[int | None, List[str], Exception | None, bool],
-    ],
+    deps: CodacyCandidateDeps,
 ) -> Tuple[int | None, List[str], Exception | None, bool]:
     """Query one provider candidate and normalize recoverable failures."""
     try:
-        open_issues, findings = query_provider(query, token)
+        open_issues, findings = deps.query_provider(query, token)
     except urllib.error.HTTPError as exc:
-        return http_error_handler(exc, query)
+        return handle_codacy_http_error(exc, query, deps=deps.http_error_deps)
     except (OSError, RuntimeError, ValueError) as exc:  # pragma: no cover
         return None, [f"Codacy API request failed: {exc}"], exc, True
     return open_issues, findings, None, True
@@ -147,21 +194,19 @@ def query_codacy_open_issues(
     token: str,
     provider_candidates: Iterable[Any],
     *,
-    provider_query_builder: CodacyQueryBuilderFn,
-    query_candidate: CodacyCandidateFn,
-    not_found_builder: FindingsFn,
+    deps: CodacyQueryOpenIssuesDeps,
 ) -> Tuple[int | None, List[str], Exception | None]:
     """Try each provider alias until one Codacy issue total resolves."""
     last_exc: Exception | None = None
     for provider in provider_candidates:
-        query = provider_query_builder(base_query, str(provider))
-        open_issues, findings, last_exc, should_return = query_candidate(
+        query = deps.provider_query_builder(base_query, str(provider))
+        open_issues, findings, last_exc, should_return = deps.query_candidate(
             query,
             token,
         )
         if should_return:
             return open_issues, findings, last_exc
-    return not_found_builder(provider_candidates, last_exc)
+    return deps.not_found_builder(provider_candidates, last_exc)
 
 
 def is_retryable_pr_not_found(
@@ -219,16 +264,15 @@ def pull_request_pending_message(
     query: Any,
     target_sha: str,
     *,
-    mapping_or_empty: Callable[[Any], Dict[str, Any]],
-    preferred_text: TextFn,
+    text_deps: CodacyTextDeps,
 ) -> str | None:
     """Return the pending status for a Codacy pull-request analysis."""
     if bool(payload.get("isAnalysing")):
         return f"Codacy is still analysing pull request {query.pull_request}."
-    pull_request = mapping_or_empty(payload.get("pullRequest"))
+    pull_request = text_deps.mapping_or_empty(payload.get("pullRequest"))
     return sha_wait_message(
         f"pull request {query.pull_request}",
-        preferred_text(pull_request.get("headCommitSha")).lower(),
+        text_deps.preferred_text(pull_request.get("headCommitSha")).lower(),
         target_sha,
     )
 
@@ -237,20 +281,21 @@ def repository_pending_message(
     payload: Dict[str, Any],
     target_sha: str,
     *,
-    mapping_or_empty: Callable[[Any], Dict[str, Any]],
-    preferred_text: TextFn,
+    text_deps: CodacyTextDeps,
 ) -> str | None:
     """Return the pending status for the default-branch repository analysis."""
-    repository = mapping_or_empty(payload.get("data"))
-    last_analysed_commit = mapping_or_empty(repository.get("lastAnalysedCommit"))
+    repository = text_deps.mapping_or_empty(payload.get("data"))
+    last_analysed_commit = text_deps.mapping_or_empty(
+        repository.get("lastAnalysedCommit")
+    )
     pending_message = sha_wait_message(
         "repository",
-        preferred_text(last_analysed_commit.get("sha")).lower(),
+        text_deps.preferred_text(last_analysed_commit.get("sha")).lower(),
         target_sha,
     )
     if pending_message is not None:
         return pending_message
-    if not preferred_text(last_analysed_commit.get("endedAnalysis")):
+    if not text_deps.preferred_text(last_analysed_commit.get("endedAnalysis")):
         return "Codacy repository analysis has not finished yet."
     return None
 
@@ -259,19 +304,15 @@ def analysis_pending_message(
     query: Any,
     token: str,
     *,
-    request_status: CodacyRequestFn,
-    pull_request_analysis_url: Callable[[str, str, str, str], str],
-    repository_analysis_url: Callable[[str, str, str], str],
-    mapping_or_empty: Callable[[Any], Dict[str, Any]],
-    preferred_text: TextFn,
+    deps: CodacyPendingMessageDeps,
 ) -> str | None:
     """Return the current pending-analysis message for the active Codacy scope."""
-    target_sha = preferred_text(query.sha).lower()
+    target_sha = deps.text_deps.preferred_text(query.sha).lower()
     if not target_sha:
         return None
     if query.pull_request:
-        payload = request_status(
-            pull_request_analysis_url(
+        payload = deps.request_status(
+            deps.pull_request_analysis_url(
                 query.provider,
                 query.owner,
                 query.repo,
@@ -283,18 +324,16 @@ def analysis_pending_message(
             payload,
             query,
             target_sha,
-            mapping_or_empty=mapping_or_empty,
-            preferred_text=preferred_text,
+            text_deps=deps.text_deps,
         )
-    payload = request_status(
-        repository_analysis_url(query.provider, query.owner, query.repo),
+    payload = deps.request_status(
+        deps.repository_analysis_url(query.provider, query.owner, query.repo),
         token,
     )
     return repository_pending_message(
         payload,
         target_sha,
-        mapping_or_empty=mapping_or_empty,
-        preferred_text=preferred_text,
+        text_deps=deps.text_deps,
     )
 
 
@@ -327,29 +366,22 @@ def load_codacy_findings_with_retry(
     token: str,
     retry_config: Any,
     *,
-    query_open_issues: IssuesFn,
-    retryable_pr_not_found: Callable[[Any, Exception | None], bool],
-    pending_message_fn: Callable[[Any, Any, str], str | None],
-    final_findings_fn: Callable[
-        [int | None, List[str], str | None],
-        Tuple[int | None, List[str]],
-    ],
-    sleep_fn: CodacySleepFn,
+    deps: CodacyRetryDeps,
 ) -> Tuple[int | None, List[str]]:
     """Load Codacy findings, retrying short-lived PR and analysis-lag states."""
     open_issues: int | None = None
     findings: List[str] = []
     pending_message: str | None = None
     for attempt in range(retry_config.attempts):
-        open_issues, findings, last_exc = query_open_issues(
+        open_issues, findings, last_exc = deps.query_open_issues(
             base_query,
             token,
             list(retry_config.provider_candidates),
         )
-        retry_requested = retryable_pr_not_found(base_query, last_exc)
-        pending_message = pending_message_fn(retry_config, base_query, token)
+        retry_requested = deps.retryable_pr_not_found(base_query, last_exc)
+        pending_message = deps.pending_message_fn(retry_config, base_query, token)
         if not retry_requested and pending_message is None:
             return open_issues, findings
         if attempt != retry_config.attempts - 1:
-            sleep_fn(retry_config.sleep_seconds)
-    return final_findings_fn(open_issues, findings, pending_message)
+            deps.sleep_fn(retry_config.sleep_seconds)
+    return deps.final_findings_fn(open_issues, findings, pending_message)

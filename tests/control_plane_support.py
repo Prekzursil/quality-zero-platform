@@ -97,6 +97,7 @@ class ControlPlaneAssertions(_AssertionProtocol):
             ". .venv-pytest/bin/activate",
             "tests/test_quality_security_scripts.py",
             "tests/test_quality_coverage_scripts.py",
+            "tests/test_quality_script_coverage.py",
             "tests/test_static_remediation_guards.py",
         ):
             self.assertIn(expected_snippet, profile["coverage"]["command"])

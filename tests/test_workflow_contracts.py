@@ -172,6 +172,7 @@ class WorkflowContractTests(unittest.TestCase):
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
         self.assertIn("qltysh/qlty-action/install@a19242102d17e497f437d7466aa01b528537e899", text)
         self.assertIn('qlty_executable = shutil.which("qlty")', text)
+        self.assertIn("normalize_coverage_for_qlty.py", text)
         self.assertIn('subprocess.run(command, executable=qlty_executable, check=True)', text)
         self.assertIn("job_name: QLTY Zero", text)
         self.assertIn("lane: qlty_zero", text)

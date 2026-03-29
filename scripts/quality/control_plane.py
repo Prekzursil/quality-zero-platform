@@ -408,12 +408,12 @@ def build_ruleset_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
                 "parameters": {
                     "strict_required_status_checks_policy": True,
                     "do_not_enforce_on_create": False,
-                "required_status_checks": [
-                    {"context": name, "integration_id": None}
-                    for name in contexts
-                ],
+                    "required_status_checks": [
+                        {"context": name, "integration_id": None}
+                        for name in contexts
+                    ],
+                },
             },
-        },
             {"type": "non_fast_forward"},
             {"type": "deletion"},
         ],

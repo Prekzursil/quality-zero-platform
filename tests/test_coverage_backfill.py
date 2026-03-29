@@ -189,22 +189,25 @@ class CoverageBackfillTests(unittest.TestCase):
                 encoding="utf-8",
             )
             script_path = Path(build_quality_rollup.__file__).resolve()
-            with patch.object(
-                sys,
-                "argv",
-                [
-                    str(script_path),
-                    "--profile-json",
-                    str(profile_path),
-                    "--repo",
-                    "owner/repo",
-                    "--sha",
-                    "abc",
-                    "--artifacts-dir",
-                    str(root),
-                ],
-            ), patch.dict("os.environ", {}, clear=True):
-                with self.assertRaises(SystemExit) as result:
+            with (
+                patch.object(
+                    sys,
+                    "argv",
+                    [
+                        str(script_path),
+                        "--profile-json",
+                        str(profile_path),
+                        "--repo",
+                        "owner/repo",
+                        "--sha",
+                        "abc",
+                        "--artifacts-dir",
+                        str(root),
+                    ],
+                ),
+                patch.dict("os.environ", {}, clear=True),
+                self.assertRaises(SystemExit) as result,
+            ):
                     runpy.run_path(str(script_path), run_name="__main__")
             self.assertEqual(result.exception.code, 0)
 
@@ -217,8 +220,10 @@ class CoverageBackfillTests(unittest.TestCase):
             {"status": "pass", "repo": "owner/repo", "open_alerts": 0, "policy": "zero_critical", "scope": "runtime", "timestamp_utc": "now", "findings": []}
         )
         self.assertIn("- None", markdown)
-        with patch.object(check_dependabot_alerts, "load_json_https", return_value=({"bad": True}, {})):
-            with self.assertRaisesRegex(RuntimeError, "Unexpected Dependabot alerts payload"):
+        with (
+            patch.object(check_dependabot_alerts, "load_json_https", return_value=({"bad": True}, {})),
+            self.assertRaisesRegex(RuntimeError, "Unexpected Dependabot alerts payload"),
+        ):
                 check_dependabot_alerts._request_alerts("owner/repo", "token", scope="runtime")
 
         script_path = Path(check_dependabot_alerts.__file__).resolve()
@@ -228,8 +233,8 @@ class CoverageBackfillTests(unittest.TestCase):
             patch.object(sys, "argv", [str(script_path), "--repo", "owner/repo"]),
             patch.object(sys, "path", trimmed_sys_path[:]),
             patch.dict("os.environ", {}, clear=True),
+            self.assertRaises(SystemExit) as result,
         ):
-            with self.assertRaises(SystemExit) as result:
                 runpy.run_path(str(script_path), run_name="__main__")
         self.assertEqual(result.exception.code, 1)
 
@@ -276,8 +281,8 @@ class CoverageBackfillTests(unittest.TestCase):
                         ],
                     ),
                     patch.dict("os.environ", {}, clear=True),
+                    self.assertRaises(SystemExit) as result,
                 ):
-                    with self.assertRaises(SystemExit) as result:
                         runpy.run_path(str(script_path), run_name="__main__")
                 self.assertEqual(result.exception.code, 0)
             finally:
@@ -342,24 +347,28 @@ class CoverageBackfillTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             markdown = Path(temp_dir) / "rollup.md"
             markdown.write_text("# Rollup\n", encoding="utf-8")
-            with patch.object(
-                sys,
-                "argv",
-                [
-                    str(script_path),
-                    "--repo",
-                    "owner/repo",
-                    "--pull-request",
-                    "1",
-                    "--markdown-file",
-                    str(markdown),
-                ],
-            ), patch.object(sys, "path", trimmed_sys_path[:]), patch.dict(
-                "os.environ",
-                {},
-                clear=True,
+            with (
+                patch.object(
+                    sys,
+                    "argv",
+                    [
+                        str(script_path),
+                        "--repo",
+                        "owner/repo",
+                        "--pull-request",
+                        "1",
+                        "--markdown-file",
+                        str(markdown),
+                    ],
+                ),
+                patch.object(sys, "path", trimmed_sys_path[:]),
+                patch.dict(
+                    "os.environ",
+                    {},
+                    clear=True,
+                ),
+                self.assertRaises(SystemExit) as result,
             ):
-                with self.assertRaises(SystemExit) as result:
                     runpy.run_path(str(script_path), run_name="__main__")
             self.assertEqual(str(result.exception), "GITHUB_TOKEN or GH_TOKEN is required")
 

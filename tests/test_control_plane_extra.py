@@ -378,20 +378,24 @@ invalid codacy.dashboard_url
         original_sys_path = list(sys.path)
         trimmed_sys_path = [item for item in original_sys_path if item != root_text]
         buffer = io.StringIO()
-        with patch.object(
-            sys,
-            "argv",
-            [
-                str(CONTROL_PLANE_PATH),
-                "--inventory",
-                str(ROOT / "inventory" / "repos.yml"),
-                "--repo-slug",
-                "Prekzursil/quality-zero-platform",
-                "--print",
-                "contexts",
-            ],
-        ), patch.object(sys, "path", trimmed_sys_path[:]), contextlib.redirect_stdout(buffer):
-            with self.assertRaises(SystemExit) as result:
+        with (
+            patch.object(
+                sys,
+                "argv",
+                [
+                    str(CONTROL_PLANE_PATH),
+                    "--inventory",
+                    str(ROOT / "inventory" / "repos.yml"),
+                    "--repo-slug",
+                    "Prekzursil/quality-zero-platform",
+                    "--print",
+                    "contexts",
+                ],
+            ),
+            patch.object(sys, "path", trimmed_sys_path[:]),
+            contextlib.redirect_stdout(buffer),
+            self.assertRaises(SystemExit) as result,
+        ):
                 runpy.run_path(str(CONTROL_PLANE_PATH), run_name="__main__")
 
         self.assertEqual(result.exception.code, 0)

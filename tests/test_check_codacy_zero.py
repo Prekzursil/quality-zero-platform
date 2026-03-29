@@ -120,14 +120,16 @@ class CodacyZeroTests(unittest.TestCase):
 
     def test_request_json_rejects_non_dict_payloads(self) -> None:
         """Cover request json rejects non dict payloads."""
-        with patch(
-            "scripts.quality.check_codacy_zero.load_json_https",
-            return_value=(["invalid"], {}),
-        ):
-            with self.assertRaisesRegex(
+        with (
+            patch(
+                "scripts.quality.check_codacy_zero.load_json_https",
+                return_value=(["invalid"], {}),
+            ),
+            self.assertRaisesRegex(
                 RuntimeError, "Unexpected Codacy API response payload"
-            ):
-                check_codacy_zero._request_json("https://api.codacy.com/test", "token")
+            ),
+        ):
+            check_codacy_zero._request_json("https://api.codacy.com/test", "token")
 
         with patch(
             "scripts.quality.check_codacy_zero.load_json_https",
@@ -150,16 +152,18 @@ class CodacyZeroTests(unittest.TestCase):
                 ),
                 (0, []),
             )
-        with patch(
-            "scripts.quality.check_codacy_zero.load_json_https",
-            return_value=("bad", {}),
-        ):
-            with self.assertRaisesRegex(
+        with (
+            patch(
+                "scripts.quality.check_codacy_zero.load_json_https",
+                return_value=("bad", {}),
+            ),
+            self.assertRaisesRegex(
                 RuntimeError, "Unexpected Codacy public repository payload"
-            ):
-                check_codacy_zero._query_codacy_public_repository_issues(
-                    "gh", "Prekzursil", "quality-zero-platform"
-                )
+            ),
+        ):
+            check_codacy_zero._query_codacy_public_repository_issues(
+                "gh", "Prekzursil", "quality-zero-platform"
+            )
         with patch(
             "scripts.quality.check_codacy_zero.load_json_https",
             return_value=({"items": []}, {}),
@@ -257,16 +261,18 @@ class CodacyZeroTests(unittest.TestCase):
 
     def test_request_analysis_status_validates_payload_shape(self) -> None:
         """Cover request analysis status validates payload shape."""
-        with patch(
-            "scripts.quality.check_codacy_zero.load_json_https",
-            return_value=("bad", {}),
-        ):
-            with self.assertRaisesRegex(
+        with (
+            patch(
+                "scripts.quality.check_codacy_zero.load_json_https",
+                return_value=("bad", {}),
+            ),
+            self.assertRaisesRegex(
                 RuntimeError, "Unexpected Codacy analysis status payload"
-            ):
-                check_codacy_zero._request_analysis_status(
-                    "https://app.codacy.com/api/v3/test", "token"
-                )
+            ),
+        ):
+            check_codacy_zero._request_analysis_status(
+                "https://app.codacy.com/api/v3/test", "token"
+            )
         with patch(
             "scripts.quality.check_codacy_zero.load_json_https",
             return_value=({"data": {}}, {}),
@@ -380,8 +386,6 @@ class CodacyZeroTests(unittest.TestCase):
             """Handle fake request."""
             current = responses.pop(0)
             if isinstance(current, Exception):
-                from urllib.error import HTTPError
-
                 raise HTTPError(url, 404, "Not Found", hdrs=Message(), fp=None)
             return current
 
@@ -427,8 +431,6 @@ class CodacyZeroTests(unittest.TestCase):
 
     def test_open_issue_http_error_and_not_found_paths(self) -> None:
         """Cover open issue http error and not found paths."""
-        from urllib.error import HTTPError
-
         error = HTTPError(
             "https://api.codacy.com", 401, "Unauthorized", hdrs=Message(), fp=None
         )
@@ -496,8 +498,6 @@ class CodacyZeroTests(unittest.TestCase):
 
     def test_fallback_and_http_error_helpers_cover_remaining_branches(self) -> None:
         """Cover fallback and http error helpers cover remaining branches."""
-        from urllib.error import HTTPError
-
         self.assertIsNone(
             check_codacy_zero._fallback_public_issues(
                 self._base_query(pull_request="5")

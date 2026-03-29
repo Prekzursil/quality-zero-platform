@@ -147,13 +147,15 @@ class QualityRollupExtraTests(unittest.TestCase):
         self.assertEqual(contexts["DeepScan"]["source"], "status")
         self.assertNotIn("", contexts)
 
-        with patch.object(
-            build_quality_rollup, "load_json_https", return_value=(["invalid"], {})
-        ):
-            with self.assertRaisesRegex(
+        with (
+            patch.object(
+                build_quality_rollup, "load_json_https", return_value=(["invalid"], {})
+            ),
+            self.assertRaisesRegex(
                 RuntimeError, "Unexpected GitHub API response payload"
-            ):
-                build_quality_rollup._github_payload("owner/repo", "sha", "token")
+            ),
+        ):
+            build_quality_rollup._github_payload("owner/repo", "sha", "token")
 
     def test_quality_rollup_main_passes_with_token_and_lane_payloads(self) -> None:
         """Cover quality rollup main passes with token and lane payloads."""

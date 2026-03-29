@@ -213,9 +213,9 @@ class RunQualityZeroGateTests(unittest.TestCase):
                     return_value=args,
                 ),
                 patch.dict("os.environ", {}, clear=True),
+                self.assertRaises(SystemExit) as exc,
             ):
-                with self.assertRaises(SystemExit) as exc:
-                    main()
+                main()
 
         self.assertEqual(str(exc.exception), "TARGET_SHA or GITHUB_SHA is required")
 

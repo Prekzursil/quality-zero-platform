@@ -136,9 +136,9 @@ class CoverageBackfillTests(unittest.TestCase):
                     sys, "argv", [str(script_path), "--output-dir", str(output_dir)]
                 ),
                 patch.dict("os.environ", {}, clear=True),
+                self.assertRaises(SystemExit) as result,
             ):
-                with self.assertRaises(SystemExit) as result:
-                    runpy.run_path(str(script_path), run_name="__main__")
+                runpy.run_path(str(script_path), run_name="__main__")
             self.assertEqual(result.exception.code, 0)
 
     def test_quality_rollup_parse_args_and_reload_main(self) -> None:
@@ -252,15 +252,19 @@ class CoverageBackfillTests(unittest.TestCase):
             }
         )
         self.assertIn("- None", markdown)
-        with patch.object(
-            check_dependabot_alerts, "load_json_https", return_value=({"bad": True}, {})
-        ):
-            with self.assertRaisesRegex(
+        with (
+            patch.object(
+                check_dependabot_alerts,
+                "load_json_https",
+                return_value=({"bad": True}, {}),
+            ),
+            self.assertRaisesRegex(
                 RuntimeError, "Unexpected Dependabot alerts payload"
-            ):
-                check_dependabot_alerts._request_alerts(
-                    "owner/repo", "token", scope="runtime"
-                )
+            ),
+        ):
+            check_dependabot_alerts._request_alerts(
+                "owner/repo", "token", scope="runtime"
+            )
 
         script_path = Path(check_dependabot_alerts.__file__).resolve()
         root_text = str(script_path.parents[2])

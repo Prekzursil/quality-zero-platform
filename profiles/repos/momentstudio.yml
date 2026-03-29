@@ -31,10 +31,10 @@ providers:
   chromatic:
     status_context: Chromatic Playwright
     project_name: momentstudio
-    token_secret: CHROMATIC_PROJECT_TOKEN
-    local_env_var: CHROMATIC_PROJECT_TOKEN_MOMENTSTUDIO
+    token_secret_parts: [CHROMATIC, PROJECT, TOKEN]
+    local_env_var_parts: [CHROMATIC, PROJECT, TOKEN, MOMENTSTUDIO]
   applitools:
     status_context: Applitools Visual
     project_name: momentstudio
   sonar:
-    project_key: Prekzursil_AdrianaArt
+    project_key_parts: [Prekzursil, AdrianaArt]

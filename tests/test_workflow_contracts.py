@@ -1,8 +1,9 @@
+"""Test workflow contracts."""
+
 from __future__ import absolute_import, division
 
 import unittest
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parents[1]
 MUTATION_TEMPLATE_REF = "@7268fee30f1cf796938d97fe460259f27386a8cd"
@@ -174,10 +175,10 @@ class WorkflowContractTests(unittest.TestCase):
         ]
 
         forbidden_snippets = [
-            '${{ inputs.repo_slug }}',
-            '${{ inputs.failure_context }}',
-            '${{ inputs.lane }}',
-            '${{ inputs.sha || github.sha }}',
+            "${{ inputs.repo_slug }}",
+            "${{ inputs.failure_context }}",
+            "${{ inputs.lane }}",
+            "${{ inputs.sha || github.sha }}",
         ]
 
         for path in workflow_paths:
@@ -197,7 +198,7 @@ class WorkflowContractTests(unittest.TestCase):
         )
         self.assertIn('qlty_executable = shutil.which("qlty")', text)
         self.assertIn("normalize_coverage_for_qlty.py", text)
-        self.assertIn('subprocess.run(command, executable=qlty_executable, check=True)', text)
+        self.assertIn("subprocess.run(command, executable=qlty_executable, check=True)", text)
         self.assertIn("job_name: QLTY Zero", text)
         self.assertIn("lane: qlty_zero", text)
         self.assertIn("run_qlty_zero.py", text)
@@ -291,9 +292,7 @@ class WorkflowContractTests(unittest.TestCase):
         ]:
             self.assertIn(expected, wrapper_text)
 
-        template_text = (ROOT / "templates" / "repo" / ".github" / "workflows" / "quality-zero-platform.yml").read_text(
-            encoding="utf-8"
-        )
+        template_text = (ROOT / "templates" / "repo" / ".github" / "workflows" / "quality-zero-platform.yml").read_text(encoding="utf-8")
         for expected in [
             "branch_name: ${{ github.head_ref || github.ref_name }}",
             "pull_request_number: ${{ github.event.pull_request.number || '' }}",

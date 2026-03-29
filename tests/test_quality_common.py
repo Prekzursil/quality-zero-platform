@@ -1,3 +1,5 @@
+"""Test quality common."""
+
 from __future__ import absolute_import
 
 import contextlib
@@ -37,6 +39,7 @@ from scripts.quality.common import (
 
 @contextlib.contextmanager
 def _temporary_cwd(target: Path):
+    """Handle temporary cwd."""
     previous = Path.cwd()
     os.chdir(target)
     try:
@@ -46,8 +49,11 @@ def _temporary_cwd(target: Path):
 
 
 class QualityCommonTests(unittest.TestCase):
+    """Quality Common Tests."""
+
     @staticmethod
     def _normalized_explicit_coverage() -> dict:
+        """Handle normalized explicit coverage."""
         return normalize_coverage(
             {
                 "runner": " ",
@@ -72,6 +78,7 @@ class QualityCommonTests(unittest.TestCase):
 
     @staticmethod
     def _inferred_coverage() -> dict:
+        """Handle inferred coverage."""
         return normalize_coverage(
             {
                 "command": (
@@ -88,6 +95,7 @@ class QualityCommonTests(unittest.TestCase):
         )
 
     def test_resolve_report_spec_supports_report_spec_and_validates_legacy_kwargs(self) -> None:
+        """Cover resolve report spec supports report spec and validates legacy kwargs."""
         report_spec = ReportSpec(
             out_json="reports/out.json",
             out_md="reports/out.md",
@@ -129,12 +137,14 @@ class QualityCommonTests(unittest.TestCase):
             )
 
     def test_utc_timestamp_is_timezone_aware(self) -> None:
+        """Cover utc timestamp is timezone aware."""
         timestamp = utc_timestamp()
         parsed = datetime.fromisoformat(timestamp)
         self.assertIsNotNone(parsed.tzinfo)
         self.assertEqual(parsed.tzinfo, timezone.utc)
 
     def test_dedupe_strings_trims_skips_empty_and_preserves_first_seen_order(self) -> None:
+        """Cover dedupe strings trims skips empty and preserves first seen order."""
         values: List[Any] = ["  alpha ", "", "beta", "alpha", None, " beta ", "gamma"]
         self.assertEqual(
             dedupe_strings(values),
@@ -142,6 +152,7 @@ class QualityCommonTests(unittest.TestCase):
         )
 
     def test_safe_output_path_uses_fallback_and_rejects_workspace_escape(self) -> None:
+        """Cover safe output path uses fallback and rejects workspace escape."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             with _temporary_cwd(root):
@@ -158,6 +169,7 @@ class QualityCommonTests(unittest.TestCase):
                     safe_output_path("../outside.json", "reports/out.json")
 
     def test_write_report_writes_both_formats_and_prints_markdown(self) -> None:
+        """Cover write report writes both formats and prints markdown."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             payload = {"status": "pass", "items": ["one", "two"]}
@@ -183,6 +195,7 @@ class QualityCommonTests(unittest.TestCase):
             self.assertEqual(stdout.getvalue(), "# Report\n\n- Status: pass\n")
 
     def test_write_report_returns_non_zero_when_output_path_is_invalid(self) -> None:
+        """Cover write report returns non zero when output path is invalid."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             stderr = io.StringIO()
@@ -200,6 +213,7 @@ class QualityCommonTests(unittest.TestCase):
             self.assertIn("escapes workspace root", stderr.getvalue())
 
     def test_normalize_context_helpers_cover_defaults_and_merges(self) -> None:
+        """Cover normalize context helpers cover defaults and merges."""
         self.assertEqual(
             normalize_required_contexts(None),
             {
@@ -248,6 +262,7 @@ class QualityCommonTests(unittest.TestCase):
         )
 
     def test_normalize_coverage_helpers_cover_filters_and_fallbacks(self) -> None:
+        """Cover normalize coverage helpers cover filters and fallbacks."""
         self.assertEqual(normalize_coverage_inputs("not-a-list"), [])
         self.assertEqual(
             normalize_coverage_inputs(
@@ -283,6 +298,7 @@ class QualityCommonTests(unittest.TestCase):
         )
 
     def test_normalize_setup_helpers_cover_string_inputs(self) -> None:
+        """Cover normalize setup helpers cover string inputs."""
         self.assertEqual(normalize_java_setup("21"), {"distribution": "temurin", "version": "21"})
         self.assertEqual(normalize_java_setup(None), {"distribution": "", "version": ""})
         self.assertEqual(
@@ -320,6 +336,7 @@ class QualityCommonTests(unittest.TestCase):
         )
 
     def test_normalize_coverage_helper_covers_explicit_inputs(self) -> None:
+        """Cover normalize coverage helper covers explicit inputs."""
         self.assertEqual(
             self._normalized_explicit_coverage(),
             {
@@ -346,6 +363,7 @@ class QualityCommonTests(unittest.TestCase):
         )
 
     def test_normalize_coverage_helper_infers_required_sources_from_command(self) -> None:
+        """Cover normalize coverage helper infers required sources from command."""
         inferred = self._inferred_coverage()
         self.assertEqual(
             inferred["require_sources"],
@@ -362,6 +380,7 @@ class QualityCommonTests(unittest.TestCase):
         self.assertIsNone(normalize_coverage({"branch_min_percent": "bogus"})["branch_min_percent"])
 
     def test_profile_coverage_normalization_helpers_cover_empty_and_multi_filter_paths(self) -> None:
+        """Cover profile coverage normalization helpers cover empty and multi filter paths."""
         with patch.object(profile_coverage_normalization, "_normalize_source_hint", return_value=""):
             self.assertEqual(profile_coverage_normalization._extract_cov_hints("--cov=scripts"), [])
 
@@ -382,6 +401,7 @@ class QualityCommonTests(unittest.TestCase):
             self.assertEqual(profile_coverage_normalization._extract_gcovr_hints("gcovr --filter placeholder"), ["alpha/"])
 
     def test_normalize_codex_environment_helper_covers_string_inputs(self) -> None:
+        """Cover normalize codex environment helper covers string inputs."""
         self.assertEqual(
             normalize_codex_environment(None, verify_command="bash scripts/verify"),
             {
@@ -395,6 +415,7 @@ class QualityCommonTests(unittest.TestCase):
         )
 
     def test_normalize_issue_policy_supports_defaults_and_shortcuts(self) -> None:
+        """Cover normalize issue policy supports defaults and shortcuts."""
         self.assertEqual(
             normalize_issue_policy(None),
             {
@@ -424,6 +445,7 @@ class QualityCommonTests(unittest.TestCase):
         )
 
     def test_normalize_deps_supports_defaults_and_shortcuts(self) -> None:
+        """Cover normalize deps supports defaults and shortcuts."""
         self.assertEqual(
             normalize_deps(None),
             {
@@ -463,6 +485,7 @@ class QualityCommonTests(unittest.TestCase):
         )
 
     def test_finalize_vendors_and_deep_merge_cover_string_inputs(self) -> None:
+        """Cover finalize vendors and deep merge cover string inputs."""
         self.assertEqual(
             finalize_vendors(
                 {
@@ -476,5 +499,3 @@ class QualityCommonTests(unittest.TestCase):
             _deep_merge({"left": {"keep": 1}, "shared": 1}, {"left": {"add": 2}, "shared": 3, "extra": 4}),
             {"left": {"keep": 1, "add": 2}, "shared": 3, "extra": 4},
         )
-
-

@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Tuple
 import urllib.error
 
-
 CodacyCandidateFn = Callable[..., Tuple[int | None, List[str], Exception | None, bool]]
 CodacyPendingFn = Callable[[Any, str], str | None]
 CodacyQueryBuilderFn = Callable[[Any, str], Any]
@@ -152,10 +151,7 @@ def not_found_findings(
     last_exc: Exception | None,
 ) -> Tuple[int | None, List[str], Exception | None]:
     """Build the finding payload for provider aliases that all returned 404."""
-    message = (
-        "Codacy API endpoint was not found for providers: "
-        f"{', '.join(str(item) for item in provider_candidates)}."
-    )
+    message = "Codacy API endpoint was not found for providers: " f"{', '.join(str(item) for item in provider_candidates)}."
     findings = [message]
     if last_exc is not None:
         findings.append(f"Last Codacy API error: {last_exc}")
@@ -214,11 +210,7 @@ def is_retryable_pr_not_found(
     last_exc: Exception | None,
 ) -> bool:
     """Return whether a missing PR endpoint should be retried after a delay."""
-    return (
-        bool(base_query.pull_request)
-        and isinstance(last_exc, urllib.error.HTTPError)
-        and last_exc.code == 404
-    )
+    return bool(base_query.pull_request) and isinstance(last_exc, urllib.error.HTTPError) and last_exc.code == 404
 
 
 def request_analysis_status(
@@ -252,10 +244,7 @@ def sha_wait_message(
     if not observed_sha:
         return f"Codacy analysis for {scope_label} is not available yet."
     if observed_sha != target_sha:
-        return (
-            f"Codacy analysis for {scope_label} is still on {observed_sha[:12]} "
-            f"(waiting for {target_sha[:12]})."
-        )
+        return f"Codacy analysis for {scope_label} is still on {observed_sha[:12]} " f"(waiting for {target_sha[:12]})."
     return None
 
 
@@ -285,9 +274,7 @@ def repository_pending_message(
 ) -> str | None:
     """Return the pending status for the default-branch repository analysis."""
     repository = text_deps.mapping_or_empty(payload.get("data"))
-    last_analysed_commit = text_deps.mapping_or_empty(
-        repository.get("lastAnalysedCommit")
-    )
+    last_analysed_commit = text_deps.mapping_or_empty(repository.get("lastAnalysedCommit"))
     pending_message = sha_wait_message(
         "repository",
         text_deps.preferred_text(last_analysed_commit.get("sha")).lower(),

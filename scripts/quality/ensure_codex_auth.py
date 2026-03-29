@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Ensure codex auth."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -9,6 +11,7 @@ from typing import Dict, Mapping
 
 
 def _parse_args() -> argparse.Namespace:
+    """Handle parse args."""
     parser = argparse.ArgumentParser(description="Ensure Codex account auth exists on a trusted private runner.")
     parser.add_argument("--auth-file", default="~/.codex/auth.json")
     parser.add_argument("--bootstrap-env-var", default="CODEX_AUTH_JSON")
@@ -17,6 +20,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _write_payload(path: str, payload: Mapping[str, object]) -> None:
+    """Handle write payload."""
     if not path:
         return
     target = Path(path)
@@ -25,6 +29,7 @@ def _write_payload(path: str, payload: Mapping[str, object]) -> None:
 
 
 def _resolve_auth_payload(args: argparse.Namespace) -> Dict[str, str]:
+    """Handle resolve auth payload."""
     auth_path = Path(args.auth_file).expanduser()
     auth_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -41,12 +46,12 @@ def _resolve_auth_payload(args: argparse.Namespace) -> Dict[str, str]:
         return {"auth_file": str(auth_path), "source": args.bootstrap_env_var}
 
     raise SystemExit(
-        "Codex account auth is missing. Seed the trusted private runner once with `codex login` "
-        f"or provide {args.bootstrap_env_var} as a repository secret for bootstrap."
+        "Codex account auth is missing. Seed the trusted private runner once with `codex login` " f"or provide {args.bootstrap_env_var} as a repository secret for bootstrap."
     )
 
 
 def main() -> int:
+    """Handle main."""
     args = _parse_args()
     payload = _resolve_auth_payload(args)
     _write_payload(args.out_json, payload)

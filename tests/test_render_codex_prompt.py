@@ -1,3 +1,5 @@
+"""Test render codex prompt."""
+
 from __future__ import absolute_import
 
 import io
@@ -15,7 +17,10 @@ from scripts.quality.render_codex_prompt import _parse_args, _render_prompt
 
 
 class RenderCodexPromptTests(unittest.TestCase):
+    """Render Codex Prompt Tests."""
+
     def test_parse_args_supports_expected_defaults(self) -> None:
+        """Cover parse args supports expected defaults."""
         with patch.object(
             sys,
             "argv",
@@ -29,6 +34,7 @@ class RenderCodexPromptTests(unittest.TestCase):
         self.assertEqual(args.artifact, [])
 
     def test_render_prompt_preserves_contract_sections_and_artifacts(self) -> None:
+        """Cover render prompt preserves contract sections and artifacts."""
         profile = {
             "slug": "Prekzursil/quality-zero-platform",
             "verify_command": "bash scripts/verify",
@@ -71,6 +77,7 @@ class RenderCodexPromptTests(unittest.TestCase):
         self.assertTrue(prompt.endswith("\n"))
 
     def test_render_prompt_rejects_non_mapping_profiles_and_unexpected_kwargs(self) -> None:
+        """Cover render prompt rejects non mapping profiles and unexpected kwargs."""
         with self.assertRaises(TypeError):
             _render_prompt(
                 lane="remediation",
@@ -108,6 +115,7 @@ class RenderCodexPromptTests(unittest.TestCase):
             )
 
     def test_main_prints_or_writes_the_rendered_prompt(self) -> None:
+        """Cover main prints or writes the rendered prompt."""
         prompt_text = "# Codex PR failure remediation\n"
         args = type(
             "Args",
@@ -124,9 +132,7 @@ class RenderCodexPromptTests(unittest.TestCase):
         )()
 
         stdout = io.StringIO()
-        with patch.object(render_codex_prompt, "_parse_args", return_value=args), patch.object(
-            render_codex_prompt, "load_inventory", return_value={"repos": []}
-        ), patch.object(
+        with patch.object(render_codex_prompt, "_parse_args", return_value=args), patch.object(render_codex_prompt, "load_inventory", return_value={"repos": []}), patch.object(
             render_codex_prompt, "load_repo_profile", return_value={"slug": "Prekzursil/quality-zero-platform"}
         ), patch.object(render_codex_prompt, "_render_prompt", return_value=prompt_text), patch(
             "sys.stdout",
@@ -139,15 +145,14 @@ class RenderCodexPromptTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "prompt.md"
             args.output = str(output_path)
-            with patch.object(render_codex_prompt, "_parse_args", return_value=args), patch.object(
-                render_codex_prompt, "load_inventory", return_value={"repos": []}
-            ), patch.object(
+            with patch.object(render_codex_prompt, "_parse_args", return_value=args), patch.object(render_codex_prompt, "load_inventory", return_value={"repos": []}), patch.object(
                 render_codex_prompt, "load_repo_profile", return_value={"slug": "Prekzursil/quality-zero-platform"}
             ), patch.object(render_codex_prompt, "_render_prompt", return_value=prompt_text):
                 self.assertEqual(render_codex_prompt.main(), 0)
             self.assertEqual(output_path.read_text(encoding="utf-8"), prompt_text)
 
     def test_script_entrypoint_reinserts_repo_root_when_missing(self) -> None:
+        """Cover script entrypoint reinserts repo root when missing."""
         script_path = Path("scripts/quality/render_codex_prompt.py").resolve()
         root_text = str(Path.cwd().resolve())
         trimmed_sys_path = [item for item in sys.path if item != root_text]
@@ -173,7 +178,9 @@ class RenderCodexPromptTests(unittest.TestCase):
         ), patch(
             "scripts.quality.render_codex_prompt.active_required_contexts",
             return_value=["Coverage 100 Gate"],
-        ), patch("sys.stdout", buffer):
+        ), patch(
+            "sys.stdout", buffer
+        ):
             cwd = Path(tmpdir)
             previous = Path.cwd()
             try:

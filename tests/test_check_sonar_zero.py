@@ -1,3 +1,5 @@
+"""Test check sonar zero."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -16,7 +18,10 @@ from typing import List
 
 
 class SonarZeroTests(unittest.TestCase):
+    """Sonar Zero Tests."""
+
     def test_auth_header_and_query_helpers_cover_scoped_inputs(self) -> None:
+        """Cover auth header and query helpers cover scoped inputs."""
         auth_header = check_sonar_zero._auth_header("token")
         self.assertTrue(auth_header.startswith("Basic "))
         self.assertEqual(
@@ -25,6 +30,7 @@ class SonarZeroTests(unittest.TestCase):
         )
 
     def test_request_json_rejects_non_dict_payloads(self) -> None:
+        """Cover request json rejects non dict payloads."""
         with patch("scripts.quality.check_sonar_zero.load_json_https", return_value=(["invalid"], {})):
             with self.assertRaisesRegex(RuntimeError, "Unexpected SonarCloud API response payload"):
                 check_sonar_zero._request_json("https://sonarcloud.io/api/issues/search", "auth")
@@ -35,6 +41,7 @@ class SonarZeroTests(unittest.TestCase):
             )
 
     def test_load_helpers_collect_open_issues_quality_gate_and_findings(self) -> None:
+        """Cover load helpers collect open issues quality gate and findings."""
         responses = [
             {"paging": {"total": 1}},
             {"projectStatus": {"status": "ERROR"}},
@@ -42,6 +49,7 @@ class SonarZeroTests(unittest.TestCase):
         captured_urls: List[str] = []
 
         def fake_request(url: str, auth_header: str):
+            """Handle fake request."""
             captured_urls.append(url)
             return responses.pop(0)
 
@@ -56,6 +64,7 @@ class SonarZeroTests(unittest.TestCase):
         branch_urls: List[str] = []
 
         def fake_branch_request(url: str, auth_header: str):
+            """Handle fake branch request."""
             branch_urls.append(url)
             return {"paging": {"total": 0}}
 
@@ -65,27 +74,22 @@ class SonarZeroTests(unittest.TestCase):
 
         self.assertIn("branch=main", branch_urls[0])
 
-        with patch.object(check_sonar_zero, "_load_open_issues", return_value=2), patch.object(
-            check_sonar_zero, "_load_quality_gate", return_value="ERROR"
-        ):
+        with patch.object(check_sonar_zero, "_load_open_issues", return_value=2), patch.object(check_sonar_zero, "_load_quality_gate", return_value="ERROR"):
             open_issues, quality_gate, findings = check_sonar_zero._load_sonar_findings(args, "auth")
         self.assertEqual(open_issues, 2)
         self.assertEqual(quality_gate, "ERROR")
         self.assertIn("Sonar reports 2 open issues", findings[0])
         self.assertIn("Sonar quality gate status is ERROR", findings[1])
 
-        with patch.object(check_sonar_zero, "_load_open_issues", return_value=0), patch.object(
-            check_sonar_zero, "_load_quality_gate", return_value="OK"
-        ):
+        with patch.object(check_sonar_zero, "_load_open_issues", return_value=0), patch.object(check_sonar_zero, "_load_quality_gate", return_value="OK"):
             self.assertEqual(check_sonar_zero._load_sonar_findings(args, "auth"), (0, "OK", []))
 
         ratchet_args = Namespace(project_key="project", branch="", pull_request="5", policy_mode="ratchet")
-        with patch.object(check_sonar_zero, "_load_open_issues", return_value=6), patch.object(
-            check_sonar_zero, "_load_quality_gate", return_value="OK"
-        ):
+        with patch.object(check_sonar_zero, "_load_open_issues", return_value=6), patch.object(check_sonar_zero, "_load_quality_gate", return_value="OK"):
             self.assertEqual(check_sonar_zero._load_sonar_findings(ratchet_args, "auth"), (6, "OK", []))
 
     def test_revision_helpers_and_pending_message_cover_scoped_paths(self) -> None:
+        """Cover revision helpers and pending message cover scoped paths."""
         args = Namespace(project_key="project", branch="main", pull_request="", sha="targetsha")
         with patch.object(
             check_sonar_zero,
@@ -132,6 +136,7 @@ class SonarZeroTests(unittest.TestCase):
         )
 
     def test_retry_waits_for_pr_scoped_findings_to_settle(self) -> None:
+        """Cover retry waits for pr scoped findings to settle."""
         args = argparse.Namespace(branch="", pull_request="5")
         responses = [
             (1, "OK", ["Sonar reports 1 open issues (expected 0)."]),
@@ -140,6 +145,7 @@ class SonarZeroTests(unittest.TestCase):
         attempts: List[int] = []
 
         def fake_loader(current_args, auth):
+            """Handle fake loader."""
             attempts.append(len(attempts) + 1)
             return responses.pop(0)
 
@@ -155,6 +161,7 @@ class SonarZeroTests(unittest.TestCase):
         self.assertEqual(attempts, [1, 2])
 
     def test_retry_waits_for_scoped_revision_to_match_target_sha(self) -> None:
+        """Cover retry waits for scoped revision to match target sha."""
         args = argparse.Namespace(branch="main", pull_request="", sha="targetsha")
         attempts: List[int] = []
         pending_responses = [
@@ -163,10 +170,12 @@ class SonarZeroTests(unittest.TestCase):
         ]
 
         def fake_loader(current_args, auth):
+            """Handle fake loader."""
             attempts.append(len(attempts) + 1)
             return 0, "OK", []
 
         def fake_pending(current_args, auth):
+            """Handle fake pending."""
             return pending_responses.pop(0)
 
         open_issues, quality_gate, findings = load_sonar_findings_with_retry(
@@ -182,10 +191,12 @@ class SonarZeroTests(unittest.TestCase):
         self.assertEqual(attempts, [1, 2])
 
     def test_retry_retries_transient_scoped_api_errors_before_failing(self) -> None:
+        """Cover retry retries transient scoped api errors before failing."""
         args = argparse.Namespace(branch="", pull_request="5")
         attempts: List[int] = []
 
         def fake_loader(current_args, auth):
+            """Handle fake loader."""
             attempts.append(len(attempts) + 1)
             if len(attempts) == 1:
                 raise RuntimeError("HTTP Error 404")
@@ -203,10 +214,12 @@ class SonarZeroTests(unittest.TestCase):
         self.assertEqual(attempts, [1, 2])
 
     def test_retry_returns_failure_findings_when_scoped_api_errors_persist(self) -> None:
+        """Cover retry returns failure findings when scoped api errors persist."""
         args = argparse.Namespace(branch="", pull_request="5")
         attempts: List[int] = []
 
         def fake_loader(current_args, auth):
+            """Handle fake loader."""
             attempts.append(len(attempts) + 1)
             raise RuntimeError("HTTP Error 404")
 
@@ -224,9 +237,11 @@ class SonarZeroTests(unittest.TestCase):
         self.assertEqual(attempts, [1, 2])
 
     def test_retry_raises_unscoped_api_errors_without_retrying(self) -> None:
+        """Cover retry raises unscoped api errors without retrying."""
         args = argparse.Namespace(branch="", pull_request="")
 
         def fake_loader(current_args, auth):
+            """Handle fake loader."""
             raise RuntimeError("provider down")
 
         with self.assertRaisesRegex(RuntimeError, "provider down"):
@@ -239,6 +254,7 @@ class SonarZeroTests(unittest.TestCase):
             )
 
     def test_retry_keyword_only_guards_reject_invalid_invocations(self) -> None:
+        """Cover retry keyword only guards reject invalid invocations."""
         args = argparse.Namespace(branch="", pull_request="5")
 
         with self.assertRaisesRegex(TypeError, "expects argparse namespace and auth header"):
@@ -253,10 +269,12 @@ class SonarZeroTests(unittest.TestCase):
             )
 
     def test_retry_skips_unscoped_queries(self) -> None:
+        """Cover retry skips unscoped queries."""
         args = argparse.Namespace(branch="", pull_request="")
         attempts: List[int] = []
 
         def fake_loader(current_args, auth):
+            """Handle fake loader."""
             attempts.append(len(attempts) + 1)
             return 3, "ERROR", ["Sonar reports 3 open issues (expected 0)."]
 
@@ -272,6 +290,7 @@ class SonarZeroTests(unittest.TestCase):
         self.assertEqual(attempts, [1])
 
     def test_retry_reports_pending_status_failures(self) -> None:
+        """Cover retry reports pending status failures."""
         args = argparse.Namespace(branch="main", pull_request="", sha="targetsha")
         open_issues, quality_gate, findings = load_sonar_findings_with_retry(
             args,
@@ -287,10 +306,12 @@ class SonarZeroTests(unittest.TestCase):
         self.assertEqual(findings, ["Sonar analysis status request failed: pending broke"])
 
     def test_retry_returns_last_scoped_result_after_retry_budget_is_exhausted(self) -> None:
+        """Cover retry returns last scoped result after retry budget is exhausted."""
         args = argparse.Namespace(branch="", pull_request="5")
         attempts: List[int] = []
 
         def fake_loader(current_args, auth):
+            """Handle fake loader."""
             attempts.append(len(attempts) + 1)
             return 1, "ERROR", ["Sonar reports 1 open issues (expected 0)."]
 
@@ -306,6 +327,7 @@ class SonarZeroTests(unittest.TestCase):
         self.assertEqual(attempts, [1, 2])
 
     def test_retry_reports_pending_revision_when_retry_budget_is_exhausted(self) -> None:
+        """Cover retry reports pending revision when retry budget is exhausted."""
         args = argparse.Namespace(branch="main", pull_request="", sha="targetsha")
 
         open_issues, quality_gate, findings = load_sonar_findings_with_retry(
@@ -322,6 +344,7 @@ class SonarZeroTests(unittest.TestCase):
         self.assertEqual(findings, ["Sonar analysis for branch main is not available yet."])
 
     def test_retry_default_budget_handles_transient_none_quality_gate_for_prs(self) -> None:
+        """Cover retry default budget handles transient none quality gate for prs."""
         args = argparse.Namespace(branch="", pull_request="13")
         attempts: List[int] = []
         responses = [
@@ -336,6 +359,7 @@ class SonarZeroTests(unittest.TestCase):
         ]
 
         def fake_loader(current_args, auth):
+            """Handle fake loader."""
             attempts.append(len(attempts) + 1)
             return responses.pop(0)
 
@@ -350,6 +374,7 @@ class SonarZeroTests(unittest.TestCase):
         self.assertEqual(attempts, [1, 2, 3, 4, 5, 6, 7, 8])
 
     def test_main_handles_missing_token_success_and_report_failures(self) -> None:
+        """Cover main handles missing token success and report failures."""
         args = Namespace(
             project_key="Prekzursil_quality-zero-platform",
             token=str(),
@@ -396,6 +421,7 @@ class SonarZeroTests(unittest.TestCase):
         self.assertEqual(write_report_mock.call_args.args[0]["status"], "pass")
 
     def test_parse_args_render_markdown_and_script_entrypoint(self) -> None:
+        """Cover parse args render markdown and script entrypoint."""
         with patch.object(sys, "argv", ["check_sonar_zero.py", "--project-key", "project"]):
             args = check_sonar_zero._parse_args()
         self.assertEqual(args.project_key, "project")

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Run qlty zero."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -16,7 +18,6 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
 
 from scripts.quality.common import utc_timestamp, write_report
 
-
 DEFAULT_JSON = "qlty-zero/qlty-zero.json"
 DEFAULT_MD = "qlty-zero/qlty-zero.md"
 _QLTY_EXECUTABLE = "qlty"
@@ -24,9 +25,8 @@ _ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Run QLTY in fail-on-any-issue mode and emit a summary report."
-    )
+    """Handle parse args."""
+    parser = argparse.ArgumentParser(description="Run QLTY in fail-on-any-issue mode and emit a summary report.")
     parser.add_argument("--repo-dir", default=".")
     parser.add_argument("--out-json", default=DEFAULT_JSON)
     parser.add_argument("--out-md", default=DEFAULT_MD)
@@ -34,6 +34,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _build_qlty_check_argv() -> List[str]:
+    """Handle build qlty check argv."""
     return [
         "qlty",
         "check",
@@ -45,6 +46,7 @@ def _build_qlty_check_argv() -> List[str]:
 
 
 def _build_qlty_smells_argv() -> List[str]:
+    """Handle build qlty smells argv."""
     return [
         "qlty",
         "smells",
@@ -55,6 +57,7 @@ def _build_qlty_smells_argv() -> List[str]:
 
 
 def _resolved_qlty_executable_path() -> str:
+    """Handle resolved qlty executable path."""
     qlty_executable = shutil.which(_QLTY_EXECUTABLE)
     if not qlty_executable:
         raise FileNotFoundError(f"Unable to locate required executable: {_QLTY_EXECUTABLE}")
@@ -62,6 +65,7 @@ def _resolved_qlty_executable_path() -> str:
 
 
 def _tail_lines(text: str, *, limit: int = 200) -> str:
+    """Handle tail lines."""
     if not text:
         return ""
     lines = text.splitlines()
@@ -71,6 +75,7 @@ def _tail_lines(text: str, *, limit: int = 200) -> str:
 
 
 def _combine_output(stdout: str, stderr: str) -> str:
+    """Handle combine output."""
     stdout_tail = _tail_lines(stdout)
     stderr_tail = _tail_lines(stderr)
     if stdout_tail and stderr_tail:
@@ -79,6 +84,7 @@ def _combine_output(stdout: str, stderr: str) -> str:
 
 
 def _smells_output_indicates_findings(output_tail: str) -> bool:
+    """Handle smells output indicates findings."""
     normalized = _ANSI_ESCAPE_RE.sub("", output_tail).strip().lower()
     if not normalized:
         return False
@@ -86,6 +92,7 @@ def _smells_output_indicates_findings(output_tail: str) -> bool:
 
 
 def _render_md(payload: Mapping[str, Any]) -> str:
+    """Handle render md."""
     lines = [
         "# QLTY Zero",
         "",
@@ -120,10 +127,12 @@ def _render_md(payload: Mapping[str, Any]) -> str:
 
 
 def cast_mapping(value: Any) -> Mapping[str, Any]:
+    """Handle cast mapping."""
     return value if isinstance(value, Mapping) else {}
 
 
 def _run_qlty_check(repo_dir: Path) -> subprocess.CompletedProcess[str]:
+    """Handle run qlty check."""
     executable_path = _resolved_qlty_executable_path()
     command = _build_qlty_check_argv()
     # Safe-by-construction: a fixed literal executable name, explicit argv,
@@ -140,6 +149,7 @@ def _run_qlty_check(repo_dir: Path) -> subprocess.CompletedProcess[str]:
 
 
 def _run_qlty_smells(repo_dir: Path) -> subprocess.CompletedProcess[str]:
+    """Handle run qlty smells."""
     executable_path = _resolved_qlty_executable_path()
     command = _build_qlty_smells_argv()
     # Safe-by-construction: a fixed literal executable name, explicit argv,
@@ -156,6 +166,7 @@ def _run_qlty_smells(repo_dir: Path) -> subprocess.CompletedProcess[str]:
 
 
 def _build_check_entry(name: str, argv: List[str], result: subprocess.CompletedProcess[str]) -> Dict[str, Any]:
+    """Handle build check entry."""
     output_tail = _combine_output(result.stdout or "", result.stderr or "")
     status = "pass"
     if int(result.returncode) != 0 or (name == "smells" and _smells_output_indicates_findings(output_tail)):
@@ -170,6 +181,7 @@ def _build_check_entry(name: str, argv: List[str], result: subprocess.CompletedP
 
 
 def _build_payload(checks: Iterable[Mapping[str, Any]], *, status: str, return_code: int) -> Dict[str, Any]:
+    """Handle build payload."""
     check_list = [dict(check) for check in checks]
     output_chunks = [str(check.get("output_tail") or "").strip() for check in check_list]
     output_tail = "\n".join(chunk for chunk in output_chunks if chunk)
@@ -185,6 +197,7 @@ def _build_payload(checks: Iterable[Mapping[str, Any]], *, status: str, return_c
 
 @contextmanager
 def _working_directory(path: Path):
+    """Handle working directory."""
     previous = Path.cwd()
     os.chdir(path)
     try:
@@ -194,6 +207,7 @@ def _working_directory(path: Path):
 
 
 def _write_payload(payload: Mapping[str, Any], *, out_json: str, out_md: str) -> int:
+    """Handle write payload."""
     return write_report(
         payload,
         out_json=out_json,
@@ -205,6 +219,7 @@ def _write_payload(payload: Mapping[str, Any], *, out_json: str, out_md: str) ->
 
 
 def _run_checks(repo_dir: Path) -> Tuple[List[Dict[str, Any]], int]:
+    """Handle run checks."""
     entries: List[Dict[str, Any]] = []
     final_return_code = 0
     checks: List[Tuple[str, List[str], subprocess.CompletedProcess[str]]] = [
@@ -220,6 +235,7 @@ def _run_checks(repo_dir: Path) -> Tuple[List[Dict[str, Any]], int]:
 
 
 def _build_missing_command_payload() -> Dict[str, Any]:
+    """Handle build missing command payload."""
     missing_message = "Failed to execute qlty: command not found"
     check_argv = _build_qlty_check_argv()
     smells_argv = _build_qlty_smells_argv()
@@ -243,6 +259,7 @@ def _build_missing_command_payload() -> Dict[str, Any]:
 
 
 def main() -> int:
+    """Handle main."""
     args = _parse_args()
     repo_dir = Path(args.repo_dir).resolve()
 

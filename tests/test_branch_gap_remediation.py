@@ -1,3 +1,5 @@
+"""Test branch gap remediation."""
+
 from __future__ import absolute_import
 
 import io
@@ -23,6 +25,7 @@ class _NoCloseResponse:
     """Minimal response stub that leaves the in-memory payload readable."""
 
     def __init__(self, payload, headers=None, *, status=200, reason="OK"):
+        """Handle init."""
         self._payload = payload
         self._headers = dict(headers or {})
         self.status = status
@@ -34,6 +37,7 @@ class _NoCloseResponse:
 
     @property
     def headers(self):
+        """Handle headers."""
         return self._headers
 
 
@@ -50,11 +54,7 @@ class BranchGapRemediationTests(unittest.TestCase):
         inventory_path = root / "inventory" / "repos.yml"
         profile_path = root / "profiles" / "repos" / "example-repo.yml"
         inventory_path.write_text(
-            "version: 1\nrepos:\n"
-            "  - slug: Prekzursil/example-repo\n"
-            "    profile: example-repo\n"
-            "    rollout: phase2-wave0\n"
-            "    default_branch: main\n",
+            "version: 1\nrepos:\n" "  - slug: Prekzursil/example-repo\n" "    profile: example-repo\n" "    rollout: phase2-wave0\n" "    default_branch: main\n",
             encoding="utf-8",
         )
         profile_path.write_text(
@@ -164,18 +164,24 @@ class BranchGapRemediationTests(unittest.TestCase):
     def test_export_profile_main_skips_github_output_when_unset(self) -> None:
         """Skip GitHub output emission when the caller leaves it unset."""
         profile = {"profile_id": "example", "coverage": {"inputs": []}}
-        with patch.object(export_profile, "_parse_args", return_value=Namespace(
-            inventory="",
-            repo_slug="Prekzursil/quality-zero-platform",
-            event_name="push",
-            output="",
-            out_json="",
-            github_output="",
-        )), patch.object(export_profile, "load_inventory", return_value={"repos": []}), patch.object(
-            export_profile, "load_repo_profile", return_value=profile
-        ), patch.object(export_profile, "active_required_contexts", return_value=[]), patch.object(
+        with patch.object(
+            export_profile,
+            "_parse_args",
+            return_value=Namespace(
+                inventory="",
+                repo_slug="Prekzursil/quality-zero-platform",
+                event_name="push",
+                output="",
+                out_json="",
+                github_output="",
+            ),
+        ), patch.object(export_profile, "load_inventory", return_value={"repos": []}), patch.object(export_profile, "load_repo_profile", return_value=profile), patch.object(
+            export_profile, "active_required_contexts", return_value=[]
+        ), patch.object(
             export_profile, "_write_github_output"
-        ) as write_mock, patch("sys.stdout", new=io.StringIO()) as stdout:
+        ) as write_mock, patch(
+            "sys.stdout", new=io.StringIO()
+        ) as stdout:
             self.assertEqual(export_profile.main(), 0)
 
         write_mock.assert_not_called()
@@ -190,6 +196,7 @@ class BranchGapRemediationTests(unittest.TestCase):
             previous = Path.cwd()
             try:
                 import os
+
                 os.chdir(root)
                 self.assertEqual(_coverage_source_candidates("src/main.py", ["", "src"]), ["src/main.py"])
             finally:
@@ -200,6 +207,7 @@ class BranchGapRemediationTests(unittest.TestCase):
             self.assertEqual(profile_coverage_normalization._extract_gcovr_hints("--filter '.*/src/.*'"), ["src/"])
 
     def test_run_quality_zero_gate_and_run_codex_exec_cover_remaining_branches(self) -> None:
+        """Cover run quality zero gate and run codex exec cover remaining branches."""
         with self.assertRaises(SystemExit):
             run_quality_zero_gate._required_contexts({"required_contexts": {"target": "Coverage 100 Gate"}})
 
@@ -214,9 +222,7 @@ class BranchGapRemediationTests(unittest.TestCase):
             json_log="run.json",
         )
         completed = SimpleNamespace(stdout="", stderr="warn", returncode=0)
-        with patch("scripts.quality.run_codex_exec._parse_args", return_value=args), patch(
-            "pathlib.Path.read_text", return_value="hello"
-        ), patch(
+        with patch("scripts.quality.run_codex_exec._parse_args", return_value=args), patch("pathlib.Path.read_text", return_value="hello"), patch(
             "scripts.quality.run_codex_exec._run_codex_exec", return_value=completed
         ), patch("sys.stdout", new=io.StringIO()) as stdout, patch("sys.stderr", new=io.StringIO()) as stderr:
             self.assertEqual(run_codex_exec.main(), 0)
@@ -224,6 +230,7 @@ class BranchGapRemediationTests(unittest.TestCase):
         self.assertEqual(stderr.getvalue(), "warn")
 
     def test_codacy_and_deepscan_helpers_cover_remaining_branches(self) -> None:
+        """Cover codacy and deepscan helpers cover remaining branches."""
         open_issues, findings, exc = check_codacy_zero._not_found_findings(["gh"], None)
         self.assertIsNone(open_issues)
         self.assertEqual(findings, ["Codacy API endpoint was not found for providers: gh."])
@@ -259,6 +266,7 @@ class BranchGapRemediationTests(unittest.TestCase):
         self.assertEqual(status["context"], "DeepScan")
 
     def test_required_checks_and_sonar_helpers_cover_remaining_branches(self) -> None:
+        """Cover required checks and sonar helpers cover remaining branches."""
         args = Namespace(repo="owner/repo", sha="deadbeef", timeout_seconds=1, poll_seconds=0)
         pending_payload = {
             "status": "fail",
@@ -270,7 +278,9 @@ class BranchGapRemediationTests(unittest.TestCase):
         ), patch(
             "scripts.quality.check_required_checks.time.time",
             side_effect=[10, 10, 12],
-        ), patch("scripts.quality.check_required_checks.time.sleep") as sleep_mock:
+        ), patch(
+            "scripts.quality.check_required_checks.time.sleep"
+        ) as sleep_mock:
             payload = check_required_checks._wait_for_payload(args, ["Coverage 100 Gate"], "token")
         self.assertEqual(payload, pending_payload)
         sleep_mock.assert_called_once()
@@ -281,6 +291,7 @@ class BranchGapRemediationTests(unittest.TestCase):
         )
 
     def test_security_helpers_cover_responses_without_close_method(self) -> None:
+        """Cover security helpers cover responses without close method."""
         parsed = urlparse("https://api.github.com/repos/Prekzursil/quality-zero-platform/status")
         response = _NoCloseResponse(b'{"ok": true}', {"X-Test": "value"})
         with patch("scripts.security_helpers._ValidatedTLSConnection") as connection_cls:

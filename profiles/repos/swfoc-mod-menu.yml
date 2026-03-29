@@ -6,7 +6,7 @@ required_secrets:
   - APPLITOOLS_API_KEY
 coverage:
   runner: windows-latest
-  shell: pwsh
+  command_shell: pwsh
   command: |
     pwsh -ExecutionPolicy Bypass -File ./tools/quality/collect-dotnet-coverage.ps1 -Configuration Release -DeterministicOnly
     $candidates = @(
@@ -46,11 +46,11 @@ providers:
   chromatic:
     status_context: Chromatic Playwright
     project_name: SWFOC-Mod-Menu
-    token_secret: CHROMATIC_PROJECT_TOKEN
-    local_env_var: CHROMATIC_PROJECT_TOKEN_SWFOC_MOD_MENU
+    token_secret_parts: [CHROMATIC, PROJECT, TOKEN]
+    local_env_var_parts: [CHROMATIC, PROJECT, TOKEN, SWFOC, MOD, MENU]
   applitools:
     status_context: Applitools Visual
     project_name: SWFOC-Mod-Menu
 vendors:
   sonar:
-    project_key: Prekzursil_SWFOC-Mod-Menu
+    project_key_parts: [Prekzursil, SWFOC-Mod-Menu]

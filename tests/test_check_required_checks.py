@@ -1,3 +1,5 @@
+"""Test check required checks."""
+
 from __future__ import absolute_import
 
 import sys
@@ -77,10 +79,7 @@ class RequiredChecksTests(unittest.TestCase):
         self.assertEqual(payload, {"ok": True})
         self.assertEqual(
             loader.call_args.args[0],
-            (
-                "https://api.github.com/repos/Prekzursil/"
-                "quality-zero-platform/commits/abc/status"
-            ),
+            ("https://api.github.com/repos/Prekzursil/" "quality-zero-platform/commits/abc/status"),
         )
         self.assertEqual(loader.call_args.kwargs["allowed_hosts"], {"api.github.com"})
         self.assertEqual(
@@ -138,9 +137,7 @@ class RequiredChecksTests(unittest.TestCase):
 
     def test_collect_status_contexts_skips_blank_names(self) -> None:
         """Ignore status entries that do not declare a context name."""
-        contexts = checks_module._collect_status_contexts(
-            {"statuses": [{"context": "", "state": "success"}]}
-        )
+        contexts = checks_module._collect_status_contexts({"statuses": [{"context": "", "state": "success"}]})
         self.assertEqual(contexts, {})
 
     def test_evaluate_accepts_reusable_workflow_suffix_matches(self) -> None:
@@ -238,7 +235,7 @@ class RequiredChecksTests(unittest.TestCase):
                         "conclusion": "",
                         "source": "check_run",
                     }
-                }
+                },
             )
         )
         self.assertFalse(
@@ -250,7 +247,7 @@ class RequiredChecksTests(unittest.TestCase):
                         "conclusion": "success",
                         "source": "status",
                     }
-                }
+                },
             )
         )
 

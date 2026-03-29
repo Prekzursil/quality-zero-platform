@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Export profile."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -14,6 +16,7 @@ from scripts.quality.control_plane import active_required_contexts, load_invento
 
 
 def _parse_args() -> argparse.Namespace:
+    """Handle parse args."""
     parser = argparse.ArgumentParser(description="Export a resolved control-plane profile for workflows.")
     parser.add_argument("--inventory", default="")
     parser.add_argument("--repo-slug", required=True)
@@ -25,17 +28,17 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _coverage_input_files(coverage: Dict[str, Any]) -> str:
-    return ",".join(
-        str(PurePosixPath("repo") / PurePosixPath(str(item["path"]).replace("\\", "/")))
-        for item in coverage.get("inputs", [])
-    )
+    """Handle coverage input files."""
+    return ",".join(str(PurePosixPath("repo") / PurePosixPath(str(item["path"]).replace("\\", "/"))) for item in coverage.get("inputs", []))
 
 
 def _json_output(key: str, value: object) -> str:
+    """Handle json output."""
     return f"{key}={json.dumps(value, separators=(',', ':'))}"
 
 
 def _profile_output_lines(profile: Dict[str, Any], event_name: str) -> List[str]:
+    """Handle profile output lines."""
     contexts = active_required_contexts(profile, event_name=event_name)
     coverage = profile.get("coverage", {})
     codex_environment = profile.get("codex_environment", {})
@@ -81,6 +84,7 @@ def _profile_output_lines(profile: Dict[str, Any], event_name: str) -> List[str]
 
 
 def _profile_json_output(profile: Dict[str, Any]) -> List[str]:
+    """Handle profile json output."""
     return [
         "profile_json<<__PROFILE__",
         json.dumps(profile, indent=2, sort_keys=True),
@@ -89,10 +93,12 @@ def _profile_json_output(profile: Dict[str, Any]) -> List[str]:
 
 
 def _github_output_lines(profile: Dict[str, Any], event_name: str) -> List[str]:
+    """Handle github output lines."""
     return [*_profile_output_lines(profile, event_name), *_profile_json_output(profile)]
 
 
 def _write_github_output(path: Path, profile: Dict[str, Any], event_name: str) -> None:
+    """Handle write github output."""
     payload_lines = _github_output_lines(profile, event_name)
     with path.open("a", encoding="utf-8") as handle:
         for line in payload_lines:
@@ -100,6 +106,7 @@ def _write_github_output(path: Path, profile: Dict[str, Any], event_name: str) -
 
 
 def main() -> int:
+    """Handle main."""
     args = _parse_args()
     inventory = load_inventory(args.inventory) if args.inventory else load_inventory()
     profile = load_repo_profile(inventory, args.repo_slug)

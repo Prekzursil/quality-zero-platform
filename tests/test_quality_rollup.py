@@ -1,3 +1,5 @@
+"""Test quality rollup."""
+
 from __future__ import absolute_import
 
 import tempfile
@@ -11,6 +13,7 @@ FAKE_GITHUB_CREDENTIAL = "gh-auth-placeholder"
 
 
 def exercise_wait_for_contexts(responses):
+    """Handle exercise wait for contexts."""
     with patch.object(
         build_quality_rollup,
         "load_check_contexts",
@@ -30,7 +33,10 @@ def exercise_wait_for_contexts(responses):
 
 
 class QualityRollupTests(unittest.TestCase):
+    """Quality Rollup Tests."""
+
     def test_build_rollup_combines_expected_contexts_lane_artifacts_and_check_results(self) -> None:
+        """Cover build rollup combines expected contexts lane artifacts and check results."""
         profile = {
             "slug": "Prekzursil/example-repo",
             "active_required_contexts": [
@@ -70,6 +76,7 @@ class QualityRollupTests(unittest.TestCase):
         self.assertEqual(rollup["contexts"][1]["detail"], "Open issues: 0")
 
     def test_render_rollup_markdown_and_comment_body_include_marker(self) -> None:
+        """Cover render rollup markdown and comment body include marker."""
         payload = {
             "repo": "Prekzursil/example-repo",
             "sha": "abc123",
@@ -91,6 +98,7 @@ class QualityRollupTests(unittest.TestCase):
         self.assertIn("# Quality Rollup", comment)
 
     def test_load_lane_payloads_reads_known_json_artifacts(self) -> None:
+        """Cover load lane payloads reads known json artifacts."""
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             (root / "coverage-artifacts" / "coverage-100").mkdir(parents=True)
@@ -117,6 +125,7 @@ class QualityRollupTests(unittest.TestCase):
         self.assertEqual(payloads["sonar"]["findings"], ["bad"])
 
     def test_status_resolution_handles_suffix_matches_and_status_contexts(self) -> None:
+        """Cover status resolution handles suffix matches and status contexts."""
         contexts = {
             "shared-scanner-matrix / Semgrep Zero": {"state": "completed", "conclusion": "success", "source": "check_run"},
             "DeepScan": {"state": "success", "conclusion": "success", "source": "status"},
@@ -128,6 +137,7 @@ class QualityRollupTests(unittest.TestCase):
         self.assertEqual(build_quality_rollup._status_from_context("Missing", contexts), "missing")
 
     def test_load_check_contexts_merges_check_runs_and_statuses(self) -> None:
+        """Cover load check contexts merges check runs and statuses."""
         responses = [
             {"check_runs": [{"name": "shared-scanner-matrix / QLTY Zero", "status": "completed", "conclusion": "success"}]},
             {"statuses": [{"context": "DeepScan", "state": "success"}]},
@@ -140,6 +150,7 @@ class QualityRollupTests(unittest.TestCase):
         self.assertEqual(contexts["DeepScan"]["source"], "status")
 
     def test_wait_for_contexts_polls_until_pending_contexts_settle(self) -> None:
+        """Cover wait for contexts polls until pending contexts settle."""
         responses = [
             {
                 "Coverage 100 Gate": {"state": "in_progress", "conclusion": "", "source": "check_run"},
@@ -155,6 +166,7 @@ class QualityRollupTests(unittest.TestCase):
         sleep_mock.assert_called_once()
 
     def test_wait_for_contexts_also_retries_missing_contexts(self) -> None:
+        """Cover wait for contexts also retries missing contexts."""
         responses = [
             {},
             {"Coverage 100 Gate": {"state": "completed", "conclusion": "success", "source": "check_run"}},
@@ -166,6 +178,7 @@ class QualityRollupTests(unittest.TestCase):
         sleep_mock.assert_called_once()
 
     def test_wait_for_contexts_returns_empty_when_timeout_expires_before_first_poll(self) -> None:
+        """Cover wait for contexts returns empty when timeout expires before first poll."""
         with patch.object(
             build_quality_rollup,
             "load_check_contexts",

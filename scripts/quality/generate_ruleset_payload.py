@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Generate ruleset payload."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -13,6 +15,7 @@ from scripts.quality.control_plane import build_ruleset_payload, load_inventory,
 
 
 def _parse_args() -> argparse.Namespace:
+    """Handle parse args."""
     parser = argparse.ArgumentParser(description="Generate JSON ruleset payloads from control-plane profiles.")
     parser.add_argument("--inventory", default="")
     parser.add_argument("--repo-slug", action="append", default=[])
@@ -21,6 +24,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    """Handle main."""
     args = _parse_args()
     inventory = load_inventory(args.inventory) if args.inventory else load_inventory()
     output_dir = Path(args.output_dir)

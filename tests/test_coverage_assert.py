@@ -1,3 +1,5 @@
+"""Test coverage assert."""
+
 from __future__ import absolute_import
 
 import contextlib
@@ -36,6 +38,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @contextlib.contextmanager
 def _temporary_cwd(target: Path):
+    """Handle temporary cwd."""
     previous = Path.cwd()
     os.chdir(target)
     try:
@@ -45,7 +48,10 @@ def _temporary_cwd(target: Path):
 
 
 class CoverageAssertTests(unittest.TestCase):
+    """Coverage Assert Tests."""
+
     def test_parse_named_path_validates_expected_format(self) -> None:
+        """Cover parse named path validates expected format."""
         name, path = parse_named_path("platform=coverage.xml")
         self.assertEqual(name, "platform")
         self.assertEqual(path, Path("coverage.xml"))
@@ -53,6 +59,7 @@ class CoverageAssertTests(unittest.TestCase):
             parse_named_path("coverage.xml")
 
     def test_parse_coverage_xml_supports_summary_and_line_hit_fallback(self) -> None:
+        """Cover parse coverage xml supports summary and line hit fallback."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             summary_xml = root / "summary.xml"
@@ -74,6 +81,7 @@ class CoverageAssertTests(unittest.TestCase):
         self.assertEqual((fallback_stats.covered, fallback_stats.total), (2, 3))
 
     def test_parse_lcov_counts_lines_found_and_hit(self) -> None:
+        """Cover parse lcov counts lines found and hit."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             lcov_path = root / "coverage.lcov"
@@ -104,6 +112,7 @@ class CoverageAssertTests(unittest.TestCase):
         self.assertEqual((stats.branch_covered, stats.branch_total), (4, 6))
 
     def test_coverage_sources_from_xml_and_lcov_are_workspace_relative(self) -> None:
+        """Cover coverage sources from xml and lcov are workspace relative."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "scripts" / "quality").mkdir(parents=True)
@@ -149,6 +158,7 @@ class CoverageAssertTests(unittest.TestCase):
         self.assertNotIn("build/_deps/googletest-src/googletest/src/gtest.cc", lcov_sources)
 
     def test_evaluate_flags_missing_required_sources_and_honors_threshold(self) -> None:
+        """Cover evaluate flags missing required sources and honors threshold."""
         stats = [CoverageStats(name="python", path="coverage.xml", covered=9, total=10)]
 
         status, findings = evaluate(
@@ -203,6 +213,7 @@ class CoverageAssertTests(unittest.TestCase):
         self.assertTrue(any("branch coverage data missing" in item for item in missing_branch_findings))
 
     def test_source_normalization_and_required_source_helpers_cover_edge_cases(self) -> None:
+        """Cover source normalization and required source helpers cover edge cases."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             with tempfile.TemporaryDirectory() as external_tmp:
@@ -244,6 +255,7 @@ class CoverageAssertTests(unittest.TestCase):
                 )
 
     def test_collect_inputs_build_payload_and_render_markdown(self) -> None:
+        """Cover collect inputs build payload and render markdown."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "pkg").mkdir()
@@ -280,6 +292,7 @@ class CoverageAssertTests(unittest.TestCase):
         self.assertIn("85.00%", markdown)
 
     def test_build_payload_rejects_positional_and_unexpected_keyword_arguments(self) -> None:
+        """Cover build payload rejects positional and unexpected keyword arguments."""
         with self.assertRaisesRegex(TypeError, "keyword arguments only"):
             _build_payload("unexpected")
 
@@ -294,28 +307,36 @@ class CoverageAssertTests(unittest.TestCase):
             )
 
     def test_main_requires_inputs_and_clamps_threshold(self) -> None:
-        with patch.object(assert_coverage_100, "_parse_args", return_value=Namespace(
-            xml=[],
-            lcov=[],
-            require_source=[],
-            min_percent=250.0,
-            branch_min_percent="",
-            out_json="coverage-100/coverage.json",
-            out_md="coverage-100/coverage.md",
-        )):
-            with self.assertRaisesRegex(SystemExit, "No coverage files were provided"):
-                assert_coverage_100.main()
+        """Cover main requires inputs and clamps threshold."""
+        with patch.object(
+            assert_coverage_100,
+            "_parse_args",
+            return_value=Namespace(
+                xml=[],
+                lcov=[],
+                require_source=[],
+                min_percent=250.0,
+                branch_min_percent="",
+                out_json="coverage-100/coverage.json",
+                out_md="coverage-100/coverage.md",
+            ),
+        ), self.assertRaisesRegex(SystemExit, "No coverage files were provided"):
+            assert_coverage_100.main()
 
         stats = [CoverageStats(name="python", path="coverage.xml", covered=1, total=1, branch_covered=1, branch_total=1)]
-        with patch.object(assert_coverage_100, "_parse_args", return_value=Namespace(
-            xml=[],
-            lcov=[],
-            require_source=[],
-            min_percent=250.0,
-            branch_min_percent=90.0,
-            out_json="coverage-100/custom.json",
-            out_md="coverage-100/custom.md",
-        )), patch.object(assert_coverage_100, "_collect_coverage_inputs", return_value=(stats, {"pkg/main.py"})), patch.object(
+        with patch.object(
+            assert_coverage_100,
+            "_parse_args",
+            return_value=Namespace(
+                xml=[],
+                lcov=[],
+                require_source=[],
+                min_percent=250.0,
+                branch_min_percent=90.0,
+                out_json="coverage-100/custom.json",
+                out_md="coverage-100/custom.md",
+            ),
+        ), patch.object(assert_coverage_100, "_collect_coverage_inputs", return_value=(stats, {"pkg/main.py"})), patch.object(
             assert_coverage_100, "write_report", return_value=0
         ) as write_report_mock:
             self.assertEqual(assert_coverage_100.main(), 0)
@@ -326,6 +347,7 @@ class CoverageAssertTests(unittest.TestCase):
         self.assertEqual(payload["status"], "pass")
 
     def test_coverage_stats_percent_and_render_markdown_cover_zero_totals_and_empty_sections(self) -> None:
+        """Cover coverage stats percent and render markdown cover zero totals and empty sections."""
         self.assertEqual(CoverageStats(name="empty", path="coverage.xml", covered=0, total=0).percent, 100.0)
         self.assertEqual(CoverageStats(name="empty", path="coverage.xml", covered=0, total=0, branch_covered=0, branch_total=0).branch_percent, 100.0)
         markdown = _render_md(
@@ -341,6 +363,7 @@ class CoverageAssertTests(unittest.TestCase):
         self.assertIn("- None", markdown)
 
     def test_component_markdown_line_renders_branch_coverage_when_present(self) -> None:
+        """Cover component markdown line renders branch coverage when present."""
         markdown = _render_md(
             {
                 "status": "pass",
@@ -366,6 +389,7 @@ class CoverageAssertTests(unittest.TestCase):
         self.assertIn("branch=`90.00%` (9/10) from `coverage.xml`", markdown)
 
     def test_build_payload_includes_branch_percent_for_branch_tracked_components(self) -> None:
+        """Cover build payload includes branch percent for branch tracked components."""
         payload = _build_payload(
             stats=[CoverageStats(name="python", path="coverage.xml", covered=10, total=10, branch_covered=9, branch_total=10)],
             covered_sources={"pkg/main.py"},
@@ -378,6 +402,7 @@ class CoverageAssertTests(unittest.TestCase):
         self.assertEqual(payload["components"][0]["branch_percent"], 90.0)
 
     def test_script_entrypoint_handles_import_guard_and_report_failures(self) -> None:
+        """Cover script entrypoint handles import guard and report failures."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             xml_path = root / "coverage.xml"
@@ -398,9 +423,8 @@ class CoverageAssertTests(unittest.TestCase):
                     "--out-md",
                     "coverage-100/out.md",
                 ],
-            ), patch.object(sys, "path", trimmed_sys_path[:]):
-                with self.assertRaises(SystemExit) as result:
-                    runpy.run_path(str(script_path), run_name="__main__")
+            ), patch.object(sys, "path", trimmed_sys_path[:]), self.assertRaises(SystemExit) as result:
+                runpy.run_path(str(script_path), run_name="__main__")
 
             self.assertEqual(result.exception.code, 0)
             self.assertTrue(any(path.name == "out.json" for path in root.rglob("out.json")))
@@ -421,4 +445,3 @@ class CoverageAssertTests(unittest.TestCase):
             patch.object(assert_coverage_100, "write_report", return_value=5),
         ):
             self.assertEqual(assert_coverage_100.main(), 5)
-

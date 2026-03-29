@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Validate control plane."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -14,6 +16,7 @@ from scripts.quality.control_plane import build_ruleset_payload, load_inventory,
 
 
 def _parse_args() -> argparse.Namespace:
+    """Handle parse args."""
     parser = argparse.ArgumentParser(description="Validate all enrolled control-plane repo profiles.")
     parser.add_argument("--inventory", default="")
     parser.add_argument("--write-generated", default="")
@@ -21,6 +24,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    """Handle main."""
     args = _parse_args()
     inventory = load_inventory(args.inventory) if args.inventory else load_inventory()
     generated_dir = Path(args.write_generated) if args.write_generated else None

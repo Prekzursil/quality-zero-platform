@@ -5,7 +5,6 @@ from __future__ import absolute_import
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Tuple
 
-
 PendingFn = Callable[[Any, str], str | None]
 RequestFn = Callable[[str, str], Dict[str, Any]]
 RetryFetchFn = Callable[[Any, str], Tuple[int, str, List[str]]]
@@ -86,8 +85,7 @@ def _load_analysis_revision(
 ) -> str:
     """Load the currently indexed commit SHA for one Sonar scope."""
     payload = config.request_json(
-        f"{config.sonar_api_base}/api/{config.analysis_path}?project="
-        f"{config.url_quote(args.project_key, safe='')}",
+        f"{config.sonar_api_base}/api/{config.analysis_path}?project=" f"{config.url_quote(args.project_key, safe='')}",
         auth,
     )
     entry = config.named_entry(
@@ -169,10 +167,7 @@ def scoped_analysis_pending_message(
     if not revision:
         return f"Sonar analysis for {current_scope_label} is not available yet."
     if revision != current_target_sha:
-        return (
-            f"Sonar analysis for {current_scope_label} is still on {revision[:12]} "
-            f"(waiting for {current_target_sha[:12]})."
-        )
+        return f"Sonar analysis for {current_scope_label} is still on {revision[:12]} " f"(waiting for {current_target_sha[:12]})."
     return None
 
 
@@ -186,14 +181,10 @@ def resolve_retry_settings(
     pending_fn = retry_kwargs.get("pending_fn", defaults.pending_fn)
     attempts = int(retry_kwargs.get("attempts", defaults.attempts))
     sleep_seconds = float(retry_kwargs.get("sleep_seconds", defaults.sleep_seconds))
-    unexpected = sorted(
-        set(retry_kwargs) - {"fetch_fn", "pending_fn", "attempts", "sleep_seconds"}
-    )
+    unexpected = sorted(set(retry_kwargs) - {"fetch_fn", "pending_fn", "attempts", "sleep_seconds"})
     if unexpected:
         names = ", ".join(unexpected)
-        raise TypeError(
-            f"Unexpected load_sonar_findings_with_retry parameters: {names}"
-        )
+        raise TypeError(f"Unexpected load_sonar_findings_with_retry parameters: {names}")
     return RetrySettings(
         fetch_fn=fetch_fn,
         pending_fn=pending_fn,
@@ -237,9 +228,7 @@ def should_retry_scoped_analysis(
     is_scoped_analysis: Callable[[Any], bool],
 ) -> bool:
     """Return whether the current Sonar scoped analysis should retry."""
-    return is_scoped_analysis(namespace) and bool(
-        findings or pending_message is not None
-    )
+    return is_scoped_analysis(namespace) and bool(findings or pending_message is not None)
 
 
 def final_retry_findings(
@@ -287,7 +276,11 @@ def load_sonar_findings_with_retry(
             return open_issues, quality_gate, findings
         if attempt != settings.attempts - 1:
             handlers.sleep_fn(max(0.0, settings.sleep_seconds))
-    return open_issues, quality_gate, handlers.final_findings_fn(
-        findings,
-        pending_message,
+    return (
+        open_issues,
+        quality_gate,
+        handlers.final_findings_fn(
+            findings,
+            pending_message,
+        ),
     )

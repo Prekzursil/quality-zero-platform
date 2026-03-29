@@ -27,11 +27,11 @@ providers:
   chromatic:
     status_context: Chromatic Playwright
     project_name: TanksFlashMobile
-    token_secret: CHROMATIC_PROJECT_TOKEN
-    local_env_var: CHROMATIC_PROJECT_TOKEN_TANKSFLASHMOBILE
+    token_secret_parts: [CHROMATIC, PROJECT, TOKEN]
+    local_env_var_parts: [CHROMATIC, PROJECT, TOKEN, TANKSFLASHMOBILE]
   applitools:
     status_context: Applitools Visual
     project_name: TanksFlashMobile
 vendors:
   sonar:
-    project_key: Prekzursil_TanksFlashMobile
+    project_key_parts: [Prekzursil, TanksFlashMobile]

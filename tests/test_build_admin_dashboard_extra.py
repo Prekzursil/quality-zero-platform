@@ -1,3 +1,5 @@
+"""Test build admin dashboard extra."""
+
 from __future__ import absolute_import
 
 import tempfile
@@ -10,7 +12,10 @@ from scripts.quality import build_admin_dashboard
 
 
 class BuildAdminDashboardExtraTests(unittest.TestCase):
+    """Build Admin Dashboard Extra Tests."""
+
     def test_helper_rendering_and_health_helpers_cover_non_default_paths(self) -> None:
+        """Cover helper rendering and health helpers cover non default paths."""
         item = {
             "slug": "Prekzursil/example",
             "profile": "example",
@@ -56,6 +61,7 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
         )
 
     def test_github_payload_and_live_health_cover_token_paths(self) -> None:
+        """Cover github payload and live health cover token paths."""
         with patch.object(
             build_admin_dashboard,
             "load_json_https",
@@ -79,6 +85,7 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
         self.assertTrue(live["ruleset_present"])
 
     def test_main_uses_live_health_when_token_is_present(self) -> None:
+        """Cover main uses live health when token is present."""
         inventory = {
             "repos": [
                 {
@@ -123,6 +130,7 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
         )
 
     def test_main_prefers_explicit_assets_dir_and_fallbacks_without_token(self) -> None:
+        """Cover main prefers explicit assets dir and fallbacks without token."""
         inventory = {"repos": [{"slug": "Prekzursil/example", "profile": "example", "default_branch": "main"}]}
         profile = {
             "enabled_scanners": {"coverage": True},

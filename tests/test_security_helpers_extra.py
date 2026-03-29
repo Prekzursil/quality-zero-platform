@@ -1,3 +1,5 @@
+"""Test security helpers extra."""
+
 from __future__ import absolute_import
 
 import unittest
@@ -9,7 +11,10 @@ from scripts import security_helpers
 
 
 class _FakeBytesResponse:
+    """Fake Bytes Response."""
+
     def __init__(self, payload: bytes, headers=None, *, status=200, reason="OK") -> None:
+        """Handle init."""
         self._payload = payload
         self._headers = dict(headers or {})
         self.status = status
@@ -17,18 +22,24 @@ class _FakeBytesResponse:
         self.closed = False
 
     def read(self) -> bytes:
+        """Handle read."""
         return self._payload
 
     @property
     def headers(self):
+        """Handle headers."""
         return self._headers
 
     def close(self) -> None:
+        """Handle close."""
         self.closed = True
 
 
 class SecurityHelpersExtraTests(unittest.TestCase):
+    """Security Helpers Extra Tests."""
+
     def test_prepare_https_request_validates_kwargs(self) -> None:
+        """Cover prepare https request validates kwargs."""
         parsed, request_kwargs = security_helpers._prepare_https_request(
             "https://api.github.com/repos/Prekzursil/quality-zero-platform/status",
             function_name="load_bytes_https",
@@ -44,6 +55,7 @@ class SecurityHelpersExtraTests(unittest.TestCase):
             )
 
     def test_read_bytes_response_and_load_bytes_https_cover_success_and_error_paths(self) -> None:
+        """Cover read bytes response and load bytes https cover success and error paths."""
         parsed = urlparse("https://api.github.com/repos/Prekzursil/quality-zero-platform/status")
         response = _FakeBytesResponse(b"payload", {"X-Test": "value"})
         with patch("scripts.security_helpers._ValidatedTLSConnection") as connection_cls:

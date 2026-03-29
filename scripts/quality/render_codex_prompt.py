@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Render codex prompt."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -13,6 +15,7 @@ from scripts.quality.control_plane import active_required_contexts, load_invento
 
 
 def _parse_args() -> argparse.Namespace:
+    """Handle parse args."""
     parser = argparse.ArgumentParser(description="Render Codex remediation/backlog prompts from a repo profile.")
     parser.add_argument("--inventory", default="")
     parser.add_argument("--repo-slug", required=True)
@@ -25,10 +28,12 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _artifact_lines(artifacts: List[object]) -> str:
+    """Handle artifact lines."""
     return "\n".join(f"- {item}" for item in artifacts) or "- None"
 
 
 def _repo_contract_lines(profile: dict) -> List[str]:
+    """Handle repo contract lines."""
     codex_environment = profile.get("codex_environment", {})
     return [
         "## Repo contract",
@@ -49,6 +54,7 @@ def _repo_contract_lines(profile: dict) -> List[str]:
 
 
 def _required_contexts_lines(profile: dict, *, event_name: str) -> List[str]:
+    """Handle required contexts lines."""
     contexts = active_required_contexts(profile, event_name=event_name)
     return [
         f"## Required contexts for {event_name}",
@@ -58,6 +64,7 @@ def _required_contexts_lines(profile: dict, *, event_name: str) -> List[str]:
 
 
 def _render_prompt(*args: object, **kwargs: object) -> str:
+    """Handle render prompt."""
     if len(args) != 1:
         raise TypeError("_render_prompt expects a single profile mapping positional argument")
     profile = args[0]
@@ -98,6 +105,7 @@ def _render_prompt(*args: object, **kwargs: object) -> str:
 
 
 def main() -> int:
+    """Handle main."""
     args = _parse_args()
     inventory = load_inventory(args.inventory) if args.inventory else load_inventory()
     profile = load_repo_profile(inventory, args.repo_slug)

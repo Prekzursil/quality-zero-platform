@@ -13,10 +13,13 @@ import scripts.quality.run_qlty_zero as run_qlty_zero
 
 
 class RunQltyZeroTests(unittest.TestCase):
+    """Validate the standalone QLTY zero runner contract."""
+
+    @staticmethod
     def _run_main_with_completed_processes(
-        self,
         *completed_processes: Any,
     ) -> Tuple[int, Path, str, str, Sequence[Any]]:
+        """Run ``main`` with mocked subprocess results and capture artifacts."""
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_dir = Path(temp_dir) / "repo"
             repo_dir.mkdir()
@@ -49,6 +52,7 @@ class RunQltyZeroTests(unittest.TestCase):
             return result, repo_dir, json_text, markdown, mock_run.call_args_list
 
     def test_tail_lines_truncates_to_the_requested_tail_and_smells_detection_handles_empty_output(self) -> None:
+        """Tail rendering and smell detection should treat empty output as clean."""
         self.assertEqual(
             run_qlty_zero._tail_lines("line-1\nline-2\nline-3", limit=2),
             "line-2\nline-3",
@@ -59,6 +63,7 @@ class RunQltyZeroTests(unittest.TestCase):
         self.assertTrue(run_qlty_zero._smells_output_indicates_findings("one smell"))
 
     def test_render_md_uses_none_when_a_check_has_no_output_tail(self) -> None:
+        """Markdown reports should render an explicit placeholder for empty tails."""
         markdown = run_qlty_zero._render_md(
             {
                 "status": "pass",
@@ -80,6 +85,7 @@ class RunQltyZeroTests(unittest.TestCase):
         self.assertIn("## check", markdown)
 
     def test_build_qlty_check_argv_uses_fail_on_any_issue_semantics(self) -> None:
+        """The check command should fail on any reported issue level."""
         self.assertEqual(
             run_qlty_zero._build_qlty_check_argv(),
             [
@@ -93,6 +99,7 @@ class RunQltyZeroTests(unittest.TestCase):
         )
 
     def test_build_qlty_smells_argv_runs_repo_wide_structure_analysis(self) -> None:
+        """The smells command should run repo-wide without noisy snippets."""
         self.assertEqual(
             run_qlty_zero._build_qlty_smells_argv(),
             [
@@ -105,6 +112,7 @@ class RunQltyZeroTests(unittest.TestCase):
         )
 
     def test_main_runs_qlty_commands_with_static_argv_in_repo_root(self) -> None:
+        """The runner should execute both commands from the repo root."""
         completed_check = type(
             "Completed",
             (),
@@ -139,6 +147,7 @@ class RunQltyZeroTests(unittest.TestCase):
             self.assertTrue(call.kwargs["text"])
 
     def test_main_writes_failure_artifacts_when_smells_report_findings(self) -> None:
+        """A failing smells run should still emit complete report artifacts."""
         completed_check = type(
             "Completed",
             (),
@@ -175,6 +184,7 @@ class RunQltyZeroTests(unittest.TestCase):
         self.assertIn("## smells", markdown)
 
     def test_main_builds_missing_command_payload_when_qlty_is_missing(self) -> None:
+        """Missing executables should surface a synthetic error payload."""
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_dir = Path(temp_dir) / "repo"
             repo_dir.mkdir()
@@ -208,6 +218,7 @@ class RunQltyZeroTests(unittest.TestCase):
             self.assertTrue(all("command not found" in check["output_tail"] for check in payload["checks"]))
 
     def test_main_returns_the_report_error_when_report_writing_fails(self) -> None:
+        """A report write failure should propagate its explicit return code."""
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_dir = Path(temp_dir) / "repo"
             repo_dir.mkdir()
@@ -247,6 +258,7 @@ class RunQltyZeroTests(unittest.TestCase):
             self.assertEqual(result, 7)
 
     def test_smells_output_marks_run_as_failed_even_when_cli_exit_code_is_zero(self) -> None:
+        """Reported smells should fail the run even when the CLI exits cleanly."""
         completed_check = type("Completed", (), {"returncode": 0, "stdout": "clean\n", "stderr": ""})()
         completed_smells = type("Completed", (), {"returncode": 0, "stdout": "one smell\n", "stderr": ""})()
         result, _repo_dir, json_text, _markdown, _call_args = self._run_main_with_completed_processes(
@@ -262,6 +274,7 @@ class RunQltyZeroTests(unittest.TestCase):
         self.assertIn("one smell", payload["checks"][1]["output_tail"])
 
     def test_main_returns_success_and_still_writes_artifacts_for_clean_check(self) -> None:
+        """Clean runs should succeed while still writing summary artifacts."""
         completed_check = type("Completed", (), {"returncode": 0, "stdout": "clean\n", "stderr": ""})()
         completed_smells = type("Completed", (), {"returncode": 0, "stdout": "no smells\n", "stderr": ""})()
         result, _repo_dir, json_text, markdown, _call_args = self._run_main_with_completed_processes(
@@ -277,6 +290,7 @@ class RunQltyZeroTests(unittest.TestCase):
         self.assertEqual(markdown.count("QLTY Zero"), 1)
 
     def test_reloading_the_module_without_the_repo_root_reinserts_the_import_path(self) -> None:
+        """Module reloads should restore the repository root import path."""
         repo_root = str(Path(run_qlty_zero.__file__).resolve().parents[2])
         original_sys_path = list(sys.path)
         try:

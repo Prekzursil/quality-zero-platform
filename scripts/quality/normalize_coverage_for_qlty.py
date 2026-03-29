@@ -4,6 +4,7 @@ from __future__ import absolute_import
 import argparse
 from contextlib import contextmanager
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -24,7 +25,6 @@ _XML_SOURCE_RE = re.compile(r"<source>(?P<value>.*?)</source>")
 
 def _parse_args() -> argparse.Namespace:
     """Parse CLI arguments for QLTY coverage normalization."""
-
     parser = argparse.ArgumentParser(
         description="Normalize coverage report paths for QLTY uploads."
     )
@@ -37,7 +37,6 @@ def _parse_args() -> argparse.Namespace:
 @contextmanager
 def _working_directory(path: Path):
     """Temporarily switch the process working directory."""
-
     previous = Path.cwd()
     try:
         import os
@@ -50,20 +49,17 @@ def _working_directory(path: Path):
 
 def _is_xml_report(path: Path) -> bool:
     """Return True when the report uses an XML-based coverage format."""
-
     return path.suffix.lower() == ".xml"
 
 
 def _is_lcov_report(path: Path) -> bool:
     """Return True when the report uses an LCOV-compatible file name."""
-
     lowered = path.name.lower()
     return path.suffix.lower() in {".info", ".lcov"} or lowered in {"lcov", "lcov.info"}
 
 
 def _existing_candidate(raw_path: str, source_roots: Iterable[str]) -> str:
     """Resolve the first existing repo-relative candidate for a coverage source."""
-
     for candidate in _coverage_source_candidates(raw_path, list(source_roots)):
         if Path(candidate).is_file():
             return Path(candidate).as_posix()
@@ -75,7 +71,6 @@ def _existing_candidate(raw_path: str, source_roots: Iterable[str]) -> str:
 
 def _xml_source_roots(text: str) -> List[str]:
     """Collect source roots declared inside a coverage XML payload."""
-
     return [
         match.group("value").strip()
         for match in _XML_SOURCE_RE.finditer(text)
@@ -83,17 +78,30 @@ def _xml_source_roots(text: str) -> List[str]:
     ]
 
 
-def _output_path(out_dir: Path, *, report_id: int, extension: str) -> Path:
-    """Build a deterministic normalized artifact path inside the temp directory."""
+def _path_within_base(base_dir: Path, candidate: Path) -> Path:
+    """Resolve a path and reject candidates that escape the trusted base."""
+    resolved_base = base_dir.resolve()
+    resolved_candidate = (
+        candidate.resolve(strict=False)
+        if candidate.is_absolute()
+        else (resolved_base / candidate).resolve(strict=False)
+    )
+    if os.path.commonpath([str(resolved_base), str(resolved_candidate)]) != str(
+        resolved_base
+    ):
+        raise ValueError(f"Path escapes normalized coverage workspace: {candidate}")
+    return resolved_candidate
 
-    out_path = out_dir / f"report-{report_id}{extension}"
+
+def _output_path(out_dir: Path, *, report_id: int, extension: str) -> Path:
+    """Build a normalized artifact path inside the validated output directory."""
+    out_path = _path_within_base(out_dir, Path(f"report-{report_id}{extension}"))
     out_path.parent.mkdir(parents=True, exist_ok=True)
     return out_path
 
 
 def _copy_report(path: Path, out_path: Path) -> Path:
     """Copy an already-normalized artifact into its upload location."""
-
     shutil.copy2(path, out_path)
     return out_path
 
@@ -106,12 +114,12 @@ def normalize_xml_report(
     report_id: int,
 ) -> Dict[str, object]:
     """Rewrite Cobertura-style XML reports to repo-relative paths."""
-
     text = path.read_text(encoding="utf-8")
     source_roots = _xml_source_roots(text)
     rewritten = 0
 
     def _replace_filename(match: re.Match[str]) -> str:
+        """Rewrite one XML filename attribute when it maps to a repo file."""
         nonlocal rewritten
         raw_filename = match.group("value")
         normalized = _existing_candidate(raw_filename, source_roots)
@@ -143,7 +151,6 @@ def normalize_lcov_report(
     report_id: int,
 ) -> Dict[str, object]:
     """Rewrite LCOV source file entries to repo-relative paths."""
-
     rewritten = 0
     lines: List[str] = []
 
@@ -172,12 +179,13 @@ def normalize_reports(
     out_dir: Path,
 ) -> List[Dict[str, object]]:
     """Normalize every declared coverage input into deterministic temp artifacts."""
-
     normalized: List[Dict[str, object]] = []
+    repo_dir = repo_dir.resolve()
+    out_dir = _path_within_base(repo_dir, out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     with _working_directory(repo_dir):
         for index, raw_input in enumerate(inputs, start=1):
-            path = (repo_dir / raw_input).resolve()
+            path = _path_within_base(repo_dir, Path(raw_input))
             if _is_xml_report(path):
                 normalized.append(
                     normalize_xml_report(
@@ -217,10 +225,9 @@ def normalize_reports(
 
 def main() -> int:
     """Normalize requested coverage inputs and print a JSON manifest."""
-
     args = _parse_args()
     repo_dir = Path(args.repo_dir).resolve()
-    out_dir = Path(args.out_dir).resolve()
+    out_dir = Path(args.out_dir)
     payload = normalize_reports(args.inputs, repo_dir=repo_dir, out_dir=out_dir)
     json.dump(payload, sys.stdout)
     sys.stdout.write("\n")

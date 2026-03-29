@@ -436,7 +436,7 @@ jobs:
               "--repo-dir",
               str(Path.cwd().resolve()),
               "--out-dir",
-              str((Path(os.environ["RUNNER_TEMP"]) / "qlty-coverage").resolve()),
+              ".qlty-coverage",
               *items,
           ]
           normalized_payload = json.loads(

@@ -12,9 +12,10 @@ from email.message import Message
 from pathlib import Path
 from typing import List, Tuple
 from urllib.error import HTTPError
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import scripts.quality.check_codacy_zero as check_codacy_zero
+from scripts.quality import codacy_zero_support
 from scripts.quality.check_codacy_zero import (
     CodacyQuery,
     CodacyRetryConfig,
@@ -376,6 +377,24 @@ class CodacyZeroTests(unittest.TestCase):
             self.assertIsNone(
                 check_codacy_zero._analysis_pending_message(pr_query, "token")
             )
+        with (
+            patch.object(
+                check_codacy_zero,
+                "_request_analysis_status",
+                return_value={"pullRequest": {"headCommitSha": "targetsha"}},
+            ),
+            patch.object(
+                check_codacy_zero,
+                "_request_json",
+                return_value={
+                    "analyzed": True,
+                    "data": [{"commitIssue": {"commitInfo": {}}}],
+                },
+            ),
+        ):
+            self.assertIsNone(
+                check_codacy_zero._analysis_pending_message(pr_query, "token")
+            )
 
     def test_analysis_pending_message_tracks_repository_state(self) -> None:
         """Cover analysis pending message tracks repository state."""
@@ -620,6 +639,48 @@ class CodacyZeroTests(unittest.TestCase):
             ),
             None,
         )
+
+    def test_codacy_support_pending_message_handles_empty_sha_and_non_pr(self) -> None:
+        """Cover support pending-message guards for empty sha and non-PR queries."""
+        deps = codacy_zero_support.CodacyPendingMessageDeps(
+            request_status=Mock(return_value={"pullRequest": {}}),
+            repository_analysis_url=Mock(return_value="repository-url"),
+            pull_request_analysis_url=Mock(return_value="pull-request-url"),
+            text_deps=codacy_zero_support.CodacyTextDeps(
+                mapping_or_empty=check_codacy_zero._mapping_or_empty,
+                preferred_text=check_codacy_zero._preferred_text,
+            ),
+        )
+
+        self.assertIsNone(
+            codacy_zero_support.analysis_pending_message(
+                self._base_query(pull_request="5", sha=""),
+                "token",
+                deps=deps,
+            )
+        )
+        deps.request_status.assert_not_called()
+
+        self.assertEqual(
+            codacy_zero_support.analysis_pending_message(
+                self._base_query(sha="targetsha"),
+                "token",
+                deps=deps,
+            ),
+            "Codacy analysis for repository is not available yet.",
+        )
+        deps.request_status.assert_called_once_with("repository-url", "token")
+        deps.request_status.reset_mock()
+
+        self.assertEqual(
+            codacy_zero_support.analysis_pending_message(
+                self._base_query(pull_request="5", sha="targetsha"),
+                "token",
+                deps=deps,
+            ),
+            "Codacy analysis for pull request 5 is not available yet.",
+        )
+        deps.request_status.assert_called_once_with("pull-request-url", "token")
 
     def test_query_candidate_and_helpers(self) -> None:
         """Cover query candidate and helpers."""

@@ -2,6 +2,10 @@ slug: Prekzursil/codex-session-manager
 stack: dotnet-wpf
 verify_command: bash scripts/verify
 required_contexts_mode: replace
+issue_policy:
+  mode: zero
+  pr_behavior: absolute
+  main_behavior: absolute
 required_contexts:
   always:
     - build-test

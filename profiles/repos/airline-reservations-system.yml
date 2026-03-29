@@ -2,6 +2,10 @@ slug: Prekzursil/Airline-Reservations-System
 stack: cpp-cmake
 verify_command: bash scripts/verify
 required_contexts_mode: replace
+issue_policy:
+  mode: zero
+  pr_behavior: absolute
+  main_behavior: absolute
 coverage:
   command: |
     python3 -m venv .venv-pytest

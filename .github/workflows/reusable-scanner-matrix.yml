@@ -163,7 +163,7 @@ jobs:
         if: matrix.lane == 'coverage' && steps.profile.outputs.coverage_needs_rust == 'true'
         uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7
       - name: Install Qlty CLI
-        if: steps.profile.outputs.qlty_enabled == 'true' && ((matrix.lane == 'coverage' && steps.profile.outputs.qlty_coverage_files != '') || matrix.lane == 'qlty_zero')
+        if: steps.profile.outputs.qlty_enabled == 'true' && (matrix.lane == 'qlty_zero' || (matrix.lane == 'coverage' && steps.profile.outputs.qlty_coverage_files != '' && runner.os != 'Windows'))
         uses: qltysh/qlty-action/install@a19242102d17e497f437d7466aa01b528537e899
       - name: Run selected lane
         shell: bash

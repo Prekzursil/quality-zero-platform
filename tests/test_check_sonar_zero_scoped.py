@@ -23,6 +23,7 @@ class SonarZeroScopedTests(unittest.TestCase):
         responses = list(scenario["responses"])
 
         def fake_request(url: str, auth_header: str):
+            """Capture the scoped request URL and return the next fake response."""
             captured_urls.append(url)
             return responses.pop(0)
 

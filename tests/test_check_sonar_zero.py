@@ -5,6 +5,7 @@ from __future__ import absolute_import
 import argparse
 import unittest
 from argparse import Namespace
+from typing import List
 from unittest.mock import patch
 
 from scripts.quality import check_sonar_zero

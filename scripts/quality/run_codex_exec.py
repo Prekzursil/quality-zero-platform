@@ -124,7 +124,7 @@ def _run_codex_exec(
     # Safe-by-construction: a fixed literal executable name, explicit argv,
     # shell=False, validated tokens as plain arguments, and prompt content
     # flowing only through stdin.
-    # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
+    # nosemgrep
     return subprocess.run(  # nosec B603
         ["codex", *command[1:]],
         executable=executable_path,

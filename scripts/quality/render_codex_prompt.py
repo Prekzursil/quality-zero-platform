@@ -43,6 +43,7 @@ def _artifact_lines(artifacts: List[object]) -> str:
 def _repo_contract_lines(profile: dict) -> List[str]:
     """Handle repo contract lines."""
     codex_environment = profile.get("codex_environment", {})
+    codex_auth_file = codex_environment.get("auth_file", "~/.codex/auth.json")
     github_mutation_lane = profile.get("github_mutation_lane", "codex-private-runner")
     provider_ui_mode = profile.get("provider_ui_mode", "playwright-manual-login")
     return [
@@ -57,7 +58,7 @@ def _repo_contract_lines(profile: dict) -> List[str]:
             "- Codex environment verify command: "
             f"`{codex_environment.get('verify_command', profile['verify_command'])}`"
         ),
-        f"- Codex auth file: `{codex_environment.get('auth_file', '~/.codex/auth.json')}`",
+        f"- Codex auth file: `{codex_auth_file}`",
         (
             "- Codex environment network profile: "
             f"`{codex_environment.get('network_profile', 'unrestricted')}`"

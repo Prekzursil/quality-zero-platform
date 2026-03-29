@@ -33,7 +33,7 @@ TOTAL_KEYS = {
 CODACY_API_BASE = "https://api.codacy.com"
 CODACY_APP_API_BASE = "https://app.codacy.com/api/v3"
 JSON_ACCEPT_HEADER = "application/json"
-SCOPED_ANALYSIS_RETRY_ATTEMPTS = 24
+SCOPED_ANALYSIS_RETRY_ATTEMPTS = 72
 
 
 @dataclass(frozen=True)

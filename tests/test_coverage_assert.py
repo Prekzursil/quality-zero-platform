@@ -4,7 +4,6 @@ from __future__ import absolute_import
 
 import contextlib
 import os
-import runpy
 import tempfile
 import unittest
 from argparse import Namespace
@@ -16,19 +15,12 @@ from scripts.quality.assert_coverage_100 import (
     CoverageStats,
     _build_payload,
     _collect_coverage_inputs,
-    _matches_required_source,
-    _normalize_source_path,
     _render_md,
     parse_coverage_xml,
     parse_lcov,
     parse_named_path,
     coverage_sources_from_lcov,
     coverage_sources_from_xml,
-    evaluate,
-)
-from scripts.quality.coverage_support import (
-    _existing_repo_file_candidate,
-    _should_track_coverage_source,
 )
 
 ROOT = Path(__file__).resolve().parents[1]

@@ -256,10 +256,8 @@ class DeepScanZeroTests(unittest.TestCase):
             )
             self.assertEqual(check_deepscan_zero._github_sha(args), "abc123")
 
-    def test_validate_helpers_and_open_issue_mode_cover_missing_input_paths(
-        self,
-    ) -> None:
-        """Cover validate helpers and open issue mode cover missing input paths."""
+    def test_validate_helpers_report_missing_input_paths(self) -> None:
+        """Cover missing-input validation for both DeepScan modes."""
         self.assertEqual(
             check_deepscan_zero._validate_github_check_context_inputs("", "", ""),
             [
@@ -279,6 +277,8 @@ class DeepScanZeroTests(unittest.TestCase):
             ],
         )
 
+    def test_open_issue_mode_reports_nonzero_and_unparseable_totals(self) -> None:
+        """Cover open-issue mode totals and parse failures."""
         with patch.object(
             check_deepscan_zero, "_request_json", return_value={"total": 4}
         ):
@@ -375,20 +375,19 @@ class DeepScanZeroTests(unittest.TestCase):
         github_token = _placeholder_token("github")
         self._assert_policy_dispatch(args, github_token)
 
-    def test_main_handles_missing_inputs_success_and_runtime_exceptions(self) -> None:
-        """Cover main handles missing inputs success and runtime exceptions."""
-        args = Namespace(
-            policy_mode="open_issues_url",
-            repo="",
-            sha="",
-            github_context="DeepScan",
-            token=str(),
-            out_json="deepscan-zero/deepscan.json",
-            out_md="deepscan-zero/deepscan.md",
-        )
+    def test_main_reports_missing_inputs(self) -> None:
+        """Cover the failing DeepScan main path when inputs are missing."""
         self._assert_main_result(
             {
-                "args": args,
+                "args": Namespace(
+                    policy_mode="open_issues_url",
+                    repo="",
+                    sha="",
+                    github_context="DeepScan",
+                    token=str(),
+                    out_json="deepscan-zero/deepscan.json",
+                    out_md="deepscan-zero/deepscan.md",
+                ),
                 "env": {},
                 "expected_code": 1,
                 "expected_status": "fail",
@@ -396,8 +395,16 @@ class DeepScanZeroTests(unittest.TestCase):
             }
         )
 
+    def test_main_handles_success_and_write_report_failures(self) -> None:
+        """Cover successful DeepScan execution and report-write failures."""
         success_args = Namespace(
-            **{**args.__dict__, "token": _placeholder_token("api")}
+            policy_mode="open_issues_url",
+            repo="",
+            sha="",
+            github_context="DeepScan",
+            token=_placeholder_token("api"),
+            out_json="deepscan-zero/deepscan.json",
+            out_md="deepscan-zero/deepscan.md",
         )
         deepscan_env = {"DEEPSCAN_OPEN_ISSUES_URL": "https://deepscan.io/project/issues"}
         self._assert_main_result(
@@ -409,19 +416,6 @@ class DeepScanZeroTests(unittest.TestCase):
                 "expected_status": "pass",
             }
         )
-
-        assert_main_reports_provider_failure(
-            self,
-            check_deepscan_zero,
-            {
-                "env": deepscan_env,
-                "args": success_args,
-                "operation_name": "_evaluate_deepscan_policy",
-                "failure_message": "provider timeout",
-                "expected_finding": "DeepScan API request failed: provider timeout",
-            },
-        )
-
         self._assert_main_result(
             {
                 "args": success_args,
@@ -433,8 +427,31 @@ class DeepScanZeroTests(unittest.TestCase):
             }
         )
 
-    def test_parse_args_render_markdown_and_script_entrypoint(self) -> None:
-        """Cover parse args render markdown and script entrypoint."""
+    def test_main_reports_provider_runtime_exceptions(self) -> None:
+        """Cover provider failures raised during the DeepScan main path."""
+        deepscan_env = {"DEEPSCAN_OPEN_ISSUES_URL": "https://deepscan.io/project/issues"}
+        assert_main_reports_provider_failure(
+            self,
+            check_deepscan_zero,
+            {
+                "env": deepscan_env,
+                "args": Namespace(
+                    policy_mode="open_issues_url",
+                    repo="",
+                    sha="",
+                    github_context="DeepScan",
+                    token=_placeholder_token("api"),
+                    out_json="deepscan-zero/deepscan.json",
+                    out_md="deepscan-zero/deepscan.md",
+                ),
+                "operation_name": "_evaluate_deepscan_policy",
+                "failure_message": "provider timeout",
+                "expected_finding": "DeepScan API request failed: provider timeout",
+            },
+        )
+
+    def test_parse_args_and_markdown_helpers(self) -> None:
+        """Cover DeepScan parse-args defaults and markdown rendering."""
         with patch.object(sys, "argv", ["check_deepscan_zero.py"]):
             args = check_deepscan_zero._parse_args()
         self.assertEqual(args.github_context, "DeepScan")
@@ -450,6 +467,8 @@ class DeepScanZeroTests(unittest.TestCase):
         self.assertIn("`n/a`", markdown)
         self.assertIn("- None", markdown)
 
+    def test_script_entrypoint_helpers_exit_cleanly(self) -> None:
+        """Cover both script-entrypoint helper paths."""
         self.assertEqual(
             run_script_entrypoint_failure("scripts/quality/check_deepscan_zero.py"),
             1,

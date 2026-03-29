@@ -24,6 +24,21 @@ from scripts.quality.run_quality_zero_gate import (
 class RunQualityZeroGateTests(unittest.TestCase):
     """Run Quality Zero Gate Tests."""
 
+    @staticmethod
+    def _write_profile_fixture(tmp: Path) -> Path:
+        """Create the minimal profile fixture used by module-entrypoint tests."""
+        profile_path = tmp / "profile.json"
+        profile_path.write_text(
+            json.dumps(
+                {
+                    "slug": "Prekzursil/quality-zero-platform",
+                    "active_required_contexts": ["Coverage 100 Gate"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        return profile_path
+
     def test_parse_args_supports_expected_defaults(self) -> None:
         """Cover parse args supports expected defaults."""
         with patch(
@@ -233,16 +248,7 @@ class RunQualityZeroGateTests(unittest.TestCase):
                 sys.path.remove(repo_root)
             with tempfile.TemporaryDirectory() as tmpdir:
                 tmp = Path(tmpdir)
-                profile_path = tmp / "profile.json"
-                profile_path.write_text(
-                    json.dumps(
-                        {
-                            "slug": "Prekzursil/quality-zero-platform",
-                            "active_required_contexts": ["Coverage 100 Gate"],
-                        }
-                    ),
-                    encoding="utf-8",
-                )
+                profile_path = self._write_profile_fixture(tmp)
                 (tmp / "repo").mkdir()
                 (tmp / "platform" / "scripts" / "quality").mkdir(parents=True)
 

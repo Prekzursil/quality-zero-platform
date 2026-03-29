@@ -1044,6 +1044,43 @@ class CodacyZeroTests(unittest.TestCase):
         self.assertEqual(commit_query.sha, "targetsha")
         self.assertEqual(query_mock.call_args.args[2], ("gh", "github"))
 
+    def test_commit_scope_fallback_requires_target_sha(self) -> None:
+        """Do not trigger commit fallback when the target SHA is unavailable."""
+        self.assertIsNone(
+            check_codacy_zero._commit_scope_fallback(
+                self._base_query(pull_request="68", sha=""),
+                "token",
+                ("gh",),
+                [
+                    (
+                        "Codacy analysis for pull request 68 issues is still on "
+                        "oldsha (waiting for targetsha)."
+                    )
+                ],
+            )
+        )
+
+    def test_commit_scope_fallback_ignores_unresolved_commit_query(self) -> None:
+        """Keep the stale PR findings when the commit-scoped query is unresolved."""
+        with patch.object(
+            check_codacy_zero,
+            "_query_codacy_open_issues",
+            return_value=(None, [], RuntimeError("still pending")),
+        ):
+            self.assertIsNone(
+                check_codacy_zero._commit_scope_fallback(
+                    self._base_query(pull_request="68", sha="targetsha"),
+                    "token",
+                    ("gh",),
+                    [
+                        (
+                            "Codacy analysis for pull request 68 issues is still on "
+                            "oldsha (waiting for targetsha)."
+                        )
+                    ],
+                )
+            )
+
     def test_resolve_codacy_status_prefers_commit_scope_when_pr_payload_is_stale(
         self,
     ) -> None:
@@ -1085,6 +1122,37 @@ class CodacyZeroTests(unittest.TestCase):
         self.assertEqual(result.status, "pass")
         self.assertEqual(result.open_issues, 0)
         self.assertEqual(result.findings, [])
+
+    def test_support_detects_stale_pull_request_findings(self) -> None:
+        """Cover the shared stale PR finding matcher."""
+        self.assertTrue(
+            codacy_zero_support.stale_pull_request_findings(
+                "68",
+                [
+                    (
+                        "Codacy analysis for pull request 68 issues is still on "
+                        "oldsha (waiting for targetsha)."
+                    )
+                ],
+            )
+        )
+        self.assertFalse(
+            codacy_zero_support.stale_pull_request_findings(
+                "68",
+                ["Codacy reports 1 open issue (expected 0)."],
+            )
+        )
+        self.assertFalse(
+            codacy_zero_support.stale_pull_request_findings(
+                "",
+                [
+                    (
+                        "Codacy analysis for pull request 68 issues is still on "
+                        "oldsha (waiting for targetsha)."
+                    )
+                ],
+            )
+        )
 
     def test_payload_and_report_helpers(self) -> None:
         """Cover payload and report helpers."""

@@ -588,6 +588,54 @@ def _final_retry_findings(
     )
 
 
+def _has_stale_pull_request_findings(
+    pull_request: str,
+    findings: Sequence[str],
+) -> bool:
+    """Return whether Codacy is still serving stale pull-request-scoped data."""
+    normalized_pr = _preferred_text(pull_request)
+    if not normalized_pr:
+        return False
+    prefixes = (
+        f"Codacy is still analysing pull request {normalized_pr}.",
+        f"Codacy analysis for pull request {normalized_pr} is not available yet.",
+        f"Codacy analysis for pull request {normalized_pr} is still on ",
+        f"Codacy issues for pull request {normalized_pr} are not available yet.",
+        f"Codacy analysis for pull request {normalized_pr} issues is still on ",
+    )
+    return any(
+        any(item.startswith(prefix) for prefix in prefixes) for item in findings
+    )
+
+
+def _commit_scope_fallback(
+    base_query: CodacyQuery,
+    token: str,
+    provider_candidates: Sequence[str],
+    findings: Sequence[str],
+) -> Tuple[int | None, List[str]] | None:
+    """Return a commit-scoped fallback when pull-request-scoped Codacy data is stale."""
+    if not _has_stale_pull_request_findings(base_query.pull_request, findings):
+        return None
+    target_sha = _preferred_text(base_query.sha).lower()
+    if not target_sha:
+        return None
+    open_issues, commit_findings, last_exc = _query_codacy_open_issues(
+        CodacyQuery(
+            provider=base_query.provider,
+            owner=base_query.owner,
+            repo=base_query.repo,
+            pull_request="",
+            sha=target_sha,
+        ),
+        token,
+        provider_candidates,
+    )
+    if last_exc is not None or open_issues is None:
+        return None
+    return open_issues, commit_findings
+
+
 def load_codacy_findings_with_retry(
     base_query: CodacyQuery,
     token: str,
@@ -634,6 +682,14 @@ def _resolve_codacy_status(args: argparse.Namespace) -> CodacyStatusResult:
         token,
         _build_retry_config(base_query, provider_candidates),
     )
+    commit_fallback = _commit_scope_fallback(
+        base_query,
+        token,
+        provider_candidates,
+        findings,
+    )
+    if commit_fallback is not None:
+        open_issues, findings = commit_fallback
     return CodacyStatusResult(
         status=_codacy_status(findings, getattr(args, "policy_mode", "ratchet")),
         findings=findings,

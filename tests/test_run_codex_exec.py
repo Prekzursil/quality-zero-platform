@@ -43,7 +43,9 @@ class RunCodexExecTests(unittest.TestCase):
         return argv
 
     @staticmethod
-    def _build_main_args(tmpdir_path: Path, *, prompt_text: str = "hello codex") -> Namespace:
+    def _build_main_args(
+        tmpdir_path: Path, *, prompt_text: str = "hello codex"
+    ) -> Namespace:
         """Handle build main args."""
         repo_dir = tmpdir_path / "repo"
         repo_dir.mkdir()
@@ -63,16 +65,26 @@ class RunCodexExecTests(unittest.TestCase):
     @staticmethod
     def _expected_codex_command(args: Namespace) -> List[str]:
         """Handle expected codex command."""
-        with patch("scripts.quality.run_codex_exec.shutil.which", return_value=r"C:\Tools\codex.exe"):
+        with patch(
+            "scripts.quality.run_codex_exec.shutil.which",
+            return_value=r"C:\Tools\codex.exe",
+        ):
             return build_codex_command(args)
 
     @staticmethod
     def _run_main_with_patched_subprocess(args: Namespace, completed: SimpleNamespace):
         """Handle run main with patched subprocess."""
         json_log = Path(args.json_log)
-        with patch("scripts.quality.run_codex_exec._parse_args", return_value=args), patch(
-            "scripts.quality.run_codex_exec.shutil.which", return_value=r"C:\Tools\codex.exe"
-        ), patch("scripts.quality.run_codex_exec.subprocess.run", return_value=completed) as mock_run, patch("sys.stdout", new=io.StringIO()) as stdout, patch(
+        with patch(
+            "scripts.quality.run_codex_exec._parse_args", return_value=args
+        ), patch(
+            "scripts.quality.run_codex_exec.shutil.which",
+            return_value=r"C:\Tools\codex.exe",
+        ), patch(
+            "scripts.quality.run_codex_exec.subprocess.run", return_value=completed
+        ) as mock_run, patch(
+            "sys.stdout", new=io.StringIO()
+        ) as stdout, patch(
             "sys.stderr", new=io.StringIO()
         ) as stderr:
             exit_code = main()
@@ -130,7 +142,10 @@ class RunCodexExecTests(unittest.TestCase):
             config=["a=b", "c=d"],
         )
 
-        with patch("scripts.quality.run_codex_exec.shutil.which", return_value=r"C:\Tools\codex.exe"):
+        with patch(
+            "scripts.quality.run_codex_exec.shutil.which",
+            return_value=r"C:\Tools\codex.exe",
+        ):
             command = build_codex_command(args)
 
         self.assertEqual(command[:4], ["codex", "exec", "--full-auto", "-C"])
@@ -139,7 +154,10 @@ class RunCodexExecTests(unittest.TestCase):
         self.assertEqual(command[8], "-o")
         self.assertEqual(command[9], str(Path(args.output_last_message).resolve()))
         self.assertEqual(command[10], "-")
-        self.assertEqual(command[11:], ["-p", "trusted-profile", "-m", "gpt-5.4", "-c", "a=b", "-c", "c=d"])
+        self.assertEqual(
+            command[11:],
+            ["-p", "trusted-profile", "-m", "gpt-5.4", "-c", "a=b", "-c", "c=d"],
+        )
 
     def test_build_codex_command_omits_optional_flags_when_not_set(self):
         """Cover build codex command omits optional flags when not set."""
@@ -153,7 +171,10 @@ class RunCodexExecTests(unittest.TestCase):
             config=[],
         )
 
-        with patch("scripts.quality.run_codex_exec.shutil.which", return_value=r"C:\Tools\codex.exe"):
+        with patch(
+            "scripts.quality.run_codex_exec.shutil.which",
+            return_value=r"C:\Tools\codex.exe",
+        ):
             command = build_codex_command(args)
 
         self.assertEqual(
@@ -175,7 +196,9 @@ class RunCodexExecTests(unittest.TestCase):
 
     def test_validate_cli_token_rejects_control_characters(self):
         """Cover validate cli token rejects control characters."""
-        with self.assertRaisesRegex(ValueError, "--profile contains unsupported control characters"):
+        with self.assertRaisesRegex(
+            ValueError, "--profile contains unsupported control characters"
+        ):
             _validate_cli_token("trusted\nprofile", flag_name="--profile")
 
     def test_validate_cli_token_rejects_empty_values(self):
@@ -195,8 +218,13 @@ class RunCodexExecTests(unittest.TestCase):
             config=[],
         )
 
-        with patch("scripts.quality.run_codex_exec.shutil.which", return_value=r"C:\Tools\codex.exe"):
-            with self.assertRaisesRegex(ValueError, "--profile contains unsupported characters"):
+        with patch(
+            "scripts.quality.run_codex_exec.shutil.which",
+            return_value=r"C:\Tools\codex.exe",
+        ):
+            with self.assertRaisesRegex(
+                ValueError, "--profile contains unsupported characters"
+            ):
                 build_codex_command(args)
 
     def test_build_codex_command_requires_codex_executable_on_path(self):
@@ -212,7 +240,9 @@ class RunCodexExecTests(unittest.TestCase):
         )
 
         with patch("scripts.quality.run_codex_exec.shutil.which", return_value=None):
-            with self.assertRaisesRegex(FileNotFoundError, "Unable to locate required executable: codex"):
+            with self.assertRaisesRegex(
+                FileNotFoundError, "Unable to locate required executable: codex"
+            ):
                 build_codex_command(args)
 
     def test_run_codex_exec_invokes_subprocess_with_shell_false_and_stdin_prompt(self):
@@ -228,7 +258,10 @@ class RunCodexExecTests(unittest.TestCase):
 
         completed = SimpleNamespace(stdout='{"ok":true}', stderr="warn", returncode=7)
 
-        with patch("scripts.quality.run_codex_exec.shutil.which", return_value=r"C:\Tools\codex.exe"), patch(
+        with patch(
+            "scripts.quality.run_codex_exec.shutil.which",
+            return_value=r"C:\Tools\codex.exe",
+        ), patch(
             "scripts.quality.run_codex_exec.subprocess.run", return_value=completed
         ) as mock_run:
             result = _run_codex_exec(args, "hello codex")
@@ -246,7 +279,9 @@ class RunCodexExecTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)
             args = self._build_main_args(tmpdir_path)
-            completed = SimpleNamespace(stdout='{"ok":true}', stderr="warn", returncode=7)
+            completed = SimpleNamespace(
+                stdout='{"ok":true}', stderr="warn", returncode=7
+            )
             result = self._run_main_with_patched_subprocess(args, completed)
 
             self.assertEqual(result["exit_code"], 7)
@@ -269,8 +304,15 @@ class RunCodexExecTests(unittest.TestCase):
             prompt_file = tmpdir_path / "prompt.txt"
             prompt_file.write_text("hello from entrypoint", encoding="utf-8")
             output_last_message = tmpdir_path / "message.txt"
-            script_path = Path(__file__).resolve().parents[1] / "scripts" / "quality" / "run_codex_exec.py"
-            completed = SimpleNamespace(stdout='{"entry":true}', stderr="", returncode=0)
+            script_path = (
+                Path(__file__).resolve().parents[1]
+                / "scripts"
+                / "quality"
+                / "run_codex_exec.py"
+            )
+            completed = SimpleNamespace(
+                stdout='{"entry":true}', stderr="", returncode=0
+            )
             argv = [
                 str(script_path),
                 "--repo-dir",
@@ -281,9 +323,13 @@ class RunCodexExecTests(unittest.TestCase):
                 str(output_last_message),
             ]
 
-            with patch("shutil.which", return_value=r"C:\Tools\codex.exe"), patch("subprocess.run", return_value=completed) as mock_run, patch("sys.argv", argv), patch(
+            with patch("shutil.which", return_value=r"C:\Tools\codex.exe"), patch(
+                "subprocess.run", return_value=completed
+            ) as mock_run, patch("sys.argv", argv), patch(
                 "sys.stdout", new=io.StringIO()
-            ) as stdout, self.assertRaises(SystemExit) as result:
+            ) as stdout, self.assertRaises(
+                SystemExit
+            ) as result:
                 runpy.run_path(str(script_path), run_name="__main__")
 
             self.assertEqual(result.exception.code, 0)

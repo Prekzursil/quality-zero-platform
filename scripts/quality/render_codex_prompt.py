@@ -11,15 +11,23 @@ from typing import Iterable, List, cast
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.quality.control_plane import active_required_contexts, load_inventory, load_repo_profile
+from scripts.quality.control_plane import (
+    active_required_contexts,
+    load_inventory,
+    load_repo_profile,
+)
 
 
 def _parse_args() -> argparse.Namespace:
     """Handle parse args."""
-    parser = argparse.ArgumentParser(description="Render Codex remediation/backlog prompts from a repo profile.")
+    parser = argparse.ArgumentParser(
+        description="Render Codex remediation/backlog prompts from a repo profile."
+    )
     parser.add_argument("--inventory", default="")
     parser.add_argument("--repo-slug", required=True)
-    parser.add_argument("--lane", choices=("remediation", "backlog"), default="remediation")
+    parser.add_argument(
+        "--lane", choices=("remediation", "backlog"), default="remediation"
+    )
     parser.add_argument("--event-name", default="pull_request")
     parser.add_argument("--failure-context", default="")
     parser.add_argument("--artifact", action="append", default=[])
@@ -66,7 +74,9 @@ def _required_contexts_lines(profile: dict, *, event_name: str) -> List[str]:
 def _render_prompt(*args: object, **kwargs: object) -> str:
     """Handle render prompt."""
     if len(args) != 1:
-        raise TypeError("_render_prompt expects a single profile mapping positional argument")
+        raise TypeError(
+            "_render_prompt expects a single profile mapping positional argument"
+        )
     profile = args[0]
     if not isinstance(profile, dict):
         raise TypeError("_render_prompt expects profile to be a mapping")
@@ -81,7 +91,9 @@ def _render_prompt(*args: object, **kwargs: object) -> str:
         raise TypeError("_render_prompt expects artifacts to be iterable")
     artifacts = list(cast(Iterable[object], artifacts_value))
     if kwargs:
-        raise TypeError(f"Unexpected _render_prompt parameters: {', '.join(sorted(kwargs))}")
+        raise TypeError(
+            f"Unexpected _render_prompt parameters: {', '.join(sorted(kwargs))}"
+        )
     headline = "PR failure remediation" if lane == "remediation" else "backlog sweep"
     sections = [
         f"# Codex {headline}",

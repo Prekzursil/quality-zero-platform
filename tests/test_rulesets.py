@@ -29,8 +29,12 @@ class RulesetPayloadTests(unittest.TestCase):
         self.assertEqual(payload["name"], "quality-zero-platform / pbinfo-get-unsolved")
         self.assertIn("Coverage 100 Gate", contexts)
         self.assertIn("DeepScan", contexts)
-        self.assertEqual(payload["rules"][0]["parameters"]["required_approving_review_count"], 0)
-        self.assertFalse(payload["rules"][0]["parameters"]["required_review_thread_resolution"])
+        self.assertEqual(
+            payload["rules"][0]["parameters"]["required_approving_review_count"], 0
+        )
+        self.assertFalse(
+            payload["rules"][0]["parameters"]["required_review_thread_resolution"]
+        )
         self.assertEqual(profile["default_branch"], "main")
 
     def test_reframe_ruleset_payload_uses_live_required_now_not_target(self) -> None:
@@ -52,7 +56,9 @@ class RulesetPayloadTests(unittest.TestCase):
         self.assertIn("Chromatic Playwright", profile["required_contexts"]["target"])
         self.assertIn("qlty check", profile["required_contexts"]["target"])
 
-    def test_env_inspector_ruleset_payload_matches_emitted_required_contexts(self) -> None:
+    def test_env_inspector_ruleset_payload_matches_emitted_required_contexts(
+        self,
+    ) -> None:
         """Cover env inspector ruleset payload matches emitted required contexts."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/env-inspector")
@@ -87,13 +93,18 @@ class RulesetPayloadTests(unittest.TestCase):
         self.assertIn("DeepSource: Shell", contexts)
         self.assertIn("DeepSource: Secrets", contexts)
 
-    def test_quality_zero_platform_self_ruleset_enforces_qlty_coverage_contexts(self) -> None:
+    def test_quality_zero_platform_self_ruleset_enforces_qlty_coverage_contexts(
+        self,
+    ) -> None:
         """Cover quality zero platform self ruleset enforces qlty coverage contexts."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
         payload = build_ruleset_payload(profile)
 
-        contexts = [entry["context"] for entry in payload["rules"][1]["parameters"]["required_status_checks"]]
+        contexts = [
+            entry["context"]
+            for entry in payload["rules"][1]["parameters"]["required_status_checks"]
+        ]
 
         self.assertNotIn("qlty check", contexts)
         self.assertNotIn("qlty coverage", contexts)
@@ -103,6 +114,8 @@ class RulesetPayloadTests(unittest.TestCase):
         self.assertNotIn("qlty check", profile["required_contexts"]["target"])
         self.assertNotIn("qlty coverage", profile["required_contexts"]["target"])
         self.assertNotIn("qlty coverage diff", profile["required_contexts"]["target"])
-        self.assertNotIn("Codacy Static Code Analysis", profile["required_contexts"]["target"])
+        self.assertNotIn(
+            "Codacy Static Code Analysis", profile["required_contexts"]["target"]
+        )
         self.assertNotIn("DeepScan", profile["required_contexts"]["target"])
         self.assertIn("QLTY Zero", contexts)

@@ -16,7 +16,9 @@ class ControlPlaneAdminTests(unittest.TestCase):
         """Handle write repo."""
         (root / "inventory").mkdir(parents=True, exist_ok=True)
         (root / "profiles" / "repos").mkdir(parents=True, exist_ok=True)
-        (root / "inventory" / "repos.yml").write_text("version: 1\nrepos: []\n", encoding="utf-8")
+        (root / "inventory" / "repos.yml").write_text(
+            "version: 1\nrepos: []\n", encoding="utf-8"
+        )
 
     def test_enroll_repo_appends_inventory_entry_and_profile(self) -> None:
         """Cover enroll repo appends inventory entry and profile."""
@@ -36,7 +38,9 @@ class ControlPlaneAdminTests(unittest.TestCase):
             )
 
             inventory = (root / "inventory" / "repos.yml").read_text(encoding="utf-8")
-            profile = (root / "profiles" / "repos" / "example-repo.yml").read_text(encoding="utf-8")
+            profile = (root / "profiles" / "repos" / "example-repo.yml").read_text(
+                encoding="utf-8"
+            )
 
         self.assertIn("slug: Prekzursil/example-repo", inventory)
         self.assertIn("profile: example-repo", inventory)
@@ -50,11 +54,22 @@ class ControlPlaneAdminTests(unittest.TestCase):
             self._write_repo(root)
             profile_path = root / "profiles" / "repos" / "example-repo.yml"
             profile_path.write_text(
-                "slug: Prekzursil/example-repo\n" "stack: python-web\n" "enabled_scanners:\n" "  sonar: true\n" "coverage:\n" "  assert_mode:\n" "    default: enforce\n",
+                "slug: Prekzursil/example-repo\n"
+                "stack: python-web\n"
+                "enabled_scanners:\n"
+                "  sonar: true\n"
+                "coverage:\n"
+                "  assert_mode:\n"
+                "    default: enforce\n",
                 encoding="utf-8",
             )
 
-            control_plane_admin.set_scanner(repo_root=root, profile_id="example-repo", scanner="sonar", enabled=False)
+            control_plane_admin.set_scanner(
+                repo_root=root,
+                profile_id="example-repo",
+                scanner="sonar",
+                enabled=False,
+            )
             control_plane_admin.set_issue_policy(
                 repo_root=root,
                 profile_id="example-repo",
@@ -83,7 +98,11 @@ class ControlPlaneAdminTests(unittest.TestCase):
             self._write_repo(root)
             profile_path = root / "profiles" / "repos" / "example-repo.yml"
             profile_path.write_text(
-                "slug: Prekzursil/example-repo\n" "stack: python-web\n" "required_contexts:\n" "  target:\n" "    - Coverage 100 Gate\n",
+                "slug: Prekzursil/example-repo\n"
+                "stack: python-web\n"
+                "required_contexts:\n"
+                "  target:\n"
+                "    - Coverage 100 Gate\n",
                 encoding="utf-8",
             )
 

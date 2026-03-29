@@ -103,7 +103,9 @@ invalid codacy.dashboard_url
     @staticmethod
     def _invalid_profile_findings() -> List[str]:
         """Handle invalid profile findings."""
-        return ControlPlaneExtraTests._INVALID_PROFILE_FINDINGS_BLOCK.strip().splitlines()
+        return (
+            ControlPlaneExtraTests._INVALID_PROFILE_FINDINGS_BLOCK.strip().splitlines()
+        )
 
     @staticmethod
     def _expected_issue_policy() -> Dict[str, str]:
@@ -128,7 +130,9 @@ invalid codacy.dashboard_url
             "java": {"distribution": "", "version": ""},
         }
 
-    def test_normalize_coverage_helpers_filter_invalid_entries_and_support_legacy_path(self) -> None:
+    def test_normalize_coverage_helpers_filter_invalid_entries_and_support_legacy_path(
+        self,
+    ) -> None:
         """Cover normalize coverage helpers filter invalid entries and support legacy path."""
         self.assertEqual(repo_root(), ROOT)
         self.assertEqual(_normalize_coverage_inputs("not-a-list"), [])
@@ -139,7 +143,9 @@ invalid codacy.dashboard_url
                 "skip-me",
             ]
         )
-        self.assertEqual(normalized, [{"format": "xml", "name": "platform", "path": "coverage.xml"}])
+        self.assertEqual(
+            normalized, [{"format": "xml", "name": "platform", "path": "coverage.xml"}]
+        )
         self.assertEqual(
             _infer_coverage_inputs({"artifact_path": "coverage.xml"}),
             [{"format": "xml", "name": "default", "path": "coverage.xml"}],
@@ -163,7 +169,9 @@ invalid codacy.dashboard_url
     def test_required_context_normalization_wrappers_cover_helper_paths(self) -> None:
         """Cover required context normalization wrappers cover helper paths."""
         self.assertEqual(
-            _normalize_required_contexts({"always": ["Coverage 100 Gate"], "pull_request_only": ["QLTY Zero"]}),
+            _normalize_required_contexts(
+                {"always": ["Coverage 100 Gate"], "pull_request_only": ["QLTY Zero"]}
+            ),
             {
                 "always": ["Coverage 100 Gate"],
                 "pull_request_only": ["QLTY Zero"],
@@ -172,7 +180,9 @@ invalid codacy.dashboard_url
             },
         )
         self.assertEqual(
-            _merge_required_contexts({"always": ["Coverage 100 Gate"]}, {"pull_request_only": ["QLTY Zero"]}),
+            _merge_required_contexts(
+                {"always": ["Coverage 100 Gate"]}, {"pull_request_only": ["QLTY Zero"]}
+            ),
             {
                 "always": ["Coverage 100 Gate"],
                 "pull_request_only": ["QLTY Zero"],
@@ -188,11 +198,15 @@ invalid codacy.dashboard_url
             self._expected_python_only_setup(),
         )
         self.assertEqual(
-            _normalize_coverage({"runner": "", "shell": "", "setup": {"python": "3.12"}})["setup"]["python"],
+            _normalize_coverage(
+                {"runner": "", "shell": "", "setup": {"python": "3.12"}}
+            )["setup"]["python"],
             "3.12",
         )
         self.assertEqual(
-            _normalize_codex_environment({}, verify_command="bash scripts/verify")["verify_command"],
+            _normalize_codex_environment({}, verify_command="bash scripts/verify")[
+                "verify_command"
+            ],
             "bash scripts/verify",
         )
         self.assertEqual(
@@ -205,7 +219,11 @@ invalid codacy.dashboard_url
         merged = _apply_inventory_overrides(
             {"verify_command": "bash scripts/verify"},
             {
-                "repo_entry": {"default_branch": "main", "rollout": "phase1", "notes": "inventory note"},
+                "repo_entry": {
+                    "default_branch": "main",
+                    "rollout": "phase1",
+                    "notes": "inventory note",
+                },
                 "repo_slug": "Prekzursil/quality-zero-platform",
                 "profile_id": "quality-zero-platform",
                 "stack_id": "python-web",
@@ -213,7 +231,11 @@ invalid codacy.dashboard_url
             },
         )
         expected = InventoryOverrides(
-            repo_entry={"default_branch": "main", "rollout": "phase1", "notes": "inventory note"},
+            repo_entry={
+                "default_branch": "main",
+                "rollout": "phase1",
+                "notes": "inventory note",
+            },
             repo_slug="Prekzursil/quality-zero-platform",
             profile_id="quality-zero-platform",
             stack_id="python-web",
@@ -222,9 +244,13 @@ invalid codacy.dashboard_url
         self.assertEqual(merged["slug"], expected.repo_slug)
         self.assertEqual(merged["profile_id"], expected.profile_id)
         self.assertEqual(merged["stack"], expected.stack_id)
-        self.assertEqual(merged["required_contexts_mode"], expected.required_contexts_mode)
+        self.assertEqual(
+            merged["required_contexts_mode"], expected.required_contexts_mode
+        )
 
-    def test_load_stack_and_profile_resolution_raise_on_invalid_inventory_entries(self) -> None:
+    def test_load_stack_and_profile_resolution_raise_on_invalid_inventory_entries(
+        self,
+    ) -> None:
         """Cover load stack and profile resolution raise on invalid inventory entries."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -236,9 +262,15 @@ invalid codacy.dashboard_url
                 "repos:\n" "  - slug: Example/Repo\n",
                 encoding="utf-8",
             )
-            (root / "profiles" / "stacks" / "cycle-a.yml").write_text("extends: cycle-b\n", encoding="utf-8")
-            (root / "profiles" / "stacks" / "cycle-b.yml").write_text("extends: cycle-a\n", encoding="utf-8")
-            (root / "profiles" / "repos" / "example.yml").write_text("verify_command: bash scripts/verify\n", encoding="utf-8")
+            (root / "profiles" / "stacks" / "cycle-a.yml").write_text(
+                "extends: cycle-b\n", encoding="utf-8"
+            )
+            (root / "profiles" / "stacks" / "cycle-b.yml").write_text(
+                "extends: cycle-a\n", encoding="utf-8"
+            )
+            (root / "profiles" / "repos" / "example.yml").write_text(
+                "verify_command: bash scripts/verify\n", encoding="utf-8"
+            )
 
             inventory = load_inventory(inventory_path)
 
@@ -279,10 +311,16 @@ invalid codacy.dashboard_url
 
         findings = validate_profile(profile)
 
-        self.assertTrue(any("unexpected profile key `unexpected`" in item for item in findings))
-        self.assertTrue(any("unexpected coverage key `mystery`" in item for item in findings))
+        self.assertTrue(
+            any("unexpected profile key `unexpected`" in item for item in findings)
+        )
+        self.assertTrue(
+            any("unexpected coverage key `mystery`" in item for item in findings)
+        )
 
-    def test_validate_profile_shape_allows_command_shell_before_normalization(self) -> None:
+    def test_validate_profile_shape_allows_command_shell_before_normalization(
+        self,
+    ) -> None:
         """Cover validate profile shape allows command shell before normalization."""
         findings = profile_shape.validate_profile_shape(
             {
@@ -294,9 +332,13 @@ invalid codacy.dashboard_url
             slug="Prekzursil/codex-session-manager",
         )
 
-        self.assertFalse(any("unexpected coverage key `command_shell`" in item for item in findings))
+        self.assertFalse(
+            any("unexpected coverage key `command_shell`" in item for item in findings)
+        )
 
-    def test_additional_contract_validators_cover_repo_lookup_target_and_runner_label_edges(self) -> None:
+    def test_additional_contract_validators_cover_repo_lookup_target_and_runner_label_edges(
+        self,
+    ) -> None:
         """Cover additional contract validators cover repo lookup target and runner label edges."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         with self.assertRaisesRegex(KeyError, "Repo Missing/Repo not found"):
@@ -309,8 +351,15 @@ invalid codacy.dashboard_url
 
         findings = validate_profile(profile)
 
-        self.assertTrue(any("runner_labels must include self-hosted" in item for item in findings))
-        self.assertTrue(any("required_contexts.target is missing Coverage 100 Gate" in item for item in findings))
+        self.assertTrue(
+            any("runner_labels must include self-hosted" in item for item in findings)
+        )
+        self.assertTrue(
+            any(
+                "required_contexts.target is missing Coverage 100 Gate" in item
+                for item in findings
+            )
+        )
 
     def test_visual_pair_and_optional_validators_cover_remaining_branches(self) -> None:
         """Cover visual pair and optional validators cover remaining branches."""
@@ -326,13 +375,30 @@ invalid codacy.dashboard_url
         self.assertEqual(_validate_vendor_urls(plain_profile), [])
 
         visual_profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
-        visual_profile["required_contexts"]["required_now"] = [item for item in visual_profile["required_contexts"]["required_now"] if item != "Applitools Visual"]
+        visual_profile["required_contexts"]["required_now"] = [
+            item
+            for item in visual_profile["required_contexts"]["required_now"]
+            if item != "Applitools Visual"
+        ]
 
         findings = validate_profile(visual_profile)
 
-        self.assertTrue(any("visual_pair_required needs both Chromatic and Applitools contexts in required_now" in item for item in findings))
+        self.assertTrue(
+            any(
+                "visual_pair_required needs both Chromatic and Applitools contexts in required_now"
+                in item
+                for item in findings
+            )
+        )
         non_visual = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
-        self.assertEqual([item for item in validate_profile(non_visual) if "visual_pair_required" in item], [])
+        self.assertEqual(
+            [
+                item
+                for item in validate_profile(non_visual)
+                if "visual_pair_required" in item
+            ],
+            [],
+        )
 
     def test_main_print_modes_emit_expected_json(self) -> None:
         """Cover main print modes emit expected json."""
@@ -359,7 +425,9 @@ invalid codacy.dashboard_url
         ruleset_payload = cast(Dict[str, Any], outputs[1])
         contexts_payload = cast(List[str], outputs[2])
         self.assertEqual(profile_payload["slug"], "Prekzursil/quality-zero-platform")
-        self.assertEqual(ruleset_payload["repo_slug"], "Prekzursil/quality-zero-platform")
+        self.assertEqual(
+            ruleset_payload["repo_slug"], "Prekzursil/quality-zero-platform"
+        )
         self.assertIn("Coverage 100 Gate", contexts_payload)
 
     def test_script_entrypoint_inserts_repo_root_when_missing(self) -> None:
@@ -380,7 +448,11 @@ invalid codacy.dashboard_url
                 "--print",
                 "contexts",
             ],
-        ), patch.object(sys, "path", trimmed_sys_path[:]), contextlib.redirect_stdout(buffer), self.assertRaises(SystemExit) as result:
+        ), patch.object(sys, "path", trimmed_sys_path[:]), contextlib.redirect_stdout(
+            buffer
+        ), self.assertRaises(
+            SystemExit
+        ) as result:
             runpy.run_path(str(CONTROL_PLANE_PATH), run_name="__main__")
 
         self.assertEqual(result.exception.code, 0)

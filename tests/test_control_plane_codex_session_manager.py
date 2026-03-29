@@ -6,7 +6,12 @@ import unittest
 from pathlib import Path
 from typing import List, Set
 
-from scripts.quality.control_plane import active_required_contexts, load_inventory, load_repo_profile, validate_profile
+from scripts.quality.control_plane import (
+    active_required_contexts,
+    load_inventory,
+    load_repo_profile,
+    validate_profile,
+)
 
 from tests.control_plane_support import ControlPlaneAssertions
 
@@ -36,7 +41,8 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
         )
         self._assert_context_subset(
             pr_contexts,
-            self._zero_gate_provider_contexts() | {"build-test", "analyze", "scan", "dependency-review"},
+            self._zero_gate_provider_contexts()
+            | {"build-test", "analyze", "scan", "dependency-review"},
         )
         self._assert_context_subset(
             ruleset_contexts,
@@ -78,7 +84,10 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
         self.assertEqual(profile["coverage"]["shell"], "pwsh")
         self.assertNotIn("command_shell", profile["coverage"])
         self.assertEqual(
-            [(item["name"], item["path"], item["format"]) for item in profile["coverage"]["inputs"]],
+            [
+                (item["name"], item["path"], item["format"])
+                for item in profile["coverage"]["inputs"]
+            ],
             [
                 ("app", "coverage/app/coverage.cobertura.xml", "xml"),
                 ("core", "coverage/core/coverage.cobertura.xml", "xml"),
@@ -93,7 +102,10 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
                 "src/CodexSessionManager.Storage/",
             ],
         )
-        self.assertEqual(profile["vendors"]["sonar"]["project_key"], "Prekzursil_codex-session-manager")
+        self.assertEqual(
+            profile["vendors"]["sonar"]["project_key"],
+            "Prekzursil_codex-session-manager",
+        )
 
     def test_codex_session_manager_uses_repo_specific_required_contexts(self) -> None:
         """Cover codex session manager uses repo specific required contexts."""
@@ -143,7 +155,9 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
             self.assertNotIn(unexpected, push_contexts)
             self.assertNotIn(unexpected, pr_contexts)
 
-    def test_codex_session_manager_profile_validation_accepts_emitted_required_now_contexts(self) -> None:
+    def test_codex_session_manager_profile_validation_accepts_emitted_required_now_contexts(
+        self,
+    ) -> None:
         """Cover codex session manager profile validation accepts emitted required now contexts."""
         findings = validate_profile(self._load_profile())
         self.assertEqual(
@@ -151,7 +165,9 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
             [],
         )
 
-    def test_codex_session_manager_profile_tracks_windows_wpf_rollout_contract(self) -> None:
+    def test_codex_session_manager_profile_tracks_windows_wpf_rollout_contract(
+        self,
+    ) -> None:
         """Cover codex session manager profile tracks windows wpf rollout contract."""
         profile = self._load_profile()
 

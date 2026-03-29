@@ -19,7 +19,10 @@ from scripts.quality.common import (
     _deep_merge as common_deep_merge,
     dedupe_strings,
 )
-from scripts.quality.control_plane_vendors import finalize_vendors, normalize_visual_lane
+from scripts.quality.control_plane_vendors import (
+    finalize_vendors,
+    normalize_visual_lane,
+)
 from scripts.quality import profile_contract_validation
 from scripts.quality.profile_normalization import (
     normalize_deps as common_normalize_deps,
@@ -96,7 +99,9 @@ def load_inventory(path: Path | str = DEFAULT_INVENTORY_PATH) -> Dict[str, Any]:
     return payload
 
 
-def _load_stack(inventory: Dict[str, Any], stack_id: str, seen: Set[str] | None = None) -> Dict[str, Any]:
+def _load_stack(
+    inventory: Dict[str, Any], stack_id: str, seen: Set[str] | None = None
+) -> Dict[str, Any]:
     """Handle load stack."""
     if not stack_id:
         raise ValueError("stack id is required")
@@ -124,7 +129,9 @@ def _normalize_required_contexts(raw: Dict[str, Any]) -> Dict[str, List[str]]:
     return common_normalize_required_contexts(raw)
 
 
-def _merge_required_contexts(base: Dict[str, Any], overlay: Dict[str, Any]) -> Dict[str, List[str]]:
+def _merge_required_contexts(
+    base: Dict[str, Any], overlay: Dict[str, Any]
+) -> Dict[str, List[str]]:
     """Handle merge required contexts."""
     return common_merge_required_contexts(base, overlay)
 
@@ -160,7 +167,9 @@ def _normalize_coverage(raw: Dict[str, Any]) -> Dict[str, Any]:
     return common_normalize_coverage(raw)
 
 
-def _normalize_codex_environment(raw: Dict[str, Any], *, verify_command: str) -> Dict[str, Any]:
+def _normalize_codex_environment(
+    raw: Dict[str, Any], *, verify_command: str
+) -> Dict[str, Any]:
     """Handle normalize codex environment."""
     return common_normalize_codex_environment(raw, verify_command=verify_command)
 
@@ -172,7 +181,9 @@ def _normalize_issue_policy(raw: Dict[str, Any]) -> Dict[str, str]:
 
 def _resolve_repo_sources(inventory: Dict[str, Any], repo_slug: str) -> RepoSources:
     """Handle resolve repo sources."""
-    repo_entry = next((item for item in inventory["repos"] if item.get("slug") == repo_slug), None)
+    repo_entry = next(
+        (item for item in inventory["repos"] if item.get("slug") == repo_slug), None
+    )
     if repo_entry is None:
         raise KeyError(f"Repo {repo_slug} not found in inventory")
 
@@ -180,33 +191,62 @@ def _resolve_repo_sources(inventory: Dict[str, Any], repo_slug: str) -> RepoSour
     if not profile_id:
         raise ValueError(f"Repo {repo_slug} is missing a profile id")
 
-    profile_path = _inventory_root(inventory) / "profiles" / "repos" / f"{profile_id}.yml"
+    profile_path = (
+        _inventory_root(inventory) / "profiles" / "repos" / f"{profile_id}.yml"
+    )
     repo_profile = _load_yaml(profile_path)
     stack_id = str(repo_profile.get("stack", "")).strip()
     stack_profile = _load_stack(inventory, stack_id)
     return RepoSources(repo_entry, profile_id, repo_profile, stack_id, stack_profile)
 
 
-def _merge_repo_profile(stack_profile: Dict[str, Any], repo_profile: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
+def _merge_repo_profile(
+    stack_profile: Dict[str, Any], repo_profile: Dict[str, Any]
+) -> Tuple[Dict[str, Any], str]:
     """Handle merge repo profile."""
     merged = _deep_merge(stack_profile, repo_profile)
-    required_contexts_mode = str(repo_profile.get("required_contexts_mode", "merge")).strip() or "merge"
+    required_contexts_mode = (
+        str(repo_profile.get("required_contexts_mode", "merge")).strip() or "merge"
+    )
     if required_contexts_mode == "replace":
-        merged["required_contexts"] = common_normalize_required_contexts(repo_profile.get("required_contexts", {}))
+        merged["required_contexts"] = common_normalize_required_contexts(
+            repo_profile.get("required_contexts", {})
+        )
     else:
         merged["required_contexts"] = common_merge_required_contexts(
             stack_profile.get("required_contexts", {}),
             repo_profile.get("required_contexts", {}),
         )
-    merged["required_secrets"] = dedupe_strings([*stack_profile.get("required_secrets", []), *repo_profile.get("required_secrets", [])])
-    merged["conditional_secrets"] = dedupe_strings([*stack_profile.get("conditional_secrets", []), *repo_profile.get("conditional_secrets", [])])
-    merged["required_vars"] = dedupe_strings([*stack_profile.get("required_vars", []), *repo_profile.get("required_vars", [])])
-    merged["providers"] = _deep_merge(stack_profile.get("providers", {}), repo_profile.get("providers", {}))
-    merged["vendors"] = _deep_merge(stack_profile.get("vendors", {}), repo_profile.get("vendors", {}))
+    merged["required_secrets"] = dedupe_strings(
+        [
+            *stack_profile.get("required_secrets", []),
+            *repo_profile.get("required_secrets", []),
+        ]
+    )
+    merged["conditional_secrets"] = dedupe_strings(
+        [
+            *stack_profile.get("conditional_secrets", []),
+            *repo_profile.get("conditional_secrets", []),
+        ]
+    )
+    merged["required_vars"] = dedupe_strings(
+        [
+            *stack_profile.get("required_vars", []),
+            *repo_profile.get("required_vars", []),
+        ]
+    )
+    merged["providers"] = _deep_merge(
+        stack_profile.get("providers", {}), repo_profile.get("providers", {})
+    )
+    merged["vendors"] = _deep_merge(
+        stack_profile.get("vendors", {}), repo_profile.get("vendors", {})
+    )
     return merged, required_contexts_mode
 
 
-def _apply_inventory_overrides(merged: Dict[str, Any], overrides: InventoryOverrides | Dict[str, Any]) -> Dict[str, Any]:
+def _apply_inventory_overrides(
+    merged: Dict[str, Any], overrides: InventoryOverrides | Dict[str, Any]
+) -> Dict[str, Any]:
     """Handle apply inventory overrides."""
     if not isinstance(overrides, InventoryOverrides):
         overrides = InventoryOverrides(
@@ -221,7 +261,9 @@ def _apply_inventory_overrides(merged: Dict[str, Any], overrides: InventoryOverr
         merged,
         {
             "slug": overrides.repo_slug,
-            "default_branch": overrides.repo_entry.get("default_branch", merged.get("default_branch", "main")),
+            "default_branch": overrides.repo_entry.get(
+                "default_branch", merged.get("default_branch", "main")
+            ),
             "rollout": overrides.repo_entry.get("rollout", merged.get("rollout", "")),
             "rollout_notes": overrides.repo_entry.get("notes", ""),
             "profile_id": overrides.profile_id,
@@ -236,16 +278,33 @@ def _finalize_repo_profile(merged: Dict[str, Any], repo_slug: str) -> Dict[str, 
     owner, repo_name = repo_slug.split("/", 1)
     merged["owner"] = owner
     merged["repo_name"] = repo_name
-    merged["verify_command"] = str(merged.get("verify_command", "bash scripts/verify")).strip()
-    merged["github_mutation_lane"] = str(merged.get("github_mutation_lane", "codex-private-runner")).strip() or "codex-private-runner"
-    merged["codex_auth_lane"] = str(merged.get("codex_auth_lane", "chatgpt-account")).strip() or "chatgpt-account"
-    merged["provider_ui_mode"] = str(merged.get("provider_ui_mode", "playwright-manual-login")).strip() or "playwright-manual-login"
+    merged["verify_command"] = str(
+        merged.get("verify_command", "bash scripts/verify")
+    ).strip()
+    merged["github_mutation_lane"] = (
+        str(merged.get("github_mutation_lane", "codex-private-runner")).strip()
+        or "codex-private-runner"
+    )
+    merged["codex_auth_lane"] = (
+        str(merged.get("codex_auth_lane", "chatgpt-account")).strip()
+        or "chatgpt-account"
+    )
+    merged["provider_ui_mode"] = (
+        str(merged.get("provider_ui_mode", "playwright-manual-login")).strip()
+        or "playwright-manual-login"
+    )
     merged["required_secrets"] = dedupe_strings(merged.get("required_secrets", []))
-    merged["conditional_secrets"] = dedupe_strings(merged.get("conditional_secrets", []))
+    merged["conditional_secrets"] = dedupe_strings(
+        merged.get("conditional_secrets", [])
+    )
     merged["required_vars"] = dedupe_strings(merged.get("required_vars", []))
-    merged["required_contexts"] = common_normalize_required_contexts(merged.get("required_contexts", {}))
+    merged["required_contexts"] = common_normalize_required_contexts(
+        merged.get("required_contexts", {})
+    )
     merged["enabled_scanners"] = merged.get("enabled_scanners", {})
-    merged["issue_policy"] = common_normalize_issue_policy(merged.get("issue_policy", {}))
+    merged["issue_policy"] = common_normalize_issue_policy(
+        merged.get("issue_policy", {})
+    )
     merged["deps"] = common_normalize_deps(merged.get("deps", {}))
     merged["enabled_scanners"]["deps"] = bool(merged["deps"]["enabled"])
     merged["coverage"] = common_normalize_coverage(merged.get("coverage", {}))
@@ -255,8 +314,12 @@ def _finalize_repo_profile(merged: Dict[str, Any], repo_slug: str) -> Dict[str, 
     )
     merged["visual_pair_required"] = bool(merged.get("visual_pair_required", False))
     merged["visual_lane"] = normalize_visual_lane(merged.get("visual_lane", {}))
-    merged["ruleset_mode"] = str(merged.get("ruleset_mode", "strict-zero-phase1")).strip()
-    merged["preserve_public_check_names"] = bool(merged.get("preserve_public_check_names", True))
+    merged["ruleset_mode"] = str(
+        merged.get("ruleset_mode", "strict-zero-phase1")
+    ).strip()
+    merged["preserve_public_check_names"] = bool(
+        merged.get("preserve_public_check_names", True)
+    )
     vendor_source = _deep_merge(merged.get("vendors", {}), merged.get("providers", {}))
     merged["vendors"] = finalize_vendors(merged, vendor_source)
     merged["providers"] = deepcopy(merged["vendors"])
@@ -329,7 +392,9 @@ def build_ruleset_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
                 "parameters": {
                     "strict_required_status_checks_policy": True,
                     "do_not_enforce_on_create": False,
-                    "required_status_checks": [{"context": name, "integration_id": None} for name in contexts],
+                    "required_status_checks": [
+                        {"context": name, "integration_id": None} for name in contexts
+                    ],
                 },
             },
             {"type": "non_fast_forward"},
@@ -340,7 +405,9 @@ def build_ruleset_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
 
 def validate_profile(profile: Dict[str, Any]) -> List[str]:
     """Handle validate profile."""
-    return profile_contract_validation.validate_profile(profile, active_required_contexts_fn=active_required_contexts)
+    return profile_contract_validation.validate_profile(
+        profile, active_required_contexts_fn=active_required_contexts
+    )
 
 
 def _validate_coverage_contract(profile: Dict[str, Any]) -> List[str]:
@@ -355,11 +422,15 @@ def _validate_vendor_urls(profile: Dict[str, Any]) -> List[str]:
 
 def _parse_args() -> argparse.Namespace:
     """Handle parse args."""
-    parser = argparse.ArgumentParser(description="Resolve control-plane repo profiles and rulesets.")
+    parser = argparse.ArgumentParser(
+        description="Resolve control-plane repo profiles and rulesets."
+    )
     parser.add_argument("--inventory", default=str(DEFAULT_INVENTORY_PATH))
     parser.add_argument("--repo-slug", required=True)
     parser.add_argument("--event-name", default="pull_request")
-    parser.add_argument("--print", choices=("profile", "ruleset", "contexts"), default="profile")
+    parser.add_argument(
+        "--print", choices=("profile", "ruleset", "contexts"), default="profile"
+    )
     return parser.parse_args()
 
 
@@ -373,7 +444,11 @@ def main() -> int:
     elif args.print == "ruleset":
         print(json.dumps(build_ruleset_payload(profile), indent=2, sort_keys=True))
     else:
-        print(json.dumps(active_required_contexts(profile, event_name=args.event_name), indent=2))
+        print(
+            json.dumps(
+                active_required_contexts(profile, event_name=args.event_name), indent=2
+            )
+        )
     return 0
 
 

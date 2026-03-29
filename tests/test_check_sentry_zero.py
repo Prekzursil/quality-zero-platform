@@ -110,7 +110,9 @@ class SentryZeroTests(unittest.TestCase):
             },
             clear=False,
         ):
-            projects = sentry_module._collect_projects(["quality-zero-platform", "quality-zero-platform"])
+            projects = sentry_module._collect_projects(
+                ["quality-zero-platform", "quality-zero-platform"]
+            )
 
         self.assertEqual(
             projects,
@@ -137,7 +139,11 @@ class SentryZeroTests(unittest.TestCase):
         """Render the zero-findings markdown shape for empty project results."""
         self.assertEqual(
             sentry_module._issues_url("prek/zursil", "event link"),
-            ("https://sentry.io/api/0/projects/prek%2Fzursil/" "event%20link/issues/?query=is%3Aunresolved&limit=1" "&project=event%2520link"),
+            (
+                "https://sentry.io/api/0/projects/prek%2Fzursil/"
+                "event%20link/issues/?query=is%3Aunresolved&limit=1"
+                "&project=event%2520link"
+            ),
         )
         markdown = sentry_module._render_md(
             {
@@ -229,7 +235,10 @@ class SentryZeroTests(unittest.TestCase):
         )
         self.assertEqual(
             findings,
-            ["Sentry project quality-zero-platform has 2 unresolved issues " "(expected 0)."],
+            [
+                "Sentry project quality-zero-platform has 2 unresolved issues "
+                "(expected 0)."
+            ],
         )
 
     def test_collect_project_results_validates_payload_and_reraises_non_404_http_errors(
@@ -452,7 +461,13 @@ class SentryZeroTests(unittest.TestCase):
                 "--out-md",
                 str(Path(tmpdir) / "sentry.md"),
             ],
-        ), patch.dict(os.environ, {}, clear=True,), self.assertRaises(SystemExit) as exc_info:
+        ), patch.dict(
+            os.environ,
+            {},
+            clear=True,
+        ), self.assertRaises(
+            SystemExit
+        ) as exc_info:
             runpy.run_path(str(module_path), run_name="__main__")
 
         self.assertEqual(exc_info.exception.code, 1)

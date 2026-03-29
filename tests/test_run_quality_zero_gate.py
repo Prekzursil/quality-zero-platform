@@ -13,7 +13,12 @@ import sys
 from typing import List
 from unittest.mock import patch
 
-from scripts.quality.run_quality_zero_gate import _build_argv, _parse_args, _run_required_checks, main
+from scripts.quality.run_quality_zero_gate import (
+    _build_argv,
+    _parse_args,
+    _run_required_checks,
+    main,
+)
 
 
 class RunQualityZeroGateTests(unittest.TestCase):
@@ -37,15 +42,27 @@ class RunQualityZeroGateTests(unittest.TestCase):
         self.assertEqual(args.out_json, "quality-zero-gate/required-checks.json")
         self.assertEqual(args.out_md, "quality-zero-gate/required-checks.md")
 
-    def test_required_contexts_uses_fallback_target_and_rejects_invalid_profiles(self) -> None:
+    def test_required_contexts_uses_fallback_target_and_rejects_invalid_profiles(
+        self,
+    ) -> None:
         """Cover required contexts uses fallback target and rejects invalid profiles."""
         self.assertEqual(
-            importlib.import_module("scripts.quality.run_quality_zero_gate")._required_contexts({"required_contexts": {"target": [" Coverage 100 Gate ", "", "qlty check"]}}),
+            importlib.import_module(
+                "scripts.quality.run_quality_zero_gate"
+            )._required_contexts(
+                {
+                    "required_contexts": {
+                        "target": [" Coverage 100 Gate ", "", "qlty check"]
+                    }
+                }
+            ),
             ["Coverage 100 Gate", "qlty check"],
         )
 
         with self.assertRaises(SystemExit):
-            importlib.import_module("scripts.quality.run_quality_zero_gate")._required_contexts({"required_contexts": "not-a-dict"})
+            importlib.import_module(
+                "scripts.quality.run_quality_zero_gate"
+            )._required_contexts({"required_contexts": "not-a-dict"})
 
     def test_build_argv_uses_profile_contexts_and_explicit_outputs(self) -> None:
         """Cover build argv uses profile contexts and explicit outputs."""
@@ -81,7 +98,9 @@ class RunQualityZeroGateTests(unittest.TestCase):
             ],
         )
 
-    def test_build_argv_supports_positional_args_and_rejects_invalid_calls(self) -> None:
+    def test_build_argv_supports_positional_args_and_rejects_invalid_calls(
+        self,
+    ) -> None:
         """Cover build argv supports positional args and rejects invalid calls."""
         profile = {
             "slug": "Prekzursil/quality-zero-platform",
@@ -150,9 +169,17 @@ class RunQualityZeroGateTests(unittest.TestCase):
             (tmp / "repo").mkdir()
             (tmp / "platform" / "scripts" / "quality").mkdir(parents=True)
 
-            with patch("scripts.quality.run_quality_zero_gate._parse_args", return_value=args), patch(
-                "scripts.quality.run_quality_zero_gate.check_required_checks.main", return_value=0
-            ) as mock_main, patch.dict("os.environ", {"TARGET_SHA": "deadbeef"}, clear=False):
+            with (
+                patch(
+                    "scripts.quality.run_quality_zero_gate._parse_args",
+                    return_value=args,
+                ),
+                patch(
+                    "scripts.quality.run_quality_zero_gate.check_required_checks.main",
+                    return_value=0,
+                ) as mock_main,
+                patch.dict("os.environ", {"TARGET_SHA": "deadbeef"}, clear=False),
+            ):
                 exit_code = main()
 
         self.assertEqual(exit_code, 0)
@@ -164,7 +191,12 @@ class RunQualityZeroGateTests(unittest.TestCase):
             tmp = Path(tmpdir)
             profile_path = tmp / "profile.json"
             profile_path.write_text(
-                json.dumps({"slug": "Prekzursil/quality-zero-platform", "active_required_contexts": ["Coverage 100 Gate"]}),
+                json.dumps(
+                    {
+                        "slug": "Prekzursil/quality-zero-platform",
+                        "active_required_contexts": ["Coverage 100 Gate"],
+                    }
+                ),
                 encoding="utf-8",
             )
             args = Namespace(
@@ -175,7 +207,13 @@ class RunQualityZeroGateTests(unittest.TestCase):
                 out_md="quality-zero-gate/required-checks.md",
             )
 
-            with patch("scripts.quality.run_quality_zero_gate._parse_args", return_value=args), patch.dict("os.environ", {}, clear=True):
+            with (
+                patch(
+                    "scripts.quality.run_quality_zero_gate._parse_args",
+                    return_value=args,
+                ),
+                patch.dict("os.environ", {}, clear=True),
+            ):
                 with self.assertRaises(SystemExit) as exc:
                     main()
 
@@ -183,7 +221,10 @@ class RunQualityZeroGateTests(unittest.TestCase):
 
     def test_module_execution_as_main_inserts_repo_root_and_exits_cleanly(self) -> None:
         """Cover module execution as main inserts repo root and exits cleanly."""
-        module_path = importlib.import_module("scripts.quality.run_quality_zero_gate").__file__ or ""
+        module_path = (
+            importlib.import_module("scripts.quality.run_quality_zero_gate").__file__
+            or ""
+        )
         self.assertTrue(module_path)
         repo_root = str(Path(module_path).resolve().parents[2])
         original_sys_path = list(sys.path)
@@ -194,7 +235,12 @@ class RunQualityZeroGateTests(unittest.TestCase):
                 tmp = Path(tmpdir)
                 profile_path = tmp / "profile.json"
                 profile_path.write_text(
-                    json.dumps({"slug": "Prekzursil/quality-zero-platform", "active_required_contexts": ["Coverage 100 Gate"]}),
+                    json.dumps(
+                        {
+                            "slug": "Prekzursil/quality-zero-platform",
+                            "active_required_contexts": ["Coverage 100 Gate"],
+                        }
+                    ),
                     encoding="utf-8",
                 )
                 (tmp / "repo").mkdir()
@@ -215,22 +261,33 @@ class RunQualityZeroGateTests(unittest.TestCase):
                             str(tmp / "platform"),
                         ],
                     ),
-                    patch.dict("os.environ", {"TARGET_SHA": "deadbeef"}, clear=False),self.assertRaises(SystemExit) as exc
+                    patch.dict("os.environ", {"TARGET_SHA": "deadbeef"}, clear=False),
+                    self.assertRaises(SystemExit) as exc,
                 ):
-                    runpy.run_module("scripts.quality.run_quality_zero_gate", run_name="__main__")
+                    runpy.run_module(
+                        "scripts.quality.run_quality_zero_gate", run_name="__main__"
+                    )
             self.assertEqual(exc.exception.code, 0)
             self.assertIn(repo_root, sys.path)
         finally:
             sys.path[:] = original_sys_path
 
-    def test_run_required_checks_uses_repo_dir_as_working_directory_and_restores_argv(self) -> None:
+    def test_run_required_checks_uses_repo_dir_as_working_directory_and_restores_argv(
+        self,
+    ) -> None:
         """Cover run required checks uses repo dir as working directory and restores argv."""
         original_argv = list(sys.argv)
         with tempfile.TemporaryDirectory() as tmpdir:
             repo_dir = Path(tmpdir) / "repo"
             repo_dir.mkdir()
             argv = [
-                str(Path(tmpdir) / "platform" / "scripts" / "quality" / "check_required_checks.py"),
+                str(
+                    Path(tmpdir)
+                    / "platform"
+                    / "scripts"
+                    / "quality"
+                    / "check_required_checks.py"
+                ),
                 "--repo",
                 "Prekzursil/quality-zero-platform",
                 "--sha",
@@ -245,7 +302,10 @@ class RunQualityZeroGateTests(unittest.TestCase):
                 argv_during_call.append(list(sys.argv))
                 return 0
 
-            with patch("scripts.quality.run_quality_zero_gate.check_required_checks.main", side_effect=_fake_main):
+            with patch(
+                "scripts.quality.run_quality_zero_gate.check_required_checks.main",
+                side_effect=_fake_main,
+            ):
                 exit_code = _run_required_checks(argv, repo_dir=repo_dir)
 
         self.assertEqual(exit_code, 0)

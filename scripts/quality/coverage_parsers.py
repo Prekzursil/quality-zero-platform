@@ -20,7 +20,9 @@ _XML_LINES_COVERED_RE = re.compile(r'lines-covered="(\d+(?:\.\d+)?)"')
 _XML_BRANCHES_VALID_RE = re.compile(r'branches-valid="(\d+(?:\.\d+)?)"')
 _XML_BRANCHES_COVERED_RE = re.compile(r'branches-covered="(\d+(?:\.\d+)?)"')
 _XML_LINE_HITS_RE = re.compile(r'<line\b[^>]*\bhits="(\d+(?:\.\d+)?)"')
-_XML_FILENAME_RE = re.compile(r'<[^>]+\bfilename=(?P<quote>["\'])(?P<value>.*?)(?P=quote)')
+_XML_FILENAME_RE = re.compile(
+    r'<[^>]+\bfilename=(?P<quote>["\'])(?P<value>.*?)(?P=quote)'
+)
 _XML_SOURCE_RE = re.compile(r"<source>(?P<value>.*?)</source>")
 
 
@@ -28,7 +30,9 @@ def coverage_sources_from_xml(path: Path) -> Set[str]:
     """Handle coverage sources from xml."""
     text = path.read_text(encoding="utf-8")
     covered_sources: Set[str] = set()
-    source_roots = [match.group("value").strip() for match in _XML_SOURCE_RE.finditer(text)]
+    source_roots = [
+        match.group("value").strip() for match in _XML_SOURCE_RE.finditer(text)
+    ]
     for match in _XML_FILENAME_RE.finditer(text):
         for filename in _coverage_source_candidates(match.group("value"), source_roots):
             if _should_track_coverage_source(filename):

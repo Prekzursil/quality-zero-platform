@@ -12,7 +12,9 @@ from typing import Dict, Mapping
 
 def _parse_args() -> argparse.Namespace:
     """Handle parse args."""
-    parser = argparse.ArgumentParser(description="Ensure Codex account auth exists on a trusted private runner.")
+    parser = argparse.ArgumentParser(
+        description="Ensure Codex account auth exists on a trusted private runner."
+    )
     parser.add_argument("--auth-file", default="~/.codex/auth.json")
     parser.add_argument("--bootstrap-env-var", default="CODEX_AUTH_JSON")
     parser.add_argument("--out-json", default="")
@@ -25,7 +27,9 @@ def _write_payload(path: str, payload: Mapping[str, object]) -> None:
         return
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    target.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
 
 def _resolve_auth_payload(args: argparse.Namespace) -> Dict[str, str]:
@@ -41,12 +45,17 @@ def _resolve_auth_payload(args: argparse.Namespace) -> Dict[str, str]:
         try:
             parsed = json.loads(bootstrap_value)
         except json.JSONDecodeError as exc:
-            raise SystemExit(f"{args.bootstrap_env_var} is not valid JSON: {exc}") from exc
-        auth_path.write_text(json.dumps(parsed, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            raise SystemExit(
+                f"{args.bootstrap_env_var} is not valid JSON: {exc}"
+            ) from exc
+        auth_path.write_text(
+            json.dumps(parsed, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         return {"auth_file": str(auth_path), "source": args.bootstrap_env_var}
 
     raise SystemExit(
-        "Codex account auth is missing. Seed the trusted private runner once with `codex login` " f"or provide {args.bootstrap_env_var} as a repository secret for bootstrap."
+        "Codex account auth is missing. Seed the trusted private runner once with `codex login` "
+        f"or provide {args.bootstrap_env_var} as a repository secret for bootstrap."
     )
 
 

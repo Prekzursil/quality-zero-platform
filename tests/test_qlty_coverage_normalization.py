@@ -59,7 +59,9 @@ class QltyCoverageNormalizationTests(unittest.TestCase):
         """Read one normalized coverage artifact from a manifest entry."""
         normalized = payload_entry["normalized"]
         if not isinstance(normalized, str):
-            raise AssertionError("Normalized coverage manifest entry must be a string path.")
+            raise AssertionError(
+                "Normalized coverage manifest entry must be a string path."
+            )
         return Path(normalized).read_text(encoding="utf-8")
 
     def _sample_xml_payload(

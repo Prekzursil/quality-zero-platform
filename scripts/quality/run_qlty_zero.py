@@ -60,13 +60,12 @@ def _build_qlty_smells_argv() -> List[str]:
 
 
 def _resolved_qlty_executable_path() -> str:
-    """Resolve the absolute path to the required QLTY executable."""
-    qlty_executable = shutil.which(_QLTY_EXECUTABLE)
-    if not qlty_executable:
+    """Ensure the required QLTY executable is available on ``PATH``."""
+    if not shutil.which(_QLTY_EXECUTABLE):
         raise FileNotFoundError(
             f"Unable to locate required executable: {_QLTY_EXECUTABLE}"
         )
-    return qlty_executable
+    return _QLTY_EXECUTABLE
 
 
 def _tail_lines(text: str, *, limit: int = 200) -> str:
@@ -138,17 +137,11 @@ def cast_mapping(value: Any) -> Mapping[str, Any]:
 
 def _run_qlty_check(repo_dir: Path) -> subprocess.CompletedProcess[str]:
     """Run `qlty check` in the requested repository directory."""
-    # Safe-by-construction: the argv shape is fixed, the resolved executable path
-    # becomes argv[0], and shell=False preserves literal argument boundaries.
+    # Safe-by-construction: the argv shape is fixed and shell=False preserves
+    # literal argument boundaries.
+    _resolved_qlty_executable_path()
     return subprocess.run(  # nosec B603
-        [
-            _resolved_qlty_executable_path(),
-            "check",
-            "--all",
-            "--fail-level",
-            "note",
-            "--summary",
-        ],
+        _build_qlty_check_argv(),
         cwd=repo_dir,
         shell=False,
         check=False,
@@ -159,16 +152,11 @@ def _run_qlty_check(repo_dir: Path) -> subprocess.CompletedProcess[str]:
 
 def _run_qlty_smells(repo_dir: Path) -> subprocess.CompletedProcess[str]:
     """Run `qlty smells` in the requested repository directory."""
-    # Safe-by-construction: the argv shape is fixed, the resolved executable path
-    # becomes argv[0], and shell=False preserves literal argument boundaries.
+    # Safe-by-construction: the argv shape is fixed and shell=False preserves
+    # literal argument boundaries.
+    _resolved_qlty_executable_path()
     return subprocess.run(  # nosec B603
-        [
-            _resolved_qlty_executable_path(),
-            "smells",
-            "--all",
-            "--quiet",
-            "--no-snippets",
-        ],
+        _build_qlty_smells_argv(),
         cwd=repo_dir,
         shell=False,
         check=False,

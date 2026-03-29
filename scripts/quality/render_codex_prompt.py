@@ -109,6 +109,15 @@ def _render_prompt(*args: object, **kwargs: object) -> str:
             f"Unexpected _render_prompt parameters: {', '.join(sorted(kwargs))}"
         )
     headline = "PR failure remediation" if lane == "remediation" else "backlog sweep"
+    policy_line = (
+        "Treat missing external statuses as policy drift, provider drift, "
+        "or secret drift before changing code."
+    )
+    branch_line = (
+        "Never push to the default branch. Use "
+        "`codex/fix/<context>/<shortsha>` for remediation and "
+        "`codex/backlog/<tool>` for backlog work."
+    )
     sections = [
         f"# Codex {headline}",
         "",
@@ -116,15 +125,8 @@ def _render_prompt(*args: object, **kwargs: object) -> str:
         f"Lane: {lane}",
         f"Failure context: {failure_context or 'n/a'}",
         "",
-        (
-            "Treat missing external statuses as policy drift, provider drift, "
-            "or secret drift before changing code."
-        ),
-        (
-            "Never push to the default branch. Use "
-            "`codex/fix/<context>/<shortsha>` for remediation and "
-            "`codex/backlog/<tool>` for backlog work."
-        ),
+        policy_line,
+        branch_line,
         "",
         *_repo_contract_lines(profile),
         "",

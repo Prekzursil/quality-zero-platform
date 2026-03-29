@@ -277,7 +277,6 @@ def _fallback_public_issues(
 
 def _http_error_findings(exc: urllib.error.HTTPError) -> List[str]:
     """Render a standardized finding for one Codacy HTTP error."""
-
     return [f"Codacy API request failed: HTTP {exc.code}"]
 
 
@@ -286,7 +285,6 @@ def _unauthorized_http_result(
     query: CodacyQuery,
 ) -> Tuple[int | None, List[str], Exception | None, bool]:
     """Handle unauthorized Codacy API responses with a public fallback when possible."""
-
     if fallback := _fallback_public_issues(query):
         open_issues, findings, last_exc = fallback
         if last_exc is None:
@@ -300,7 +298,6 @@ def _handle_codacy_http_error(
     query: CodacyQuery,
 ) -> Tuple[int | None, List[str], Exception | None, bool]:
     """Translate one Codacy HTTP error into the gate's fallback behavior."""
-
     handler = {
         401: lambda: _unauthorized_http_result(exc, query),
         404: lambda: (None, [], exc, False),
@@ -315,7 +312,6 @@ def _not_found_findings(
     last_exc: Exception | None,
 ) -> Tuple[int | None, List[str], Exception | None]:
     """Build the finding payload for provider aliases that all returned not found."""
-
     findings = [
         (
             "Codacy API endpoint was not found for providers: "
@@ -329,7 +325,6 @@ def _not_found_findings(
 
 def _provider_query(base_query: CodacyQuery, provider: str) -> CodacyQuery:
     """Clone the base Codacy query for one provider alias."""
-
     return CodacyQuery(
         provider=str(provider),
         owner=base_query.owner,
@@ -343,7 +338,6 @@ def _query_codacy_candidate(
     token: Any,
 ) -> Tuple[int | None, List[str], Exception | None, bool]:
     """Query one provider candidate and normalize recoverable failures."""
-
     try:
         open_issues, findings = _query_codacy_provider(query, token)
     except urllib.error.HTTPError as exc:
@@ -359,7 +353,6 @@ def _query_codacy_open_issues(
     provider_candidates: Any,
 ) -> Tuple[int | None, List[str], Exception | None]:
     """Try each provider alias until one Codacy issue total resolves."""
-
     last_exc: Exception | None = None
     for provider in provider_candidates:
         query = _provider_query(base_query, str(provider))
@@ -375,13 +368,11 @@ def _query_codacy_open_issues(
 
 def _codacy_status(findings: List[str], policy_mode: str) -> str:
     """Resolve the final gate status from the findings and policy mode."""
-
     return "pass" if policy_mode == "audit" or not findings else "fail"
 
 
 def _base_query(args: argparse.Namespace, pull_request: str) -> CodacyQuery:
     """Build the normalized Codacy query from CLI arguments."""
-
     return CodacyQuery(
         provider=args.provider,
         owner=urllib.parse.quote(args.owner.strip(), safe=""),
@@ -395,7 +386,6 @@ def _is_retryable_pr_not_found(
     last_exc: Exception | None,
 ) -> bool:
     """Return whether a missing PR endpoint should be retried after a delay."""
-
     return (
         bool(base_query.pull_request)
         and isinstance(last_exc, urllib.error.HTTPError)
@@ -430,7 +420,6 @@ def load_codacy_findings_with_retry(
 
 def _resolve_codacy_status(args: argparse.Namespace) -> CodacyStatusResult:
     """Resolve the final Codacy gate status for the current invocation."""
-
     token = (args.token or os.environ.get("CODACY_API_TOKEN", "")).strip()
     pull_request = str(args.pull_request or "").strip()
     if not token:
@@ -461,7 +450,6 @@ def _build_payload(
     result: CodacyStatusResult,
 ) -> Dict[str, Any]:
     """Build the JSON payload persisted by the Codacy zero gate."""
-
     return {
         "status": result.status,
         "owner": args.owner,
@@ -476,7 +464,6 @@ def _build_payload(
 
 def _write_codacy_report(args: argparse.Namespace, payload: Mapping[str, Any]) -> int:
     """Persist the Codacy gate payload in JSON and Markdown formats."""
-
     return write_report(
         payload,
         out_json=args.out_json,
@@ -489,7 +476,6 @@ def _write_codacy_report(args: argparse.Namespace, payload: Mapping[str, Any]) -
 
 def main() -> int:
     """Execute the Codacy zero gate CLI."""
-
     args = _parse_args()
     result = _resolve_codacy_status(args)
     payload = _build_payload(args, result)

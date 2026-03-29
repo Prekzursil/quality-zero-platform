@@ -1,15 +1,13 @@
 from __future__ import absolute_import
 
 import os
-import runpy
 import sys
-import tempfile
 import unittest
 from argparse import Namespace
-from pathlib import Path
 from unittest.mock import patch
 
 from scripts.quality import check_deepscan_zero
+from tests.script_entrypoint_support import run_script_entrypoint_failure
 
 
 def _placeholder_token(label: str) -> str:
@@ -274,21 +272,7 @@ class DeepScanZeroTests(unittest.TestCase):
         self.assertIn("`n/a`", markdown)
         self.assertIn("- None", markdown)
 
-        script_path = Path("scripts/quality/check_deepscan_zero.py").resolve()
-        root_text = str(Path.cwd().resolve())
-        trimmed_sys_path = [item for item in sys.path if item != root_text]
-        with tempfile.TemporaryDirectory() as tmp, patch.dict("os.environ", {}, clear=True), patch.object(
-            sys,
-            "argv",
-            [str(script_path)],
-        ), patch.object(sys, "path", trimmed_sys_path[:]):
-            cwd = Path(tmp)
-            previous = Path.cwd()
-            os.chdir(cwd)
-            try:
-                with self.assertRaises(SystemExit) as result:
-                    runpy.run_path(str(script_path), run_name="__main__")
-            finally:
-                os.chdir(previous)
-        self.assertEqual(result.exception.code, 1)
-
+        self.assertEqual(
+            run_script_entrypoint_failure("scripts/quality/check_deepscan_zero.py"),
+            1,
+        )

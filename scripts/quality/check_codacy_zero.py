@@ -235,7 +235,6 @@ def _fallback_public_issues(
 _http_error_findings = codacy_zero_support.http_error_findings
 _not_found_findings = codacy_zero_support.not_found_findings
 _provider_query = codacy_zero_support.provider_query
-_is_retryable_pr_not_found = codacy_zero_support.is_retryable_pr_not_found
 _sha_wait_message = codacy_zero_support.sha_wait_message
 _pending_analysis_message = codacy_zero_support.pending_analysis_message
 _final_retry_findings = codacy_zero_support.final_retry_findings
@@ -477,7 +476,7 @@ def load_codacy_findings_with_retry(
         config,
         deps=codacy_zero_support.CodacyRetryDeps(
             query_open_issues=_query_codacy_open_issues,
-            retryable_pr_not_found=_is_retryable_pr_not_found,
+            retryable_pr_not_found=codacy_zero_support.is_retryable_pr_not_found,
             pending_message_fn=_pending_analysis_message,
             final_findings_fn=_final_retry_findings,
             sleep_fn=time.sleep,

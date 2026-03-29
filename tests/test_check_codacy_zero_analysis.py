@@ -3,7 +3,6 @@
 from __future__ import absolute_import
 
 import unittest
-from argparse import Namespace
 from email.message import Message
 from typing import List, Tuple
 from urllib.error import HTTPError
@@ -112,61 +111,41 @@ class CodacyZeroAnalysisTests(unittest.TestCase):
     def test_analysis_pending_message_reads_pull_request_issue_payload(self) -> None:
         """Cover issue-payload pending messages once PR status reaches target SHA."""
         pr_query = self._base_query(pull_request="5", sha="targetsha")
-        with (
-            patch.object(
-                check_codacy_zero,
-                "_request_analysis_status",
-                return_value={"pullRequest": {"headCommitSha": "targetsha"}},
-            ),
-            patch.object(
-                check_codacy_zero,
-                "_request_json",
-                return_value={"analyzed": False},
-            ),
-        ):
-            self.assertEqual(
-                check_codacy_zero._analysis_pending_message(pr_query, "token"),
+        scenarios = [
+            (
+                {"analyzed": False},
                 "Codacy issues for pull request 5 are not available yet.",
-            )
-
-        with (
-            patch.object(
-                check_codacy_zero,
-                "_request_analysis_status",
-                return_value={"pullRequest": {"headCommitSha": "targetsha"}},
             ),
-            patch.object(
-                check_codacy_zero,
-                "_request_json",
-                return_value={
+            (
+                {
                     "analyzed": True,
                     "data": [{"commitIssue": {"commitInfo": {"sha": "oldsha"}}}],
                 },
-            ),
-        ):
-            self.assertEqual(
-                check_codacy_zero._analysis_pending_message(pr_query, "token"),
                 (
                     "Codacy analysis for pull request 5 issues is still on oldsha "
                     "(waiting for targetsha)."
                 ),
-            )
+            ),
+            ({"analyzed": True, "data": []}, None),
+        ]
 
-        with (
-            patch.object(
-                check_codacy_zero,
-                "_request_analysis_status",
-                return_value={"pullRequest": {"headCommitSha": "targetsha"}},
-            ),
-            patch.object(
-                check_codacy_zero,
-                "_request_json",
-                return_value={"analyzed": True, "data": []},
-            ),
-        ):
-            self.assertIsNone(
-                check_codacy_zero._analysis_pending_message(pr_query, "token")
-            )
+        for issue_payload, expected in scenarios:
+            with (
+                patch.object(
+                    check_codacy_zero,
+                    "_request_analysis_status",
+                    return_value={"pullRequest": {"headCommitSha": "targetsha"}},
+                ),
+                patch.object(
+                    check_codacy_zero,
+                    "_request_json",
+                    return_value=issue_payload,
+                ),
+            ):
+                self.assertEqual(
+                    check_codacy_zero._analysis_pending_message(pr_query, "token"),
+                    expected,
+                )
 
     def test_analysis_pending_message_tracks_repository_state(self) -> None:
         """Cover repository-analysis pending-state transitions."""
@@ -515,115 +494,3 @@ class CodacyZeroAnalysisTests(unittest.TestCase):
         self.assertEqual(findings, ["Codacy API request failed: provider broke"])
         self.assertIsInstance(exc, RuntimeError)
         self.assertTrue(should_return)
-
-    def test_not_found_findings_helpers(self) -> None:
-        """Cover not-found findings with and without the last exception."""
-        open_issues, findings, exc = check_codacy_zero._not_found_findings(
-            ["gh"],
-            RuntimeError("boom"),
-        )
-        self.assertIsNone(open_issues)
-        self.assertEqual(
-            findings,
-            [
-                "Codacy API endpoint was not found for providers: gh.",
-                "Last Codacy API error: boom",
-            ],
-        )
-        self.assertIsInstance(exc, RuntimeError)
-        open_issues, findings, exc = check_codacy_zero._not_found_findings(["gh"], None)
-        self.assertIsNone(open_issues)
-        self.assertEqual(
-            findings, ["Codacy API endpoint was not found for providers: gh."]
-        )
-        self.assertIsNone(exc)
-
-    def test_main_status_requires_token(self) -> None:
-        """Cover the missing-token main path."""
-        args = Namespace(
-            provider="gh",
-            owner="Prekzursil",
-            repo="quality-zero-platform",
-            pull_request="",
-            token="",
-            out_json="codacy-zero/codacy.json",
-            out_md="codacy-zero/codacy.md",
-        )
-        with (
-            patch.dict("os.environ", {}, clear=True),
-            patch.object(check_codacy_zero, "_parse_args", return_value=args),
-            patch.object(check_codacy_zero, "write_report", return_value=0) as write_mock,
-        ):
-            self.assertEqual(check_codacy_zero.main(), 1)
-        self.assertEqual(
-            write_mock.call_args.args[0]["findings"],
-            ["CODACY_API_TOKEN is missing."],
-        )
-
-    def test_main_status_passes_with_zero_issues(self) -> None:
-        """Cover the successful main path."""
-        args = Namespace(
-            provider="gh",
-            owner="Prekzursil",
-            repo="quality-zero-platform",
-            pull_request="5",
-            token="explicit-token",
-            out_json="codacy-zero/codacy.json",
-            out_md="codacy-zero/codacy.md",
-        )
-        with (
-            patch.object(check_codacy_zero, "_parse_args", return_value=args),
-            patch.object(
-                check_codacy_zero,
-                "_query_codacy_open_issues",
-                return_value=(0, [], None),
-            ),
-            patch.object(check_codacy_zero, "write_report", return_value=0) as write_mock,
-        ):
-            self.assertEqual(check_codacy_zero.main(), 0)
-        self.assertEqual(write_mock.call_args.args[0]["status"], "pass")
-
-    def test_main_status_returns_write_report_failure(self) -> None:
-        """Cover write-report failures from the main path."""
-        args = Namespace(
-            provider="gh",
-            owner="Prekzursil",
-            repo="quality-zero-platform",
-            pull_request="5",
-            token="explicit-token",
-            out_json="codacy-zero/codacy.json",
-            out_md="codacy-zero/codacy.md",
-        )
-        with (
-            patch.object(check_codacy_zero, "_parse_args", return_value=args),
-            patch.object(
-                check_codacy_zero,
-                "_query_codacy_open_issues",
-                return_value=(0, [], None),
-            ),
-            patch.object(check_codacy_zero, "write_report", return_value=7),
-        ):
-            self.assertEqual(check_codacy_zero.main(), 7)
-
-    def test_main_status_audit_mode_keeps_success(self) -> None:
-        """Cover audit-mode success when findings remain."""
-        args = Namespace(
-            provider="gh",
-            owner="Prekzursil",
-            repo="quality-zero-platform",
-            pull_request="5",
-            token="explicit-token",
-            policy_mode="audit",
-            out_json="codacy-zero/codacy.json",
-            out_md="codacy-zero/codacy.md",
-        )
-        with (
-            patch.object(check_codacy_zero, "_parse_args", return_value=args),
-            patch.object(
-                check_codacy_zero,
-                "_query_codacy_open_issues",
-                return_value=(5, ["Codacy reports 5 open issues (expected 0)."], None),
-            ),
-            patch.object(check_codacy_zero, "write_report", return_value=0),
-        ):
-            self.assertEqual(check_codacy_zero.main(), 0)

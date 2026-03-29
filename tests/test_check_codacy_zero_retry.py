@@ -25,6 +25,9 @@ from scripts.quality.check_codacy_zero import (
 )
 
 
+ANALYSIS_TOKEN = "analysis-token"
+
+
 def _raise_runtime_error(message: str) -> None:
     """Raise one runtime error for callback tests."""
     raise RuntimeError(message)
@@ -261,8 +264,10 @@ class CodacyZeroRetryTests(unittest.TestCase):
             findings, ["Codacy analysis status request failed: status broke"]
         )
 
-    def test_commit_scope_fallback_paths(self) -> None:
-        """Cover commit-scope fallback success and guard paths."""
+    def test_commit_scope_fallback_uses_commit_query_when_pr_payload_is_stale(
+        self,
+    ) -> None:
+        """Cover commit-scope fallback success when PR payload is stale."""
         self.assertIsNone(
             check_codacy_zero._commit_scope_fallback(
                 self._base_query(pull_request="68", sha="targetsha"),
@@ -296,6 +301,8 @@ class CodacyZeroRetryTests(unittest.TestCase):
         self.assertEqual(commit_query.sha, "targetsha")
         self.assertEqual(query_mock.call_args.args[2], ("gh", "github"))
 
+    def test_commit_scope_fallback_skips_when_target_sha_is_missing(self) -> None:
+        """Cover the commit-scope guard when the target sha is missing."""
         self.assertIsNone(
             check_codacy_zero._commit_scope_fallback(
                 self._base_query(pull_request="68", sha=""),
@@ -309,6 +316,11 @@ class CodacyZeroRetryTests(unittest.TestCase):
                 ],
             )
         )
+
+    def test_commit_scope_fallback_skips_when_commit_scope_is_still_pending(
+        self,
+    ) -> None:
+        """Cover the commit-scope guard while commit-scoped data is pending."""
         with patch.object(
             check_codacy_zero,
             "_query_codacy_open_issues",
@@ -338,7 +350,7 @@ class CodacyZeroRetryTests(unittest.TestCase):
             repo="quality-zero-platform",
             pull_request="68",
             sha="targetsha",
-            token="analysis-marker",
+            token=ANALYSIS_TOKEN,
             policy_mode="ratchet",
             out_json="codacy-zero/codacy.json",
             out_md="codacy-zero/codacy.md",

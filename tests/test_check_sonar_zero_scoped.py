@@ -14,6 +14,9 @@ from unittest.mock import patch
 from scripts.quality import check_sonar_zero
 
 
+EMPTY_TOKEN = ""
+
+
 class SonarZeroScopedTests(unittest.TestCase):
     """Scoped-path Sonar zero-gate tests."""
 
@@ -214,7 +217,7 @@ class SonarZeroScopedTests(unittest.TestCase):
         """Cover the missing-token main path."""
         args = Namespace(
             project_key="Prekzursil_quality-zero-platform",
-            token="",
+            token=EMPTY_TOKEN,
             branch="",
             pull_request="5",
             out_json="sonar-zero/sonar.json",

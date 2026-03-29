@@ -141,6 +141,7 @@ class RunQltyZeroTests(unittest.TestCase):
         )
         for call in call_args:
             self.assertEqual(Path(call.kwargs["cwd"]).resolve(), repo_dir.resolve())
+            self.assertEqual(call.kwargs["executable"], r"C:\Tools\qlty.exe")
             self.assertFalse(call.kwargs.get("shell", False))
             self.assertFalse(call.kwargs["check"])
             self.assertTrue(call.kwargs["capture_output"])

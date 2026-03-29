@@ -342,9 +342,6 @@ jobs:
             if not profile.get("enabled_scanners", {}).get("deepsource_visible", False):
               print("DeepSource visible-zero lane is disabled for this profile; skipping.")
               sys.exit(0)
-            if os.environ["EVENT_NAME"] in {"pull_request", "pull_request_target"}:
-              print("DeepSource visible-zero lane only evaluates the default branch; skipping for pull requests.")
-              sys.exit(0)
             cmd = [
               sys.executable,
               str(platform_dir / "scripts/quality/check_deepsource_zero.py"),

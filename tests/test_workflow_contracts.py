@@ -180,6 +180,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("job_name: DeepSource Visible Zero", text)
         self.assertIn("lane: deepsource_visible", text)
         self.assertIn("check_deepsource_zero.py", text)
+        self.assertNotIn("skipping for pull requests", text)
         self.assertIn("dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7", text)
 
         backlog_text = (ROOT / ".github" / "workflows" / "reusable-backlog-sweep.yml").read_text(encoding="utf-8")

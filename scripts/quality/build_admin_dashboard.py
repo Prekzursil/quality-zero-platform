@@ -2,6 +2,8 @@
 
 """Build the static admin dashboard payload and HTML shell."""
 
+from __future__ import absolute_import
+
 import argparse
 import json
 import os

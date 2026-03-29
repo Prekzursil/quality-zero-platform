@@ -2,6 +2,8 @@
 
 """Enforce the platform coverage contract for collected reports."""
 
+from __future__ import absolute_import
+
 import argparse
 import re
 import sys

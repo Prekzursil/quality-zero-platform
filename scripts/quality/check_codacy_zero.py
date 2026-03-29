@@ -477,28 +477,18 @@ def _pull_request_issue_pending_message(
     target_sha: str,
 ) -> str | None:
     """Return the pending status for a Codacy pull-request issues payload."""
-    if payload.get("analyzed") is False:
-        return (
-            f"Codacy issues for pull request {query.pull_request} are not "
-            "available yet."
-        )
-
-    issue_records = payload.get("data")
-    if not isinstance(issue_records, list) or not issue_records:
-        return None
-
-    for item in issue_records:
-        issue_mapping = _mapping_or_empty(item)
-        commit_issue = _mapping_or_empty(issue_mapping.get("commitIssue"))
-        commit_info = _mapping_or_empty(commit_issue.get("commitInfo"))
-        observed_sha = _preferred_text(commit_info.get("sha")).lower()
-        if observed_sha:
-            return _sha_wait_message(
-                f"pull request {query.pull_request} issues",
-                observed_sha,
-                target_sha,
-            )
-    return None
+    return codacy_zero_support.pull_request_issue_pending_message(
+        payload,
+        query,
+        target_sha,
+        deps=codacy_zero_support.CodacyIssuePendingDeps(
+            text_deps=codacy_zero_support.CodacyTextDeps(
+                mapping_or_empty=_mapping_or_empty,
+                preferred_text=_preferred_text,
+            ),
+            sha_wait_message=_sha_wait_message,
+        ),
+    )
 
 
 def _repository_pending_message(payload: Dict[str, Any], target_sha: str) -> str | None:

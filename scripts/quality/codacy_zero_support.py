@@ -62,6 +62,14 @@ class CodacyPendingMessageDeps:
 
 
 @dataclass(frozen=True)
+class CodacyIssuePendingDeps:
+    """Bundle helpers for Codacy pull-request issue payload checks."""
+
+    text_deps: CodacyTextDeps
+    sha_wait_message: Callable[[str, str, str], str | None]
+
+
+@dataclass(frozen=True)
 class CodacyCandidateDeps:
     """Bundle query helpers for one Codacy provider candidate."""
 
@@ -274,6 +282,38 @@ def pull_request_pending_message(
         text_deps.preferred_text(pull_request.get("headCommitSha")).lower(),
         target_sha,
     )
+
+
+def pull_request_issue_pending_message(
+    payload: Dict[str, Any],
+    query: Any,
+    target_sha: str,
+    *,
+    deps: CodacyIssuePendingDeps,
+) -> str | None:
+    """Return the pending status for a Codacy pull-request issues payload."""
+    if payload.get("analyzed") is False:
+        return (
+            f"Codacy issues for pull request {query.pull_request} are not "
+            "available yet."
+        )
+
+    issue_records = payload.get("data")
+    if not isinstance(issue_records, list) or not issue_records:
+        return None
+
+    for item in issue_records:
+        issue_mapping = deps.text_deps.mapping_or_empty(item)
+        commit_issue = deps.text_deps.mapping_or_empty(issue_mapping.get("commitIssue"))
+        commit_info = deps.text_deps.mapping_or_empty(commit_issue.get("commitInfo"))
+        observed_sha = deps.text_deps.preferred_text(commit_info.get("sha")).lower()
+        if observed_sha:
+            return deps.sha_wait_message(
+                f"pull request {query.pull_request} issues",
+                observed_sha,
+                target_sha,
+            )
+    return None
 
 
 def repository_pending_message(

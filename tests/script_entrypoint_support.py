@@ -12,7 +12,6 @@ from unittest.mock import patch
 
 def run_script_entrypoint_failure(script_relative_path: str) -> int:
     """Run a script as ``__main__`` and return its exit code."""
-
     script_path = Path(script_relative_path).resolve()
     root_text = str(Path.cwd().resolve())
     trimmed_sys_path = [item for item in sys.path if item != root_text]

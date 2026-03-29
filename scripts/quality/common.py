@@ -3,7 +3,6 @@
 from __future__ import absolute_import
 
 import json
-import os
 import sys
 from copy import deepcopy
 from dataclasses import dataclass
@@ -38,6 +37,15 @@ def dedupe_strings(items: Iterable[str | None]) -> List[str]:
     return list(dict.fromkeys(value for value in normalized if value))
 
 
+def _ensure_within_root(path: Path, root: Path) -> Path:
+    """Return ``path`` when it stays within ``root``."""
+    try:
+        path.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(f"Output path escapes workspace root: {path}") from exc
+    return path
+
+
 def safe_output_path(raw: str, fallback: str, base: Path | None = None) -> Path:
     """Handle safe output path."""
     root = (base or Path.cwd()).resolve()
@@ -47,9 +55,7 @@ def safe_output_path(raw: str, fallback: str, base: Path | None = None) -> Path:
         if candidate.is_absolute()
         else (root / candidate).resolve(strict=False)
     )
-    if os.path.commonpath([str(root), str(resolved)]) != str(root):
-        raise ValueError(f"Output path escapes workspace root: {candidate}")
-    return resolved
+    return _ensure_within_root(resolved, root)
 
 
 def _raise_write_report_type_error(message: str) -> None:
@@ -109,23 +115,38 @@ def _report_spec_from_kwargs(values: Mapping[str, Any]) -> ReportSpec:
     )
 
 
+def _write_workspace_text(path: Path, content: str, *, root: Path) -> None:
+    """Write UTF-8 text after revalidating the workspace-relative target."""
+    target = _ensure_within_root(path.resolve(strict=False), root)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("w", encoding="utf-8") as handle:
+        handle.write(content)
+
+
 def write_report(payload: Mapping[str, Any], *args: Any, **kwargs: Any) -> int:
     """Handle write report."""
     spec = _resolve_report_spec(*args, **kwargs)
+    workspace_root = Path.cwd().resolve()
     try:
-        json_path = safe_output_path(spec.out_json, spec.default_json)
-        md_path = safe_output_path(spec.out_md, spec.default_md)
+        json_path = safe_output_path(
+            spec.out_json,
+            spec.default_json,
+            base=workspace_root,
+        )
+        md_path = safe_output_path(
+            spec.out_md,
+            spec.default_md,
+            base=workspace_root,
+        )
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 1
 
-    json_path.parent.mkdir(parents=True, exist_ok=True)
-    md_path.parent.mkdir(parents=True, exist_ok=True)
-    json_path.write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )  # NOSONAR
-    md_path.write_text(spec.render_md(payload), encoding="utf-8")  # NOSONAR
-    print(md_path.read_text(encoding="utf-8"), end="")
+    json_text = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    markdown_text = spec.render_md(payload)
+    _write_workspace_text(json_path, json_text, root=workspace_root)
+    _write_workspace_text(md_path, markdown_text, root=workspace_root)
+    print(markdown_text, end="")
     return 0
 
 

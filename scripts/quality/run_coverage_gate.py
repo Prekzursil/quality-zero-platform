@@ -31,7 +31,10 @@ from scripts.security_helpers import load_bytes_https, normalize_https_url
 def _parse_args() -> argparse.Namespace:
     """Handle parse args."""
     parser = argparse.ArgumentParser(
-        description="Run repo-specific coverage collection and assert the configured gate."
+        description=(
+            "Run repo-specific coverage collection and assert the configured "
+            "gate."
+        )
     )
     parser.add_argument("--profile-json", required=True)
     parser.add_argument("--event-name", required=True)
@@ -52,8 +55,9 @@ def _run_shell(command: str, *, shell_name: str, cwd: Path) -> None:
     """Handle run shell."""
     if not command.strip():
         return
-    # Safe-by-construction: the interpreter argv is static, shell=False prevents interpolation,
-    # and the repo-owned profile command is passed via stdin instead of becoming dynamic argv.
+    # Safe-by-construction: the interpreter argv is static, shell=False
+    # prevents interpolation, and the repo-owned profile command is passed
+    # via stdin instead of becoming dynamic argv.
     if shell_name == "pwsh":
         if _path_exists(r"C:\Program Files\PowerShell\7\pwsh.exe"):
             subprocess.run(  # nosec B603
@@ -272,9 +276,15 @@ def _load_baseline_coverage_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
     run_id = _find_successful_run_id(workflow_runs, "Quality Zero Platform")
     if run_id is None:
         raise RuntimeError(
-            "Unable to find a successful Quality Zero Platform run on the default branch."
+            (
+                "Unable to find a successful Quality Zero Platform run on the "
+                "default branch."
+            )
         )
-    artifacts_url = f"https://api.github.com/repos/{repo_slug}/actions/runs/{run_id}/artifacts?per_page=100"
+    artifacts_url = (
+        f"https://api.github.com/repos/{repo_slug}/actions/runs/{run_id}/artifacts"
+        "?per_page=100"
+    )
     artifacts_payload = json.loads(
         _download_bytes(artifacts_url, token).decode("utf-8")
     )
@@ -324,7 +334,10 @@ def _write_non_regression_report(
     if current_percent < baseline_percent:
         status = "fail"
         findings.append(
-            f"combined coverage regressed from {baseline_percent:.2f}% to {current_percent:.2f}%"
+            (
+                "combined coverage regressed from "
+                f"{baseline_percent:.2f}% to {current_percent:.2f}%"
+            )
         )
     payload = {
         "status": status,

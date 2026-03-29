@@ -120,7 +120,7 @@ class DeepScanZeroTests(unittest.TestCase):
     def test_extract_total_open_request_json_and_repo_sha_helpers_cover_edge_cases(
         self,
     ) -> None:
-        """Cover extract total open request json and repo sha helpers cover edge cases."""
+        """Cover extract total open request json and repo sha edge cases."""
         api_token = _placeholder_token("api")
         self.assertEqual(
             check_deepscan_zero.extract_total_open({"nested": {"total": 2}}), 2
@@ -191,7 +191,10 @@ class DeepScanZeroTests(unittest.TestCase):
             check_deepscan_zero._validate_github_check_context_inputs("", "", ""),
             [
                 "GITHUB_TOKEN is missing for github_check_context mode.",
-                "REPO_SLUG or GITHUB_REPOSITORY is missing for github_check_context mode.",
+                (
+                    "REPO_SLUG or GITHUB_REPOSITORY is missing for "
+                    "github_check_context mode."
+                ),
                 "TARGET_SHA or GITHUB_SHA is missing for github_check_context mode.",
             ],
         )

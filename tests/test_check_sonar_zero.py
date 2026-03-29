@@ -137,11 +137,15 @@ class SonarZeroTests(unittest.TestCase):
             return_value={"branches": [{"name": "main", "commit": {"sha": "oldsha"}}]},
         ):
             self.assertEqual(
-                check_sonar_zero._load_branch_analysis_revision(args, "auth"), "oldsha"
+                check_sonar_zero._load_branch_analysis_revision(args, "auth"),
+                "oldsha",
             )
             self.assertEqual(
                 check_sonar_zero._scoped_analysis_pending_message(args, "auth"),
-                "Sonar analysis for branch main is still on oldsha (waiting for targetsha).",
+                (
+                    "Sonar analysis for branch main is still on oldsha "
+                    "(waiting for targetsha)."
+                ),
             )
 
         with patch.object(
@@ -223,7 +227,10 @@ class SonarZeroTests(unittest.TestCase):
         args = argparse.Namespace(branch="main", pull_request="", sha="targetsha")
         attempts: List[int] = []
         pending_responses = [
-            "Sonar analysis for branch main is still on oldsha (waiting for targetsha).",
+            (
+                "Sonar analysis for branch main is still on oldsha "
+                "(waiting for targetsha)."
+            ),
             None,
         ]
 
@@ -412,7 +419,9 @@ class SonarZeroTests(unittest.TestCase):
             args,
             "auth",
             fetch_fn=lambda _args, _auth: (0, "OK", []),
-            pending_fn=lambda _args, _auth: "Sonar analysis for branch main is not available yet.",
+            pending_fn=lambda _args, _auth: (
+                "Sonar analysis for branch main is not available yet."
+            ),
             attempts=2,
             sleep_seconds=0.0,
         )

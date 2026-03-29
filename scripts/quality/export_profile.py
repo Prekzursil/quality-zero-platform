@@ -55,6 +55,9 @@ def _profile_output_lines(profile: Dict[str, Any], event_name: str) -> List[str]
     setup = coverage.get("setup", {})
     java = setup.get("java", {})
     coverage_input_files = _coverage_input_files(coverage)
+    enabled_scanners = profile.get("enabled_scanners", {})
+    codecov_enabled = str(bool(enabled_scanners.get("codecov", False))).lower()
+    qlty_enabled = str(bool(enabled_scanners.get("qlty", False))).lower()
     return [
         f"verify_command={profile['verify_command']}",
         f"default_branch={profile['default_branch']}",
@@ -92,9 +95,9 @@ def _profile_output_lines(profile: Dict[str, Any], event_name: str) -> List[str]
         f"coverage_java_version={java.get('version', '')}",
         f"coverage_needs_rust={str(bool(setup.get('rust', False))).lower()}",
         _json_output("coverage_system_packages_json", setup.get("system_packages", [])),
-        f"codecov_enabled={str(bool(profile.get('enabled_scanners', {}).get('codecov', False))).lower()}",
+        f"codecov_enabled={codecov_enabled}",
         f"coverage_input_files={coverage_input_files}",
-        f"qlty_enabled={str(bool(profile.get('enabled_scanners', {}).get('qlty', False))).lower()}",
+        f"qlty_enabled={qlty_enabled}",
         f"qlty_coverage_files={coverage_input_files}",
         _json_output("enabled_scanners_json", profile.get("enabled_scanners", {})),
         _json_output("vendors_json", profile.get("vendors", {})),

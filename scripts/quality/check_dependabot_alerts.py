@@ -43,7 +43,10 @@ def _request_alerts(repo: str, token: str, *, scope: str) -> List[Dict[str, Any]
         "X-GitHub-Api-Version": "2022-11-28",
         "User-Agent": "quality-zero-platform",
     }
-    next_url = f"{GITHUB_API_BASE}/repos/{repo}/dependabot/alerts?state=open&per_page=100{ecosystem}"
+    next_url = (
+        f"{GITHUB_API_BASE}/repos/{repo}/dependabot/alerts"
+        f"?state=open&per_page=100{ecosystem}"
+    )
     alerts: List[Dict[str, Any]] = []
     while next_url:
         payload, response_headers = load_json_https(
@@ -112,7 +115,8 @@ def main() -> int:
         open_alerts = len(filtered)
         if open_alerts:
             findings.append(
-                f"Dependabot reports {open_alerts} open alerts matching policy {args.policy}."
+                "Dependabot reports "
+                f"{open_alerts} open alerts matching policy {args.policy}."
             )
         status = "pass" if not findings else "fail"
 

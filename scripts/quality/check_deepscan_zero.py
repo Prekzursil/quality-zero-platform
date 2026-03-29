@@ -177,7 +177,8 @@ def _validate_deepscan_inputs(*args: Any, **kwargs: Any) -> List[str]:
         raise TypeError(f"Missing required DeepScan parameter: {exc.args[0]}") from exc
     if kwargs:
         raise TypeError(
-            f"Unexpected _validate_deepscan_inputs parameters: {', '.join(sorted(kwargs))}"
+            "Unexpected _validate_deepscan_inputs parameters: "
+            f"{', '.join(sorted(kwargs))}"
         )
     if policy_mode == "github_check_context":
         return _validate_github_check_context_inputs(github_token, repo, sha)
@@ -272,7 +273,8 @@ def _evaluate_deepscan_policy(
         ) from exc
     if kwargs:
         raise TypeError(
-            f"Unexpected _evaluate_deepscan_policy parameters: {', '.join(sorted(kwargs))}"
+            "Unexpected _evaluate_deepscan_policy parameters: "
+            f"{', '.join(sorted(kwargs))}"
         )
     if policy_mode == "github_check_context":
         return _evaluate_github_check_context(args, github_token)

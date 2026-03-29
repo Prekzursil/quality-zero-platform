@@ -21,8 +21,8 @@ from scripts.quality import run_coverage_gate
 class RunCoverageGateTests(unittest.TestCase):
     """Run Coverage Gate Tests."""
 
+    @staticmethod
     def _assert_run_shell_invocation(
-        self,
         *,
         shell_name: str,
         resolved_path: str,
@@ -54,7 +54,8 @@ class RunCoverageGateTests(unittest.TestCase):
             check=True,
         )
 
-    def _coverage_assert_fixture(self):
+    @staticmethod
+    def _coverage_assert_fixture():
         """Handle coverage assert fixture."""
         temp_dir = tempfile.TemporaryDirectory()
         repo_dir = Path(temp_dir.name) / "repo"
@@ -65,8 +66,9 @@ class RunCoverageGateTests(unittest.TestCase):
         coverage_dir.mkdir()
         (coverage_dir / "platform-coverage.xml").write_text(
             (
-                '<coverage lines-valid="1" lines-covered="1"><packages><package><classes>'
-                '<class filename="src/app.py"><lines><line number="1" hits="1" />'
+                "<coverage lines-valid=\"1\" lines-covered=\"1\"><packages>"
+                "<package><classes><class filename=\"src/app.py\"><lines>"
+                '<line number="1" hits="1" />'
                 "</lines></class></classes></package></packages></coverage>"
             ),
             encoding="utf-8",
@@ -373,7 +375,10 @@ class RunCoverageGateTests(unittest.TestCase):
             with (
                 patch("scripts.quality.run_coverage_gate._run_shell") as mock_shell,
                 patch(
-                    "scripts.quality.run_coverage_gate._collect_current_coverage_payload",
+                    (
+                        "scripts.quality.run_coverage_gate."
+                        "_collect_current_coverage_payload"
+                    ),
                     return_value={"combined_percent": 95.0},
                 ),
                 patch(
@@ -475,7 +480,9 @@ class RunCoverageGateTests(unittest.TestCase):
                     "artifacts": [
                         {
                             "name": "coverage-artifacts",
-                            "archive_download_url": "https://api.github.com/archive.zip",
+                            "archive_download_url": (
+                                "https://api.github.com/archive.zip"
+                            ),
                         }
                     ]
                 }

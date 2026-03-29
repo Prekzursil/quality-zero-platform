@@ -47,15 +47,33 @@ def _repo_contract_lines(profile: dict) -> List[str]:
         "## Repo contract",
         "",
         f"- Verify command: `{profile['verify_command']}`",
-        f"- GitHub mutation lane: `{profile.get('github_mutation_lane', 'codex-private-runner')}`",
+        (
+            "- GitHub mutation lane: "
+            f"`{profile.get('github_mutation_lane', 'codex-private-runner')}`"
+        ),
         f"- Codex auth lane: `{profile.get('codex_auth_lane', 'chatgpt-account')}`",
-        f"- Provider UI mode: `{profile.get('provider_ui_mode', 'playwright-manual-login')}`",
+        (
+            "- Provider UI mode: "
+            f"`{profile.get('provider_ui_mode', 'playwright-manual-login')}`"
+        ),
         f"- Codex environment mode: `{codex_environment.get('mode', 'automatic')}`",
-        f"- Codex environment verify command: `{codex_environment.get('verify_command', profile['verify_command'])}`",
-        f"- Codex auth file: `{codex_environment.get('auth_file', '~/.codex/auth.json')}`",
-        f"- Codex environment network profile: `{codex_environment.get('network_profile', 'unrestricted')}`",
+        (
+            "- Codex environment verify command: "
+            f"`{codex_environment.get('verify_command', profile['verify_command'])}`"
+        ),
+        (
+            "- Codex auth file: "
+            f"`{codex_environment.get('auth_file', '~/.codex/auth.json')}`"
+        ),
+        (
+            "- Codex environment network profile: "
+            f"`{codex_environment.get('network_profile', 'unrestricted')}`"
+        ),
         f"- Codex environment methods: `{codex_environment.get('methods', 'all')}`",
-        f"- Codex runner labels: `{', '.join(codex_environment.get('runner_labels', []))}`",
+        (
+            "- Codex runner labels: "
+            f"`{', '.join(codex_environment.get('runner_labels', []))}`"
+        ),
         f"- Default branch: `{profile['default_branch']}`",
         f"- Preserve public check names: `{profile['preserve_public_check_names']}`",
     ]
@@ -102,8 +120,15 @@ def _render_prompt(*args: object, **kwargs: object) -> str:
         f"Lane: {lane}",
         f"Failure context: {failure_context or 'n/a'}",
         "",
-        "Treat missing external statuses as policy drift, provider drift, or secret drift before changing code.",
-        "Never push to the default branch. Use `codex/fix/<context>/<shortsha>` for remediation and `codex/backlog/<tool>` for backlog work.",
+        (
+            "Treat missing external statuses as policy drift, provider drift, "
+            "or secret drift before changing code."
+        ),
+        (
+            "Never push to the default branch. Use "
+            "`codex/fix/<context>/<shortsha>` for remediation and "
+            "`codex/backlog/<tool>` for backlog work."
+        ),
         "",
         *_repo_contract_lines(profile),
         "",

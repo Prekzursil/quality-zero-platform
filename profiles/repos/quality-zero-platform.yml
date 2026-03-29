@@ -30,8 +30,8 @@ enabled_scanners:
   deepsource_visible: true
 coverage:
   command: |
-    python -m pip install --upgrade pip
-    python -m pip install -r requirements-dev.txt coverage
+    python3 -m pip install --upgrade pip
+    python3 -m pip install -r requirements-dev.txt coverage
     coverage run --branch -m unittest discover -s tests -p 'test_*.py'
     coverage xml -o coverage/platform-coverage.xml
   inputs:

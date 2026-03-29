@@ -108,6 +108,22 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
                 ),
             )
 
+    def test_visible_zero_inputs_falls_back_to_empty_issue_url_on_resolution_error(
+        self,
+    ) -> None:
+        """Cover visible-zero inputs when the issues URL cannot be resolved."""
+        args = Namespace(repo="Prekzursil/quality-zero-platform", sha="abc123")
+        with patch.dict("os.environ", {"GH_TOKEN": "token"}, clear=False), patch.object(
+            check_deepsource_zero,
+            "_issues_url",
+            side_effect=ValueError("missing issues url"),
+        ):
+            inputs = check_deepsource_zero._visible_zero_inputs(args)
+        self.assertEqual(inputs.token, "token")
+        self.assertEqual(inputs.repo, "Prekzursil/quality-zero-platform")
+        self.assertEqual(inputs.sha, "abc123")
+        self.assertEqual(inputs.issues_url, "")
+
     def test_validate_inputs_and_status_findings_cover_missing_and_failure_paths(
         self,
     ) -> None:

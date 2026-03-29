@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-from __future__ import absolute_import
+"""Assert that Codacy reports zero open issues for a repository or pull request."""
+
+from __future__ import absolute_import  # skipcq: PY-W2000 - retained for Codacy compatibility.
 
 import argparse
 import json
@@ -55,6 +57,8 @@ class CodacyQuery:
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for the Codacy zero gate."""
+
     parser = argparse.ArgumentParser(
         description="Assert Codacy has zero total open issues."
     )
@@ -76,6 +80,8 @@ def _request_json(
     method: str = "GET",
     data: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
+    """Request a JSON object from one Codacy API endpoint."""
+
     body = json.dumps(data).encode("utf-8") if data is not None else None
     payload, _ = load_json_https(
         url.rstrip("/"),
@@ -84,7 +90,11 @@ def _request_json(
             "Accept": JSON_ACCEPT_HEADER,
             "api-token": token,
             "User-Agent": "quality-zero-platform",
-            **({"Content-Type": "application/json"} if body is not None else {}),
+            **(
+                {"Content-Type": "application/json"}
+                if body is not None
+                else {}
+            ),
         },
         method=method,
         data=body,
@@ -95,6 +105,8 @@ def _request_json(
 
 
 def _nested_payload_values(payload: Any) -> List[Any]:
+    """Return nested values that may contain an aggregate issue total."""
+
     if isinstance(payload, dict):
         return list(payload.values())
     if isinstance(payload, list):
@@ -103,6 +115,8 @@ def _nested_payload_values(payload: Any) -> List[Any]:
 
 
 def _direct_total_open(payload: Mapping[str, Any]) -> int | None:
+    """Read the total issue count from one flat payload."""
+
     for key, value in payload.items():
         if key in TOTAL_KEYS and isinstance(value, (int, float)):
             return int(value)
@@ -110,6 +124,8 @@ def _direct_total_open(payload: Mapping[str, Any]) -> int | None:
 
 
 def _dict_total_open(payload: Any) -> int | None:
+    """Read the total issue count when the payload is a mapping."""
+
     if not isinstance(payload, dict):
         return None
     return _direct_total_open(payload)
@@ -117,7 +133,6 @@ def _dict_total_open(payload: Any) -> int | None:
 
 def extract_total_open(payload: Any) -> int | None:
     """Extract one total issue count from a nested Codacy response payload."""
-
     if (total := _dict_total_open(payload)) is not None:
         return total
     for nested in _nested_payload_values(payload):
@@ -128,6 +143,8 @@ def extract_total_open(payload: Any) -> int | None:
 
 
 def _render_md(payload: Mapping[str, Any]) -> str:
+    """Render the Markdown summary written by the Codacy gate."""
+
     lines = [
         "# Codacy Zero Gate",
         "",
@@ -138,11 +155,15 @@ def _render_md(payload: Mapping[str, Any]) -> str:
         "",
         "## Findings",
     ]
-    lines.extend([f"- {item}" for item in payload.get("findings", [])] or ["- None"])
+    lines.extend(
+        [f"- {item}" for item in payload.get("findings", [])] or ["- None"]
+    )
     return "\n".join(lines) + "\n"
 
 
 def _provider_candidates(primary_provider: str) -> List[str]:
+    """Return provider aliases to try when querying Codacy."""
+
     return list(dict.fromkeys([primary_provider, "gh", "github"]))
 
 
@@ -154,7 +175,6 @@ def build_issues_url(
     pull_request: str = "",
 ) -> str:
     """Build the Codacy issues endpoint for a repository or pull request scope."""
-
     query = [
         urllib.parse.urlencode({"limit": "1"}),
         urllib.parse.urlencode({"status": "new", "limit": "1"}),
@@ -174,6 +194,8 @@ def build_issues_url(
 
 
 def build_repository_analysis_url(provider: str, owner: str, repo: str) -> str:
+    """Build the public repository analysis endpoint for one Codacy project."""
+
     return (
         f"{CODACY_APP_API_BASE}/analysis/organizations/"
         f"{provider}/{owner}/repositories/{repo}"
@@ -181,6 +203,8 @@ def build_repository_analysis_url(provider: str, owner: str, repo: str) -> str:
 
 
 def _request_mode(query: CodacyQuery) -> Tuple[str, Dict[str, Any] | None]:
+    """Return the Codacy HTTP method and request body for the selected scope."""
+
     return [("POST", {}), ("GET", None)][bool(query.pull_request)]
 
 
@@ -189,6 +213,8 @@ def _query_codacy_public_repository_issues(
     owner: str,
     repo: str,
 ) -> Tuple[int | None, List[str]]:
+    """Query public repository issue totals without using a Codacy API token."""
+
     payload, _ = load_json_https(
         build_repository_analysis_url(provider, owner, repo),
         allowed_host_suffixes={"codacy.com"},
@@ -207,6 +233,8 @@ def _query_codacy_provider(
     query: CodacyQuery,
     token: str,
 ) -> Tuple[int | None, List[str]]:
+    """Query Codacy issue totals through the authenticated API."""
+
     url = build_issues_url(
         query.provider,
         query.owner,
@@ -214,22 +242,35 @@ def _query_codacy_provider(
         pull_request=query.pull_request,
     )
     request_method, request_data = _request_mode(query)
-    payload = _request_json(url, token, method=request_method, data=request_data)
+    payload = _request_json(
+        url,
+        token,
+        method=request_method,
+        data=request_data,
+    )
     return _issue_total_findings(payload)
 
 
 def _issue_total_findings(payload: Any) -> Tuple[int | None, List[str]]:
+    """Convert one Codacy payload into a total and a list of gate findings."""
+
     open_issues = extract_total_open(payload)
     if open_issues is None:
-        return None, ["Codacy response did not include a parseable total issue count."]
+        return None, [
+            "Codacy response did not include a parseable total issue count."
+        ]
     if open_issues != 0:
-        return open_issues, [f"Codacy reports {open_issues} open issues (expected 0)."]
+        return open_issues, [
+            f"Codacy reports {open_issues} open issues (expected 0)."
+        ]
     return open_issues, []
 
 
 def _fallback_public_issues(
     query: CodacyQuery,
 ) -> Tuple[int | None, List[str], Exception | None] | None:
+    """Fall back to the public repository summary when API auth is unavailable."""
+
     if query.pull_request:
         return None
     try:
@@ -238,7 +279,11 @@ def _fallback_public_issues(
             query.owner,
             query.repo,
         )
-    except (OSError, RuntimeError, ValueError) as fallback_exc:  # pragma: no cover
+    except (
+        OSError,
+        RuntimeError,
+        ValueError,
+    ) as fallback_exc:  # pragma: no cover
         return None, [], fallback_exc
     return open_issues, findings, None
 

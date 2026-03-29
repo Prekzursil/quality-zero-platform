@@ -445,6 +445,10 @@ jobs:
                   check=True,
                   capture_output=True,
                   text=True,
+                  env={
+                      **os.environ,
+                      "PYTHONPATH": str((Path.cwd().parent / "platform").resolve()),
+                  },
               ).stdout
           )
           normalized_items = [entry["normalized"] for entry in normalized_payload]

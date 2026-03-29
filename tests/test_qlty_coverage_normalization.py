@@ -114,4 +114,45 @@ class QltyCoverageNormalizationTests(unittest.TestCase):
 
             payload = json.loads(stdout.getvalue())
             self.assertTrue(str(payload[0]["normalized"]).startswith(str(out_dir.resolve())))
-            self.assertTrue(str(payload[0]["normalized"]).endswith("coverage__lcov.info"))
+            self.assertTrue(str(payload[0]["normalized"]).endswith("report-1.info"))
+
+    def test_existing_candidate_covers_fallback_and_empty_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            repo_dir = root / "repo"
+            (repo_dir / "src").mkdir(parents=True)
+            (repo_dir / "src" / "main.py").write_text("print('ok')\n", encoding="utf-8")
+            with patch.object(normalize_coverage_for_qlty, "_coverage_source_candidates", return_value=[]):
+                with patch.object(normalize_coverage_for_qlty, "_normalize_source_path", return_value="src/main.py"):
+                    previous = Path.cwd()
+                    try:
+                        import os
+
+                        os.chdir(repo_dir)
+                        self.assertEqual(
+                            normalize_coverage_for_qlty._existing_candidate("ignored", []),
+                            "src/main.py",
+                        )
+                    finally:
+                        os.chdir(previous)
+                with patch.object(normalize_coverage_for_qlty, "_normalize_source_path", return_value=""):
+                    self.assertEqual(normalize_coverage_for_qlty._existing_candidate("", []), "")
+
+    def test_normalize_reports_copies_unknown_formats(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            repo_dir = root / "repo"
+            out_dir = root / "out"
+            report_path = repo_dir / "coverage" / "custom.txt"
+            report_path.parent.mkdir(parents=True)
+            report_path.write_text("custom coverage payload\n", encoding="utf-8")
+
+            payload = normalize_coverage_for_qlty.normalize_reports(
+                ["coverage/custom.txt"],
+                repo_dir=repo_dir,
+                out_dir=out_dir,
+            )
+
+            self.assertEqual(payload[0]["format"], "copy")
+            self.assertEqual(payload[0]["rewritten_paths"], 0)
+            self.assertEqual(Path(payload[0]["normalized"]).read_text(encoding="utf-8"), "custom coverage payload\n")

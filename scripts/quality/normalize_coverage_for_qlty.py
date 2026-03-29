@@ -10,9 +10,6 @@ import sys
 from typing import Dict, Iterable, List
 from xml.etree import ElementTree
 
-if str(Path(__file__).resolve().parents[2]) not in sys.path:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
 from scripts.quality.coverage_paths import _coverage_source_candidates, _normalize_source_path
 
 
@@ -63,19 +60,14 @@ def _xml_source_elements(root: ElementTree.Element) -> List[ElementTree.Element]
     ]
 
 
-def _copy_report(path: Path, out_dir: Path, *, repo_dir: Path, suffix: str = "") -> Path:
-    try:
-        relative_path = path.relative_to(repo_dir)
-    except ValueError:
-        relative_path = path
-    safe_name = "__".join(part for part in relative_path.parts if part not in {".", ""})
-    out_path = out_dir / f"{Path(safe_name).stem}{suffix}{path.suffix}"
+def _copy_report(path: Path, out_dir: Path, *, report_id: int, suffix: str = "") -> Path:
+    out_path = out_dir / f"report-{report_id}{suffix}{path.suffix}"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(path, out_path)
     return out_path
 
 
-def normalize_xml_report(path: Path, repo_dir: Path, out_dir: Path) -> Dict[str, object]:
+def normalize_xml_report(path: Path, repo_dir: Path, out_dir: Path, *, report_id: int) -> Dict[str, object]:
     tree = ElementTree.parse(path)
     root = tree.getroot()
     source_nodes = _xml_source_elements(root)
@@ -95,7 +87,7 @@ def normalize_xml_report(path: Path, repo_dir: Path, out_dir: Path) -> Dict[str,
     for node in source_nodes:
         node.text = repo_root_text
 
-    out_path = _copy_report(path, out_dir, repo_dir=repo_dir, suffix="")
+    out_path = _copy_report(path, out_dir, report_id=report_id, suffix="")
     tree.write(out_path, encoding="utf-8", xml_declaration=True)
     return {
         "input": path.as_posix(),
@@ -105,7 +97,7 @@ def normalize_xml_report(path: Path, repo_dir: Path, out_dir: Path) -> Dict[str,
     }
 
 
-def normalize_lcov_report(path: Path, repo_dir: Path, out_dir: Path) -> Dict[str, object]:
+def normalize_lcov_report(path: Path, out_dir: Path, *, report_id: int) -> Dict[str, object]:
     rewritten = 0
     lines: List[str] = []
 
@@ -117,7 +109,7 @@ def normalize_lcov_report(path: Path, repo_dir: Path, out_dir: Path) -> Dict[str
                 rewritten += 1
         lines.append(raw_line)
 
-    out_path = _copy_report(path, out_dir, repo_dir=repo_dir, suffix="")
+    out_path = _copy_report(path, out_dir, report_id=report_id, suffix="")
     out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return {
         "input": path.as_posix(),
@@ -131,14 +123,14 @@ def normalize_reports(inputs: Iterable[str], *, repo_dir: Path, out_dir: Path) -
     normalized: List[Dict[str, object]] = []
     out_dir.mkdir(parents=True, exist_ok=True)
     with _working_directory(repo_dir):
-        for raw_input in inputs:
+        for index, raw_input in enumerate(inputs, start=1):
             path = (repo_dir / raw_input).resolve()
             if _is_xml_report(path):
-                normalized.append(normalize_xml_report(path, repo_dir, out_dir))
+                normalized.append(normalize_xml_report(path, repo_dir, out_dir, report_id=index))
             elif _is_lcov_report(path):
-                normalized.append(normalize_lcov_report(path, repo_dir, out_dir))
+                normalized.append(normalize_lcov_report(path, out_dir, report_id=index))
             else:
-                copied = _copy_report(path, out_dir, repo_dir=repo_dir, suffix="-qlty")
+                copied = _copy_report(path, out_dir, report_id=index, suffix="-qlty")
                 normalized.append(
                     {
                         "input": path.as_posix(),

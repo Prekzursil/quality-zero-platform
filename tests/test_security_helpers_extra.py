@@ -40,6 +40,39 @@ class _FakeBytesResponse:
 class SecurityHelpersExtraTests(unittest.TestCase):
     """Security Helpers Extra Tests."""
 
+    def _assert_read_bytes_response(
+        self,
+        parsed,
+        response: _FakeBytesResponse,
+        *,
+        expected_error: str | None = None,
+    ) -> None:
+        """Exercise `_read_bytes_response` for one fake response."""
+        with patch("scripts.security_helpers._ValidatedTLSConnection") as connection_cls:
+            connection = connection_cls.return_value
+            connection.getresponse.return_value = response
+            if expected_error is None:
+                payload, headers = security_helpers._read_bytes_response(
+                    parsed,
+                    headers={"Accept": "application/octet-stream"},
+                    method="GET",
+                    data=None,
+                    timeout=15,
+                )
+                self.assertEqual(payload, b"payload")
+                self.assertEqual(headers, {"x-test": "value"})
+            else:
+                with self.assertRaisesRegex(HTTPError, expected_error):
+                    security_helpers._read_bytes_response(
+                        parsed,
+                        headers={"Accept": "application/octet-stream"},
+                        method="GET",
+                        data=None,
+                        timeout=15,
+                    )
+        self.assertTrue(response.closed)
+        connection.close.assert_called_once()
+
     def test_prepare_https_request_validates_kwargs(self) -> None:
         """Cover prepare https request validates kwargs."""
         parsed, request_kwargs = security_helpers._prepare_https_request(
@@ -65,40 +98,15 @@ class SecurityHelpersExtraTests(unittest.TestCase):
         parsed = urlparse(
             "https://api.github.com/repos/Prekzursil/quality-zero-platform/status"
         )
-        response = _FakeBytesResponse(b"payload", {"X-Test": "value"})
-        with patch(
-            "scripts.security_helpers._ValidatedTLSConnection"
-        ) as connection_cls:
-            connection = connection_cls.return_value
-            connection.getresponse.return_value = response
-            payload, headers = security_helpers._read_bytes_response(
-                parsed,
-                headers={"Accept": "application/octet-stream"},
-                method="GET",
-                data=None,
-                timeout=15,
-            )
-        self.assertEqual(payload, b"payload")
-        self.assertEqual(headers, {"x-test": "value"})
-        self.assertTrue(response.closed)
-        connection.close.assert_called_once()
-
-        error_response = _FakeBytesResponse(b"{}", status=404, reason="Not Found")
-        with patch(
-            "scripts.security_helpers._ValidatedTLSConnection"
-        ) as connection_cls:
-            connection = connection_cls.return_value
-            connection.getresponse.return_value = error_response
-            with self.assertRaisesRegex(HTTPError, "HTTP Error 404: Not Found"):
-                security_helpers._read_bytes_response(
-                    parsed,
-                    headers={"Accept": "application/octet-stream"},
-                    method="GET",
-                    data=None,
-                    timeout=15,
-                )
-        self.assertTrue(error_response.closed)
-        connection.close.assert_called_once()
+        self._assert_read_bytes_response(
+            parsed,
+            _FakeBytesResponse(b"payload", {"X-Test": "value"}),
+        )
+        self._assert_read_bytes_response(
+            parsed,
+            _FakeBytesResponse(b"{}", status=404, reason="Not Found"),
+            expected_error="HTTP Error 404: Not Found",
+        )
 
         response = _FakeBytesResponse(b"bytes", {"X-Test": "value"})
         with patch(

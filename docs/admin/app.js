@@ -174,13 +174,14 @@ function renderError(message) {
   body.replaceChildren(main);
 }
 
-loadDashboard().then(payload => {
+try {
+  const payload = await loadDashboard();
   renderSummary(payload);
   renderTable(payload);
   document.getElementById('searchInput').addEventListener('input', () => renderTable(payload));
   document.getElementById('closeDetail').addEventListener('click', () => {
     document.getElementById('detailPanel').classList.add('hidden');
   });
-}).catch(error => {
+} catch (error) {
   renderError(error.message);
-});
+}

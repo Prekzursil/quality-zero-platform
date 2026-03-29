@@ -71,6 +71,12 @@ class RunCodexExecTests(unittest.TestCase):
         ):
             return build_codex_command(args)
 
+    @classmethod
+    def _expected_subprocess_command(cls, args: Namespace) -> List[str]:
+        """Handle expected subprocess command."""
+        command = cls._expected_codex_command(args)
+        return [r"C:\Tools\codex.exe", *command[1:]]
+
     @staticmethod
     @staticmethod
     def _run_main_with_patched_subprocess(
@@ -110,7 +116,7 @@ class RunCodexExecTests(unittest.TestCase):
     ) -> None:
         """Handle assert subprocess call matches args."""
         called_args, called_kwargs = call_args
-        self.assertEqual(called_args[0], self._expected_codex_command(args))
+        self.assertEqual(called_args[0], self._expected_subprocess_command(args))
         self.assertEqual(called_kwargs["executable"], r"C:\Tools\codex.exe")
         self.assertFalse(called_kwargs["shell"])
         self.assertEqual(called_kwargs["input"], prompt_text)

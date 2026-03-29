@@ -29,6 +29,7 @@ from scripts.security_helpers import (
 )
 
 DEEPSOURCE_STATUS_PREFIX = "DeepSource"
+DEEPSOURCE_HOST = "app.deepsource.com"
 DEFAULT_TIMEOUT_SECONDS = 900
 DEFAULT_POLL_SECONDS = 20
 
@@ -91,13 +92,13 @@ def _issues_url(args: argparse.Namespace) -> str:
     """Resolve the default-branch DeepSource issues URL for the repo."""
     explicit = (args.issues_url or os.environ.get("DEEPSOURCE_ISSUES_URL", "")).strip()
     if explicit:
-        return normalize_https_url(explicit, allowed_hosts={"app.deepsource.com"})
+        return normalize_https_url(explicit, allowed_hosts={DEEPSOURCE_HOST})
     repo = _github_repo(args)
     if not repo:
         return ""
     return normalize_https_url(
         f"https://app.deepsource.com/gh/{repo}/issues?category=all&page=1",
-        allowed_hosts={"app.deepsource.com"},
+        allowed_hosts={DEEPSOURCE_HOST},
     )
 
 
@@ -110,7 +111,7 @@ def _request_html(url: str) -> str:
     """Fetch a DeepSource HTML page as UTF-8 text."""
     payload, _ = load_bytes_https(
         url,
-        allowed_hosts={"app.deepsource.com"},
+        allowed_hosts={DEEPSOURCE_HOST},
         headers={
             "Accept": "text/html,application/xhtml+xml",
             "User-Agent": "quality-zero-platform",

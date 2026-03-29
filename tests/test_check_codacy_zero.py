@@ -34,6 +34,11 @@ from scripts.quality.check_codacy_zero import (
 )
 
 
+def _raise_runtime_error(message: str) -> None:
+    """Raise one runtime error for callback tests."""
+    raise RuntimeError(message)
+
+
 class CodacyZeroTests(unittest.TestCase):
     """Codacy Zero Tests."""
 
@@ -599,15 +604,14 @@ class CodacyZeroTests(unittest.TestCase):
                 "(waiting for targetsha)."
             ),
         )
-        self.assertEqual(
+        self.assertIsNone(
             check_codacy_zero._pull_request_pending_message(
                 {"pullRequest": {"headCommitSha": "targetsha"}},
                 self._base_query(pull_request="5"),
                 "targetsha",
-            ),
-            None,
+            )
         )
-        self.assertEqual(
+        self.assertIsNone(
             check_codacy_zero._repository_pending_message(
                 {
                     "data": {
@@ -618,8 +622,7 @@ class CodacyZeroTests(unittest.TestCase):
                     }
                 },
                 "targetsha",
-            ),
-            None,
+            )
         )
 
     def test_codacy_support_pending_message_handles_empty_sha_and_non_pr(self) -> None:
@@ -1028,9 +1031,7 @@ class CodacyZeroTests(unittest.TestCase):
                 "token",
                 self._retry_config(
                     ("gh",),
-                    pending_fn=lambda _query, _token: (_ for _ in ()).throw(
-                        RuntimeError("status broke")
-                    ),
+                    pending_fn=lambda _query, _token: _raise_runtime_error("status broke"),
                 ),
             )
 

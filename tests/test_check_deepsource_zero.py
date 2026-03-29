@@ -113,7 +113,7 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
     ) -> None:
         """Cover visible-zero inputs when the issues URL cannot be resolved."""
         args = Namespace(repo="Prekzursil/quality-zero-platform", sha="abc123")
-        with patch.dict("os.environ", {"GH_TOKEN": "token"}, clear=False), patch.object(
+        with patch.dict("os.environ", {"GH_TOKEN": "token"}, clear=True), patch.object(
             check_deepsource_zero,
             "_issues_url",
             side_effect=ValueError("missing issues url"),

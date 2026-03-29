@@ -17,9 +17,9 @@ class ScriptEntrypointSupportTests(unittest.TestCase):
         self.assertEqual(run_script_entrypoint_failure(str(script_path)), 0)
 
     def test_run_script_entrypoint_failure_handles_string_exit_code(self) -> None:
-        """Convert string exit codes into integers for callers."""
+        """Treat non-integer exit payloads the way Python does at process exit."""
         script_path = Path("tests/fixtures/string_exit_script.py").resolve()
-        self.assertEqual(run_script_entrypoint_failure(str(script_path)), 7)
+        self.assertEqual(run_script_entrypoint_failure(str(script_path)), 1)
 
     def test_run_script_entrypoint_failure_raises_when_script_never_exits(self) -> None:
         """Cover run script entrypoint failure raises when script never exits."""

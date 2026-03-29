@@ -38,7 +38,7 @@ def run_script_entrypoint_failure(script_relative_path: str) -> int:
                     return 0
                 if isinstance(exc.code, int):
                     return exc.code
-                return int(str(exc.code))
+                return 1
         finally:
             os.chdir(previous)
     raise AssertionError(f"{script_relative_path} did not exit")

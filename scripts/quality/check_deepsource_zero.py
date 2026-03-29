@@ -232,13 +232,17 @@ def _visible_zero_inputs(
     args: argparse.Namespace,
 ) -> Tuple[str, str, str, str]:
     """Return the resolved runtime inputs for one visible-zero check."""
+    try:
+        issues_url = _issues_url(args)
+    except ValueError:
+        issues_url = ""
     return (
         (
             os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")
         ).strip(),
         _github_repo(args),
         _github_sha(args),
-        _issues_url(args),
+        issues_url,
     )
 
 

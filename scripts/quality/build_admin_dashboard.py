@@ -197,7 +197,7 @@ def _select_runs(
 ) -> List[Mapping[str, Any]]:
     """Handle select runs."""
     if filter_fn is None:
-        return workflow_runs
+        return list(workflow_runs)
     return [item for item in workflow_runs if filter_fn(item)]
 
 

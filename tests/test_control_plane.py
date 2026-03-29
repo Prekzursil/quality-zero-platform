@@ -14,6 +14,21 @@ from tests.control_plane_support import ControlPlaneAssertions, ROOT
 class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
     """Control-plane regression tests for required contexts and repo contracts."""
 
+    def _assert_quality_zero_platform_contexts(
+        self,
+        *contexts: str,
+        push_contexts,
+        ruleset_contexts,
+        target_contexts,
+        ruleset_status_checks,
+    ) -> None:
+        """Assert the shared push/ruleset/target contract for one repo."""
+        for context in contexts:
+            self.assertIn(context, push_contexts)
+            self.assertIn(context, target_contexts)
+            self.assertIn(context, ruleset_contexts)
+            self.assertIn(context, ruleset_status_checks)
+
     def test_inventory_expands_to_15_repos(self) -> None:
         """Inventory should continue to expose the full enrolled repo set."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
@@ -162,45 +177,22 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
             profile, event_name="merge_group"
         )
         payload = build_ruleset_payload(profile)
+        ruleset_status_checks = [
+            item["context"]
+            for item in payload["rules"][1]["parameters"]["required_status_checks"]
+        ]
 
-        self.assertIn("Codecov Analytics", push_contexts)
-        self.assertIn("QLTY Zero", push_contexts)
-        self.assertIn("DeepSource Visible Zero", push_contexts)
-        self.assertIn("Codecov Analytics", profile["required_contexts"]["target"])
-        self.assertIn("QLTY Zero", profile["required_contexts"]["target"])
-        self.assertIn("DeepSource Visible Zero", profile["required_contexts"]["target"])
-        self.assertIn("Codecov Analytics", ruleset_contexts)
-        self.assertIn("QLTY Zero", ruleset_contexts)
-        self.assertIn("DeepSource Visible Zero", ruleset_contexts)
+        self._assert_quality_zero_platform_contexts(
+            "Codecov Analytics",
+            "QLTY Zero",
+            "DeepSource Visible Zero",
+            push_contexts=push_contexts,
+            ruleset_contexts=ruleset_contexts,
+            target_contexts=profile["required_contexts"]["target"],
+            ruleset_status_checks=ruleset_status_checks,
+        )
         self.assertEqual(ruleset_contexts, merge_group_contexts)
         self.assertNotIn("qlty coverage diff", ruleset_contexts)
-        self.assertIn(
-            "Codecov Analytics",
-            [
-                item["context"]
-                for item in payload["rules"][1]["parameters"][
-                    "required_status_checks"
-                ]
-            ],
-        )
-        self.assertIn(
-            "QLTY Zero",
-            [
-                item["context"]
-                for item in payload["rules"][1]["parameters"][
-                    "required_status_checks"
-                ]
-            ],
-        )
-        self.assertIn(
-            "DeepSource Visible Zero",
-            [
-                item["context"]
-                for item in payload["rules"][1]["parameters"][
-                    "required_status_checks"
-                ]
-            ],
-        )
         self.assertEqual(
             payload["rules"][0]["parameters"]["required_approving_review_count"],
             0,

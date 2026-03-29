@@ -141,8 +141,7 @@ def _run_qlty_check(repo_dir: Path) -> subprocess.CompletedProcess[str]:
     command = _build_qlty_check_argv()
     # Safe-by-construction: a fixed literal executable name, explicit argv,
     # shell=False, and an absolute executable path supplied separately.
-    return subprocess.run(  # nosec B603
-        # nosemgrep
+    return subprocess.run(  # nosec B603  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
         command,
         executable=executable_path,
         cwd=repo_dir,
@@ -159,8 +158,7 @@ def _run_qlty_smells(repo_dir: Path) -> subprocess.CompletedProcess[str]:
     command = _build_qlty_smells_argv()
     # Safe-by-construction: a fixed literal executable name, explicit argv,
     # shell=False, and an absolute executable path supplied separately.
-    return subprocess.run(  # nosec B603
-        # nosemgrep
+    return subprocess.run(  # nosec B603  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
         command,
         executable=executable_path,
         cwd=repo_dir,

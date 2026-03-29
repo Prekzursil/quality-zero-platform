@@ -20,45 +20,24 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         return load_repo_profile(inventory, "Prekzursil/codex-session-manager")
 
-    def _assert_context_contracts(
-        self,
-        *,
-        push_contexts: List[str],
-        pr_contexts: List[str],
-        ruleset_contexts: Set[str],
-        target_contexts: Set[str],
-    ) -> None:
-        """Assert the event-specific context contract for the repo."""
-        self._assert_context_subset(
-            push_contexts,
-            self._zero_gate_provider_contexts() | {"build-test", "analyze", "scan"},
-        )
-        self._assert_context_subset(
-            pr_contexts,
-            self._shared_zero_gate_contexts()
-            | {
-                "build-test",
-                "analyze",
-                "scan",
-                "dependency-review",
-                "aggregate-gate / Quality Zero Gate",
-                "shared-scanner-matrix / Quality Rollup",
-            },
-        )
-        self._assert_context_subset(
-            ruleset_contexts,
-            self._shared_zero_gate_contexts()
-            | {
-                "build-test",
-                "analyze",
-                "scan",
-                "dependency-review",
-                "aggregate-gate / Quality Zero Gate",
-                "shared-scanner-matrix / Quality Rollup",
-            },
-        )
-        self.assertTrue(ruleset_contexts.issubset(target_contexts))
-        for unexpected in (
+    @staticmethod
+    def _repo_required_contexts() -> Set[str]:
+        """Return repo-specific contexts shared by push, PR, and ruleset checks."""
+        return {"build-test", "analyze", "scan"}
+
+    @staticmethod
+    def _pr_only_contexts() -> Set[str]:
+        """Return contexts that only appear on pull requests and rulesets."""
+        return {
+            "dependency-review",
+            "aggregate-gate / Quality Zero Gate",
+            "shared-scanner-matrix / Quality Rollup",
+        }
+
+    @staticmethod
+    def _unexpected_contexts() -> Set[str]:
+        """Return contexts that must stay out of this repo contract."""
+        return {
             "Codecov Analytics",
             "Coverage 100 Gate",
             "QLTY Zero",
@@ -72,7 +51,27 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
             "qlty coverage diff",
             "Codacy Static Code Analysis",
             "DeepScan",
-        ):
+        }
+
+    def _assert_context_contracts(
+        self,
+        *,
+        push_contexts: List[str],
+        pr_contexts: List[str],
+        ruleset_contexts: Set[str],
+        target_contexts: Set[str],
+    ) -> None:
+        """Assert the event-specific context contract for the repo."""
+        repo_required = self._repo_required_contexts()
+        pr_required = self._shared_zero_gate_contexts() | repo_required | self._pr_only_contexts()
+        self._assert_context_subset(
+            push_contexts,
+            self._zero_gate_provider_contexts() | repo_required,
+        )
+        self._assert_context_subset(pr_contexts, pr_required)
+        self._assert_context_subset(ruleset_contexts, pr_required)
+        self.assertTrue(ruleset_contexts.issubset(target_contexts))
+        for unexpected in self._unexpected_contexts():
             self.assertNotIn(unexpected, pr_contexts)
 
     def _assert_profile_shape(self, profile: dict) -> None:
@@ -108,52 +107,23 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
         push_contexts = active_required_contexts(profile, event_name="push")
         ruleset_contexts = set(active_required_contexts(profile, event_name="ruleset"))
         target_contexts = set(profile["required_contexts"]["target"])
-
-        for required in self._zero_gate_provider_contexts() | {
-            "build-test",
-            "analyze",
-            "scan",
-        }:
-            self.assertIn(required, push_contexts)
-        for required in self._shared_zero_gate_contexts() | {
-            "build-test",
-            "analyze",
-            "scan",
-            "dependency-review",
-            "aggregate-gate / Quality Zero Gate",
-            "shared-scanner-matrix / Quality Rollup",
-        }:
-            self.assertIn(required, pr_contexts)
+        self._assert_context_contracts(
+            push_contexts=push_contexts,
+            pr_contexts=pr_contexts,
+            ruleset_contexts=ruleset_contexts,
+            target_contexts=target_contexts,
+        )
         self.assertNotIn("dependency-review", push_contexts)
-
-        for required in self._shared_zero_gate_contexts() | {
-            "build-test",
-            "analyze",
-            "scan",
-            "dependency-review",
-            "aggregate-gate / Quality Zero Gate",
-            "shared-scanner-matrix / Quality Rollup",
-        }:
-            self.assertIn(required, ruleset_contexts)
-            self.assertIn(required, target_contexts)
-
-        for unexpected in (
+        for unexpected in {"qlty check", "qlty coverage", "qlty coverage diff"}:
+            self.assertNotIn(unexpected, push_contexts)
+            self.assertNotIn(unexpected, pr_contexts)
+        for unexpected in self._unexpected_contexts() - {
             "qlty check",
             "qlty coverage",
             "qlty coverage diff",
-        ):
-            self.assertNotIn(unexpected, push_contexts)
-            self.assertNotIn(unexpected, pr_contexts)
-        for unexpected in (
-            "Codecov Analytics",
-            "Coverage 100 Gate",
-            "QLTY Zero",
-            "Sonar Zero",
-            "Codacy Zero",
-            "Semgrep Zero",
-            "Sentry Zero",
-            "DeepScan Zero",
-        ):
+            "Codacy Static Code Analysis",
+            "DeepScan",
+        }:
             self.assertNotIn(unexpected, pr_contexts)
 
     def test_codex_session_manager_profile_validation_accepts_emitted_required_now_contexts(self) -> None:

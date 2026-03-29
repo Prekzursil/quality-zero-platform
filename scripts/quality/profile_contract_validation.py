@@ -74,8 +74,6 @@ def _validate_codex_environment(
 
 def _validate_control_plane_lanes(
     profile: Dict[str, Any],
-    *,
-    active_required_contexts_fn,
 ) -> List[str]:
     """Validate core control-plane lane defaults for one profile."""
     slug = profile["slug"]
@@ -110,6 +108,43 @@ def _validate_control_plane_lanes(
     return findings
 
 
+def _missing_required_now_contexts(profile: Dict[str, Any]) -> List[str]:
+    """Return always and PR-only contexts missing from required_now."""
+    pr_context_defaults = dedupe_strings(
+        [
+            *profile["required_contexts"].get("always", []),
+            *profile["required_contexts"].get("pull_request_only", []),
+        ]
+    )
+    required_now = set(profile["required_contexts"].get("required_now", []))
+    return [
+        name
+        for name in pr_context_defaults
+        if not _contains_required_context(required_now, name)
+    ]
+
+
+def _missing_target_contexts(profile: Dict[str, Any]) -> List[str]:
+    """Return required-now contexts that are absent from the target set."""
+    required_now = set(profile["required_contexts"].get("required_now", []))
+    target_contexts = set(profile["required_contexts"].get("target", []))
+    return [name for name in required_now if name not in target_contexts]
+
+
+def _missing_ruleset_target_contexts(
+    profile: Dict[str, Any],
+    *,
+    ruleset_contexts: Set[str],
+) -> List[str]:
+    """Return target contexts that are not emitted by the ruleset contract."""
+    target_contexts = set(profile["required_contexts"].get("target", []))
+    return [
+        name
+        for name in target_contexts
+        if not _contains_required_context(ruleset_contexts, name)
+    ]
+
+
 def _matches_required_context(actual_context: str, expected_context: str) -> bool:
     """Return whether one emitted status context satisfies the expected name."""
     current = str(actual_context or "").strip()
@@ -140,35 +175,22 @@ def _validate_required_context_sets(
     ruleset_contexts = set(active_required_contexts_fn(profile, event_name="ruleset"))
     if not ruleset_contexts:
         findings.append(f"{profile['slug']}: at least one required context is required")
-    pr_context_defaults = dedupe_strings(
-        [
-            *profile["required_contexts"].get("always", []),
-            *profile["required_contexts"].get("pull_request_only", []),
-        ]
-    )
-    required_now = set(profile["required_contexts"].get("required_now", []))
-    missing_required_now = [
-        name
-        for name in pr_context_defaults
-        if not _contains_required_context(required_now, name)
-    ]
+    missing_required_now = _missing_required_now_contexts(profile)
     if missing_required_now:
         findings.append(
             f"{profile['slug']}: required_contexts.required_now is missing "
             f"{', '.join(missing_required_now)}"
         )
-    target_contexts = set(profile["required_contexts"].get("target", []))
-    missing_target = [name for name in required_now if name not in target_contexts]
+    missing_target = _missing_target_contexts(profile)
     if missing_target:
         findings.append(
             f"{profile['slug']}: required_contexts.target is missing "
             f"{', '.join(missing_target)}"
         )
-    missing_ruleset_target = [
-        name
-        for name in target_contexts
-        if not _contains_required_context(ruleset_contexts, name)
-    ]
+    missing_ruleset_target = _missing_ruleset_target_contexts(
+        profile,
+        ruleset_contexts=ruleset_contexts,
+    )
     if missing_ruleset_target:
         findings.append(
             f"{profile['slug']}: emitted ruleset contexts are missing "
@@ -339,10 +361,7 @@ def validate_profile(
     """Run every profile-contract validator and return the combined findings."""
     findings: List[str] = validate_profile_shape(profile, slug=profile["slug"])
     validators = (
-        lambda current: _validate_control_plane_lanes(
-            current,
-            active_required_contexts_fn=active_required_contexts_fn,
-        ),
+        _validate_control_plane_lanes,
         lambda current: _validate_required_context_sets(
             current,
             active_required_contexts_fn=active_required_contexts_fn,

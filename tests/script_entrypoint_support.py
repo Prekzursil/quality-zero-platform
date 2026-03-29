@@ -3,7 +3,7 @@
 from __future__ import absolute_import
 
 import os
-import runpy
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -14,34 +14,35 @@ from unittest.mock import patch
 def run_script_entrypoint_failure(script_relative_path: str) -> int:
     """Run a script as ``__main__`` and return its exit code."""
     script_path = Path(script_relative_path).resolve()
-    root_text = str(Path.cwd().resolve())
-    trimmed_sys_path = [item for item in sys.path if item != root_text]
-    with tempfile.TemporaryDirectory() as tmp, patch.dict(
-        "os.environ",
-        {},
-        clear=True,
-    ), patch.object(
-        sys,
-        "argv",
-        [str(script_path)],
-    ), patch.object(
-        sys, "path", trimmed_sys_path[:]
-    ):
-        cwd = Path(tmp)
-        previous = Path.cwd()
-        os.chdir(cwd)
-        try:
-            try:
-                runpy.run_path(str(script_path), run_name="__main__")
-            except SystemExit as exc:
-                if exc.code is None:
-                    return 0
-                if isinstance(exc.code, int):
-                    return exc.code
-                return 1
-        finally:
-            os.chdir(previous)
-    raise AssertionError(f"{script_relative_path} did not exit")
+    bootstrap = "\n".join(
+        [
+            "import runpy, sys",
+            "script_path = sys.argv[1]",
+            "sys.argv = [script_path]",
+            "try:",
+            "    runpy.run_path(script_path, run_name='__main__')",
+            "except SystemExit as exc:",
+            "    code = exc.code",
+            "    if code is None:",
+            "        raise SystemExit(0)",
+            "    if isinstance(code, int):",
+            "        raise SystemExit(code)",
+            "    raise SystemExit(1)",
+            "raise SystemExit(255)",
+        ]
+    )
+    with tempfile.TemporaryDirectory() as tmp, patch.dict("os.environ", {}, clear=True):
+        completed = subprocess.run(
+            [sys.executable, "-c", bootstrap, str(script_path)],
+            cwd=Path(tmp),
+            env={},
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    if completed.returncode == 255:
+        raise AssertionError(f"{script_path} did not exit")
+    return int(completed.returncode)
 
 
 def assert_main_reports_provider_failure(

@@ -17,8 +17,91 @@ from scripts.quality.check_sonar_zero import load_sonar_findings_with_retry
 from typing import List
 
 
+def _raise_runtime_error(message: str) -> None:
+    """Raise one runtime error for callback tests."""
+    raise RuntimeError(message)
+
+
 class SonarZeroTests(unittest.TestCase):
     """Sonar Zero Tests."""
+
+    def _assert_sonar_request_round_trip(
+        self,
+        args: Namespace,
+        responses,
+        *,
+        expected_open_issues: int,
+        expected_quality_gate: str,
+        expected_query: str,
+    ) -> None:
+        """Assert one Sonar request sequence and query parameter shape."""
+        captured_urls: List[str] = []
+
+        def fake_request(url: str, auth_header: str):
+            """Handle fake request."""
+            captured_urls.append(url)
+            return responses.pop(0)
+
+        with patch(
+            "scripts.quality.check_sonar_zero._request_json", side_effect=fake_request
+        ):
+            self.assertEqual(
+                check_sonar_zero._load_open_issues(args, "auth"),
+                expected_open_issues,
+            )
+            self.assertEqual(
+                check_sonar_zero._load_quality_gate(args, "auth"),
+                expected_quality_gate,
+            )
+        self.assertIn(expected_query, captured_urls[0])
+        self.assertIn(expected_query, captured_urls[1])
+
+    def _assert_revision_lookup(
+        self,
+        args: Namespace,
+        payload,
+        *,
+        expected_revision: str,
+        expected_pending_message,
+        revision_loader,
+    ) -> None:
+        """Assert one scoped revision lookup and pending-message scenario."""
+        with patch.object(check_sonar_zero, "_request_json", return_value=payload):
+            self.assertEqual(revision_loader(args, "auth"), expected_revision)
+            self.assertEqual(
+                check_sonar_zero._scoped_analysis_pending_message(args, "auth"),
+                expected_pending_message,
+            )
+
+    def _assert_main_result(
+        self,
+        args: Namespace,
+        *,
+        load_result=None,
+        load_side_effect=None,
+        write_report_result=0,
+        expected_code: int,
+        expected_findings=None,
+        expected_status: str | None = None,
+    ) -> None:
+        """Exercise one Sonar main-path scenario."""
+        with patch.object(
+            check_sonar_zero, "_parse_args", return_value=args
+        ), patch.object(
+            check_sonar_zero, "write_report", return_value=write_report_result
+        ) as write_report_mock:
+            with patch.object(
+                check_sonar_zero,
+                "load_sonar_findings_with_retry",
+                return_value=load_result,
+                side_effect=load_side_effect,
+            ):
+                self.assertEqual(check_sonar_zero.main(), expected_code)
+        payload = write_report_mock.call_args.args[0]
+        if expected_findings is not None:
+            self.assertEqual(payload["findings"], expected_findings)
+        if expected_status is not None:
+            self.assertEqual(payload["status"], expected_status)
 
     def test_auth_header_and_query_helpers_cover_scoped_inputs(self) -> None:
         """Cover auth header and query helpers cover scoped inputs."""
@@ -58,46 +141,26 @@ class SonarZeroTests(unittest.TestCase):
 
     def test_load_helpers_collect_open_issues_quality_gate_and_findings(self) -> None:
         """Cover load helpers collect open issues quality gate and findings."""
-        responses = [
-            {"paging": {"total": 1}},
-            {"projectStatus": {"status": "ERROR"}},
-        ]
-        captured_urls: List[str] = []
-
-        def fake_request(url: str, auth_header: str):
-            """Handle fake request."""
-            captured_urls.append(url)
-            return responses.pop(0)
-
         args = Namespace(
             project_key="project", branch="", pull_request="5", policy_mode="zero"
         )
-        with patch(
-            "scripts.quality.check_sonar_zero._request_json", side_effect=fake_request
-        ):
-            self.assertEqual(check_sonar_zero._load_open_issues(args, "auth"), 1)
-            self.assertEqual(check_sonar_zero._load_quality_gate(args, "auth"), "ERROR")
-
-        self.assertIn("pullRequest=5", captured_urls[0])
-        self.assertIn("pullRequest=5", captured_urls[1])
-
-        branch_urls: List[str] = []
-
-        def fake_branch_request(url: str, auth_header: str):
-            """Handle fake branch request."""
-            branch_urls.append(url)
-            return {"paging": {"total": 0}}
-
         branch_args = Namespace(
             project_key="project", branch="main", pull_request="", policy_mode="zero"
         )
-        with patch(
-            "scripts.quality.check_sonar_zero._request_json",
-            side_effect=fake_branch_request,
-        ):
-            self.assertEqual(check_sonar_zero._load_open_issues(branch_args, "auth"), 0)
-
-        self.assertIn("branch=main", branch_urls[0])
+        self._assert_sonar_request_round_trip(
+            args,
+            [{"paging": {"total": 1}}, {"projectStatus": {"status": "ERROR"}}],
+            expected_open_issues=1,
+            expected_quality_gate="ERROR",
+            expected_query="pullRequest=5",
+        )
+        self._assert_sonar_request_round_trip(
+            branch_args,
+            [{"paging": {"total": 0}}, {"projectStatus": {"status": "OK"}}],
+            expected_open_issues=0,
+            expected_quality_gate="OK",
+            expected_query="branch=main",
+        )
 
         with patch.object(
             check_sonar_zero, "_load_open_issues", return_value=2
@@ -133,64 +196,41 @@ class SonarZeroTests(unittest.TestCase):
         args = Namespace(
             project_key="project", branch="main", pull_request="", sha="targetsha"
         )
-        with patch.object(
-            check_sonar_zero,
-            "_request_json",
-            return_value={"branches": [{"name": "main", "commit": {"sha": "oldsha"}}]},
-        ):
-            self.assertEqual(
-                check_sonar_zero._load_branch_analysis_revision(args, "auth"),
-                "oldsha",
-            )
-            self.assertEqual(
-                check_sonar_zero._scoped_analysis_pending_message(args, "auth"),
-                (
-                    "Sonar analysis for branch main is still on oldsha "
-                    "(waiting for targetsha)."
-                ),
-            )
-
-        with patch.object(
-            check_sonar_zero,
-            "_request_json",
-            return_value={"branches": [{"name": "other", "commit": {"sha": "oldsha"}}]},
-        ):
-            self.assertEqual(
-                check_sonar_zero._load_branch_analysis_revision(args, "auth"), ""
-            )
-            self.assertEqual(
-                check_sonar_zero._scoped_analysis_pending_message(args, "auth"),
-                "Sonar analysis for branch main is not available yet.",
-            )
+        self._assert_revision_lookup(
+            args,
+            {"branches": [{"name": "main", "commit": {"sha": "oldsha"}}]},
+            expected_revision="oldsha",
+            expected_pending_message=(
+                "Sonar analysis for branch main is still on oldsha "
+                "(waiting for targetsha)."
+            ),
+            revision_loader=check_sonar_zero._load_branch_analysis_revision,
+        )
+        self._assert_revision_lookup(
+            args,
+            {"branches": [{"name": "other", "commit": {"sha": "oldsha"}}]},
+            expected_revision="",
+            expected_pending_message="Sonar analysis for branch main is not available yet.",
+            revision_loader=check_sonar_zero._load_branch_analysis_revision,
+        )
 
         pr_args = Namespace(
             project_key="project", branch="", pull_request="5", sha="targetsha"
         )
-        with patch.object(
-            check_sonar_zero,
-            "_request_json",
-            return_value={
-                "pullRequests": [{"key": "5", "commit": {"sha": "targetsha"}}]
-            },
-        ):
-            self.assertEqual(
-                check_sonar_zero._load_pull_request_analysis_revision(pr_args, "auth"),
-                "targetsha",
-            )
-            self.assertIsNone(
-                check_sonar_zero._scoped_analysis_pending_message(pr_args, "auth")
-            )
-        with patch.object(
-            check_sonar_zero,
-            "_request_json",
-            return_value={
-                "pullRequests": [{"key": "other", "commit": {"sha": "oldsha"}}]
-            },
-        ):
-            self.assertEqual(
-                check_sonar_zero._load_pull_request_analysis_revision(pr_args, "auth"),
-                "",
-            )
+        self._assert_revision_lookup(
+            pr_args,
+            {"pullRequests": [{"key": "5", "commit": {"sha": "targetsha"}}]},
+            expected_revision="targetsha",
+            expected_pending_message=None,
+            revision_loader=check_sonar_zero._load_pull_request_analysis_revision,
+        )
+        self._assert_revision_lookup(
+            pr_args,
+            {"pullRequests": [{"key": "other", "commit": {"sha": "oldsha"}}]},
+            expected_revision="",
+            expected_pending_message="Sonar analysis for pull request 5 is not available yet.",
+            revision_loader=check_sonar_zero._load_pull_request_analysis_revision,
+        )
 
         self.assertIsNone(
             check_sonar_zero._scoped_analysis_pending_message(
@@ -372,9 +412,7 @@ class SonarZeroTests(unittest.TestCase):
             args,
             "auth",
             fetch_fn=lambda _args, _auth: (0, "OK", []),
-            pending_fn=lambda _args, _auth: (_ for _ in ()).throw(
-                RuntimeError("pending broke")
-            ),
+            pending_fn=lambda _args, _auth: _raise_runtime_error("pending broke"),
             attempts=1,
             sleep_seconds=0.0,
         )
@@ -477,67 +515,41 @@ class SonarZeroTests(unittest.TestCase):
             out_md="sonar-zero/sonar.md",
         )
 
-        with patch.dict("os.environ", {}, clear=True), patch.object(
-            check_sonar_zero, "_parse_args", return_value=args
-        ), patch.object(
-            check_sonar_zero, "write_report", return_value=0
-        ) as write_report_mock:
-            self.assertEqual(check_sonar_zero.main(), 1)
-        self.assertEqual(
-            write_report_mock.call_args.args[0]["findings"], ["SONAR_TOKEN is missing."]
-        )
+        with patch.dict("os.environ", {}, clear=True):
+            self._assert_main_result(
+                args,
+                expected_code=1,
+                expected_findings=["SONAR_TOKEN is missing."],
+            )
 
         success_args = Namespace(**{**args.__dict__, "token": "provided-token"})
-        with patch.object(
-            check_sonar_zero, "_parse_args", return_value=success_args
-        ), patch.object(
-            check_sonar_zero,
-            "load_sonar_findings_with_retry",
-            return_value=(0, "OK", []),
-        ), patch.object(
-            check_sonar_zero, "write_report", return_value=0
-        ) as write_report_mock:
-            self.assertEqual(check_sonar_zero.main(), 0)
-        self.assertEqual(write_report_mock.call_args.args[0]["status"], "pass")
-
-        with patch.object(
-            check_sonar_zero, "_parse_args", return_value=success_args
-        ), patch.object(
-            check_sonar_zero,
-            "load_sonar_findings_with_retry",
-            side_effect=RuntimeError("provider timeout"),
-        ), patch.object(
-            check_sonar_zero, "write_report", return_value=0
-        ) as write_report_mock:
-            self.assertEqual(check_sonar_zero.main(), 1)
-        self.assertEqual(
-            write_report_mock.call_args.args[0]["findings"],
-            ["Sonar API request failed: provider timeout"],
+        self._assert_main_result(
+            success_args,
+            load_result=(0, "OK", []),
+            expected_code=0,
+            expected_status="pass",
+        )
+        self._assert_main_result(
+            success_args,
+            load_side_effect=RuntimeError("provider timeout"),
+            expected_code=1,
+            expected_findings=["Sonar API request failed: provider timeout"],
+        )
+        self._assert_main_result(
+            success_args,
+            load_result=(0, "OK", []),
+            write_report_result=4,
+            expected_code=4,
+            expected_status="pass",
         )
 
-        with patch.object(
-            check_sonar_zero, "_parse_args", return_value=success_args
-        ), patch.object(
-            check_sonar_zero,
-            "load_sonar_findings_with_retry",
-            return_value=(0, "OK", []),
-        ), patch.object(
-            check_sonar_zero, "write_report", return_value=4
-        ):
-            self.assertEqual(check_sonar_zero.main(), 4)
-
         audit_args = Namespace(**{**success_args.__dict__, "policy_mode": "audit"})
-        with patch.object(
-            check_sonar_zero, "_parse_args", return_value=audit_args
-        ), patch.object(
-            check_sonar_zero,
-            "load_sonar_findings_with_retry",
-            return_value=(3, "ERROR", ["Sonar reports 3 open issues (expected 0)."]),
-        ), patch.object(
-            check_sonar_zero, "write_report", return_value=0
-        ) as write_report_mock:
-            self.assertEqual(check_sonar_zero.main(), 0)
-        self.assertEqual(write_report_mock.call_args.args[0]["status"], "pass")
+        self._assert_main_result(
+            audit_args,
+            load_result=(3, "ERROR", ["Sonar reports 3 open issues (expected 0)."]),
+            expected_code=0,
+            expected_status="pass",
+        )
 
     def test_parse_args_render_markdown_and_script_entrypoint(self) -> None:
         """Cover parse args render markdown and script entrypoint."""

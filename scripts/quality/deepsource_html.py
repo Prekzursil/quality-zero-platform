@@ -6,7 +6,7 @@ import re
 from typing import List
 
 ALL_ISSUES_JSON_PATTERN = re.compile(
-    r'"all"\s*,\s*([\d.,kK]+)\s*,\s*"recommended"',
+    r'"all"\s*,\s*([\d.,k]+)\s*,\s*"recommended"',
     re.IGNORECASE,
 )
 ISSUE_LINK_PREFIX = 'href="/gh/'
@@ -34,7 +34,7 @@ def _count_from_all_issues_heading(html: str) -> int | None:
     window = html[heading_index : heading_index + 600]
     text_window = re.sub(r"<[^>]+>", " ", window)
     compact = " ".join(text_window.split())
-    heading_match = re.search(r"All issues\s+([\d.,kK]+)", compact, re.IGNORECASE)
+    heading_match = re.search(r"All issues\s+([\d.,k]+)", compact, re.IGNORECASE)
     if heading_match is None:
         return None
     return human_count_to_int(heading_match.group(1))

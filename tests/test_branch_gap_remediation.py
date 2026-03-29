@@ -386,8 +386,7 @@ class BranchGapRemediationTests(unittest.TestCase):
             },
             "DeepScan",
         )
-        if status is None:
-            self.fail("Expected a DeepScan status payload.")
+        self.assertIsNotNone(status)
         self.assertEqual(status["context"], "DeepScan")
 
     def test_required_checks_and_sonar_helpers_cover_remaining_branches(self) -> None:

@@ -2,10 +2,12 @@
 
 from __future__ import absolute_import
 
+import runpy
 import sys
 import unittest
 from argparse import Namespace
 from contextlib import ExitStack
+from pathlib import Path
 from unittest.mock import patch
 
 from scripts.quality import check_deepsource_zero
@@ -18,6 +20,27 @@ from tests.script_entrypoint_support import (
 
 class DeepSourceVisibleZeroTests(unittest.TestCase):
     """Deep Source Visible Zero Tests."""
+
+    def _assert_in_process_entrypoint_failure(self) -> None:
+        """Execute the script entrypoint in-process and assert a failing exit."""
+        repo_root = str(Path(__file__).resolve().parents[1])
+        original_path = list(sys.path)
+        try:
+            sys.path[:] = [entry for entry in sys.path if entry != repo_root]
+            with (
+                patch.object(sys, "argv", ["check_deepsource_zero.py"]),
+                patch.dict("os.environ", {}, clear=True),
+                self.assertRaises(SystemExit) as exit_info,
+            ):
+                runpy.run_path(
+                    str(Path(repo_root) / "scripts/quality/check_deepsource_zero.py"),
+                    run_name="__main__",
+                )
+        finally:
+            inserted_path = repo_root in sys.path
+            sys.path[:] = original_path
+        self.assertTrue(inserted_path)
+        self.assertEqual(exit_info.exception.code, 1)
 
     @staticmethod
     def _status_poll_token() -> str:
@@ -103,23 +126,17 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
             out_md="deepsource-visible-zero/deepsource.md",
         )
 
-    def _assert_main_result(
-        self,
-        *,
-        env,
-        wait_result=None,
-        visible_result=None,
-        write_report_result=0,
-        expected_code: int,
-        expected_status: str,
-        expect_visible_called: bool = True,
-    ) -> None:
+    def _assert_main_result(self, scenario: dict) -> None:
         """Exercise one DeepSource main-path scenario."""
+        env = scenario.get("env", {})
         with patch.dict("os.environ", env, clear=not env), patch.object(
             check_deepsource_zero, "_parse_args", return_value=self._main_args()
         ), patch.object(
-            check_deepsource_zero, "write_report", return_value=write_report_result
+            check_deepsource_zero,
+            "write_report",
+            return_value=scenario.get("write_report_result", 0),
         ) as write_report_mock, ExitStack() as stack:
+            wait_result = scenario.get("wait_result")
             if wait_result is not None:
                 stack.enter_context(
                     patch.object(
@@ -132,15 +149,17 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
                 patch.object(
                     check_deepsource_zero,
                     "_evaluate_visible_issues",
-                    return_value=visible_result,
+                    return_value=scenario.get("visible_result"),
                 )
             )
-            self.assertEqual(check_deepsource_zero.main(), expected_code)
-        if expect_visible_called:
+            self.assertEqual(check_deepsource_zero.main(), scenario["expected_code"])
+        if scenario.get("expect_visible_called", True):
             evaluate_mock.assert_called_once()
         else:
             evaluate_mock.assert_not_called()
-        self.assertEqual(write_report_mock.call_args.args[0]["status"], expected_status)
+        self.assertEqual(
+            write_report_mock.call_args.args[0]["status"], scenario["expected_status"]
+        )
 
     def _assert_visible_issue_evaluation(
         self,
@@ -193,6 +212,11 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
                     "https://app.deepsource.com/gh/Prekzursil/"
                     "quality-zero-platform/issues?category=all&page=1"
                 ),
+            )
+        with patch.dict("os.environ", {}, clear=True):
+            self.assertEqual(
+                check_deepsource_zero._issues_url(Namespace(repo="", sha="", issues_url="")),
+                "",
             )
 
     def test_visible_zero_inputs_falls_back_to_empty_issue_url_on_resolution_error(
@@ -376,37 +400,51 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
     def test_main_handles_success_missing_inputs_and_provider_errors(self) -> None:
         """Cover main handles success missing inputs and provider errors."""
         self._assert_main_result(
-            env={},
-            visible_result=(0, []),
-            expected_code=1,
-            expected_status="fail",
-            expect_visible_called=False,
+            {
+                "env": {},
+                "visible_result": (0, []),
+                "expected_code": 1,
+                "expected_status": "fail",
+                "expect_visible_called": False,
+            }
         )
         self._assert_main_result(
-            env={"GITHUB_TOKEN": "token"},
-            wait_result=([{"context": "DeepSource: Python", "state": "success"}], []),
-            visible_result=(0, []),
-            expected_code=0,
-            expected_status="pass",
+            {
+                "env": {"GITHUB_TOKEN": "token"},
+                "wait_result": (
+                    [{"context": "DeepSource: Python", "state": "success"}],
+                    [],
+                ),
+                "visible_result": (0, []),
+                "expected_code": 0,
+                "expected_status": "pass",
+            }
         )
         self._assert_main_result(
-            env={"GITHUB_TOKEN": "token"},
-            wait_result=(
-                [{"context": "DeepSource: Python", "state": "failure"}],
-                ["DeepSource: Python GitHub status is failure (expected success)."],
-            ),
-            visible_result=(0, []),
-            expected_code=1,
-            expected_status="fail",
-            expect_visible_called=False,
+            {
+                "env": {"GITHUB_TOKEN": "token"},
+                "wait_result": (
+                    [{"context": "DeepSource: Python", "state": "failure"}],
+                    ["DeepSource: Python GitHub status is failure (expected success)."],
+                ),
+                "visible_result": (0, []),
+                "expected_code": 1,
+                "expected_status": "fail",
+                "expect_visible_called": False,
+            }
         )
         self._assert_main_result(
-            env={"GITHUB_TOKEN": "token"},
-            wait_result=([{"context": "DeepSource: Python", "state": "success"}], []),
-            visible_result=(0, []),
-            write_report_result=7,
-            expected_code=7,
-            expected_status="pass",
+            {
+                "env": {"GITHUB_TOKEN": "token"},
+                "wait_result": (
+                    [{"context": "DeepSource: Python", "state": "success"}],
+                    [],
+                ),
+                "visible_result": (0, []),
+                "write_report_result": 7,
+                "expected_code": 7,
+                "expected_status": "pass",
+            }
         )
 
         assert_main_reports_provider_failure(
@@ -466,3 +504,4 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
             run_script_entrypoint_failure("scripts/quality/check_deepsource_zero.py"),
             1,
         )
+        self._assert_in_process_entrypoint_failure()

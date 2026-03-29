@@ -2,9 +2,11 @@
 
 from __future__ import absolute_import
 
+import runpy
 import sys
 import unittest
 from argparse import Namespace
+from pathlib import Path
 from unittest.mock import patch
 
 from scripts.quality import check_deepscan_zero
@@ -21,6 +23,27 @@ def _placeholder_token(label: str) -> str:
 
 class DeepScanZeroTests(unittest.TestCase):
     """Deep Scan Zero Tests."""
+
+    def _assert_in_process_entrypoint_failure(self) -> None:
+        """Execute the script entrypoint in-process and assert a failing exit."""
+        repo_root = str(Path(__file__).resolve().parents[1])
+        original_path = list(sys.path)
+        try:
+            sys.path[:] = [entry for entry in sys.path if entry != repo_root]
+            with (
+                patch.object(sys, "argv", ["check_deepscan_zero.py"]),
+                patch.dict("os.environ", {}, clear=True),
+                self.assertRaises(SystemExit) as exit_info,
+            ):
+                runpy.run_path(
+                    str(Path(repo_root) / "scripts/quality/check_deepscan_zero.py"),
+                    run_name="__main__",
+                )
+        finally:
+            inserted_path = repo_root in sys.path
+            sys.path[:] = original_path
+        self.assertTrue(inserted_path)
+        self.assertEqual(exit_info.exception.code, 1)
 
     def _assert_request_payload_guards(self, api_token: str) -> None:
         """Exercise request-json and status-payload guards."""
@@ -100,34 +123,32 @@ class DeepScanZeroTests(unittest.TestCase):
                 (0, "https://deepscan.io/project/issues", []),
             )
 
-    def _assert_main_result(
-        self,
-        args: Namespace,
-        *,
-        env,
-        policy_result=None,
-        write_report_result=0,
-        expected_code: int,
-        expected_status: str,
-        expected_finding: str | None = None,
-    ) -> None:
+    def _assert_main_result(self, scenario: dict) -> None:
         """Exercise one DeepScan main-path scenario."""
+        args = scenario["args"]
+        env = scenario.get("env", {})
         with patch.dict("os.environ", env, clear=not env), patch.object(
             check_deepscan_zero, "_parse_args", return_value=args
         ), patch.object(
-            check_deepscan_zero, "write_report", return_value=write_report_result
+            check_deepscan_zero,
+            "write_report",
+            return_value=scenario.get("write_report_result", 0),
         ) as write_report_mock:
+            policy_result = scenario.get("policy_result")
             if policy_result is None:
-                self.assertEqual(check_deepscan_zero.main(), expected_code)
+                self.assertEqual(check_deepscan_zero.main(), scenario["expected_code"])
             else:
                 with patch.object(
                     check_deepscan_zero,
                     "_evaluate_deepscan_policy",
                     return_value=policy_result,
                 ):
-                    self.assertEqual(check_deepscan_zero.main(), expected_code)
+                    self.assertEqual(
+                        check_deepscan_zero.main(), scenario["expected_code"]
+                    )
         payload = write_report_mock.call_args.args[0]
-        self.assertEqual(payload["status"], expected_status)
+        self.assertEqual(payload["status"], scenario["expected_status"])
+        expected_finding = scenario.get("expected_finding")
         if expected_finding is not None:
             self.assertIn(expected_finding, payload["findings"])
 
@@ -388,11 +409,13 @@ class DeepScanZeroTests(unittest.TestCase):
             out_md="deepscan-zero/deepscan.md",
         )
         self._assert_main_result(
-            args,
-            env={},
-            expected_code=1,
-            expected_status="fail",
-            expected_finding="DEEPSCAN_API_TOKEN is missing.",
+            {
+                "args": args,
+                "env": {},
+                "expected_code": 1,
+                "expected_status": "fail",
+                "expected_finding": "DEEPSCAN_API_TOKEN is missing.",
+            }
         )
 
         success_args = Namespace(
@@ -400,11 +423,13 @@ class DeepScanZeroTests(unittest.TestCase):
         )
         deepscan_env = {"DEEPSCAN_OPEN_ISSUES_URL": "https://deepscan.io/project/issues"}
         self._assert_main_result(
-            success_args,
-            env=deepscan_env,
-            policy_result=(0, "https://deepscan.io/project/issues", []),
-            expected_code=0,
-            expected_status="pass",
+            {
+                "args": success_args,
+                "env": deepscan_env,
+                "policy_result": (0, "https://deepscan.io/project/issues", []),
+                "expected_code": 0,
+                "expected_status": "pass",
+            }
         )
 
         assert_main_reports_provider_failure(
@@ -420,12 +445,14 @@ class DeepScanZeroTests(unittest.TestCase):
         )
 
         self._assert_main_result(
-            success_args,
-            env=deepscan_env,
-            policy_result=(0, "https://deepscan.io/project/issues", []),
-            write_report_result=9,
-            expected_code=9,
-            expected_status="pass",
+            {
+                "args": success_args,
+                "env": deepscan_env,
+                "policy_result": (0, "https://deepscan.io/project/issues", []),
+                "write_report_result": 9,
+                "expected_code": 9,
+                "expected_status": "pass",
+            }
         )
 
     def test_parse_args_render_markdown_and_script_entrypoint(self) -> None:
@@ -449,3 +476,4 @@ class DeepScanZeroTests(unittest.TestCase):
             run_script_entrypoint_failure("scripts/quality/check_deepscan_zero.py"),
             1,
         )
+        self._assert_in_process_entrypoint_failure()

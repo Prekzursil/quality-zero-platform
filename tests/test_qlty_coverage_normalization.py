@@ -73,27 +73,34 @@ class QltyCoverageNormalizationTests(unittest.TestCase):
             normalized_frontend = ElementTree.parse(
                 Path(payload[1]["normalized"])
             ).getroot()
-            frontend_class = next(
+            frontend_elements = list(normalized_frontend.iter())
+            frontend_classes = [
+                element for element in frontend_elements if element.get("filename")
+            ]
+            frontend_sources = [
                 element
-                for element in normalized_frontend.iter()
-                if element.get("filename")
-            )
-            frontend_source = next(
-                element
-                for element in normalized_frontend.iter()
+                for element in frontend_elements
                 if element.tag.rsplit("}", 1)[-1] == "source"
+            ]
+            frontend_class = frontend_classes[0] if frontend_classes else None
+            frontend_source = frontend_sources[0] if frontend_sources else None
+            self.assertIsNotNone(frontend_class)
+            self.assertIsNotNone(frontend_source)
+            self.assertEqual(
+                frontend_class.get("filename"),
+                "ui/src/App.tsx",
             )
-            self.assertEqual(frontend_class.get("filename"), "ui/src/App.tsx")
             self.assertEqual(frontend_source.text, repo_dir.as_posix())
 
             normalized_backend = ElementTree.parse(
                 Path(payload[0]["normalized"])
             ).getroot()
-            backend_class = next(
-                element
-                for element in normalized_backend.iter()
-                if element.get("filename")
-            )
+            backend_elements = list(normalized_backend.iter())
+            backend_classes = [
+                element for element in backend_elements if element.get("filename")
+            ]
+            backend_class = backend_classes[0] if backend_classes else None
+            self.assertIsNotNone(backend_class)
             self.assertEqual(backend_class.get("filename"), "backend/app/api.py")
 
     def test_normalize_lcov_report_rewrites_absolute_paths(self) -> None:

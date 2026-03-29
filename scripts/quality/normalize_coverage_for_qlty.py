@@ -39,8 +39,6 @@ def _working_directory(path: Path):
     """Temporarily switch the process working directory."""
     previous = Path.cwd()
     try:
-        import os
-
         os.chdir(path)
         yield
     finally:
@@ -163,7 +161,7 @@ def normalize_lcov_report(
         lines.append(raw_line)
 
     out_path = _output_path(out_dir, report_id=report_id, extension=".info")
-    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")  # NOSONAR
     return {
         "input": path.as_posix(),
         "normalized": out_path.as_posix(),

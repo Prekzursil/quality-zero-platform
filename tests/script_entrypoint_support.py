@@ -3,6 +3,7 @@
 from __future__ import absolute_import
 
 import os
+import runpy
 import subprocess
 import sys
 import tempfile
@@ -43,6 +44,26 @@ def run_script_entrypoint_failure(script_relative_path: str) -> int:
     if completed.returncode == 255:
         raise AssertionError(f"{script_path} did not exit")
     return int(completed.returncode)
+
+
+def assert_in_process_entrypoint_failure(test_case, script_relative_path: str) -> None:
+    """Run one script in-process as ``__main__`` and assert a failing exit code."""
+    script_path = Path(script_relative_path).resolve()
+    repo_root = str(script_path.parents[2])
+    original_path = list(sys.path)
+    try:
+        sys.path[:] = [entry for entry in sys.path if entry != repo_root]
+        with (
+            patch.object(sys, "argv", [script_path.name]),
+            patch.dict("os.environ", {}, clear=True),
+            test_case.assertRaises(SystemExit) as exit_info,
+        ):
+            runpy.run_path(str(script_path), run_name="__main__")
+    finally:
+        inserted_path = repo_root in sys.path
+        sys.path[:] = original_path
+    test_case.assertTrue(inserted_path)
+    test_case.assertEqual(exit_info.exception.code, 1)
 
 
 def assert_main_reports_provider_failure(

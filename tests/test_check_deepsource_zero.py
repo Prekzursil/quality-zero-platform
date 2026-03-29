@@ -2,17 +2,16 @@
 
 from __future__ import absolute_import
 
-import runpy
 import sys
 import unittest
 from argparse import Namespace
 from contextlib import ExitStack
-from pathlib import Path
 from unittest.mock import patch
 
 from scripts.quality import check_deepsource_zero
 from scripts.quality.deepsource_html import human_count_to_int
 from tests.script_entrypoint_support import (
+    assert_in_process_entrypoint_failure,
     assert_main_reports_provider_failure,
     run_script_entrypoint_failure,
 )
@@ -20,27 +19,6 @@ from tests.script_entrypoint_support import (
 
 class DeepSourceVisibleZeroTests(unittest.TestCase):
     """Deep Source Visible Zero Tests."""
-
-    def _assert_in_process_entrypoint_failure(self) -> None:
-        """Execute the script entrypoint in-process and assert a failing exit."""
-        repo_root = str(Path(__file__).resolve().parents[1])
-        original_path = list(sys.path)
-        try:
-            sys.path[:] = [entry for entry in sys.path if entry != repo_root]
-            with (
-                patch.object(sys, "argv", ["check_deepsource_zero.py"]),
-                patch.dict("os.environ", {}, clear=True),
-                self.assertRaises(SystemExit) as exit_info,
-            ):
-                runpy.run_path(
-                    str(Path(repo_root) / "scripts/quality/check_deepsource_zero.py"),
-                    run_name="__main__",
-                )
-        finally:
-            inserted_path = repo_root in sys.path
-            sys.path[:] = original_path
-        self.assertTrue(inserted_path)
-        self.assertEqual(exit_info.exception.code, 1)
 
     @staticmethod
     def _status_poll_token() -> str:
@@ -504,4 +482,6 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
             run_script_entrypoint_failure("scripts/quality/check_deepsource_zero.py"),
             1,
         )
-        self._assert_in_process_entrypoint_failure()
+        assert_in_process_entrypoint_failure(
+            self, "scripts/quality/check_deepsource_zero.py"
+        )

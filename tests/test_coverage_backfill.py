@@ -413,6 +413,42 @@ class CoverageBackfillTests(unittest.TestCase):
             )
         )
 
+    def test_profile_validation_requires_at_least_one_ruleset_context(self) -> None:
+        profile = build_valid_contract_profile()
+
+        findings = profile_contract_validation.validate_profile(
+            profile,
+            active_required_contexts_fn=lambda _profile, event_name: [],
+        )
+
+        self.assertTrue(
+            any(
+                "at least one required context is required" in item
+                for item in findings
+            )
+        )
+
+    def test_profile_validation_requires_ruleset_to_emit_target_contexts(self) -> None:
+        profile = build_valid_contract_profile()
+        profile["required_contexts"] = {
+            "always": ["Coverage 100 Gate"],
+            "pull_request_only": [],
+            "required_now": ["Coverage 100 Gate", "DeepSource Visible Zero"],
+            "target": ["Coverage 100 Gate", "DeepSource Visible Zero"],
+        }
+
+        findings = profile_contract_validation.validate_profile(
+            profile,
+            active_required_contexts_fn=lambda _profile, event_name: ["Coverage 100 Gate"],
+        )
+
+        self.assertTrue(
+            any(
+                "emitted ruleset contexts are missing DeepSource Visible Zero" in item
+                for item in findings
+            )
+        )
+
     def test_profile_normalization_helpers_cover_edge_branches(self) -> None:
         self.assertEqual(profile_coverage_normalization._normalize_source_hint("pkg.module"), "pkg/module.py")
         self.assertEqual(profile_coverage_normalization._normalize_source_hint(""), "")

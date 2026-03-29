@@ -247,3 +247,27 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
                 "DeepSource: Secrets",
             }.issubset(target_contexts)
         )
+
+    def test_active_required_contexts_falls_back_to_required_now_for_other_events(
+        self,
+    ) -> None:
+        """Unknown events should keep the required-now contract."""
+        profile = {
+            "required_contexts": {
+                "always": ["Coverage 100 Gate"],
+                "pull_request_only": ["SonarCloud Code Analysis"],
+                "required_now": [
+                    "Coverage 100 Gate",
+                    "SonarCloud Code Analysis",
+                ],
+                "target": ["Coverage 100 Gate"],
+            }
+        }
+
+        self.assertEqual(
+            active_required_contexts(profile, event_name="workflow_dispatch"),
+            [
+                "Coverage 100 Gate",
+                "SonarCloud Code Analysis",
+            ],
+        )

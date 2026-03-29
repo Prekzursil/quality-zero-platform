@@ -52,7 +52,8 @@ class QltyCoverageNormalizationTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-    def _normalized_text(self, payload_entry: Dict[str, object]) -> str:
+    @staticmethod
+    def _normalized_text(payload_entry: Dict[str, object]) -> str:
         """Read one normalized coverage artifact from a manifest entry."""
         normalized = payload_entry["normalized"]
         if not isinstance(normalized, str):

@@ -263,3 +263,11 @@ class QltyCoverageNormalizationTests(unittest.TestCase):
                     repo_dir=repo_dir,
                     out_dir=root / "outside",
                 )
+
+    def test_normalized_text_rejects_non_string_manifest_paths(self) -> None:
+        """Manifest helpers should reject malformed normalized path entries."""
+        with self.assertRaisesRegex(
+            AssertionError,
+            "Normalized coverage manifest entry must be a string path.",
+        ):
+            self._normalized_text({"normalized": 1})

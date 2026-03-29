@@ -8,9 +8,9 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping
+from typing import Any, Callable, Dict, Iterable, List, Mapping
 
-from scripts.quality.string_helpers import dedupe_strings
+from scripts.quality.string_helpers import dedupe_strings as _dedupe_strings
 from scripts.security_helpers import load_json_https
 
 DEFAULT_COVERAGE_JSON = "coverage-100/coverage.json"
@@ -50,6 +50,11 @@ def github_commit_status_payload(repo: str, sha: str, token: str) -> Dict[str, A
     if not isinstance(payload, dict):
         raise RuntimeError("Unexpected GitHub status response payload")
     return payload
+
+
+def dedupe_strings(items: Iterable[str | None]) -> List[str]:
+    """Preserve the historical import surface for shared string deduping."""
+    return _dedupe_strings(items)
 
 
 def _ensure_within_root(path: Path, root: Path) -> Path:

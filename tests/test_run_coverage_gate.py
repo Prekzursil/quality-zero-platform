@@ -102,7 +102,8 @@ class RunCoverageGateTests(unittest.TestCase):
             "evidence_only",
         )
 
-    def test_run_shell_ignores_blank_commands(self) -> None:
+    @staticmethod
+    def test_run_shell_ignores_blank_commands() -> None:
         """Cover run shell ignores blank commands."""
         with patch("scripts.quality.run_coverage_gate.subprocess.run") as mock_run:
             run_coverage_gate._run_shell("   ", shell_name="bash", cwd=Path.cwd())
@@ -148,27 +149,27 @@ class RunCoverageGateTests(unittest.TestCase):
 
     def test_run_shell_requires_resolved_shell_executable(self) -> None:
         """Cover run shell requires resolved shell executable."""
-        with patch(
-            "scripts.quality.run_coverage_gate._path_exists", return_value=False
-        ):
-            with self.assertRaisesRegex(
+        with (
+            patch("scripts.quality.run_coverage_gate._path_exists", return_value=False),
+            self.assertRaisesRegex(
                 FileNotFoundError, "Unable to locate required shell executable: bash"
-            ):
-                run_coverage_gate._run_shell(
-                    "echo coverage", shell_name="bash", cwd=Path.cwd()
-                )
+            ),
+        ):
+            run_coverage_gate._run_shell(
+                "echo coverage", shell_name="bash", cwd=Path.cwd()
+            )
 
     def test_run_shell_requires_resolved_powershell_executable(self) -> None:
         """Cover run shell requires resolved powershell executable."""
-        with patch(
-            "scripts.quality.run_coverage_gate._path_exists", return_value=False
-        ):
-            with self.assertRaisesRegex(
+        with (
+            patch("scripts.quality.run_coverage_gate._path_exists", return_value=False),
+            self.assertRaisesRegex(
                 FileNotFoundError, "Unable to locate required shell executable: pwsh"
-            ):
-                run_coverage_gate._run_shell(
-                    "echo coverage", shell_name="pwsh", cwd=Path.cwd()
-                )
+            ),
+        ):
+            run_coverage_gate._run_shell(
+                "echo coverage", shell_name="pwsh", cwd=Path.cwd()
+            )
 
     def test_path_exists_reports_real_files(self) -> None:
         """Cover path exists reports real files."""
@@ -577,15 +578,17 @@ class RunCoverageGateTests(unittest.TestCase):
                     ),
                     {},
                 )
-            with patch.object(
-                run_coverage_gate, "_run_assert_coverage_100", return_value=2
-            ):
-                with self.assertRaisesRegex(
+            with (
+                patch.object(
+                    run_coverage_gate, "_run_assert_coverage_100", return_value=2
+                ),
+                self.assertRaisesRegex(
                     RuntimeError, "coverage assertion returned unexpected exit code 2"
-                ):
-                    run_coverage_gate._collect_current_coverage_payload(
-                        {}, repo_dir=repo_dir, platform_dir=repo_dir
-                    )
+                ),
+            ):
+                run_coverage_gate._collect_current_coverage_payload(
+                    {}, repo_dir=repo_dir, platform_dir=repo_dir
+                )
 
         with (
             patch.object(run_coverage_gate, "_github_api_token", return_value="token"),
@@ -594,13 +597,13 @@ class RunCoverageGateTests(unittest.TestCase):
                 "_download_bytes",
                 return_value=json.dumps({"workflow_runs": []}).encode("utf-8"),
             ),
-        ):
-            with self.assertRaisesRegex(
+            self.assertRaisesRegex(
                 RuntimeError, "Unable to find a successful Quality Zero Platform run"
-            ):
-                run_coverage_gate._load_baseline_coverage_payload(
-                    {"slug": "owner/repo", "default_branch": "main"}
-                )
+            ),
+        ):
+            run_coverage_gate._load_baseline_coverage_payload(
+                {"slug": "owner/repo", "default_branch": "main"}
+            )
 
         with (
             patch.object(run_coverage_gate, "_github_api_token", return_value="token"),

@@ -6,7 +6,7 @@ from copy import deepcopy
 import re
 from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
-from scripts.quality.common import dedupe_strings
+from scripts.quality.string_helpers import dedupe_strings
 
 _LCOV_SRC_RE = re.compile(
     r"(?P<prefix>.+?)/coverage/(?:lcov|lcov\.info|lcov-report).*",

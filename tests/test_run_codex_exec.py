@@ -222,14 +222,16 @@ class RunCodexExecTests(unittest.TestCase):
             config=[],
         )
 
-        with patch(
-            "scripts.quality.run_codex_exec.shutil.which",
-            return_value=r"C:\Tools\codex.exe",
-        ):
-            with self.assertRaisesRegex(
+        with (
+            patch(
+                "scripts.quality.run_codex_exec.shutil.which",
+                return_value=r"C:\Tools\codex.exe",
+            ),
+            self.assertRaisesRegex(
                 ValueError, "--profile contains unsupported characters"
-            ):
-                build_codex_command(args)
+            ),
+        ):
+            build_codex_command(args)
 
     def test_build_codex_command_requires_codex_executable_on_path(self):
         """Cover build codex command requires codex executable on path."""
@@ -243,11 +245,13 @@ class RunCodexExecTests(unittest.TestCase):
             config=[],
         )
 
-        with patch("scripts.quality.run_codex_exec.shutil.which", return_value=None):
-            with self.assertRaisesRegex(
+        with (
+            patch("scripts.quality.run_codex_exec.shutil.which", return_value=None),
+            self.assertRaisesRegex(
                 FileNotFoundError, "Unable to locate required executable: codex"
-            ):
-                build_codex_command(args)
+            ),
+        ):
+            build_codex_command(args)
 
     def test_run_codex_exec_invokes_subprocess_with_shell_false_and_stdin_prompt(self):
         """Cover run codex exec invokes subprocess with shell false and stdin prompt."""

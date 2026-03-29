@@ -33,16 +33,18 @@ class SonarZeroTests(unittest.TestCase):
 
     def test_request_json_rejects_non_dict_payloads(self) -> None:
         """Cover request json rejects non dict payloads."""
-        with patch(
-            "scripts.quality.check_sonar_zero.load_json_https",
-            return_value=(["invalid"], {}),
-        ):
-            with self.assertRaisesRegex(
+        with (
+            patch(
+                "scripts.quality.check_sonar_zero.load_json_https",
+                return_value=(["invalid"], {}),
+            ),
+            self.assertRaisesRegex(
                 RuntimeError, "Unexpected SonarCloud API response payload"
-            ):
-                check_sonar_zero._request_json(
-                    "https://sonarcloud.io/api/issues/search", "auth"
-                )
+            ),
+        ):
+            check_sonar_zero._request_json(
+                "https://sonarcloud.io/api/issues/search", "auth"
+            )
         with patch(
             "scripts.quality.check_sonar_zero.load_json_https",
             return_value=({"paging": {"total": 0}}, {}),

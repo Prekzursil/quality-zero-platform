@@ -2,7 +2,6 @@
 
 from __future__ import absolute_import
 
-import os
 import sys
 import unittest
 from argparse import Namespace
@@ -135,14 +134,16 @@ class DeepScanZeroTests(unittest.TestCase):
             check_deepscan_zero.extract_total_open({"nested": [{"ignored": True}]})
         )
 
-        with patch(
-            "scripts.quality.check_deepscan_zero.load_json_https",
-            return_value=(["invalid"], {}),
-        ):
-            with self.assertRaisesRegex(
+        with (
+            patch(
+                "scripts.quality.check_deepscan_zero.load_json_https",
+                return_value=(["invalid"], {}),
+            ),
+            self.assertRaisesRegex(
                 RuntimeError, "Unexpected DeepScan API response payload"
-            ):
-                check_deepscan_zero._request_json("https://deepscan.io/test", api_token)
+            ),
+        ):
+            check_deepscan_zero._request_json("https://deepscan.io/test", api_token)
         with patch(
             "scripts.quality.check_deepscan_zero.load_json_https",
             return_value=({"total": 0}, {}),
@@ -153,16 +154,18 @@ class DeepScanZeroTests(unittest.TestCase):
                 ),
                 {"total": 0},
             )
-        with patch(
-            "scripts.quality.common.load_json_https",
-            return_value=(["invalid"], {}),
-        ):
-            with self.assertRaisesRegex(
+        with (
+            patch(
+                "scripts.quality.common.load_json_https",
+                return_value=(["invalid"], {}),
+            ),
+            self.assertRaisesRegex(
                 RuntimeError, "Unexpected GitHub status response payload"
-            ):
-                check_deepscan_zero._github_status_payload(
-                    "Prekzursil/quality-zero-platform", "abc123", api_token
-                )
+            ),
+        ):
+            check_deepscan_zero._github_status_payload(
+                "Prekzursil/quality-zero-platform", "abc123", api_token
+            )
         with patch(
             "scripts.quality.common.load_json_https",
             return_value=({"statuses": []}, {}),

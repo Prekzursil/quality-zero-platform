@@ -26,7 +26,6 @@ from scripts.quality.deepsource_html import (
 )
 from scripts.security_helpers import (
     load_bytes_https,
-    load_json_https,
     normalize_https_url,
 )
 

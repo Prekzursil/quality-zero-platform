@@ -17,8 +17,8 @@ import scripts.quality.run_qlty_zero as run_qlty_zero
 class RunQltyZeroTests(unittest.TestCase):
     """Run Qlty Zero Tests."""
 
+    @staticmethod
     def _run_main_with_completed_processes(
-        self,
         *completed_processes: Any,
     ) -> Tuple[int, Path, str, str, Sequence[Any]]:
         """Handle run main with completed processes."""

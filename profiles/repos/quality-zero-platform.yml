@@ -11,6 +11,7 @@ required_contexts:
     - Semgrep Zero
     - Sentry Zero
     - DeepScan Zero
+    - DeepSource Visible Zero
   pull_request_only:
     - SonarCloud Code Analysis
   target:
@@ -22,7 +23,10 @@ required_contexts:
     - Semgrep Zero
     - Sentry Zero
     - DeepScan Zero
+    - DeepSource Visible Zero
     - SonarCloud Code Analysis
+enabled_scanners:
+  deepsource_visible: true
 coverage:
   command: |
     python -m pip install --upgrade pip

@@ -35,16 +35,19 @@ class QualityRollupTests(unittest.TestCase):
             "slug": "Prekzursil/example-repo",
             "active_required_contexts": [
                 "Coverage 100 Gate",
+                "DeepSource Visible Zero",
                 "Sonar Zero",
                 "Semgrep Zero",
             ],
         }
         lane_payloads = {
             "coverage": {"status": "pass", "findings": [], "summary": "100.00%"},
+            "deepsource_visible": {"status": "pass", "findings": [], "open_issues": 0},
             "sonar": {"status": "fail", "findings": ["Sonar reports 2 open issues (expected 0)."]},
         }
         contexts = {
             "Coverage 100 Gate": {"state": "completed", "conclusion": "success", "source": "check_run"},
+            "DeepSource Visible Zero": {"state": "completed", "conclusion": "success", "source": "check_run"},
             "Sonar Zero": {"state": "completed", "conclusion": "failure", "source": "check_run"},
             "Semgrep Zero": {"state": "completed", "conclusion": "success", "source": "check_run"},
         }
@@ -61,10 +64,10 @@ class QualityRollupTests(unittest.TestCase):
         self.assertEqual(rollup["sha"], "abc123")
         self.assertEqual(
             [item["context"] for item in rollup["contexts"]],
-            ["Coverage 100 Gate", "Semgrep Zero", "Sonar Zero"],
+            ["Coverage 100 Gate", "DeepSource Visible Zero", "Semgrep Zero", "Sonar Zero"],
         )
-        self.assertEqual(rollup["contexts"][2]["detail"], "Sonar reports 2 open issues (expected 0).")
-        self.assertEqual(rollup["contexts"][1]["detail"], "No findings.")
+        self.assertEqual(rollup["contexts"][3]["detail"], "Sonar reports 2 open issues (expected 0).")
+        self.assertEqual(rollup["contexts"][1]["detail"], "Open issues: 0")
 
     def test_render_rollup_markdown_and_comment_body_include_marker(self) -> None:
         payload = {
@@ -73,6 +76,7 @@ class QualityRollupTests(unittest.TestCase):
             "status": "fail",
             "contexts": [
                 {"context": "Coverage 100 Gate", "status": "pass", "detail": "100.00%"},
+                {"context": "DeepSource Visible Zero", "status": "pass", "detail": "Open issues: 0"},
                 {"context": "Sonar Zero", "status": "fail", "detail": "2 issues"},
             ],
         }
@@ -99,11 +103,17 @@ class QualityRollupTests(unittest.TestCase):
                 '{"status":"fail","findings":["bad"]}',
                 encoding="utf-8",
             )
+            (root / "deepsource_visible-artifacts" / "deepsource-visible-zero").mkdir(parents=True)
+            (root / "deepsource_visible-artifacts" / "deepsource-visible-zero" / "deepsource.json").write_text(
+                '{"status":"pass","open_issues":0,"findings":[]}',
+                encoding="utf-8",
+            )
 
             payloads = build_quality_rollup.load_lane_payloads(root)
 
-        self.assertEqual(sorted(payloads), ["coverage", "sonar"])
+        self.assertEqual(sorted(payloads), ["coverage", "deepsource_visible", "sonar"])
         self.assertEqual(payloads["coverage"]["status"], "pass")
+        self.assertEqual(payloads["deepsource_visible"]["open_issues"], 0)
         self.assertEqual(payloads["sonar"]["findings"], ["bad"])
 
     def test_status_resolution_handles_suffix_matches_and_status_contexts(self) -> None:

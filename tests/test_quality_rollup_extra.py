@@ -35,6 +35,7 @@ class QualityRollupExtraTests(unittest.TestCase):
 
         contexts = {
             "Coverage 100 Gate": {"state": "completed", "conclusion": "success", "source": "check_run"},
+            "DeepSource Visible Zero": {"state": "completed", "conclusion": "success", "source": "check_run"},
             "QLTY Zero": {"state": "completed", "conclusion": "failure", "source": "check_run"},
             "Pending": {"state": "in_progress", "conclusion": "", "source": "check_run"},
             "StatusPending": {"state": "pending", "conclusion": "pending", "source": "status"},
@@ -44,6 +45,7 @@ class QualityRollupExtraTests(unittest.TestCase):
         self.assertEqual(build_quality_rollup._status_from_context("StatusPending", contexts), "pending")
         self.assertEqual(build_quality_rollup._status_from_context("QLTY Zero", contexts), "fail")
         self.assertEqual(build_quality_rollup._status_from_context("Coverage 100 Gate", contexts), "pass")
+        self.assertEqual(build_quality_rollup._status_from_context("DeepSource Visible Zero", contexts), "pass")
         self.assertEqual(build_quality_rollup._lane_detail({"open_issues": 2}), "Open issues: 2")
         self.assertEqual(build_quality_rollup._lane_detail({"quality_gate": "OK"}), "Quality gate: OK")
         self.assertEqual(build_quality_rollup._lane_detail({"mode": "audit"}), "Mode: audit")

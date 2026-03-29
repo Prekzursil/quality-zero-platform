@@ -56,6 +56,10 @@
             "integration_id": null
           },
           {
+            "context": "DeepSource Visible Zero",
+            "integration_id": null
+          },
+          {
             "context": "SonarCloud Code Analysis",
             "integration_id": null
           }

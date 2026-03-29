@@ -11,13 +11,13 @@ test('runCommand dispatches bootstrap requests through provider normalization', 
         calls.push(['normalize', provider]);
         return 'chromatic';
       },
-      bootstrap: async (args) => {
+      bootstrap(args) {
         calls.push(['bootstrap', args.provider]);
       },
-      listProviders: async () => {
+      listProviders() {
         calls.push(['list']);
       },
-      openOrInspect: async () => {
+      openOrInspect() {
         calls.push(['openOrInspect']);
       },
       log: () => {
@@ -42,13 +42,13 @@ test('runCommand prints help for default commands without provider normalization
         calls.push(['normalize', provider]);
         return provider;
       },
-      bootstrap: async () => {
+      bootstrap() {
         calls.push(['bootstrap']);
       },
-      listProviders: async () => {
+      listProviders() {
         calls.push(['list']);
       },
-      openOrInspect: async () => {
+      openOrInspect() {
         calls.push(['openOrInspect']);
       },
       log: (message) => {

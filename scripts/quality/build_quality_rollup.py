@@ -32,6 +32,7 @@ LANE_CONTEXTS = {
     "codacy": "Codacy Zero",
     "sentry": "Sentry Zero",
     "deepscan": "DeepScan Zero",
+    "deepsource_visible": "DeepSource Visible Zero",
     "deps": "Dependency Alerts",
     "secrets": "Quality Secrets Preflight",
 }
@@ -42,6 +43,7 @@ LANE_ARTIFACT_PATHS = {
     "codacy": "codacy-zero/codacy.json",
     "sentry": "sentry-zero/sentry.json",
     "deepscan": "deepscan-zero/deepscan.json",
+    "deepsource_visible": "deepsource-visible-zero/deepsource.json",
     "deps": "deps-zero/deps.json",
     "secrets": "quality-secrets/secrets.json",
 }

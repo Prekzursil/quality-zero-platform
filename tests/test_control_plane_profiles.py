@@ -187,6 +187,8 @@ class ControlPlaneProfileTests(ControlPlaneAssertions, unittest.TestCase):
         self.assertEqual(profile["coverage"]["min_percent"], 100.0)
         self.assertEqual(profile["coverage"]["branch_min_percent"], 100.0)
         self.assertEqual(profile["coverage"]["command"].strip(), "bash scripts/verify")
+        self.assertIn("DeepSource Visible Zero", profile["required_contexts"]["always"])
+        self.assertIn("DeepSource Visible Zero", profile["required_contexts"]["target"])
         self.assertEqual(
             profile["coverage"]["inputs"],
             [
@@ -209,6 +211,7 @@ class ControlPlaneProfileTests(ControlPlaneAssertions, unittest.TestCase):
             quality_zero_platform["vendors"]["qlty"]["check_names_actual"],
             ["qlty check", "qlty coverage", "qlty coverage diff"],
         )
+        self.assertTrue(quality_zero_platform["enabled_scanners"]["deepsource_visible"])
         self.assertEqual(
             quality_zero_platform["vendors"]["qlty"]["gate_context"],
             "qlty check",

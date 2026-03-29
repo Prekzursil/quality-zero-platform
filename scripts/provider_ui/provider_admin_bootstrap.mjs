@@ -120,6 +120,7 @@ function printResult(prefix, result) {
     headless: result.headless
   };
 
+  // skipcq: JS-0002 - this Node CLI intentionally emits structured JSON for automation.
   console.log(`${prefix}: ${JSON.stringify(metadata, null, 2)}`);
 }
 
@@ -134,6 +135,7 @@ async function listProviders(args) {
     };
   });
 
+  // skipcq: JS-0002 - this Node CLI intentionally emits structured JSON for automation.
   console.log(JSON.stringify({
     providers: rows,
     defaultStateRoot: args.stateRoot,
@@ -214,6 +216,7 @@ async function main() {
 }
 
 function reportCliError(error) {
+  // skipcq: JS-0002 - this Node CLI writes failures to stderr for callers and CI logs.
   console.error(error instanceof Error ? error.stack ?? error.message : error);
   process.exitCode = 1;
 }

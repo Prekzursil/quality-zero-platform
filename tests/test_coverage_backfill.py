@@ -112,8 +112,8 @@ class CoverageBackfillTests(unittest.TestCase):
         handler_mock.assert_called_once()
         return handler_mock
 
-    def test_dashboard_parse_args_fallback_write_and_module_entrypoint(self) -> None:
-        """Cover dashboard parse args fallback write and module entrypoint."""
+    def test_dashboard_parse_args_and_write_dashboard(self) -> None:
+        """Cover admin-dashboard parse args and file output."""
         with patch.object(
             sys, "argv", ["build_admin_dashboard.py", "--output-dir", "site"]
         ):
@@ -127,6 +127,10 @@ class CoverageBackfillTests(unittest.TestCase):
             )
             self.assertTrue((output_dir / "index.html").is_file())
 
+    def test_dashboard_module_reload_and_entrypoint(self) -> None:
+        """Cover dashboard module reload and script entrypoint paths."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir) / "site"
             script_path = Path(build_admin_dashboard.__file__).resolve()
             root_text = str(script_path.parents[2])
             trimmed_sys_path = [item for item in sys.path if item != root_text]
@@ -163,8 +167,8 @@ class CoverageBackfillTests(unittest.TestCase):
                 runpy.run_path(str(script_path), run_name="__main__")
             self.assertEqual(result.exception.code, 0)
 
-    def test_quality_rollup_parse_args_and_reload_main(self) -> None:
-        """Cover quality rollup parse args and reload main."""
+    def test_quality_rollup_parse_args(self) -> None:
+        """Cover quality-rollup parse args."""
         with patch.object(
             sys,
             "argv",
@@ -183,6 +187,8 @@ class CoverageBackfillTests(unittest.TestCase):
             args = build_quality_rollup.parse_args()
         self.assertEqual(args.repo, "owner/repo")
 
+    def test_quality_rollup_reload_main(self) -> None:
+        """Cover quality-rollup reload main path."""
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             profile_path = root / "profile.json"
@@ -253,10 +259,8 @@ class CoverageBackfillTests(unittest.TestCase):
                 runpy.run_path(str(script_path), run_name="__main__")
             self.assertEqual(result.exception.code, 0)
 
-    def test_dependabot_parse_render_invalid_payload_and_module_entrypoint(
-        self,
-    ) -> None:
-        """Cover dependabot parse render invalid payload and module entrypoint."""
+    def test_dependabot_parse_render_and_invalid_payload(self) -> None:
+        """Cover Dependabot parse args, markdown rendering, and invalid payloads."""
         with patch.object(
             sys, "argv", ["check_dependabot_alerts.py", "--repo", "owner/repo"]
         ):
@@ -288,6 +292,8 @@ class CoverageBackfillTests(unittest.TestCase):
                 "owner/repo", "token", scope="runtime"
             )
 
+    def test_dependabot_module_entrypoint(self) -> None:
+        """Cover the Dependabot script entrypoint path."""
         script_path = Path(check_dependabot_alerts.__file__).resolve()
         root_text = str(script_path.parents[2])
         trimmed_sys_path = [item for item in sys.path if item != root_text]

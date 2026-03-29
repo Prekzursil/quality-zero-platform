@@ -119,8 +119,8 @@ class BranchGapRemediationTests(unittest.TestCase):
         self.assertNotIn("baseline_ref", profile_text)
         self.assertEqual(profile_text.count("Coverage 100 Gate"), 1)
 
-    def test_control_plane_vendors_existing_values_and_suffix(self) -> None:
-        """Preserve vendor URLs while still deriving fallback suffixes."""
+    def test_control_plane_vendors_preserve_existing_urls(self) -> None:
+        """Preserve vendor URLs when a valid value already exists."""
         vendor = {
             "dashboard_url": "https://app.codacy.com/gh/Prekzursil/example/dashboard"
         }
@@ -135,6 +135,8 @@ class BranchGapRemediationTests(unittest.TestCase):
             "https://app.codacy.com/gh/Prekzursil/example/dashboard",
         )
 
+    def test_control_plane_vendors_finalize_sonar_and_suffix_helpers(self) -> None:
+        """Cover Sonar fallback and vendor-env suffix helpers."""
         vendors = {"sonar": {"project_key": ""}}
         control_plane_vendors._finalize_sonar_vendor(vendors)
         self.assertNotIn("dashboard_url", vendors["sonar"])
@@ -164,6 +166,8 @@ class BranchGapRemediationTests(unittest.TestCase):
             control_plane_vendors._joined_vendor_env_parts(["", " ", "\t"])
         )
 
+    def test_control_plane_vendors_finalize_visual_vendors(self) -> None:
+        """Cover visual-vendor token/env fallback behavior."""
         visual_vendors = {
             "chromatic": {
                 "token_secret_parts": ["CHROMATIC", "PROJECT", "TOKEN"],
@@ -335,8 +339,8 @@ class BranchGapRemediationTests(unittest.TestCase):
         self.assertEqual(stdout.getvalue(), "")
         self.assertEqual(stderr.getvalue(), "warn")
 
-    def test_codacy_and_deepscan_helpers_cover_remaining_branches(self) -> None:
-        """Cover codacy and deepscan helpers cover remaining branches."""
+    def test_codacy_helpers_cover_not_found_and_runtime_error_paths(self) -> None:
+        """Cover Codacy helper fallbacks and runtime errors."""
         open_issues, findings, exc = check_codacy_zero._not_found_findings(["gh"], None)
         self.assertIsNone(open_issues)
         self.assertEqual(
@@ -364,6 +368,8 @@ class BranchGapRemediationTests(unittest.TestCase):
         self.assertIsInstance(exc, RuntimeError)
         query_mock.assert_called_once()
 
+    def test_deepscan_open_issue_helpers_cover_zero_issue_status_payloads(self) -> None:
+        """Cover DeepScan open-issue evaluation and status lookup."""
         with patch.object(
             check_deepscan_zero, "_request_json", return_value={"total": 0}
         ):

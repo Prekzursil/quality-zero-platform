@@ -55,10 +55,9 @@ def exercise_wait_for_contexts(responses):
 class QualityRollupTests(unittest.TestCase):
     """Quality Rollup Tests."""
 
-    def test_build_rollup_combines_expected_contexts_lane_artifacts_and_check_results(
-        self,
-    ) -> None:
-        """Cover build rollup combines expected contexts lane artifacts and check results."""
+    @staticmethod
+    def _build_rollup_fixture():
+        """Return one representative rollup fixture."""
         profile = {
             "slug": "Prekzursil/example-repo",
             "active_required_contexts": [
@@ -98,7 +97,11 @@ class QualityRollupTests(unittest.TestCase):
                 "source": "check_run",
             },
         }
+        return profile, lane_payloads, contexts
 
+    def test_build_rollup_orders_contexts_and_sets_failure_status(self) -> None:
+        """Cover rollup ordering and overall status selection."""
+        profile, lane_payloads, contexts = self._build_rollup_fixture()
         rollup = build_quality_rollup.build_rollup(
             profile=profile,
             lane_payloads=lane_payloads,
@@ -117,6 +120,16 @@ class QualityRollupTests(unittest.TestCase):
                 "Semgrep Zero",
                 "Sonar Zero",
             ],
+        )
+
+    def test_build_rollup_prefers_lane_artifact_details(self) -> None:
+        """Cover rollup detail messages from lane artifacts."""
+        profile, lane_payloads, contexts = self._build_rollup_fixture()
+        rollup = build_quality_rollup.build_rollup(
+            profile=profile,
+            lane_payloads=lane_payloads,
+            contexts=contexts,
+            sha="abc123",
         )
         self.assertEqual(
             rollup["contexts"][3]["detail"], "Sonar reports 2 open issues (expected 0)."

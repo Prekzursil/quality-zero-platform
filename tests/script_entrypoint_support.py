@@ -3,7 +3,7 @@
 from __future__ import absolute_import
 
 import runpy
-import subprocess
+import subprocess  # nosec B404 - test helpers launch a pinned local interpreter.
 import sys
 import tempfile
 from pathlib import Path
@@ -34,7 +34,7 @@ def run_script_entrypoint_failure(script_relative_path: str) -> int:
         ]
     )
     with tempfile.TemporaryDirectory() as tmp, patch.dict(ENVIRON_KEY, {}, clear=True):
-        completed = subprocess.run(
+        completed = subprocess.run(  # nosec B603 - argv is fixed by the test helper.
             [sys.executable, "-c", bootstrap, str(script_path)],
             cwd=Path(tmp),
             env={},

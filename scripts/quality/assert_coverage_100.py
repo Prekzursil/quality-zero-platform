@@ -31,9 +31,11 @@ from scripts.quality.coverage_support import (
 )
 
 _find_missing_required_sources = coverage_support._find_missing_required_sources
+_existing_repo_file_candidate = coverage_support._existing_repo_file_candidate
 _is_tests_only_report = coverage_support._is_tests_only_report
 _matches_required_source = coverage_support._matches_required_source
 _normalize_source_path = coverage_support._normalize_source_path
+_should_track_coverage_source = coverage_support._should_track_coverage_source
 
 
 def _normalized_branch_min_percent(raw_value: Any) -> float | None:

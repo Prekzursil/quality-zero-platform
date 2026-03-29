@@ -10,16 +10,32 @@ import os
 import sys
 import time
 import urllib.error
-import urllib.parse
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.quality.common import utc_timestamp, write_report
 from scripts.quality import codacy_zero_support
+from scripts.quality.codacy_zero_io import (
+    JSON_ACCEPT_HEADER,
+    CodacyPendingFn,
+    CodacyQuery,
+    CodacyRetryConfig,
+    CodacyStatusResult,
+    _render_md as _render_codacy_md,
+    _base_query,
+    _build_payload,
+    _build_retry_config as _build_retry_config_base,
+    _mapping_or_empty,
+    _preferred_text,
+    _request_mode,
+    _write_codacy_report,
+    build_issues_url,
+    build_pull_request_analysis_url,
+    build_repository_analysis_url,
+)
+from scripts.quality.common import write_report
 from scripts.security_helpers import load_json_https
 
 TOTAL_KEYS = {
@@ -31,60 +47,26 @@ TOTAL_KEYS = {
     "open_issues",
     "issuesCount",
 }
-CODACY_API_BASE = "https://api.codacy.com"
-CODACY_APP_API_BASE = "https://app.codacy.com/api/v3"
-JSON_ACCEPT_HEADER = "application/json"
 # Codacy's PR-scoped issue view can lag several minutes behind GitHub on large
 # or long-lived branches, so the default retry window needs to cover that drift.
 SCOPED_ANALYSIS_RETRY_ATTEMPTS = 180
 
 
-@dataclass(frozen=True)
-class CodacyStatusResult:
-    """Describe one resolved Codacy gate result."""
-
-    status: str
-    findings: List[str]
-    open_issues: int | None
-    pull_request: str
+def _render_md(payload: Mapping[str, Any]) -> str:
+    """Preserve the legacy markdown helper surface for tests and callers."""
+    return _render_codacy_md(payload)
 
 
-@dataclass(frozen=True)
-class CodacyQuery:
-    """Describe the repository and optional PR scope for one Codacy query."""
-
-    provider: str
-    owner: str
-    repo: str
-    pull_request: str = ""
-    sha: str = ""
-
-
-CodacyPendingFn = Callable[[CodacyQuery, str], str | None]
-
-
-@dataclass(frozen=True)
-class CodacyRetryConfig:
-    """Describe the retry settings for one Codacy zero-gate lookup."""
-
-    provider_candidates: Tuple[str, ...]
-    attempts: int
-    pending_fn: CodacyPendingFn
-    sleep_seconds: float
-
-
-def _mapping_or_empty(value: Any) -> Dict[str, Any]:
-    """Return the input mapping or an empty dictionary."""
-    return value if isinstance(value, dict) else {}
-
-
-def _preferred_text(*values: Any) -> str:
-    """Return the first non-empty textual value from the provided arguments."""
-    for value in values:
-        text = str("" if value is None else value).strip()
-        if text:
-            return text
-    return ""
+def _write_codacy_report(args: argparse.Namespace, payload: Mapping[str, Any]) -> int:
+    """Persist the Codacy gate payload in JSON and Markdown formats."""
+    return write_report(
+        payload,
+        out_json=args.out_json,
+        out_md=args.out_md,
+        default_json="codacy-zero/codacy.json",
+        default_md="codacy-zero/codacy.md",
+        render_md=_render_md,
+    )
 
 
 def _parse_args() -> argparse.Namespace:
@@ -165,22 +147,6 @@ def extract_total_open(payload: Any) -> int | None:
     return None
 
 
-def _render_md(payload: Mapping[str, Any]) -> str:
-    """Render the Markdown summary written by the Codacy gate."""
-    lines = [
-        "# Codacy Zero Gate",
-        "",
-        f"- Status: `{payload['status']}`",
-        f"- Owner/repo: `{payload['owner']}/{payload['repo']}`",
-        f"- Open issues: `{payload.get('open_issues')}`",
-        f"- Timestamp (UTC): `{payload['timestamp_utc']}`",
-        "",
-        "## Findings",
-    ]
-    lines.extend([f"- {item}" for item in payload.get("findings", [])] or ["- None"])
-    return "\n".join(lines) + "\n"
-
-
 def _provider_candidates(primary_provider: str) -> List[str]:
     """Return provider aliases to try when querying Codacy."""
     return list(dict.fromkeys([primary_provider, "gh", "github"]))
@@ -194,73 +160,17 @@ def _build_retry_config(
     sleep_seconds: float = 5.0,
 ) -> CodacyRetryConfig:
     """Build the retry configuration for one Codacy zero-gate lookup."""
-    attempts = (
-        SCOPED_ANALYSIS_RETRY_ATTEMPTS
-        if _preferred_text(query.pull_request, query.sha)
-        else 1
-    )
-    return CodacyRetryConfig(
-        provider_candidates=tuple(provider_candidates),
-        attempts=max(1, attempts),
+    return _build_retry_config_base(
+        query,
+        provider_candidates,
+        attempts=(
+            SCOPED_ANALYSIS_RETRY_ATTEMPTS
+            if _preferred_text(query.pull_request, query.sha)
+            else 1
+        ),
         pending_fn=_analysis_pending_message if pending_fn is None else pending_fn,
-        sleep_seconds=max(0.0, sleep_seconds),
+        sleep_seconds=sleep_seconds,
     )
-
-
-def build_issues_url(
-    provider: str,
-    owner: str,
-    repo: str,
-    *,
-    pull_request: str = "",
-) -> str:
-    """Build the Codacy issues endpoint for a repository or pull request scope."""
-    query = [
-        urllib.parse.urlencode({"limit": "1"}),
-        urllib.parse.urlencode({"status": "new", "limit": "1"}),
-    ][bool(pull_request)]
-    pull_request_url = (
-        f"{CODACY_APP_API_BASE}/analysis/organizations/"
-        f"{provider}/{owner}/repositories/{repo}"
-        f"/pull-requests/{pull_request}/issues?{query}"
-    )
-    if pull_request:
-        return pull_request_url
-    return (
-        f"{CODACY_API_BASE}/api/v3/analysis/organizations/"
-        f"{provider}/{owner}/repositories/{repo}/issues/search?{query}"
-    )
-
-
-def build_repository_analysis_url(provider: str, owner: str, repo: str) -> str:
-    """Build the public repository analysis endpoint for one Codacy project."""
-    return (
-        f"{CODACY_APP_API_BASE}/analysis/organizations/"
-        f"{provider}/{owner}/repositories/{repo}"
-    )
-
-
-def build_pull_request_analysis_url(
-    provider: str,
-    owner: str,
-    repo: str,
-    pull_request: str,
-) -> str:
-    """Build the public analysis endpoint for one Codacy pull request."""
-    return (
-        f"{CODACY_APP_API_BASE}/analysis/organizations/"
-        f"{provider}/{owner}/repositories/{repo}"
-        f"/pull-requests/{pull_request}"
-    )
-
-
-def _request_mode(query: CodacyQuery) -> Tuple[str, Dict[str, Any] | None]:
-    """Return the Codacy HTTP method and request body for the selected scope."""
-    if query.pull_request:
-        return "GET", None
-    if query.sha:
-        return "POST", {"commitUuid": query.sha}
-    return "POST", {}
 
 
 def _query_codacy_public_repository_issues(
@@ -323,10 +233,13 @@ def _fallback_public_issues(
         public_issue_query=_query_codacy_public_repository_issues,
     )
 
-
-def _http_error_findings(exc: urllib.error.HTTPError) -> List[str]:
-    """Render a standardized finding for one Codacy HTTP error."""
-    return codacy_zero_support.http_error_findings(exc)
+_http_error_findings = codacy_zero_support.http_error_findings
+_not_found_findings = codacy_zero_support.not_found_findings
+_provider_query = codacy_zero_support.provider_query
+_is_retryable_pr_not_found = codacy_zero_support.is_retryable_pr_not_found
+_sha_wait_message = codacy_zero_support.sha_wait_message
+_pending_analysis_message = codacy_zero_support.pending_analysis_message
+_final_retry_findings = codacy_zero_support.final_retry_findings
 
 
 def _unauthorized_http_result(
@@ -357,20 +270,6 @@ def _handle_codacy_http_error(
             error_findings=_http_error_findings,
         ),
     )
-
-
-def _not_found_findings(
-    provider_candidates: Any,
-    last_exc: Exception | None,
-) -> Tuple[int | None, List[str], Exception | None]:
-    """Build the finding payload for provider aliases that all returned not found."""
-    return codacy_zero_support.not_found_findings(provider_candidates, last_exc)
-
-
-def _provider_query(base_query: CodacyQuery, provider: str) -> CodacyQuery:
-    """Clone the base Codacy query for one provider alias."""
-    return codacy_zero_support.provider_query(base_query, provider)
-
 
 def _query_codacy_candidate(
     query: CodacyQuery,
@@ -415,25 +314,6 @@ def _codacy_status(findings: List[str], policy_mode: str) -> str:
     return "pass" if not findings else "fail"
 
 
-def _base_query(args: argparse.Namespace, pull_request: str) -> CodacyQuery:
-    """Build the normalized Codacy query from CLI arguments."""
-    return CodacyQuery(
-        provider=args.provider,
-        owner=urllib.parse.quote(args.owner.strip(), safe=""),
-        repo=urllib.parse.quote(args.repo.strip(), safe=""),
-        pull_request=pull_request,
-        sha=_preferred_text(getattr(args, "sha", "")).lower(),
-    )
-
-
-def _is_retryable_pr_not_found(
-    base_query: CodacyQuery,
-    last_exc: Exception | None,
-) -> bool:
-    """Return whether a missing PR endpoint should be retried after a delay."""
-    return codacy_zero_support.is_retryable_pr_not_found(base_query, last_exc)
-
-
 def _request_analysis_status(url: str, token: str) -> Dict[str, Any]:
     """Request the current Codacy analysis-status payload."""
     return codacy_zero_support.request_analysis_status(
@@ -442,15 +322,6 @@ def _request_analysis_status(url: str, token: str) -> Dict[str, Any]:
         json_accept_header=JSON_ACCEPT_HEADER,
         load_json=load_json_https,
     )
-
-
-def _sha_wait_message(
-    scope_label: str,
-    observed_sha: str,
-    target_sha: str,
-) -> str | None:
-    """Return the pending message for one observed Codacy analysis SHA."""
-    return codacy_zero_support.sha_wait_message(scope_label, observed_sha, target_sha)
 
 
 def _pull_request_pending_message(
@@ -555,28 +426,6 @@ def _analysis_pending_message(query: CodacyQuery, token: str) -> str | None:
     )
 
 
-def _pending_analysis_message(
-    config: CodacyRetryConfig,
-    query: CodacyQuery,
-    token: str,
-) -> str | None:
-    """Return a resilient pending-analysis message from the configured callback."""
-    return codacy_zero_support.pending_analysis_message(config, query, token)
-
-
-def _final_retry_findings(
-    open_issues: int | None,
-    findings: List[str],
-    pending_message: str | None,
-) -> Tuple[int | None, List[str]]:
-    """Append the final pending message to the existing finding list."""
-    return codacy_zero_support.final_retry_findings(
-        open_issues,
-        findings,
-        pending_message,
-    )
-
-
 def _commit_scope_fallback(
     base_query: CodacyQuery,
     token: str,
@@ -668,35 +517,6 @@ def _resolve_codacy_status(args: argparse.Namespace) -> CodacyStatusResult:
         findings=findings,
         open_issues=open_issues,
         pull_request=pull_request,
-    )
-
-
-def _build_payload(
-    args: argparse.Namespace,
-    result: CodacyStatusResult,
-) -> Dict[str, Any]:
-    """Build the JSON payload persisted by the Codacy zero gate."""
-    return {
-        "status": result.status,
-        "owner": args.owner,
-        "repo": args.repo,
-        "provider": args.provider,
-        "pull_request": result.pull_request if result.pull_request else None,
-        "open_issues": result.open_issues,
-        "timestamp_utc": utc_timestamp(),
-        "findings": result.findings,
-    }
-
-
-def _write_codacy_report(args: argparse.Namespace, payload: Mapping[str, Any]) -> int:
-    """Persist the Codacy gate payload in JSON and Markdown formats."""
-    return write_report(
-        payload,
-        out_json=args.out_json,
-        out_md=args.out_md,
-        default_json="codacy-zero/codacy.json",
-        default_md="codacy-zero/codacy.md",
-        render_md=_render_md,
     )
 
 

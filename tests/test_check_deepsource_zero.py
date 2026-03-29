@@ -379,8 +379,8 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
             ],
         )
 
-    def test_main_handles_success_missing_inputs_and_provider_errors(self) -> None:
-        """Cover main handles success missing inputs and provider errors."""
+    def test_main_reports_missing_inputs(self) -> None:
+        """Cover the failing DeepSource main path when inputs are missing."""
         self._assert_main_result(
             {
                 "env": {},
@@ -390,6 +390,9 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
                 "expect_visible_called": False,
             }
         )
+
+    def test_main_handles_success_status_failures_and_report_failures(self) -> None:
+        """Cover successful and failing DeepSource status flows."""
         self._assert_main_result(
             {
                 "env": {"GITHUB_TOKEN": self._status_poll_token()},
@@ -429,6 +432,8 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
             }
         )
 
+    def test_main_reports_provider_errors(self) -> None:
+        """Cover provider failures raised during the DeepSource main path."""
         assert_main_reports_provider_failure(
             self,
             check_deepsource_zero,
@@ -441,8 +446,8 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
             },
         )
 
-    def test_parse_args_render_markdown_and_script_entrypoint(self) -> None:
-        """Cover parse args render markdown and script entrypoint."""
+    def test_parse_args_render_markdown_and_status_helpers(self) -> None:
+        """Cover parse-args defaults, markdown rendering, and status helpers."""
         with patch.object(sys, "argv", ["check_deepsource_zero.py"]):
             args = check_deepsource_zero._parse_args()
         self.assertEqual(args.status_prefix, "DeepSource")
@@ -482,6 +487,8 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
             )
         )
 
+    def test_script_entrypoint_helpers_exit_cleanly(self) -> None:
+        """Cover both script-entrypoint helper paths."""
         self.assertEqual(
             run_script_entrypoint_failure("scripts/quality/check_deepsource_zero.py"),
             1,

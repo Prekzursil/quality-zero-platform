@@ -57,9 +57,9 @@ tbody tr:hover { background: #16203d; cursor: pointer; }
   font-size: 12px;
   font-weight: 700;
 }
-.badge.pass { background: rgba(16, 185, 129, 0.24); color: #f5fffb; }
-.badge.fail { background: rgba(239, 68, 68, 0.28); color: #fff5f5; }
-.badge.pending, .badge.unknown { background: rgba(148, 163, 184, 0.26); color: #f8fafc; }
+.badge.pass { background: #065f46; color: #ecfdf5; }
+.badge.fail { background: #991b1b; color: #fef2f2; }
+.badge.pending, .badge.unknown { background: #334155; color: #f8fafc; }
 .detail-panel {
   background: #121a31;
   border: 1px solid #1f2a44;

@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 
 from pathlib import Path
-from typing import Dict, Protocol
+from typing import Collection, Dict, Protocol, Set
 
 from scripts.quality.control_plane import load_inventory, load_repo_profile
 
@@ -24,6 +24,42 @@ class _AssertionProtocol(Protocol):
 
 class ControlPlaneAssertions(_AssertionProtocol):
     """Shared helpers for control-plane regression tests."""
+
+    @staticmethod
+    def _zero_gate_provider_contexts() -> Set[str]:
+        """Return the direct provider-owned zero-gate status contexts."""
+        return {
+            "Codecov Analytics",
+            "Coverage 100 Gate",
+            "QLTY Zero",
+            "Sonar Zero",
+            "Codacy Zero",
+            "Semgrep Zero",
+            "Sentry Zero",
+            "DeepScan Zero",
+        }
+
+    @staticmethod
+    def _shared_zero_gate_contexts() -> Set[str]:
+        """Return the shared reusable-workflow zero-gate status contexts."""
+        return {
+            "shared-codecov-analytics / Codecov Analytics",
+            "shared-scanner-matrix / Coverage 100 Gate",
+            "shared-scanner-matrix / QLTY Zero",
+            "shared-scanner-matrix / Sonar Zero",
+            "shared-scanner-matrix / Codacy Zero",
+            "shared-scanner-matrix / Semgrep Zero",
+            "shared-scanner-matrix / Sentry Zero",
+            "shared-scanner-matrix / DeepScan Zero",
+        }
+
+    def _assert_context_subset(
+        self,
+        contexts: Collection[str],
+        expected_contexts: Collection[str],
+    ) -> None:
+        """Assert that every expected context is present in the active set."""
+        self.assertEqual(set(expected_contexts) - set(contexts), set())
 
     @staticmethod
     def _special_repo_profiles() -> Dict[str, dict]:
@@ -60,10 +96,11 @@ class ControlPlaneAssertions(_AssertionProtocol):
             },
         )
         for expected_snippet in (
+            "python3 -m venv .venv-pytest",
+            ". .venv-pytest/bin/activate",
             "tests/test_quality_security_scripts.py",
             "tests/test_quality_coverage_scripts.py",
-            "tests/test_quality_script_main_flows.py",
-            "tests/test_security_helpers.py",
+            "tests/test_quality_script_coverage.py",
             "tests/test_static_remediation_guards.py",
         ):
             self.assertIn(expected_snippet, profile["coverage"]["command"])
@@ -71,8 +108,10 @@ class ControlPlaneAssertions(_AssertionProtocol):
             profile["coverage"]["require_sources"],
             ["scripts/", "src/", "airline-gui/src/"],
         )
-        self.assertIn("--filter '.*/src/.*'", profile["coverage"]["command"])
-        self.assertIn("--exclude '.*/build/_deps/.*'", profile["coverage"]["command"])
+        self.assertIn("--filter '^src/'", profile["coverage"]["command"])
+        self.assertIn("--exclude '^build/_deps/'", profile["coverage"]["command"])
+        self.assertIn("--exclude-throw-branches", profile["coverage"]["command"])
+        self.assertIn("--exclude-unreachable-branches", profile["coverage"]["command"])
         self.assertNotIn("normalize_lcov", profile["coverage"]["command"])
         self.assertEqual(profile["coverage"]["min_percent"], 100.0)
         self.assertEqual(profile["coverage"]["branch_min_percent"], 100.0)

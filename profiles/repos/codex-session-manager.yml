@@ -2,11 +2,23 @@ slug: Prekzursil/codex-session-manager
 stack: dotnet-wpf
 verify_command: bash scripts/verify
 required_contexts_mode: replace
+issue_policy:
+  mode: zero
+  pr_behavior: absolute
+  main_behavior: absolute
 required_contexts:
   always:
     - build-test
     - analyze
     - scan
+    - Codecov Analytics
+    - Coverage 100 Gate
+    - QLTY Zero
+    - Sonar Zero
+    - Codacy Zero
+    - Semgrep Zero
+    - Sentry Zero
+    - DeepScan Zero
   pull_request_only:
     - dependency-review
   required_now:
@@ -15,6 +27,13 @@ required_contexts:
     - scan
     - dependency-review
     - shared-codecov-analytics / Codecov Analytics
+    - shared-scanner-matrix / Coverage 100 Gate
+    - shared-scanner-matrix / QLTY Zero
+    - shared-scanner-matrix / Sonar Zero
+    - shared-scanner-matrix / Codacy Zero
+    - shared-scanner-matrix / Semgrep Zero
+    - shared-scanner-matrix / Sentry Zero
+    - shared-scanner-matrix / DeepScan Zero
     - aggregate-gate / Quality Zero Gate
     - shared-scanner-matrix / Quality Rollup
   target:
@@ -23,11 +42,18 @@ required_contexts:
     - scan
     - dependency-review
     - shared-codecov-analytics / Codecov Analytics
+    - shared-scanner-matrix / Coverage 100 Gate
+    - shared-scanner-matrix / QLTY Zero
+    - shared-scanner-matrix / Sonar Zero
+    - shared-scanner-matrix / Codacy Zero
+    - shared-scanner-matrix / Semgrep Zero
+    - shared-scanner-matrix / Sentry Zero
+    - shared-scanner-matrix / DeepScan Zero
     - aggregate-gate / Quality Zero Gate
     - shared-scanner-matrix / Quality Rollup
 coverage:
   runner: windows-latest
-  shell: pwsh
+  command_shell: pwsh
   command: |
     dotnet restore CodexSessionManager.sln
     dotnet build CodexSessionManager.sln --configuration Release --no-restore

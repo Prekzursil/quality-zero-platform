@@ -20,7 +20,7 @@ from scripts.quality.control_plane import (
 from tests.control_plane_support import ControlPlaneAssertions, ROOT
 
 
-class ControlPlaneProfileTests(ControlPlaneAssertions, unittest.TestCase):
+class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
     """Regression coverage for repo overlays, provider metadata, and exports."""
 
     def test_reframe_overlay_adds_visual_and_platform_contexts_to_target(self) -> None:
@@ -93,6 +93,10 @@ class ControlPlaneProfileTests(ControlPlaneAssertions, unittest.TestCase):
         profiles = self._special_repo_profiles()
         self._assert_airline_existing_behaviors(profiles["airline"])
         self._assert_swfoc_existing_behaviors(profiles["swfoc"])
+        self.assertEqual(
+            profiles["airline"]["vendors"]["sonar"]["project_key"],
+            "Prekzursil_Airline-Reservations-System",
+        )
 
     def test_quality_zero_platform_profile_keeps_controller_specific_contracts(
         self,
@@ -151,23 +155,17 @@ class ControlPlaneProfileTests(ControlPlaneAssertions, unittest.TestCase):
                 "DeepScan Zero",
             ],
         )
-        self.assertTrue(
-            {
-                "Coverage 100 Gate",
-                "Codecov Analytics",
-                "QLTY Zero",
-                "Sonar Zero",
-                "Codacy Zero",
-                "Semgrep Zero",
-                "Sentry Zero",
-                "DeepScan Zero",
+        self._assert_context_subset(
+            pr_contexts,
+            self._zero_gate_provider_contexts()
+            | {
                 "SonarCloud Code Analysis",
                 "Codacy Static Code Analysis",
                 "DeepScan",
                 "qlty check",
                 "qlty coverage",
                 "qlty coverage diff",
-            }.issubset(pr_contexts)
+            },
         )
         self.assertIn("Codecov Analytics", target_contexts)
         self.assertIn("QLTY Zero", target_contexts)

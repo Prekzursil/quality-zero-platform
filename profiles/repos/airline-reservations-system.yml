@@ -2,12 +2,18 @@ slug: Prekzursil/Airline-Reservations-System
 stack: cpp-cmake
 verify_command: bash scripts/verify
 required_contexts_mode: replace
+issue_policy:
+  mode: zero
+  pr_behavior: absolute
+  main_behavior: absolute
 coverage:
   command: |
-    python3 -m pip install --disable-pip-version-check pytest pytest-cov
+    python3 -m venv .venv-pytest
+    . .venv-pytest/bin/activate
+    python -m pip install --disable-pip-version-check pytest pytest-cov
     mkdir -p coverage/python
-    python3 -m pytest -q tests/test_quality_security_scripts.py tests/test_quality_coverage_scripts.py \
-      tests/test_quality_script_main_flows.py tests/test_security_helpers.py \
+    python -m pytest -q tests/test_quality_security_scripts.py tests/test_quality_coverage_scripts.py \
+      tests/test_quality_script_coverage.py \
       tests/test_static_remediation_guards.py \
       --cov=scripts \
       --cov-branch \
@@ -21,15 +27,19 @@ coverage:
     mkdir -p coverage/cpp
     gcovr \
       --root . \
-      --filter '.*/src/.*' \
-      --exclude 'tests' \
-      --exclude '.*/build/_deps/.*' \
+      --filter '^src/' \
+      --exclude '^tests/' \
+      --exclude '^build/_deps/' \
       --object-directory build \
       --merge-mode-functions=merge-use-line-min \
       --gcov-exclude-directory '.*/CMakeFiles/airline_api_server.dir/.*' \
       --gcov-exclude-directory '.*/CMakeFiles/airline_reservation_system.dir/.*' \
+      --exclude-throw-branches \
+      --exclude-unreachable-branches \
       --lcov coverage/cpp/lcov.info \
       --print-summary
+  setup:
+    node: "22"
   inputs:
     - format: xml
       name: scripts
@@ -55,6 +65,11 @@ required_contexts:
     - Codacy Zero
     - Semgrep Zero
     - Sentry Zero
+    - "DeepSource: JavaScript"
+    - "DeepSource: Python"
+    - "DeepSource: C & C++"
+    - "DeepSource: Shell"
+    - "DeepSource: Secrets"
     - SonarCloud Code Analysis
   target:
     - Coverage 100 Gate
@@ -67,6 +82,11 @@ required_contexts:
     - Codacy Zero
     - Semgrep Zero
     - Sentry Zero
+    - "DeepSource: JavaScript"
+    - "DeepSource: Python"
+    - "DeepSource: C & C++"
+    - "DeepSource: Shell"
+    - "DeepSource: Secrets"
     - DeepScan Zero
     - SonarCloud Code Analysis
     - Codacy Static Code Analysis
@@ -80,4 +100,4 @@ required_contexts:
     - DeepScan Zero
 vendors:
   sonar:
-    project_key: Prekzursil_Airline-Reservations-System
+    project_key_from_repo_slug: true

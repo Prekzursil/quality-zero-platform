@@ -11,7 +11,7 @@ from scripts.quality.control_plane import (
 from tests.control_plane_support import ControlPlaneAssertions, ROOT
 
 
-class ControlPlaneTests(ControlPlaneAssertions, unittest.TestCase):
+class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
     """Control-plane regression tests for required contexts and repo contracts."""
 
     def test_inventory_expands_to_15_repos(self) -> None:
@@ -40,7 +40,6 @@ class ControlPlaneTests(ControlPlaneAssertions, unittest.TestCase):
                 "Semgrep Zero",
                 "Sentry Zero",
                 "DeepScan Zero",
-                "DeepSource Visible Zero",
                 "SonarCloud Code Analysis",
                 "Chromatic Playwright",
                 "Applitools Visual",
@@ -107,6 +106,15 @@ class ControlPlaneTests(ControlPlaneAssertions, unittest.TestCase):
         push_contexts = active_required_contexts(profile, event_name="push")
         pr_contexts = active_required_contexts(profile, event_name="pull_request")
 
+        for required in (
+            "DeepSource: JavaScript",
+            "DeepSource: Python",
+            "DeepSource: C & C++",
+            "DeepSource: Shell",
+            "DeepSource: Secrets",
+        ):
+            self.assertIn(required, push_contexts)
+            self.assertIn(required, pr_contexts)
         self.assertNotIn("DeepScan Zero", push_contexts)
         self.assertNotIn("DeepScan", push_contexts)
         self.assertNotIn("Codacy Static Code Analysis", push_contexts)
@@ -200,3 +208,19 @@ class ControlPlaneTests(ControlPlaneAssertions, unittest.TestCase):
         self.assertIn("DeepSource Visible Zero", target_contexts)
         self.assertNotIn("Codacy Static Code Analysis", target_contexts)
         self.assertNotIn("DeepScan", target_contexts)
+
+    def test_airline_target_contexts_include_deepsource_contracts(self) -> None:
+        """Airline should enforce the owned DeepSource contexts in target rulesets."""
+        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
+        profile = load_repo_profile(inventory, "Prekzursil/Airline-Reservations-System")
+        target_contexts = set(profile["required_contexts"]["target"])
+
+        self.assertTrue(
+            {
+                "DeepSource: JavaScript",
+                "DeepSource: Python",
+                "DeepSource: C & C++",
+                "DeepSource: Shell",
+                "DeepSource: Secrets",
+            }.issubset(target_contexts)
+        )

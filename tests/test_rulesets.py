@@ -74,6 +74,11 @@ class RulesetPayloadTests(unittest.TestCase):
         self.assertIn("qlty check", contexts)
         self.assertIn("qlty coverage", contexts)
         self.assertIn("qlty coverage diff", contexts)
+        self.assertIn("DeepSource: JavaScript", contexts)
+        self.assertIn("DeepSource: Python", contexts)
+        self.assertIn("DeepSource: C & C++", contexts)
+        self.assertIn("DeepSource: Shell", contexts)
+        self.assertIn("DeepSource: Secrets", contexts)
 
     def test_quality_zero_platform_self_ruleset_enforces_qlty_coverage_contexts(self) -> None:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
@@ -93,4 +98,3 @@ class RulesetPayloadTests(unittest.TestCase):
         self.assertNotIn("Codacy Static Code Analysis", profile["required_contexts"]["target"])
         self.assertNotIn("DeepScan", profile["required_contexts"]["target"])
         self.assertIn("QLTY Zero", contexts)
-

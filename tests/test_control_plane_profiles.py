@@ -20,7 +20,7 @@ from scripts.quality.control_plane import (
 from tests.control_plane_support import ControlPlaneAssertions, ROOT
 
 
-class ControlPlaneProfileTests(ControlPlaneAssertions, unittest.TestCase):
+class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
     """Regression coverage for repo overlays, provider metadata, and exports."""
 
     def test_reframe_overlay_adds_visual_and_platform_contexts_to_target(self) -> None:

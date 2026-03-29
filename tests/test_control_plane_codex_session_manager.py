@@ -11,7 +11,7 @@ from tests.control_plane_support import ControlPlaneAssertions
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class CodexSessionManagerControlPlaneTests(ControlPlaneAssertions, unittest.TestCase):
+class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
     def _load_profile(self) -> dict:
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         return load_repo_profile(inventory, "Prekzursil/codex-session-manager")

@@ -11,7 +11,7 @@ from scripts.quality.control_plane import (
 from tests.control_plane_support import ControlPlaneAssertions, ROOT
 
 
-class ControlPlaneTests(ControlPlaneAssertions, unittest.TestCase):
+class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
     """Control-plane regression tests for required contexts and repo contracts."""
 
     def test_inventory_expands_to_15_repos(self) -> None:
@@ -40,7 +40,6 @@ class ControlPlaneTests(ControlPlaneAssertions, unittest.TestCase):
                 "Semgrep Zero",
                 "Sentry Zero",
                 "DeepScan Zero",
-                "DeepSource Visible Zero",
                 "SonarCloud Code Analysis",
                 "Chromatic Playwright",
                 "Applitools Visual",

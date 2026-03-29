@@ -323,20 +323,22 @@ class CodacyZeroTests(unittest.TestCase):
                     "(waiting for targetsha)."
                 ),
             )
-        with patch.object(
-            check_codacy_zero,
-            "_request_analysis_status",
-            return_value={"pullRequest": {"headCommitSha": "targetsha"}},
-        ):
-            with patch.object(
+        with (
+            patch.object(
+                check_codacy_zero,
+                "_request_analysis_status",
+                return_value={"pullRequest": {"headCommitSha": "targetsha"}},
+            ),
+            patch.object(
                 check_codacy_zero,
                 "_request_json",
                 return_value={"analyzed": False},
-            ):
-                self.assertEqual(
-                    check_codacy_zero._analysis_pending_message(pr_query, "token"),
-                    "Codacy issues for pull request 5 are not available yet.",
-                )
+            ),
+        ):
+            self.assertEqual(
+                check_codacy_zero._analysis_pending_message(pr_query, "token"),
+                "Codacy issues for pull request 5 are not available yet.",
+            )
         with (
             patch.object(
                 check_codacy_zero,

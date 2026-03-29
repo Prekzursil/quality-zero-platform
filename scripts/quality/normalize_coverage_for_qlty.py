@@ -5,16 +5,26 @@ import argparse
 from contextlib import contextmanager
 import json
 from pathlib import Path
+import re
 import shutil
 import sys
 from typing import Dict, Iterable, List
-from xml.etree import ElementTree
 
 from scripts.quality.coverage_paths import _coverage_source_candidates, _normalize_source_path
 
 
+_XML_FILENAME_RE = re.compile(
+    r'(?P<prefix><[^>]+\bfilename=(?P<quote>["\']))(?P<value>.*?)(?P=quote)'
+)
+_XML_SOURCE_RE = re.compile(r"<source>(?P<value>.*?)</source>")
+
+
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Normalize coverage report paths for QLTY uploads.")
+    """Parse CLI arguments for QLTY coverage normalization."""
+
+    parser = argparse.ArgumentParser(
+        description="Normalize coverage report paths for QLTY uploads."
+    )
     parser.add_argument("--repo-dir", required=True)
     parser.add_argument("--out-dir", required=True)
     parser.add_argument("inputs", nargs="+")
@@ -23,6 +33,8 @@ def _parse_args() -> argparse.Namespace:
 
 @contextmanager
 def _working_directory(path: Path):
+    """Temporarily switch the process working directory."""
+
     previous = Path.cwd()
     try:
         import os
@@ -34,15 +46,21 @@ def _working_directory(path: Path):
 
 
 def _is_xml_report(path: Path) -> bool:
+    """Return True when the report uses an XML-based coverage format."""
+
     return path.suffix.lower() == ".xml"
 
 
 def _is_lcov_report(path: Path) -> bool:
+    """Return True when the report uses an LCOV-compatible file name."""
+
     lowered = path.name.lower()
     return path.suffix.lower() in {".info", ".lcov"} or lowered in {"lcov", "lcov.info"}
 
 
 def _existing_candidate(raw_path: str, source_roots: Iterable[str]) -> str:
+    """Resolve the first existing repo-relative candidate for a coverage source."""
+
     for candidate in _coverage_source_candidates(raw_path, list(source_roots)):
         if Path(candidate).is_file():
             return Path(candidate).as_posix()
@@ -52,47 +70,55 @@ def _existing_candidate(raw_path: str, source_roots: Iterable[str]) -> str:
     return ""
 
 
-def _xml_source_elements(root: ElementTree.Element) -> List[ElementTree.Element]:
+def _xml_source_roots(text: str) -> List[str]:
+    """Collect source roots declared inside a coverage XML payload."""
+
     return [
-        element
-        for element in root.iter()
-        if isinstance(element.tag, str) and element.tag.rsplit("}", 1)[-1] == "source"
+        match.group("value").strip()
+        for match in _XML_SOURCE_RE.finditer(text)
+        if match.group("value").strip()
     ]
 
 
 def _output_path(out_dir: Path, *, report_id: int, extension: str) -> Path:
+    """Build a deterministic normalized artifact path inside the temp directory."""
+
     out_path = out_dir / f"report-{report_id}{extension}"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     return out_path
 
 
 def _copy_report(path: Path, out_path: Path) -> Path:
+    """Copy an already-normalized artifact into its upload location."""
+
     shutil.copy2(path, out_path)
     return out_path
 
 
 def normalize_xml_report(path: Path, repo_dir: Path, out_dir: Path, *, report_id: int) -> Dict[str, object]:
-    tree = ElementTree.parse(path)
-    root = tree.getroot()
-    source_nodes = _xml_source_elements(root)
-    source_roots = [str(node.text or "").strip() for node in source_nodes if str(node.text or "").strip()]
+    """Rewrite Cobertura-style XML reports to repo-relative paths."""
+
+    text = path.read_text(encoding="utf-8")
+    source_roots = _xml_source_roots(text)
     rewritten = 0
 
-    for element in root.iter():
-        raw_filename = element.get("filename")
-        if not raw_filename:
-            continue
+    def _replace_filename(match: re.Match[str]) -> str:
+        nonlocal rewritten
+        raw_filename = match.group("value")
         normalized = _existing_candidate(raw_filename, source_roots)
         if normalized and normalized != raw_filename.replace("\\", "/"):
-            element.set("filename", normalized)
             rewritten += 1
+            return f"{match.group('prefix')}{normalized}{match.group('quote')}"
+        return match.group(0)
 
     repo_root_text = repo_dir.resolve().as_posix()
-    for node in source_nodes:
-        node.text = repo_root_text
-
+    normalized_text = _XML_FILENAME_RE.sub(_replace_filename, text)
+    normalized_text = _XML_SOURCE_RE.sub(
+        f"<source>{repo_root_text}</source>",
+        normalized_text,
+    )
     out_path = _output_path(out_dir, report_id=report_id, extension=".xml")
-    tree.write(out_path, encoding="utf-8", xml_declaration=True)
+    out_path.write_text(normalized_text, encoding="utf-8")
     return {
         "input": path.as_posix(),
         "normalized": out_path.as_posix(),
@@ -102,6 +128,8 @@ def normalize_xml_report(path: Path, repo_dir: Path, out_dir: Path, *, report_id
 
 
 def normalize_lcov_report(path: Path, out_dir: Path, *, report_id: int) -> Dict[str, object]:
+    """Rewrite LCOV source file entries to repo-relative paths."""
+
     rewritten = 0
     lines: List[str] = []
 
@@ -124,6 +152,8 @@ def normalize_lcov_report(path: Path, out_dir: Path, *, report_id: int) -> Dict[
 
 
 def normalize_reports(inputs: Iterable[str], *, repo_dir: Path, out_dir: Path) -> List[Dict[str, object]]:
+    """Normalize every declared coverage input into deterministic temp artifacts."""
+
     normalized: List[Dict[str, object]] = []
     out_dir.mkdir(parents=True, exist_ok=True)
     with _working_directory(repo_dir):
@@ -147,6 +177,8 @@ def normalize_reports(inputs: Iterable[str], *, repo_dir: Path, out_dir: Path) -
 
 
 def main() -> int:
+    """Normalize requested coverage inputs and print a JSON manifest."""
+
     args = _parse_args()
     repo_dir = Path(args.repo_dir).resolve()
     out_dir = Path(args.out_dir).resolve()

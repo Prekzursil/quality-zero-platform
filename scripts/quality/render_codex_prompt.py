@@ -45,37 +45,31 @@ def _artifact_lines(artifacts: List[object]) -> str:
 def _repo_contract_lines(profile: dict) -> List[str]:
     """Render the repo contract section for the prompt."""
     codex_environment = profile.get("codex_environment", {})
+    github_mutation_lane = profile.get("github_mutation_lane", "codex-private-runner")
+    provider_ui_mode = profile.get(
+        "provider_ui_mode",
+        "playwright-manual-login",
+    )
+    verify_command = codex_environment.get(
+        "verify_command",
+        profile["verify_command"],
+    )
+    auth_file = codex_environment.get("auth_file", "~/.codex/auth.json")
+    network_profile = codex_environment.get("network_profile", "unrestricted")
+    runner_labels = ", ".join(codex_environment.get("runner_labels", []))
     return [
         "## Repo contract",
         "",
         f"- Verify command: `{profile['verify_command']}`",
-        (
-            f"- GitHub mutation lane: "
-            f"`{profile.get('github_mutation_lane', 'codex-private-runner')}`"
-        ),
+        f"- GitHub mutation lane: `{github_mutation_lane}`",
         f"- Codex auth lane: `{profile.get('codex_auth_lane', 'chatgpt-account')}`",
-        (
-            f"- Provider UI mode: "
-            f"`{profile.get('provider_ui_mode', 'playwright-manual-login')}`"
-        ),
+        f"- Provider UI mode: `{provider_ui_mode}`",
         f"- Codex environment mode: `{codex_environment.get('mode', 'automatic')}`",
-        (
-            f"- Codex environment verify command: "
-            f"`{codex_environment.get('verify_command', profile['verify_command'])}`"
-        ),
-        (
-            f"- Codex auth file: "
-            f"`{codex_environment.get('auth_file', '~/.codex/auth.json')}`"
-        ),
-        (
-            f"- Codex environment network profile: "
-            f"`{codex_environment.get('network_profile', 'unrestricted')}`"
-        ),
+        f"- Codex environment verify command: `{verify_command}`",
+        f"- Codex auth file: `{auth_file}`",
+        f"- Codex environment network profile: `{network_profile}`",
         f"- Codex environment methods: `{codex_environment.get('methods', 'all')}`",
-        (
-            f"- Codex runner labels: "
-            f"`{', '.join(codex_environment.get('runner_labels', []))}`"
-        ),
+        f"- Codex runner labels: `{runner_labels}`",
         f"- Default branch: `{profile['default_branch']}`",
         f"- Preserve public check names: `{profile['preserve_public_check_names']}`",
     ]

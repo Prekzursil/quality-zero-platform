@@ -7,7 +7,7 @@ from http.client import HTTPConnection, HTTPS_PORT
 import ipaddress
 import json
 import ssl
-from typing import Any, cast, Dict, List, Mapping, Set, Tuple
+from typing import Any, Callable, cast, Dict, List, Mapping, Set, Tuple
 from urllib.error import HTTPError
 from urllib.parse import ParseResult, urlparse, urlunparse
 
@@ -303,22 +303,39 @@ def _read_bytes_response(
     return _read_https_response("_read_bytes_response", parsed, *args, **kwargs)
 
 
+def _load_https_resource(
+    function_name: str,
+    reader: Callable[..., Tuple[Any, Dict[str, str]]],
+    raw_url: str,
+    *args: Any,
+    **kwargs: Any,
+) -> Tuple[Any, Dict[str, str]]:
+    """Fetch one HTTPS resource with the requested response reader."""
+    if args:
+        raise TypeError(f"{function_name} expects keyword arguments only")
+    parsed, request_kwargs = _prepare_https_request(
+        raw_url,
+        function_name=function_name,
+        kwargs=kwargs,
+    )
+    return reader(
+        parsed,
+        **request_kwargs,
+    )
+
+
 def load_json_https(
     raw_url: str,
     *args: Any,
     **kwargs: Any,
 ) -> Tuple[Any, Dict[str, str]]:
     """Fetch and decode a JSON document over HTTPS."""
-    if args:
-        raise TypeError("load_json_https expects keyword arguments only")
-    parsed, request_kwargs = _prepare_https_request(
+    return _load_https_resource(
+        "load_json_https",
+        _read_json_response,
         raw_url,
-        function_name="load_json_https",
-        kwargs=kwargs,
-    )
-    return _read_json_response(
-        parsed,
-        **request_kwargs,
+        *args,
+        **kwargs,
     )
 
 
@@ -328,14 +345,11 @@ def load_bytes_https(
     **kwargs: Any,
 ) -> Tuple[bytes, Dict[str, str]]:
     """Fetch raw bytes over HTTPS."""
-    if args:
-        raise TypeError("load_bytes_https expects keyword arguments only")
-    parsed, request_kwargs = _prepare_https_request(
+    payload, headers = _load_https_resource(
+        "load_bytes_https",
+        _read_bytes_response,
         raw_url,
-        function_name="load_bytes_https",
-        kwargs=kwargs,
+        *args,
+        **kwargs,
     )
-    return _read_bytes_response(
-        parsed,
-        **request_kwargs,
-    )
+    return cast(bytes, payload), headers

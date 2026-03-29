@@ -138,14 +138,17 @@ def cast_mapping(value: Any) -> Mapping[str, Any]:
 
 def _run_qlty_check(repo_dir: Path) -> subprocess.CompletedProcess[str]:
     """Run `qlty check` in the requested repository directory."""
-    executable_path = _resolved_qlty_executable_path()
-    command = _build_qlty_check_argv()
-    # Safe-by-construction: a fixed literal executable name, explicit argv,
-    # shell=False, and an absolute executable path supplied separately.
+    # Safe-by-construction: the argv shape is fixed, the resolved executable path
+    # becomes argv[0], and shell=False preserves literal argument boundaries.
     return subprocess.run(  # nosec B603
-        # nosemgrep: dangerous-subprocess-use-audit; fixed argv and shell=False
-        command,
-        executable=executable_path,
+        [
+            _resolved_qlty_executable_path(),
+            "check",
+            "--all",
+            "--fail-level",
+            "note",
+            "--summary",
+        ],
         cwd=repo_dir,
         shell=False,
         check=False,
@@ -156,14 +159,16 @@ def _run_qlty_check(repo_dir: Path) -> subprocess.CompletedProcess[str]:
 
 def _run_qlty_smells(repo_dir: Path) -> subprocess.CompletedProcess[str]:
     """Run `qlty smells` in the requested repository directory."""
-    executable_path = _resolved_qlty_executable_path()
-    command = _build_qlty_smells_argv()
-    # Safe-by-construction: a fixed literal executable name, explicit argv,
-    # shell=False, and an absolute executable path supplied separately.
+    # Safe-by-construction: the argv shape is fixed, the resolved executable path
+    # becomes argv[0], and shell=False preserves literal argument boundaries.
     return subprocess.run(  # nosec B603
-        # nosemgrep: dangerous-subprocess-use-audit; fixed argv and shell=False
-        command,
-        executable=executable_path,
+        [
+            _resolved_qlty_executable_path(),
+            "smells",
+            "--all",
+            "--quiet",
+            "--no-snippets",
+        ],
         cwd=repo_dir,
         shell=False,
         check=False,

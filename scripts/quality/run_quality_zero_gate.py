@@ -43,6 +43,45 @@ def _required_contexts(profile: Dict[str, Any]) -> List[str]:
     raise SystemExit("Resolved profile did not include active_required_contexts")
 
 
+def _resolve_build_args(*args: Any, **kwargs: Any) -> tuple[Any, Any, Any]:
+    """Normalize positional and keyword arguments for argv construction."""
+    if args:
+        if len(args) != 3:
+            raise TypeError(
+                "_build_argv expects platform_dir and output paths or keyword arguments"
+            )
+        return args[0], args[1], args[2]
+    try:
+        platform_dir = kwargs.pop("platform_dir")
+        out_json = kwargs.pop("out_json")
+        out_md = kwargs.pop("out_md")
+    except KeyError as exc:  # pragma: no cover - defensive contract guard
+        raise TypeError(f"Missing required argv parameter: {exc.args[0]}") from exc
+    if kwargs:
+        raise TypeError(
+            f"Unexpected _build_argv parameters: {', '.join(sorted(kwargs))}"
+        )
+    return platform_dir, out_json, out_md
+
+
+def _required_check_script_path(platform_dir: Any) -> str:
+    """Return the required-check probe path for POSIX or Windows inputs."""
+    platform_dir_text = str(platform_dir)
+    if "\\" in platform_dir_text and ":" in platform_dir_text:
+        return str(
+            PureWindowsPath(platform_dir_text)
+            / "scripts"
+            / "quality"
+            / "check_required_checks.py"
+        )
+    return str(
+        Path(platform_dir_text)
+        / "scripts"
+        / "quality"
+        / "check_required_checks.py"
+    )
+
+
 def _build_argv(
     profile: Dict[str, Any],
     sha: str,
@@ -50,43 +89,9 @@ def _build_argv(
     **kwargs: Any,
 ) -> List[str]:
     """Build argv for the required-checks probe."""
-    if args:
-        if len(args) != 3:
-            raise TypeError(
-                "_build_argv expects platform_dir and output paths or keyword arguments"
-            )
-        platform_dir, out_json, out_md = args
-    else:
-        try:
-            platform_dir = kwargs.pop("platform_dir")
-            out_json = kwargs.pop("out_json")
-            out_md = kwargs.pop("out_md")
-        except KeyError as exc:  # pragma: no cover - defensive contract guard
-            raise TypeError(f"Missing required argv parameter: {exc.args[0]}") from exc
-        if kwargs:
-            raise TypeError(
-                f"Unexpected _build_argv parameters: {', '.join(sorted(kwargs))}"
-            )
-
-    platform_dir_text = str(platform_dir)
-    script_path = (
-        str(
-            PureWindowsPath(platform_dir_text)
-            / "scripts"
-            / "quality"
-            / "check_required_checks.py"
-        )
-        if "\\" in platform_dir_text and ":" in platform_dir_text
-        else str(
-            Path(platform_dir_text)
-            / "scripts"
-            / "quality"
-            / "check_required_checks.py"
-        )
-    )
-
+    platform_dir, out_json, out_md = _resolve_build_args(*args, **kwargs)
     argv = [
-        script_path,
+        _required_check_script_path(platform_dir),
         "--repo",
         str(profile["slug"]),
         "--sha",

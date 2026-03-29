@@ -115,7 +115,7 @@ def _matches_required_context(actual_context: str, expected_context: str) -> boo
     current = str(actual_context or "").strip()
     expected = str(expected_context or "").strip()
     return bool(current) and bool(expected) and (
-        current == expected or current.rsplit(" / ", 1)[-1] == expected
+        expected in (current, current.rsplit(" / ", 1)[-1])
     )
 
 

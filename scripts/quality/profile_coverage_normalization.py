@@ -1,3 +1,5 @@
+"""Normalize coverage profile blocks for shared quality workflows."""
+
 from __future__ import absolute_import
 
 from copy import deepcopy
@@ -7,12 +9,16 @@ from typing import Any, Dict, List, Mapping, Sequence, Tuple
 from scripts.quality.common import dedupe_strings
 
 
-_LCOV_SRC_RE = re.compile(r"(?P<prefix>.+?)/coverage/(?:lcov|lcov\.info|lcov-report).*", re.IGNORECASE)
+_LCOV_SRC_RE = re.compile(
+    r"(?P<prefix>.+?)/coverage/(?:lcov|lcov\.info|lcov-report).*",
+    re.IGNORECASE,
+)
 _COV_ARG_RE = re.compile(r"--cov(?:=|\s+)(?P<value>[A-Za-z0-9_./-]+)")
 _GCOVR_FILTER_RE = re.compile(r"--filter\s+'\.*/(?P<value>[A-Za-z0-9_./-]+)/\.\*'")
 
 
 def _normalize_source_hint(raw: str) -> str:
+    """Normalize a source-path hint inferred from coverage configuration."""
     value = str(raw or "").strip().replace("\\", "/")
     if not value:
         return ""
@@ -24,6 +30,7 @@ def _normalize_source_hint(raw: str) -> str:
 
 
 def _extract_cov_hints(command: str) -> List[str]:
+    """Return source hints inferred from pytest-style `--cov` arguments."""
     inferred: List[str] = []
     for match in _COV_ARG_RE.finditer(command):
         hint = _normalize_source_hint(match.group("value"))
@@ -33,6 +40,7 @@ def _extract_cov_hints(command: str) -> List[str]:
 
 
 def _extract_gcovr_hints(command: str) -> List[str]:
+    """Return source hints inferred from gcovr filter arguments."""
     inferred: List[str] = []
     for match in _GCOVR_FILTER_RE.finditer(command):
         hint = _normalize_source_hint(match.group("value"))
@@ -44,6 +52,7 @@ def _extract_gcovr_hints(command: str) -> List[str]:
 
 
 def _extract_lcov_hint_from_inputs(inputs: Sequence[Mapping[str, Any]]) -> List[str]:
+    """Infer source roots from LCOV artifact input paths when available."""
     inferred: List[str] = []
     for item in inputs:
         path = str(item.get("path", "")).replace("\\", "/").strip()
@@ -54,6 +63,7 @@ def _extract_lcov_hint_from_inputs(inputs: Sequence[Mapping[str, Any]]) -> List[
 
 
 def infer_required_sources(raw_coverage: Mapping[str, Any] | None) -> List[str]:
+    """Infer required source roots from coverage commands and input artifacts."""
     coverage = deepcopy(raw_coverage or {}) if isinstance(raw_coverage, dict) else {}
     command = str(coverage.get("command", "")).strip()
     inputs = infer_coverage_inputs(coverage)
@@ -66,6 +76,7 @@ def infer_required_sources(raw_coverage: Mapping[str, Any] | None) -> List[str]:
 
 
 def normalize_coverage_inputs(raw_inputs: Any) -> List[Dict[str, str]]:
+    """Normalize raw coverage input mappings into the shared schema."""
     if not isinstance(raw_inputs, list):
         return []
 
@@ -78,12 +89,20 @@ def normalize_coverage_inputs(raw_inputs: Any) -> List[Dict[str, str]]:
             "name": str(item.get("name", "")).strip(),
             "path": str(item.get("path", "")).strip(),
         }
-        if normalized_item["format"] in {"xml", "lcov"} and normalized_item["name"] and normalized_item["path"]:
+        if (
+            normalized_item["format"] in {"xml", "lcov"}
+            and normalized_item["name"]
+            and normalized_item["path"]
+        ):
             normalized_items.append(normalized_item)
     return normalized_items
 
 
 def infer_coverage_inputs(coverage: Mapping[str, Any] | None) -> List[Dict[str, str]]:
+    """Return normalized coverage inputs.
+
+    Fall back to a legacy artifact path when explicit inputs are absent.
+    """
     payload = deepcopy(coverage or {}) if isinstance(coverage, dict) else {}
     inputs = normalize_coverage_inputs(payload.get("inputs", []))
     legacy_path = str(payload.get("artifact_path", "")).strip()
@@ -95,6 +114,7 @@ def infer_coverage_inputs(coverage: Mapping[str, Any] | None) -> List[Dict[str, 
 
 
 def normalize_java_setup(raw_java: Any) -> Dict[str, Any]:
+    """Normalize optional Java toolchain setup for coverage runs."""
     if isinstance(raw_java, str):
         raw_java = {"distribution": "temurin", "version": raw_java}
     java = deepcopy(raw_java) if isinstance(raw_java, dict) else {}
@@ -105,6 +125,7 @@ def normalize_java_setup(raw_java: Any) -> Dict[str, Any]:
 
 
 def normalize_coverage_setup(raw_setup: Any) -> Dict[str, Any]:
+    """Normalize language/runtime setup needed before coverage collection."""
     setup = deepcopy(raw_setup) if isinstance(raw_setup, dict) else {}
     return {
         "python": str(setup.get("python", "")).strip(),
@@ -118,6 +139,7 @@ def normalize_coverage_setup(raw_setup: Any) -> Dict[str, Any]:
 
 
 def normalize_coverage_assert_mode(raw_assert_mode: Any) -> Dict[str, str]:
+    """Normalize per-component coverage assertion modes."""
     if isinstance(raw_assert_mode, str):
         raw_assert_mode = {"default": raw_assert_mode}
     if not isinstance(raw_assert_mode, dict):
@@ -132,6 +154,7 @@ def normalize_coverage_assert_mode(raw_assert_mode: Any) -> Dict[str, str]:
 
 
 def _normalize_branch_min_percent(raw_branch_min_percent: Any) -> float | None:
+    """Normalize optional minimum branch coverage into a float threshold."""
     if raw_branch_min_percent in {"", None}:
         return None
     try:
@@ -141,28 +164,41 @@ def _normalize_branch_min_percent(raw_branch_min_percent: Any) -> float | None:
 
 
 def _resolve_required_sources(coverage: Dict[str, Any]) -> Tuple[List[str], str]:
+    """Resolve required coverage sources and whether they were explicit or inferred."""
     require_sources = dedupe_strings(coverage.get("require_sources", []))
-    require_sources_mode = "explicit" if require_sources else str(coverage.get("require_sources_mode", "infer")).strip() or "infer"
+    require_sources_mode = (
+        "explicit"
+        if require_sources
+        else str(coverage.get("require_sources_mode", "infer")).strip() or "infer"
+    )
     if require_sources_mode == "infer" and not require_sources:
         require_sources = infer_required_sources(coverage)
     return require_sources, require_sources_mode
 
 
 def normalize_coverage(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
+    """Normalize the full coverage block consumed by the shared quality gates."""
     coverage = deepcopy(raw or {}) if isinstance(raw, dict) else {}
     inputs = infer_coverage_inputs(coverage)
     require_sources, require_sources_mode = _resolve_required_sources(coverage)
     resolved_shell = coverage.get("command_shell", coverage.get("shell", "bash"))
     coverage.pop("command_shell", None)
-    coverage["runner"] = str(coverage.get("runner", "ubuntu-latest")).strip() or "ubuntu-latest"
+    coverage["runner"] = (
+        str(coverage.get("runner", "ubuntu-latest")).strip()
+        or "ubuntu-latest"
+    )
     coverage["shell"] = str(resolved_shell).strip() or "bash"
     coverage["command"] = str(coverage.get("command", "")).strip()
     coverage["inputs"] = inputs
     coverage["require_sources"] = require_sources
     coverage["require_sources_mode"] = require_sources_mode
     coverage["min_percent"] = float(coverage.get("min_percent", 100.0))
-    coverage["branch_min_percent"] = _normalize_branch_min_percent(coverage.get("branch_min_percent"))
-    coverage["assert_mode"] = normalize_coverage_assert_mode(coverage.get("assert_mode", {}))
+    coverage["branch_min_percent"] = _normalize_branch_min_percent(
+        coverage.get("branch_min_percent")
+    )
+    coverage["assert_mode"] = normalize_coverage_assert_mode(
+        coverage.get("assert_mode", {})
+    )
     coverage["evidence_note"] = str(coverage.get("evidence_note", "")).strip()
     coverage["setup"] = normalize_coverage_setup(coverage.get("setup", {}))
     return coverage

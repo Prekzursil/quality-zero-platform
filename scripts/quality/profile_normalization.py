@@ -5,8 +5,8 @@ from __future__ import absolute_import
 from copy import deepcopy
 from typing import Any, Dict, List, Mapping
 
-from scripts.quality.common import dedupe_strings
 from scripts.quality import profile_coverage_normalization
+from scripts.quality.string_utils import dedupe_strings
 
 
 def _issue_policy_defaults(mode: str) -> Dict[str, str]:

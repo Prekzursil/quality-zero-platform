@@ -20,9 +20,9 @@ from scripts.quality.deepsource_html import (
     extract_visible_issue_count,
     human_count_to_int as _human_count_to_int,
 )
+from scripts.quality.github_status import load_commit_status_payload
 from scripts.security_helpers import (
     load_bytes_https,
-    load_json_https,
     normalize_https_url,
 )
 
@@ -30,7 +30,6 @@ from scripts.security_helpers import (
 DEEPSOURCE_STATUS_PREFIX = "DeepSource"
 DEFAULT_TIMEOUT_SECONDS = 900
 DEFAULT_POLL_SECONDS = 20
-GITHUB_API_BASE = "https://api.github.com"
 
 
 @dataclass(frozen=True)
@@ -91,23 +90,6 @@ def _issues_url(args: argparse.Namespace) -> str:
     )
 
 
-def _github_status_payload(repo: str, sha: str, token: str) -> Dict[str, Any]:
-    """Fetch the GitHub status payload for a commit."""
-    payload, _ = load_json_https(
-        f"{GITHUB_API_BASE}/repos/{repo}/commits/{sha}/status",
-        allowed_hosts={"api.github.com"},
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {token}",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "quality-zero-platform",
-        },
-    )
-    if not isinstance(payload, dict):
-        raise RuntimeError("Unexpected GitHub status response payload")
-    return payload
-
-
 def _request_html(url: str) -> str:
     """Fetch a DeepSource HTML page as UTF-8 text."""
     payload, _ = load_bytes_https(
@@ -119,6 +101,11 @@ def _request_html(url: str) -> str:
         },
     )
     return payload.decode("utf-8", "ignore")
+
+
+def _github_status_payload(repo: str, sha: str, token: str) -> Dict[str, Any]:
+    """Fetch the GitHub commit-status payload for a repository SHA."""
+    return load_commit_status_payload(repo, sha, token)
 
 
 def _status_contexts(payload: Mapping[str, Any], prefix: str) -> List[Dict[str, Any]]:

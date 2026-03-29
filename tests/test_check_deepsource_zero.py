@@ -132,10 +132,7 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
         )
 
     def test_github_status_payload_and_request_html_guard_payload_shape(self) -> None:
-        with patch(
-            "scripts.quality.check_deepsource_zero.load_json_https",
-            return_value=(["invalid"], {}),
-        ):
+        with patch("scripts.quality.github_status.load_json_https", return_value=(["invalid"], {})):
             with self.assertRaisesRegex(
                 RuntimeError,
                 "Unexpected GitHub status response payload",
@@ -145,10 +142,7 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
                     "abc123",
                     "token",
                 )
-        with patch(
-            "scripts.quality.check_deepsource_zero.load_json_https",
-            return_value=({"statuses": []}, {}),
-        ):
+        with patch("scripts.quality.github_status.load_json_https", return_value=({"statuses": []}, {})):
             self.assertEqual(
                 check_deepsource_zero._github_status_payload(
                     "Prekzursil/quality-zero-platform",

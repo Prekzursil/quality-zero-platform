@@ -90,10 +90,10 @@ class DeepScanZeroTests(unittest.TestCase):
                 check_deepscan_zero._request_json("https://deepscan.io/test", api_token)
         with patch("scripts.quality.check_deepscan_zero.load_json_https", return_value=({"total": 0}, {})):
             self.assertEqual(check_deepscan_zero._request_json("https://deepscan.io/test", api_token), {"total": 0})
-        with patch("scripts.quality.check_deepscan_zero.load_json_https", return_value=(["invalid"], {})):
+        with patch("scripts.quality.github_status.load_json_https", return_value=(["invalid"], {})):
             with self.assertRaisesRegex(RuntimeError, "Unexpected GitHub status response payload"):
                 check_deepscan_zero._github_status_payload("Prekzursil/quality-zero-platform", "abc123", api_token)
-        with patch("scripts.quality.check_deepscan_zero.load_json_https", return_value=({"statuses": []}, {})):
+        with patch("scripts.quality.github_status.load_json_https", return_value=({"statuses": []}, {})):
             self.assertEqual(
                 check_deepscan_zero._github_status_payload("Prekzursil/quality-zero-platform", "abc123", api_token),
                 {"statuses": []},

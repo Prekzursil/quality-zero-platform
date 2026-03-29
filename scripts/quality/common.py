@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Mapping
 
+from scripts.quality.string_utils import dedupe_strings
+
 DEFAULT_COVERAGE_JSON = "coverage-100/coverage.json"
 DEFAULT_COVERAGE_MD = "coverage-100/coverage.md"
 NONE_BULLET = "- None"
@@ -30,12 +32,6 @@ class ReportSpec:
 def utc_timestamp() -> str:
     """Return the current UTC timestamp."""
     return datetime.now(timezone.utc).isoformat()
-
-
-def dedupe_strings(items: Iterable[str | None]) -> List[str]:
-    """Return ordered, unique, non-empty string values."""
-    normalized = (str(item or "").strip() for item in items)
-    return list(dict.fromkeys(value for value in normalized if value))
 
 
 def safe_output_path(raw: str, fallback: str, base: Path | None = None) -> Path:

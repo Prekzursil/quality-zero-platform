@@ -4,7 +4,7 @@ from __future__ import absolute_import
 
 from typing import Any, Dict, List, Set, Tuple, Union
 
-from scripts.quality.common import dedupe_strings
+from scripts.quality.string_utils import dedupe_strings
 from scripts.quality.profile_shape import validate_profile_shape
 from scripts.security_helpers import normalize_https_url
 

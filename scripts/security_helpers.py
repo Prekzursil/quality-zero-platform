@@ -233,67 +233,31 @@ def _read_json_response(
     **kwargs: Any,
 ) -> Tuple[Any, Dict[str, str]]:
     """Read and decode a JSON HTTPS response."""
-    if args:
-        raise TypeError("_read_json_response expects keyword arguments only")
-    headers = kwargs.pop("headers", None)
-    method = str(kwargs.pop("method"))
-    data = kwargs.pop("data", None)
-    timeout = int(kwargs.pop("timeout"))
-    if kwargs:
-        raise TypeError(
-            f"Unexpected _read_json_response parameters: {', '.join(sorted(kwargs))}"
-        )
-    request = _build_request(parsed, headers=headers, method=method, data=data)
-    hostname = _require_request_hostname(parsed)
-    connection = _ValidatedTLSConnection(
-        hostname,
-        port=parsed.port,
-        timeout=timeout,
+    payload_bytes, response_headers = _read_https_response(
+        "_read_json_response",
+        parsed,
+        *args,
+        **kwargs,
     )
-    response = None
-    try:
-        connection.request(
-            request.get_method(),
-            _build_request_target(parsed),
-            body=request.data,
-            headers=dict(request.header_items()),
-        )
-        response = connection.getresponse()
-        payload_bytes = response.read()
-        response_headers = {
-            key.lower(): value for key, value in response.headers.items()
-        }
-        if response.status >= 400:
-            raise HTTPError(
-                request.full_url,
-                response.status,
-                response.reason,
-                hdrs=response.headers,
-                fp=None,
-            )
-        payload = json.loads(payload_bytes.decode("utf-8"))
-    finally:
-        if response is not None and hasattr(response, "close"):
-            response.close()
-        connection.close()
-    return payload, response_headers
+    return json.loads(payload_bytes.decode("utf-8")), response_headers
 
 
-def _read_bytes_response(
+def _read_https_response(
+    function_name: str,
     parsed: ParseResult,
     *args: Any,
     **kwargs: Any,
 ) -> Tuple[bytes, Dict[str, str]]:
-    """Read a raw byte HTTPS response."""
+    """Read a raw HTTPS response after validating the request arguments."""
     if args:
-        raise TypeError("_read_bytes_response expects keyword arguments only")
+        raise TypeError(f"{function_name} expects keyword arguments only")
     headers = kwargs.pop("headers", None)
     method = str(kwargs.pop("method"))
     data = kwargs.pop("data", None)
     timeout = int(kwargs.pop("timeout"))
     if kwargs:
         raise TypeError(
-            f"Unexpected _read_bytes_response parameters: {', '.join(sorted(kwargs))}"
+            f"Unexpected {function_name} parameters: {', '.join(sorted(kwargs))}"
         )
     request = _build_request(parsed, headers=headers, method=method, data=data)
     hostname = _require_request_hostname(parsed)
@@ -328,6 +292,15 @@ def _read_bytes_response(
             response.close()
         connection.close()
     return payload_bytes, response_headers
+
+
+def _read_bytes_response(
+    parsed: ParseResult,
+    *args: Any,
+    **kwargs: Any,
+) -> Tuple[bytes, Dict[str, str]]:
+    """Read a raw byte HTTPS response."""
+    return _read_https_response("_read_bytes_response", parsed, *args, **kwargs)
 
 
 def load_json_https(

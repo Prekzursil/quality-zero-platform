@@ -158,6 +158,10 @@ class WorkflowContractTests(unittest.TestCase):
     def test_scanner_matrix_pins_qlty_actions_to_full_sha(self) -> None:
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
         self.assertIn("qltysh/qlty-action/install@a19242102d17e497f437d7466aa01b528537e899", text)
+        self.assertIn(
+            "matrix.lane == 'qlty_zero' || (matrix.lane == 'coverage' && steps.profile.outputs.qlty_coverage_files != '' && runner.os != 'Windows')",
+            text,
+        )
         self.assertIn('qlty_executable = shutil.which("qlty")', text)
         self.assertIn('subprocess.run(command, executable=qlty_executable, check=True)', text)
         self.assertIn("job_name: QLTY Zero", text)
@@ -377,4 +381,3 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("ADMIN_REPO_SLUG: ${{ inputs.repo_slug }}", admin_text)
         self.assertIn('--repo-slug "$ADMIN_REPO_SLUG"', admin_text)
         self.assertNotIn('--repo-slug "${{ inputs.repo_slug }}"', admin_text)
-

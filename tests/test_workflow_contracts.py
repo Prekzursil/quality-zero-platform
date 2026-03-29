@@ -42,8 +42,8 @@ class WorkflowContractTests(unittest.TestCase):
             if path.name in {"quality-zero-platform.yml", "quality-zero-gate.yml"}:
                 self.assertIn("platform_repository: ${{ github.repository }}", text, path.name)
 
-    def test_repo_template_parity_wrappers_float_to_main_and_do_not_inherit_all_secrets(self) -> None:
-        """Keep repo templates floating on main with explicit secrets only."""
+    def test_repo_template_parity_wrappers_pin_controller_release_and_do_not_inherit_all_secrets(self) -> None:
+        """Keep repo templates pinned to the controller release with explicit secrets only."""
         workflow_paths = [
             ROOT / "templates" / "repo" / ".github" / "workflows" / "quality-zero-platform.yml",
             ROOT / "templates" / "repo" / ".github" / "workflows" / "quality-zero-gate.yml",
@@ -53,7 +53,9 @@ class WorkflowContractTests(unittest.TestCase):
         for path in workflow_paths:
             text = path.read_text(encoding="utf-8")
             self.assertNotIn("secrets: inherit", text, path.name)
-            self.assertIn("@main", text, path.name)
+            self.assertIn(
+                "@e5fc085d61e0a984eb957b1d8b88d7a386318391", text, path.name
+            )
             self.assertIn("platform_repository: Prekzursil/quality-zero-platform", text, path.name)
             self.assertIn("platform_ref: main", text, path.name)
             self.assertIn("merge_group:", text, path.name)

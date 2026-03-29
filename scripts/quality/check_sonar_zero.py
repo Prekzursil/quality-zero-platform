@@ -14,6 +14,7 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.quality.common import utc_timestamp, write_report
+from scripts.quality import sonar_zero_support
 from scripts.security_helpers import load_json_https
 
 
@@ -22,10 +23,12 @@ SCOPED_ANALYSIS_RETRY_ATTEMPTS = 72
 
 
 def _mapping_or_empty(value: Any) -> Dict[str, Any]:
+    """Return the input mapping or an empty dictionary."""
     return value if isinstance(value, dict) else {}
 
 
 def _preferred_text(*values: Any) -> str:
+    """Return the first non-empty textual value from the provided arguments."""
     for value in values:
         text = str("" if value is None else value).strip()
         if text:
@@ -34,7 +37,11 @@ def _preferred_text(*values: Any) -> str:
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Assert SonarCloud has zero open issues and a passing quality gate.")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Assert SonarCloud has zero open issues and a passing quality gate."
+        )
+    )
     parser.add_argument("--project-key", required=True)
     parser.add_argument("--token", default="")
     parser.add_argument("--policy-mode", default="ratchet")
@@ -66,6 +73,7 @@ def _request_json(url: str, auth_header: str) -> Dict[str, Any]:
 
 
 def _render_md(payload: Mapping[str, Any]) -> str:
+    """Render the Markdown summary written by the Sonar gate."""
     lines = [
         "# Sonar Zero Gate",
         "",
@@ -81,7 +89,13 @@ def _render_md(payload: Mapping[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _build_sonar_query(project_key: str, *, branch: str, pull_request: str) -> Dict[str, str]:
+def _build_sonar_query(
+    project_key: str,
+    *,
+    branch: str,
+    pull_request: str,
+) -> Dict[str, str]:
+    """Build the Sonar query parameters for the selected branch or PR scope."""
     query = {"projectKey": project_key}
     if branch:
         query["branch"] = branch
@@ -116,18 +130,25 @@ def _load_quality_gate(args: argparse.Namespace, auth: str) -> str:
         pull_request=args.pull_request,
     )
     gate_payload = _request_json(
-        f"{SONAR_API_BASE}/api/qualitygates/project_status?{urllib.parse.urlencode(gate_query)}",
+        f"{SONAR_API_BASE}/api/qualitygates/project_status?"
+        f"{urllib.parse.urlencode(gate_query)}",
         auth,
     )
     project_status = _mapping_or_empty(gate_payload.get("projectStatus"))
     return _preferred_text(project_status.get("status"), "UNKNOWN")
 
 
-def _load_sonar_findings(args: argparse.Namespace, auth: str) -> Tuple[int, str, List[str]]:
+def _load_sonar_findings(
+    args: argparse.Namespace,
+    auth: str,
+) -> Tuple[int, str, List[str]]:
     open_issues = _load_open_issues(args, auth)
     quality_gate = _load_quality_gate(args, auth)
     findings: List[str] = []
-    ratchet_scoped = getattr(args, "policy_mode", "ratchet") == "ratchet" and _is_scoped_analysis(args)
+    ratchet_scoped = (
+        getattr(args, "policy_mode", "ratchet") == "ratchet"
+        and _is_scoped_analysis(args)
+    )
     if open_issues != 0 and not ratchet_scoped:
         findings.append(f"Sonar reports {open_issues} open issues (expected 0).")
     if quality_gate != "OK":
@@ -136,87 +157,102 @@ def _load_sonar_findings(args: argparse.Namespace, auth: str) -> Tuple[int, str,
 
 
 def _is_scoped_analysis(args: argparse.Namespace) -> bool:
-    return bool(_preferred_text(getattr(args, "branch", ""), getattr(args, "pull_request", "")))
+    return bool(
+        _preferred_text(
+            getattr(args, "branch", ""),
+            getattr(args, "pull_request", ""),
+        )
+    )
 
 
 def _target_sha(args: argparse.Namespace) -> str:
     return _preferred_text(getattr(args, "sha", "")).lower()
 
 
-def _find_named_entry(items: List[Mapping[str, Any]], key: str, value: str) -> Mapping[str, Any] | None:
-    for item in items:
-        if _preferred_text(item.get(key)) == value:
-            return item
-    return None
+def _find_named_entry(
+    items: List[Mapping[str, Any]],
+    key: str,
+    value: str,
+) -> Mapping[str, Any] | None:
+    """Return the first mapping whose named field matches the target value."""
+    return sonar_zero_support.find_named_entry(
+        items,
+        key,
+        value,
+        preferred_text=_preferred_text,
+    )
 
 
 def _load_branch_analysis_revision(args: argparse.Namespace, auth: str) -> str:
-    payload = _request_json(
-        f"{SONAR_API_BASE}/api/project_branches/list?project={urllib.parse.quote(args.project_key, safe='')}",
+    """Load the currently indexed commit SHA for one Sonar branch."""
+    return sonar_zero_support.load_branch_analysis_revision(
+        args,
         auth,
+        request_json=_request_json,
+        mapping_or_empty=_mapping_or_empty,
+        named_entry=_find_named_entry,
+        preferred_text=_preferred_text,
+        sonar_api_base=SONAR_API_BASE,
+        url_quote=urllib.parse.quote,
     )
-    branch_entry = _find_named_entry(list(payload.get("branches") or []), "name", _preferred_text(args.branch))
-    if branch_entry is None:
-        return ""
-    commit = _mapping_or_empty(branch_entry.get("commit"))
-    return _preferred_text(commit.get("sha")).lower()
 
 
 def _load_pull_request_analysis_revision(args: argparse.Namespace, auth: str) -> str:
-    payload = _request_json(
-        f"{SONAR_API_BASE}/api/project_pull_requests/list?project={urllib.parse.quote(args.project_key, safe='')}",
+    """Load the currently indexed commit SHA for one Sonar pull request."""
+    return sonar_zero_support.load_pull_request_analysis_revision(
+        args,
         auth,
+        request_json=_request_json,
+        mapping_or_empty=_mapping_or_empty,
+        named_entry=_find_named_entry,
+        preferred_text=_preferred_text,
+        sonar_api_base=SONAR_API_BASE,
+        url_quote=urllib.parse.quote,
     )
-    pull_request_entry = _find_named_entry(
-        list(payload.get("pullRequests") or []),
-        "key",
-        _preferred_text(args.pull_request),
-    )
-    if pull_request_entry is None:
-        return ""
-    commit = _mapping_or_empty(pull_request_entry.get("commit"))
-    return _preferred_text(commit.get("sha")).lower()
 
 
 def _scoped_analysis_label(args: argparse.Namespace) -> str:
-    if _preferred_text(getattr(args, "pull_request", "")):
-        return f"pull request {args.pull_request}"
-    return f"branch {args.branch}"
+    """Return the current Sonar branch or pull-request scope label."""
+    return sonar_zero_support.scoped_analysis_label(
+        args,
+        preferred_text=_preferred_text,
+    )
 
 
 def _load_scoped_analysis_revision(args: argparse.Namespace, auth: str) -> str:
-    if _preferred_text(getattr(args, "pull_request", "")):
-        return _load_pull_request_analysis_revision(args, auth)
-    return _load_branch_analysis_revision(args, auth)
+    """Load the current Sonar analysis SHA for the active scope."""
+    return sonar_zero_support.load_scoped_analysis_revision(
+        args,
+        auth,
+        preferred_text=_preferred_text,
+        load_pull_request_revision=_load_pull_request_analysis_revision,
+        load_branch_revision=_load_branch_analysis_revision,
+    )
 
 
 def _scoped_analysis_pending_message(args: argparse.Namespace, auth: str) -> str | None:
-    target_sha = _target_sha(args)
-    if not _is_scoped_analysis(args) or not target_sha:
-        return None
-    scope_label = _scoped_analysis_label(args)
-    revision = _load_scoped_analysis_revision(args, auth)
-    if not revision:
-        return f"Sonar analysis for {scope_label} is not available yet."
-    if revision != target_sha:
-        return (
-            f"Sonar analysis for {scope_label} is still on {revision[:12]} "
-            f"(waiting for {target_sha[:12]})."
-        )
-    return None
+    """Return the current Sonar pending-analysis message for the active scope."""
+    return sonar_zero_support.scoped_analysis_pending_message(
+        args,
+        auth,
+        is_scoped_analysis=_is_scoped_analysis,
+        target_sha=_target_sha,
+        scope_label=_scoped_analysis_label,
+        load_revision=_load_scoped_analysis_revision,
+    )
 
 
 def _resolve_retry_settings(
     retry_kwargs: Mapping[str, Any],
 ) -> Tuple[Any, Any, int, float]:
-    fetch_fn = retry_kwargs.get("fetch_fn", _load_sonar_findings)
-    pending_fn = retry_kwargs.get("pending_fn", _scoped_analysis_pending_message)
-    attempts = int(retry_kwargs.get("attempts", SCOPED_ANALYSIS_RETRY_ATTEMPTS))
-    sleep_seconds = float(retry_kwargs.get("sleep_seconds", 5.0))
-    unexpected = sorted(set(retry_kwargs) - {"fetch_fn", "pending_fn", "attempts", "sleep_seconds"})
-    if unexpected:
-        raise TypeError(f"Unexpected load_sonar_findings_with_retry parameters: {', '.join(unexpected)}")
-    return fetch_fn, pending_fn, max(1, attempts), max(0.0, sleep_seconds)
+    """Resolve the retry callbacks and timing budget for one Sonar lookup."""
+    return sonar_zero_support.resolve_retry_settings(
+        retry_kwargs,
+        default_fetch_fn=_load_sonar_findings,
+        default_pending_fn=_scoped_analysis_pending_message,
+        default_attempts=SCOPED_ANALYSIS_RETRY_ATTEMPTS,
+        default_sleep_seconds=5.0,
+    )
 
 
 def _retry_exception_result(
@@ -224,18 +260,22 @@ def _retry_exception_result(
     exc: Exception,
     result: Tuple[int, str],
 ) -> Tuple[int, str, List[str]]:
-    if not _is_scoped_analysis(namespace):
-        raise exc
-    open_issues, quality_gate = result
-    findings = [f"Sonar API request failed: {exc}"]
-    return open_issues, quality_gate, findings
+    """Return the final retry result after one Sonar request exception."""
+    return sonar_zero_support.retry_exception_result(
+        namespace,
+        exc,
+        result,
+        is_scoped_analysis=_is_scoped_analysis,
+    )
 
 
-def _pending_analysis_message(namespace: argparse.Namespace, auth: str, pending_fn: Any) -> str | None:
-    try:
-        return pending_fn(namespace, auth)
-    except (OSError, RuntimeError, ValueError) as exc:
-        return f"Sonar analysis status request failed: {exc}"
+def _pending_analysis_message(
+    namespace: argparse.Namespace,
+    auth: str,
+    pending_fn: Any,
+) -> str | None:
+    """Return a resilient pending-analysis message from the configured callback."""
+    return sonar_zero_support.pending_analysis_message(namespace, auth, pending_fn)
 
 
 def _should_retry_scoped_analysis(
@@ -243,40 +283,48 @@ def _should_retry_scoped_analysis(
     findings: List[str],
     pending_message: str | None,
 ) -> bool:
-    return _is_scoped_analysis(namespace) and bool(findings or pending_message is not None)
+    """Return whether the current Sonar scoped analysis should retry."""
+    return sonar_zero_support.should_retry_scoped_analysis(
+        namespace,
+        findings,
+        pending_message,
+        is_scoped_analysis=_is_scoped_analysis,
+    )
 
 
-def _final_retry_findings(findings: List[str], pending_message: str | None) -> List[str]:
-    final_findings = list(findings)
-    if pending_message is not None and pending_message not in final_findings:
-        final_findings.append(pending_message)
-    return final_findings
+def _final_retry_findings(
+    findings: List[str],
+    pending_message: str | None,
+) -> List[str]:
+    """Append the final pending message to the existing Sonar findings."""
+    return sonar_zero_support.final_retry_findings(findings, pending_message)
 
 
-def load_sonar_findings_with_retry(*args: Any, **kwargs: Any) -> Tuple[int, str, List[str]]:
+def load_sonar_findings_with_retry(
+    *args: Any,
+    **kwargs: Any,
+) -> Tuple[int, str, List[str]]:
+    """Load Sonar findings, retrying while a scoped analysis is still settling."""
     if len(args) != 2:
-        raise TypeError("load_sonar_findings_with_retry expects argparse namespace and auth header")
+        raise TypeError(
+            "load_sonar_findings_with_retry expects argparse namespace "
+            "and auth header"
+        )
     namespace, auth = args
     fetch_fn, pending_fn, retry_budget, sleep_seconds = _resolve_retry_settings(kwargs)
-    open_issues = 0
-    quality_gate = "UNKNOWN"
-    findings: List[str] = []
-    pending_message: str | None = None
-    for attempt in range(retry_budget):
-        try:
-            open_issues, quality_gate, findings = fetch_fn(namespace, auth)
-        except (OSError, RuntimeError, ValueError) as exc:
-            if attempt == retry_budget - 1:
-                return _retry_exception_result(namespace, exc, (open_issues, quality_gate))
-            _retry_exception_result(namespace, exc, (open_issues, quality_gate))
-            time.sleep(max(0.0, sleep_seconds))
-            continue
-        pending_message = _pending_analysis_message(namespace, auth, pending_fn)
-        if not _should_retry_scoped_analysis(namespace, findings, pending_message):
-            return open_issues, quality_gate, findings
-        if attempt != retry_budget - 1:
-            time.sleep(max(0.0, sleep_seconds))
-    return open_issues, quality_gate, _final_retry_findings(findings, pending_message)
+    return sonar_zero_support.load_sonar_findings_with_retry(
+        namespace,
+        auth,
+        fetch_fn=fetch_fn,
+        pending_fn=pending_fn,
+        retry_budget=retry_budget,
+        sleep_seconds=sleep_seconds,
+        retry_exception=_retry_exception_result,
+        pending_message_fn=_pending_analysis_message,
+        should_retry=_should_retry_scoped_analysis,
+        final_findings_fn=_final_retry_findings,
+        sleep_fn=time.sleep,
+    )
 
 
 def main() -> int:
@@ -292,7 +340,11 @@ def main() -> int:
     else:
         try:
             auth = _auth_header(token)
-            open_issues, quality_gate, findings = load_sonar_findings_with_retry(args, auth)
+            (
+                open_issues,
+                quality_gate,
+                findings,
+            ) = load_sonar_findings_with_retry(args, auth)
             status = "pass" if not findings else "fail"
             if getattr(args, "policy_mode", "ratchet") == "audit":
                 status = "pass"

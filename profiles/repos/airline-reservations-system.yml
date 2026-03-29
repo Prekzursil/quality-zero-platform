@@ -99,4 +99,4 @@ required_contexts:
     - DeepScan Zero
 vendors:
   sonar:
-    project_key: Prekzursil_Airline-Reservations-System
+    project_key_from_repo_slug: true

@@ -153,7 +153,9 @@ def normalize_coverage(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
     inputs = infer_coverage_inputs(coverage)
     require_sources, require_sources_mode = _resolve_required_sources(coverage)
     coverage["runner"] = str(coverage.get("runner", "ubuntu-latest")).strip() or "ubuntu-latest"
-    coverage["shell"] = str(coverage.get("shell", "bash")).strip() or "bash"
+    coverage["shell"] = str(
+        coverage.get("shell", coverage.get("command_shell", "bash"))
+    ).strip() or "bash"
     coverage["command"] = str(coverage.get("command", "")).strip()
     coverage["inputs"] = inputs
     coverage["require_sources"] = require_sources

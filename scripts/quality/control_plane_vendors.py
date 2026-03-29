@@ -25,8 +25,29 @@ def _ensure_vendor_url(
         vendor[key] = normalize_https_url(url, allowed_host_suffixes=allowed_host_suffixes)
 
 
-def _finalize_sonar_vendor(vendors: Dict[str, Any]) -> None:
+def _finalize_sonar_vendor(
+    vendors: Dict[str, Any],
+    *,
+    owner: str = "",
+    repo_name: str = "",
+) -> None:
     sonar = vendors.setdefault("sonar", {})
+    project_key = str(sonar.get("project_key", "")).strip()
+    if not project_key and bool(sonar.get("project_key_from_repo_slug")):
+        resolved_owner = owner or str(vendors.get("codacy", {}).get("owner", "")).strip()
+        resolved_repo_name = repo_name or str(vendors.get("codacy", {}).get("repo", "")).strip()
+        project_key = f"{resolved_owner}_{resolved_repo_name}".strip("_")
+    if not project_key:
+        separator = str(sonar.get("project_key_separator", "_")).strip() or "_"
+        parts = [
+            str(item).strip()
+            for item in sonar.get("project_key_parts", [])
+            if str(item).strip()
+        ]
+        if parts:
+            project_key = separator.join(parts)
+    if project_key:
+        sonar["project_key"] = project_key
     project_key = str(sonar.get("project_key", "")).strip()
     if project_key:
         _ensure_vendor_url(
@@ -127,8 +148,8 @@ def finalize_vendors(profile: Dict[str, Any], vendor_source: Dict[str, Any]) -> 
     repo_name = profile["repo_name"]
     vendors = deepcopy(vendor_source)
 
-    _finalize_sonar_vendor(vendors)
     _finalize_codacy_vendor(vendors, owner=owner, repo_name=repo_name)
+    _finalize_sonar_vendor(vendors, owner=owner, repo_name=repo_name)
     _finalize_codecov_vendor(vendors, owner=owner, repo_name=repo_name)
     _finalize_qlty_vendor(vendors, owner=owner, repo_name=repo_name)
     _finalize_passthrough_vendors(vendors)

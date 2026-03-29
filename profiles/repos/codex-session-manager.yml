@@ -53,7 +53,7 @@ required_contexts:
     - shared-scanner-matrix / Quality Rollup
 coverage:
   runner: windows-latest
-  shell: pwsh
+  command_shell: pwsh
   command: |
     dotnet restore CodexSessionManager.sln
     dotnet build CodexSessionManager.sln --configuration Release --no-restore

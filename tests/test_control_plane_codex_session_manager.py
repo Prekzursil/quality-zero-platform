@@ -70,6 +70,7 @@ class CodexSessionManagerControlPlaneTests(ControlPlaneAssertions, unittest.Test
         self.assertEqual(profile["verify_command"], "bash scripts/verify")
         self.assertEqual(profile["coverage"]["runner"], "windows-latest")
         self.assertEqual(profile["coverage"]["shell"], "pwsh")
+        self.assertNotIn("command_shell", profile["coverage"])
         self.assertEqual(
             [(item["name"], item["path"], item["format"]) for item in profile["coverage"]["inputs"]],
             [

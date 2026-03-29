@@ -93,6 +93,10 @@ class ControlPlaneProfileTests(ControlPlaneAssertions, unittest.TestCase):
         profiles = self._special_repo_profiles()
         self._assert_airline_existing_behaviors(profiles["airline"])
         self._assert_swfoc_existing_behaviors(profiles["swfoc"])
+        self.assertEqual(
+            profiles["airline"]["vendors"]["sonar"]["project_key"],
+            "Prekzursil_Airline-Reservations-System",
+        )
 
     def test_quality_zero_platform_profile_keeps_controller_specific_contracts(
         self,

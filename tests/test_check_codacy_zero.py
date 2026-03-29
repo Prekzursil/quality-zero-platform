@@ -118,7 +118,7 @@ class CodacyZeroTests(unittest.TestCase):
                 (2, ["Codacy reports 2 open issues (expected 0)."]),
             )
 
-    def test_retry_config_builder_and_pending_helpers_cover_analysis_paths(self) -> None:
+    def test_build_retry_config_for_scoped_and_unscoped_queries(self) -> None:
         unscoped = _build_retry_config(self._base_query(), ["gh"])
         self.assertEqual(unscoped.attempts, 1)
         self.assertEqual(unscoped.provider_candidates, ("gh",))
@@ -130,6 +130,7 @@ class CodacyZeroTests(unittest.TestCase):
         self.assertEqual(scoped.attempts, check_codacy_zero.SCOPED_ANALYSIS_RETRY_ATTEMPTS)
         self.assertEqual(scoped.sleep_seconds, 0.0)
 
+    def test_request_analysis_status_validates_payload_shape(self) -> None:
         with patch("scripts.quality.check_codacy_zero.load_json_https", return_value=("bad", {})):
             with self.assertRaisesRegex(RuntimeError, "Unexpected Codacy analysis status payload"):
                 check_codacy_zero._request_analysis_status("https://app.codacy.com/api/v3/test", "token")
@@ -139,6 +140,7 @@ class CodacyZeroTests(unittest.TestCase):
                 {"data": {}},
             )
 
+    def test_analysis_pending_message_tracks_pull_request_state(self) -> None:
         pr_query = CodacyQuery("gh", "Prekzursil", "quality-zero-platform", pull_request="5", sha="targetsha")
         with patch.object(check_codacy_zero, "_request_analysis_status", return_value={"isAnalysing": True}):
             self.assertEqual(
@@ -166,6 +168,7 @@ class CodacyZeroTests(unittest.TestCase):
         ):
             self.assertIsNone(check_codacy_zero._analysis_pending_message(pr_query, "token"))
 
+    def test_analysis_pending_message_tracks_repository_state(self) -> None:
         repo_query = CodacyQuery("gh", "Prekzursil", "quality-zero-platform", sha="targetsha")
         with patch.object(check_codacy_zero, "_request_analysis_status", return_value={"data": {}}):
             self.assertEqual(
@@ -305,6 +308,38 @@ class CodacyZeroTests(unittest.TestCase):
         self.assertEqual(findings, [])
         self.assertIsInstance(exc, RuntimeError)
         self.assertFalse(should_return)
+
+    def test_direct_wrapper_helpers_delegate_to_support_functions(self) -> None:
+        error = HTTPError("https://api.codacy.com", 401, "Unauthorized", hdrs=Message(), fp=None)
+
+        with patch(
+            "scripts.quality.check_codacy_zero._fallback_public_issues",
+            return_value=(0, [], None),
+        ):
+            self.assertEqual(
+                check_codacy_zero._unauthorized_http_result(error, self._base_query()),
+                (0, [], None, True),
+            )
+
+        self.assertEqual(
+            check_codacy_zero._sha_wait_message("repository", "oldsha", "targetsha"),
+            "Codacy analysis for repository is still on oldsha (waiting for targetsha).",
+        )
+        self.assertEqual(
+            check_codacy_zero._pull_request_pending_message(
+                {"pullRequest": {"headCommitSha": "targetsha"}},
+                self._base_query(pull_request="5"),
+                "targetsha",
+            ),
+            None,
+        )
+        self.assertEqual(
+            check_codacy_zero._repository_pending_message(
+                {"data": {"lastAnalysedCommit": {"sha": "targetsha", "endedAnalysis": "done"}}},
+                "targetsha",
+            ),
+            None,
+        )
 
     def test_query_candidate_and_helpers(self) -> None:
         query = self._base_query()

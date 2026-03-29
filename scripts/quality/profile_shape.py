@@ -45,6 +45,7 @@ NESTED_KEYS: Dict[str, Set[str]] = {
     "coverage": {
         "runner",
         "shell",
+        "command_shell",
         "command",
         "inputs",
         "artifact_path",

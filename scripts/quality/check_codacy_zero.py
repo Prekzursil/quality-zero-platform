@@ -487,7 +487,10 @@ def _pull_request_issue_pending_message(
 ) -> str | None:
     """Return the pending status for a Codacy pull-request issues payload."""
     if payload.get("analyzed") is False:
-        return f"Codacy issues for pull request {query.pull_request} are not available yet."
+        return (
+            f"Codacy issues for pull request {query.pull_request} are not "
+            "available yet."
+        )
 
     issue_records = payload.get("data")
     if not isinstance(issue_records, list) or not issue_records:

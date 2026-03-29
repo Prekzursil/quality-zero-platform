@@ -12,6 +12,7 @@ import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
+from typing import List
 from unittest.mock import Mock, patch
 
 from scripts.quality import (
@@ -56,7 +57,7 @@ VALID_CODEX_ENVIRONMENT = {
 
 
 def build_valid_contract_profile() -> dict:
-    """Return build valid contract profile."""
+    """Build and return a valid contract profile."""
     return {
         "slug": "owner/repo",
         "required_secrets": [],
@@ -456,11 +457,9 @@ class CoverageBackfillTests(unittest.TestCase):
             completed.stderr or completed.stdout,
         )
 
-    def test_profile_validation_flags_invalid_issue_and_dependency_policies(
-        self,
-    ) -> None:
-        """Cover profile validation flags invalid issue and dependency policies."""
-        profile = {
+    def _invalid_contract_profile(self) -> dict:
+        """Return a minimally invalid contract profile for validation tests."""
+        return {
             "slug": "owner/repo",
             "required_secrets": [],
             "conditional_secrets": [],
@@ -490,22 +489,39 @@ class CoverageBackfillTests(unittest.TestCase):
                 "pull_request_only": [],
             },
         }
-        findings = profile_contract_validation.validate_profile(
-            profile,
+
+    def _invalid_contract_profile_findings(self) -> List[str]:
+        """Return the validation findings for the baseline invalid profile."""
+        return profile_contract_validation.validate_profile(
+            self._invalid_contract_profile(),
             active_required_contexts_fn=lambda _profile, event_name: ["Chromatic"],
         )
+
+    def test_profile_validation_flags_invalid_issue_policy_mode(self) -> None:
+        """Cover invalid issue policy mode validation."""
+        findings = self._invalid_contract_profile_findings()
         self.assertTrue(
             any(
                 "issue_policy.mode must be zero, ratchet, or audit" in item
                 for item in findings
             )
         )
+
+    def test_profile_validation_flags_invalid_deps_policy(self) -> None:
+        """Cover invalid dependency policy validation."""
+        findings = self._invalid_contract_profile_findings()
         self.assertTrue(
             any(
                 "deps.policy must be zero_critical, zero_high, or zero_any" in item
                 for item in findings
             )
         )
+
+    def test_profile_validation_flags_invalid_coverage_require_sources_mode(
+        self,
+    ) -> None:
+        """Cover invalid coverage source mode validation."""
+        findings = self._invalid_contract_profile_findings()
         self.assertTrue(
             any(
                 "coverage.require_sources_mode must be explicit, infer, or disabled"
@@ -513,7 +529,19 @@ class CoverageBackfillTests(unittest.TestCase):
                 for item in findings
             )
         )
+
+    def test_profile_validation_flags_invalid_visual_pair_requirement(
+        self,
+    ) -> None:
+        """Cover invalid visual pair requirement validation."""
+        findings = self._invalid_contract_profile_findings()
         self.assertTrue(any("visual_pair_required" in item for item in findings))
+
+    def test_profile_validation_flags_invalid_issue_policy_main_behavior(
+        self,
+    ) -> None:
+        """Cover invalid issue policy main behavior validation."""
+        findings = self._invalid_contract_profile_findings()
         self.assertTrue(
             any(
                 "issue_policy.main_behavior must be absolute" in item

@@ -360,6 +360,26 @@ def final_retry_findings(
     return open_issues, final_findings
 
 
+def stale_pull_request_findings(
+    pull_request: str,
+    findings: Iterable[str],
+) -> bool:
+    """Return whether Codacy is still serving stale pull-request-scoped data."""
+    normalized_pr = str(pull_request).strip()
+    if not normalized_pr:
+        return False
+    prefixes = (
+        f"Codacy is still analysing pull request {normalized_pr}.",
+        f"Codacy analysis for pull request {normalized_pr} is not available yet.",
+        f"Codacy analysis for pull request {normalized_pr} is still on ",
+        f"Codacy issues for pull request {normalized_pr} are not available yet.",
+        f"Codacy analysis for pull request {normalized_pr} issues is still on ",
+    )
+    return any(
+        any(item.startswith(prefix) for prefix in prefixes) for item in findings
+    )
+
+
 def load_codacy_findings_with_retry(
     base_query: Any,
     token: str,

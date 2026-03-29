@@ -588,26 +588,6 @@ def _final_retry_findings(
     )
 
 
-def _has_stale_pull_request_findings(
-    pull_request: str,
-    findings: Sequence[str],
-) -> bool:
-    """Return whether Codacy is still serving stale pull-request-scoped data."""
-    normalized_pr = _preferred_text(pull_request)
-    if not normalized_pr:
-        return False
-    prefixes = (
-        f"Codacy is still analysing pull request {normalized_pr}.",
-        f"Codacy analysis for pull request {normalized_pr} is not available yet.",
-        f"Codacy analysis for pull request {normalized_pr} is still on ",
-        f"Codacy issues for pull request {normalized_pr} are not available yet.",
-        f"Codacy analysis for pull request {normalized_pr} issues is still on ",
-    )
-    return any(
-        any(item.startswith(prefix) for prefix in prefixes) for item in findings
-    )
-
-
 def _commit_scope_fallback(
     base_query: CodacyQuery,
     token: str,
@@ -615,10 +595,14 @@ def _commit_scope_fallback(
     findings: Sequence[str],
 ) -> Tuple[int | None, List[str]] | None:
     """Return a commit-scoped fallback when pull-request-scoped Codacy data is stale."""
-    if not _has_stale_pull_request_findings(base_query.pull_request, findings):
-        return None
     target_sha = _preferred_text(base_query.sha).lower()
-    if not target_sha:
+    if (
+        not target_sha
+        or not codacy_zero_support.stale_pull_request_findings(
+            base_query.pull_request,
+            findings,
+        )
+    ):
         return None
     open_issues, commit_findings, last_exc = _query_codacy_open_issues(
         CodacyQuery(

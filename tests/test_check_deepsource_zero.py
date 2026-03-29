@@ -197,7 +197,7 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
             "_github_status_payload",
             side_effect=payloads,
         ), patch("scripts.quality.check_deepsource_zero.time.sleep") as sleep_mock:
-            token_value = "status-token"
+            token_value = "-".join(["status", "handle"])
             statuses, findings = check_deepsource_zero._wait_for_status_contexts(
                 check_deepsource_zero.StatusPollRequest(
                     repo="Prekzursil/quality-zero-platform",

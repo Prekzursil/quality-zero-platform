@@ -181,6 +181,14 @@ def _provider_env_suffix(repo_name: str) -> str:
     return normalized or "REPO"
 
 
+def _joined_vendor_env_parts(value: Any) -> str | None:
+    """Join one vendor env-var fragment list into a single identifier."""
+    if not isinstance(value, list):
+        return None
+    parts = [str(item).strip() for item in value if str(item).strip()]
+    return "_".join(parts) if parts else None
+
+
 def _finalize_visual_vendors(profile: Dict[str, Any], vendors: Dict[str, Any]) -> None:
     """Finalize vendor settings for repositories that require visual pairing."""
     if not profile.get("visual_pair_required"):
@@ -194,6 +202,16 @@ def _finalize_visual_vendors(profile: Dict[str, Any], vendors: Dict[str, Any]) -
         "local_env_var",
         f"CHROMATIC_PROJECT_TOKEN_{_provider_env_suffix(repo_name)}",
     )
+    token_secret_parts = _joined_vendor_env_parts(
+        chromatic.pop("token_secret_parts", None)
+    )
+    if token_secret_parts:
+        chromatic["token_secret"] = token_secret_parts
+    local_env_var_parts = _joined_vendor_env_parts(
+        chromatic.pop("local_env_var_parts", None)
+    )
+    if local_env_var_parts:
+        chromatic["local_env_var"] = local_env_var_parts
 
     applitools = vendors.setdefault("applitools", {})
     applitools.setdefault("project_name", repo_name)

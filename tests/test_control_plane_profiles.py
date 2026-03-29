@@ -1,3 +1,5 @@
+"""Test control plane profiles."""
+
 from __future__ import absolute_import
 
 import io

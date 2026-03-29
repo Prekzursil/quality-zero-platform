@@ -22,7 +22,6 @@ from scripts.quality.common import utc_timestamp, write_report
 from scripts.quality import codacy_zero_support
 from scripts.security_helpers import load_json_https
 
-
 TOTAL_KEYS = {
     "total",
     "totalItems",
@@ -35,7 +34,9 @@ TOTAL_KEYS = {
 CODACY_API_BASE = "https://api.codacy.com"
 CODACY_APP_API_BASE = "https://app.codacy.com/api/v3"
 JSON_ACCEPT_HEADER = "application/json"
-SCOPED_ANALYSIS_RETRY_ATTEMPTS = 72
+# Codacy's PR-scoped issue view can lag several minutes behind GitHub on large
+# or long-lived branches, so the default retry window needs to cover that drift.
+SCOPED_ANALYSIS_RETRY_ATTEMPTS = 180
 
 
 @dataclass(frozen=True)
@@ -119,11 +120,7 @@ def _request_json(
             "Accept": JSON_ACCEPT_HEADER,
             "api-token": token,
             "User-Agent": "quality-zero-platform",
-            **(
-                {"Content-Type": "application/json"}
-                if body is not None
-                else {}
-            ),
+            **({"Content-Type": "application/json"} if body is not None else {}),
         },
         method=method,
         data=body,
@@ -180,9 +177,7 @@ def _render_md(payload: Mapping[str, Any]) -> str:
         "",
         "## Findings",
     ]
-    lines.extend(
-        [f"- {item}" for item in payload.get("findings", [])] or ["- None"]
-    )
+    lines.extend([f"- {item}" for item in payload.get("findings", [])] or ["- None"])
     return "\n".join(lines) + "\n"
 
 
@@ -314,13 +309,9 @@ def _issue_total_findings(payload: Any) -> Tuple[int | None, List[str]]:
     """Convert one Codacy payload into a total and a list of gate findings."""
     open_issues = extract_total_open(payload)
     if open_issues is None:
-        return None, [
-            "Codacy response did not include a parseable total issue count."
-        ]
+        return None, ["Codacy response did not include a parseable total issue count."]
     if open_issues != 0:
-        return open_issues, [
-            f"Codacy reports {open_issues} open issues (expected 0)."
-        ]
+        return open_issues, [f"Codacy reports {open_issues} open issues (expected 0)."]
     return open_issues, []
 
 
@@ -597,6 +588,54 @@ def _final_retry_findings(
     )
 
 
+def _has_stale_pull_request_findings(
+    pull_request: str,
+    findings: Sequence[str],
+) -> bool:
+    """Return whether Codacy is still serving stale pull-request-scoped data."""
+    normalized_pr = _preferred_text(pull_request)
+    if not normalized_pr:
+        return False
+    prefixes = (
+        f"Codacy is still analysing pull request {normalized_pr}.",
+        f"Codacy analysis for pull request {normalized_pr} is not available yet.",
+        f"Codacy analysis for pull request {normalized_pr} is still on ",
+        f"Codacy issues for pull request {normalized_pr} are not available yet.",
+        f"Codacy analysis for pull request {normalized_pr} issues is still on ",
+    )
+    return any(
+        any(item.startswith(prefix) for prefix in prefixes) for item in findings
+    )
+
+
+def _commit_scope_fallback(
+    base_query: CodacyQuery,
+    token: str,
+    provider_candidates: Sequence[str],
+    findings: Sequence[str],
+) -> Tuple[int | None, List[str]] | None:
+    """Return a commit-scoped fallback when pull-request-scoped Codacy data is stale."""
+    if not _has_stale_pull_request_findings(base_query.pull_request, findings):
+        return None
+    target_sha = _preferred_text(base_query.sha).lower()
+    if not target_sha:
+        return None
+    open_issues, commit_findings, last_exc = _query_codacy_open_issues(
+        CodacyQuery(
+            provider=base_query.provider,
+            owner=base_query.owner,
+            repo=base_query.repo,
+            pull_request="",
+            sha=target_sha,
+        ),
+        token,
+        provider_candidates,
+    )
+    if last_exc is not None or open_issues is None:
+        return None
+    return open_issues, commit_findings
+
+
 def load_codacy_findings_with_retry(
     base_query: CodacyQuery,
     token: str,
@@ -643,6 +682,14 @@ def _resolve_codacy_status(args: argparse.Namespace) -> CodacyStatusResult:
         token,
         _build_retry_config(base_query, provider_candidates),
     )
+    commit_fallback = _commit_scope_fallback(
+        base_query,
+        token,
+        provider_candidates,
+        findings,
+    )
+    if commit_fallback is not None:
+        open_issues, findings = commit_fallback
     return CodacyStatusResult(
         status=_codacy_status(findings, getattr(args, "policy_mode", "ratchet")),
         findings=findings,

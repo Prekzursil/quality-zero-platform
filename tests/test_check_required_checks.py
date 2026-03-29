@@ -1,3 +1,5 @@
+"""Test check required checks."""
+
 from __future__ import absolute_import
 
 import sys
@@ -238,7 +240,7 @@ class RequiredChecksTests(unittest.TestCase):
                         "conclusion": "",
                         "source": "check_run",
                     }
-                }
+                },
             )
         )
         self.assertFalse(
@@ -250,7 +252,7 @@ class RequiredChecksTests(unittest.TestCase):
                         "conclusion": "success",
                         "source": "status",
                     }
-                }
+                },
             )
         )
 

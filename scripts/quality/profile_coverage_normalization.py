@@ -6,8 +6,7 @@ from copy import deepcopy
 import re
 from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
-from scripts.quality.common import dedupe_strings
-
+from scripts.quality.string_helpers import dedupe_strings
 
 _LCOV_SRC_RE = re.compile(
     r"(?P<prefix>.+?)/coverage/(?:lcov|lcov\.info|lcov-report).*",
@@ -184,8 +183,7 @@ def normalize_coverage(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
     resolved_shell = coverage.get("command_shell", coverage.get("shell", "bash"))
     coverage.pop("command_shell", None)
     coverage["runner"] = (
-        str(coverage.get("runner", "ubuntu-latest")).strip()
-        or "ubuntu-latest"
+        str(coverage.get("runner", "ubuntu-latest")).strip() or "ubuntu-latest"
     )
     coverage["shell"] = str(resolved_shell).strip() or "bash"
     coverage["command"] = str(coverage.get("command", "")).strip()

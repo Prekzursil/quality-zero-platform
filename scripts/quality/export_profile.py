@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Export profile."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -10,11 +12,18 @@ from typing import Any, Dict, List
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.quality.control_plane import active_required_contexts, load_inventory, load_repo_profile
+from scripts.quality.control_plane import (
+    active_required_contexts,
+    load_inventory,
+    load_repo_profile,
+)
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Export a resolved control-plane profile for workflows.")
+    """Handle parse args."""
+    parser = argparse.ArgumentParser(
+        description="Export a resolved control-plane profile for workflows."
+    )
     parser.add_argument("--inventory", default="")
     parser.add_argument("--repo-slug", required=True)
     parser.add_argument("--event-name", default="pull_request")
@@ -25,6 +34,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _coverage_input_files(coverage: Dict[str, Any]) -> str:
+    """Handle coverage input files."""
     return ",".join(
         str(PurePosixPath("repo") / PurePosixPath(str(item["path"]).replace("\\", "/")))
         for item in coverage.get("inputs", [])
@@ -32,10 +42,12 @@ def _coverage_input_files(coverage: Dict[str, Any]) -> str:
 
 
 def _json_output(key: str, value: object) -> str:
+    """Handle json output."""
     return f"{key}={json.dumps(value, separators=(',', ':'))}"
 
 
 def _profile_output_lines(profile: Dict[str, Any], event_name: str) -> List[str]:
+    """Handle profile output lines."""
     contexts = active_required_contexts(profile, event_name=event_name)
     coverage = profile.get("coverage", {})
     codex_environment = profile.get("codex_environment", {})
@@ -43,6 +55,9 @@ def _profile_output_lines(profile: Dict[str, Any], event_name: str) -> List[str]
     setup = coverage.get("setup", {})
     java = setup.get("java", {})
     coverage_input_files = _coverage_input_files(coverage)
+    enabled_scanners = profile.get("enabled_scanners", {})
+    codecov_enabled = str(bool(enabled_scanners.get("codecov", False))).lower()
+    qlty_enabled = str(bool(enabled_scanners.get("qlty", False))).lower()
     return [
         f"verify_command={profile['verify_command']}",
         f"default_branch={profile['default_branch']}",
@@ -52,14 +67,23 @@ def _profile_output_lines(profile: Dict[str, Any], event_name: str) -> List[str]
         f"codex_auth_lane={profile['codex_auth_lane']}",
         f"provider_ui_mode={profile['provider_ui_mode']}",
         _json_output("required_contexts_json", contexts),
-        _json_output("required_contexts_required_now_json", profile["required_contexts"]["required_now"]),
-        _json_output("required_contexts_target_json", profile["required_contexts"]["target"]),
+        _json_output(
+            "required_contexts_required_now_json",
+            profile["required_contexts"]["required_now"],
+        ),
+        _json_output(
+            "required_contexts_target_json", profile["required_contexts"]["target"]
+        ),
         _json_output("required_secrets_json", profile["required_secrets"]),
-        _json_output("conditional_secrets_json", profile.get("conditional_secrets", [])),
+        _json_output(
+            "conditional_secrets_json", profile.get("conditional_secrets", [])
+        ),
         _json_output("required_vars_json", profile["required_vars"]),
         _json_output("codex_environment_json", codex_environment),
         f"codex_auth_file={codex_environment.get('auth_file', '')}",
-        _json_output("codex_runner_labels_json", codex_environment.get("runner_labels", [])),
+        _json_output(
+            "codex_runner_labels_json", codex_environment.get("runner_labels", [])
+        ),
         _json_output("coverage_json", coverage),
         _json_output("issue_policy_json", issue_policy),
         f"coverage_runner={coverage.get('runner', 'ubuntu-latest')}",
@@ -71,9 +95,9 @@ def _profile_output_lines(profile: Dict[str, Any], event_name: str) -> List[str]
         f"coverage_java_version={java.get('version', '')}",
         f"coverage_needs_rust={str(bool(setup.get('rust', False))).lower()}",
         _json_output("coverage_system_packages_json", setup.get("system_packages", [])),
-        f"codecov_enabled={str(bool(profile.get('enabled_scanners', {}).get('codecov', False))).lower()}",
+        f"codecov_enabled={codecov_enabled}",
         f"coverage_input_files={coverage_input_files}",
-        f"qlty_enabled={str(bool(profile.get('enabled_scanners', {}).get('qlty', False))).lower()}",
+        f"qlty_enabled={qlty_enabled}",
         f"qlty_coverage_files={coverage_input_files}",
         _json_output("enabled_scanners_json", profile.get("enabled_scanners", {})),
         _json_output("vendors_json", profile.get("vendors", {})),
@@ -81,6 +105,7 @@ def _profile_output_lines(profile: Dict[str, Any], event_name: str) -> List[str]
 
 
 def _profile_json_output(profile: Dict[str, Any]) -> List[str]:
+    """Handle profile json output."""
     return [
         "profile_json<<__PROFILE__",
         json.dumps(profile, indent=2, sort_keys=True),
@@ -89,10 +114,12 @@ def _profile_json_output(profile: Dict[str, Any]) -> List[str]:
 
 
 def _github_output_lines(profile: Dict[str, Any], event_name: str) -> List[str]:
+    """Handle github output lines."""
     return [*_profile_output_lines(profile, event_name), *_profile_json_output(profile)]
 
 
 def _write_github_output(path: Path, profile: Dict[str, Any], event_name: str) -> None:
+    """Handle write github output."""
     payload_lines = _github_output_lines(profile, event_name)
     with path.open("a", encoding="utf-8") as handle:
         for line in payload_lines:
@@ -100,18 +127,24 @@ def _write_github_output(path: Path, profile: Dict[str, Any], event_name: str) -
 
 
 def main() -> int:
+    """Handle main."""
     args = _parse_args()
     inventory = load_inventory(args.inventory) if args.inventory else load_inventory()
     profile = load_repo_profile(inventory, args.repo_slug)
     export_payload = dict(profile)
     export_payload["event_name"] = args.event_name
-    export_payload["active_required_contexts"] = active_required_contexts(profile, event_name=args.event_name)
+    export_payload["active_required_contexts"] = active_required_contexts(
+        profile, event_name=args.event_name
+    )
 
     output_target = args.out_json or args.output
     if output_target:
         output_path = Path(output_target)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(export_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        output_path.write_text(
+            json.dumps(export_payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
     else:
         print(json.dumps(export_payload, indent=2, sort_keys=True))
 

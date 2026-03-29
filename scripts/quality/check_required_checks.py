@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Check required checks."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -112,9 +114,7 @@ def _resolve_observed_context(
     if exact:
         return exact
     suffix_matches = [
-        details
-        for name, details in contexts.items()
-        if name.endswith(f" / {context}")
+        details for name, details in contexts.items() if name.endswith(f" / {context}")
     ]
     if len(suffix_matches) == 1:
         return suffix_matches[0]
@@ -250,8 +250,7 @@ def main() -> int:
     """Run the required-context gate and write its JSON and markdown reports."""
     args = _parse_args()
     token = (
-        os.environ.get("GITHUB_TOKEN", "")
-        or os.environ.get("GH_TOKEN", "")
+        os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")
     ).strip()
     required = [item.strip() for item in args.required_context if item.strip()]
     if not required:

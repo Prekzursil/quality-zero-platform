@@ -1,3 +1,5 @@
+"""Coverage parsers."""
+
 from __future__ import absolute_import
 
 import re
@@ -18,14 +20,19 @@ _XML_LINES_COVERED_RE = re.compile(r'lines-covered="(\d+(?:\.\d+)?)"')
 _XML_BRANCHES_VALID_RE = re.compile(r'branches-valid="(\d+(?:\.\d+)?)"')
 _XML_BRANCHES_COVERED_RE = re.compile(r'branches-covered="(\d+(?:\.\d+)?)"')
 _XML_LINE_HITS_RE = re.compile(r'<line\b[^>]*\bhits="(\d+(?:\.\d+)?)"')
-_XML_FILENAME_RE = re.compile(r'<[^>]+\bfilename=(?P<quote>["\'])(?P<value>.*?)(?P=quote)')
+_XML_FILENAME_RE = re.compile(
+    r'<[^>]+\bfilename=(?P<quote>["\'])(?P<value>.*?)(?P=quote)'
+)
 _XML_SOURCE_RE = re.compile(r"<source>(?P<value>.*?)</source>")
 
 
 def coverage_sources_from_xml(path: Path) -> Set[str]:
+    """Handle coverage sources from xml."""
     text = path.read_text(encoding="utf-8")
     covered_sources: Set[str] = set()
-    source_roots = [match.group("value").strip() for match in _XML_SOURCE_RE.finditer(text)]
+    source_roots = [
+        match.group("value").strip() for match in _XML_SOURCE_RE.finditer(text)
+    ]
     for match in _XML_FILENAME_RE.finditer(text):
         for filename in _coverage_source_candidates(match.group("value"), source_roots):
             if _should_track_coverage_source(filename):
@@ -35,6 +42,7 @@ def coverage_sources_from_xml(path: Path) -> Set[str]:
 
 
 def coverage_sources_from_lcov(path: Path) -> Set[str]:
+    """Handle coverage sources from lcov."""
     return {
         filename
         for raw in path.read_text(encoding="utf-8").splitlines()
@@ -45,6 +53,7 @@ def coverage_sources_from_lcov(path: Path) -> Set[str]:
 
 
 def parse_coverage_xml(name: str, path: Path) -> "CoverageStats":
+    """Handle parse coverage xml."""
     from scripts.quality.assert_coverage_100 import CoverageStats
 
     text = path.read_text(encoding="utf-8")
@@ -69,6 +78,7 @@ def parse_coverage_xml(name: str, path: Path) -> "CoverageStats":
 
 
 def _parse_xml_totals(text: str) -> Optional[Tuple[int, int, int, int]]:
+    """Handle parse xml totals."""
     lines_valid_match = _XML_LINES_VALID_RE.search(text)
     lines_covered_match = _XML_LINES_COVERED_RE.search(text)
     if not (lines_valid_match and lines_covered_match):
@@ -85,6 +95,7 @@ def _parse_xml_totals(text: str) -> Optional[Tuple[int, int, int, int]]:
 
 
 def _lcov_counter_key(line: str) -> Optional[str]:
+    """Handle lcov counter key."""
     if line.startswith("LF:"):
         return "total"
     if line.startswith("LH:"):
@@ -97,6 +108,7 @@ def _lcov_counter_key(line: str) -> Optional[str]:
 
 
 def _iter_included_lcov_lines(path: Path) -> List[str]:
+    """Handle iter included lcov lines."""
     included_lines: List[str] = []
     include_record = False
     for raw in path.read_text(encoding="utf-8").splitlines():
@@ -114,6 +126,7 @@ def _iter_included_lcov_lines(path: Path) -> List[str]:
 
 
 def parse_lcov(name: str, path: Path) -> "CoverageStats":
+    """Handle parse lcov."""
     from scripts.quality.assert_coverage_100 import CoverageStats
 
     counters = {

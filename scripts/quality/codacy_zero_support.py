@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Tuple
 import urllib.error
 
-
 CodacyCandidateFn = Callable[..., Tuple[int | None, List[str], Exception | None, bool]]
 CodacyPendingFn = Callable[[Any, str], str | None]
 CodacyQueryBuilderFn = Callable[[Any, str], Any]

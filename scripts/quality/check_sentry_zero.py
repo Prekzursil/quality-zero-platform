@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Check sentry zero."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -14,7 +16,6 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
 
 from scripts.quality.common import dedupe_strings, utc_timestamp, write_report
 from scripts.security_helpers import load_json_https
-
 
 SENTRY_API_BASE = "https://sentry.io/api/0"
 

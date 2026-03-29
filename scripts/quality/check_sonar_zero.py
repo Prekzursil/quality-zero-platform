@@ -19,7 +19,6 @@ from scripts.quality.common import utc_timestamp, write_report
 from scripts.quality import sonar_zero_support
 from scripts.security_helpers import load_json_https
 
-
 SONAR_API_BASE = "https://sonarcloud.io"
 SCOPED_ANALYSIS_RETRY_ATTEMPTS = 72
 
@@ -153,10 +152,9 @@ def _load_sonar_findings(
     open_issues = _load_open_issues(args, auth)
     quality_gate = _load_quality_gate(args, auth)
     findings: List[str] = []
-    ratchet_scoped = (
-        getattr(args, "policy_mode", "ratchet") == "ratchet"
-        and _is_scoped_analysis(args)
-    )
+    ratchet_scoped = getattr(
+        args, "policy_mode", "ratchet"
+    ) == "ratchet" and _is_scoped_analysis(args)
     if open_issues != 0 and not ratchet_scoped:
         findings.append(f"Sonar reports {open_issues} open issues (expected 0).")
     if quality_gate != "OK":

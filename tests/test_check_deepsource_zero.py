@@ -1,17 +1,26 @@
+"""Test check deepsource zero."""
+
 from __future__ import absolute_import
 
-import os
 import sys
 import unittest
 from argparse import Namespace
 from unittest.mock import patch
 
 from scripts.quality import check_deepsource_zero
-from tests.script_entrypoint_support import run_script_entrypoint_failure
+from tests.script_entrypoint_support import (
+    assert_main_reports_provider_failure,
+    run_script_entrypoint_failure,
+)
 
 
 class DeepSourceVisibleZeroTests(unittest.TestCase):
-    def test_extractors_cover_sidebar_counts_issue_links_and_status_filters(self) -> None:
+    """Deep Source Visible Zero Tests."""
+
+    def test_extractors_cover_sidebar_counts_issue_links_and_status_filters(
+        self,
+    ) -> None:
+        """Cover extractors cover sidebar counts issue links and status filters."""
         html = """
         <span>All issues</span><div>1.9k</div>
         <a href="/gh/Prekzursil/event-link/issue/JS-0125/occurrences?listindex=0">one</a>
@@ -51,7 +60,9 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
             )
         )
         self.assertEqual(
-            check_deepsource_zero.extract_visible_issue_count('"all",854,"recommended"'),
+            check_deepsource_zero.extract_visible_issue_count(
+                '"all",854,"recommended"'
+            ),
             854,
         )
         self.assertEqual(check_deepsource_zero._human_count_to_int("854"), 854)
@@ -76,6 +87,7 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
         )
 
     def test_repo_sha_and_issue_url_resolution_follow_env_and_defaults(self) -> None:
+        """Cover repo sha and issue url resolution follow env and defaults."""
         args = Namespace(repo="", sha="", issues_url="")
         with patch.dict(
             "os.environ",
@@ -95,7 +107,10 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
                 ),
             )
 
-    def test_validate_inputs_and_status_findings_cover_missing_and_failure_paths(self) -> None:
+    def test_validate_inputs_and_status_findings_cover_missing_and_failure_paths(
+        self,
+    ) -> None:
+        """Cover validate inputs and status findings cover missing and failure paths."""
         self.assertEqual(
             check_deepsource_zero._validate_inputs("", "", "", ""),
             [
@@ -132,21 +147,21 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
         )
 
     def test_github_status_payload_and_request_html_guard_payload_shape(self) -> None:
+        """Cover github status payload and request html guard payload shape."""
         with patch(
-            "scripts.quality.check_deepsource_zero.load_json_https",
+            "scripts.quality.common.load_json_https",
             return_value=(["invalid"], {}),
+        ), self.assertRaisesRegex(
+            RuntimeError,
+            "Unexpected GitHub status response payload",
         ):
-            with self.assertRaisesRegex(
-                RuntimeError,
-                "Unexpected GitHub status response payload",
-            ):
-                check_deepsource_zero._github_status_payload(
-                    "Prekzursil/quality-zero-platform",
-                    "abc123",
-                    "token",
-                )
+            check_deepsource_zero._github_status_payload(
+                "Prekzursil/quality-zero-platform",
+                "abc123",
+                "token",
+            )
         with patch(
-            "scripts.quality.check_deepsource_zero.load_json_https",
+            "scripts.quality.common.load_json_https",
             return_value=({"statuses": []}, {}),
         ):
             self.assertEqual(
@@ -168,7 +183,10 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
                 "<html>ok</html>",
             )
 
-    def test_wait_for_status_contexts_polls_until_non_pending_contexts_arrive(self) -> None:
+    def test_wait_for_status_contexts_polls_until_non_pending_contexts_arrive(
+        self,
+    ) -> None:
+        """Cover wait for status contexts polls until non pending contexts arrive."""
         payloads = [
             {"statuses": [{"context": "DeepSource: Python", "state": "pending"}]},
             {"statuses": [{"context": "DeepSource: Python", "state": "success"}]},
@@ -192,7 +210,10 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
         self.assertEqual(findings, [])
         sleep_mock.assert_called_once()
 
-    def test_wait_for_status_contexts_times_out_and_preserves_pending_findings(self) -> None:
+    def test_wait_for_status_contexts_times_out_and_preserves_pending_findings(
+        self,
+    ) -> None:
+        """Cover wait for status contexts times out and preserves pending findings."""
         with patch.object(
             check_deepsource_zero,
             "_github_status_payload",
@@ -202,7 +223,9 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
         ), patch(
             "scripts.quality.check_deepsource_zero.time.time",
             side_effect=[0, 0, 2],
-        ), patch("scripts.quality.check_deepsource_zero.time.sleep") as sleep_mock:
+        ), patch(
+            "scripts.quality.check_deepsource_zero.time.sleep"
+        ) as sleep_mock:
             statuses, findings = check_deepsource_zero._wait_for_status_contexts(
                 check_deepsource_zero.StatusPollRequest(
                     repo="Prekzursil/quality-zero-platform",
@@ -220,11 +243,14 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
         )
         sleep_mock.assert_called_once()
 
-    def test_evaluate_visible_issues_handles_zero_nonzero_and_unparseable_pages(self) -> None:
+    def test_evaluate_visible_issues_handles_zero_nonzero_and_unparseable_pages(
+        self,
+    ) -> None:
+        """Cover evaluate visible issues handles zero nonzero and unparseable pages."""
         with patch.object(
             check_deepsource_zero,
             "_request_html",
-            return_value='<span>All issues</span><div>0</div>',
+            return_value="<span>All issues</span><div>0</div>",
         ):
             self.assertEqual(
                 check_deepsource_zero._evaluate_visible_issues(
@@ -236,7 +262,7 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
         with patch.object(
             check_deepsource_zero,
             "_request_html",
-            return_value='<span>All issues</span><div>854</div>',
+            return_value="<span>All issues</span><div>854</div>",
         ):
             open_issues, findings = check_deepsource_zero._evaluate_visible_issues(
                 "https://app.deepsource.com/gh/Prekzursil/quality-zero-platform/issues"
@@ -268,7 +294,7 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
             check_deepsource_zero,
             "_request_html",
             return_value=(
-                '<span>All issues</span><div>0</div>'
+                "<span>All issues</span><div>0</div>"
                 '<a href="/gh/Prekzursil/event-link/issue/PYL-W0108/'
                 'occurrences?listindex=0">x</a>'
             ),
@@ -286,6 +312,7 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
         )
 
     def test_main_handles_success_missing_inputs_and_provider_errors(self) -> None:
+        """Cover main handles success missing inputs and provider errors."""
         args = Namespace(
             repo="Prekzursil/event-link",
             sha="abc123",
@@ -311,7 +338,9 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
             self.assertEqual(check_deepsource_zero.main(), 1)
         self.assertEqual(write_report_mock.call_args.args[0]["status"], "fail")
 
-        with patch.dict("os.environ", {"GITHUB_TOKEN": "token"}, clear=False), patch.object(
+        with patch.dict(
+            "os.environ", {"GITHUB_TOKEN": "token"}, clear=False
+        ), patch.object(
             check_deepsource_zero,
             "_parse_args",
             return_value=args,
@@ -331,7 +360,9 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
             self.assertEqual(check_deepsource_zero.main(), 0)
         self.assertEqual(write_report_mock.call_args.args[0]["status"], "pass")
 
-        with patch.dict("os.environ", {"GITHUB_TOKEN": "token"}, clear=False), patch.object(
+        with patch.dict(
+            "os.environ", {"GITHUB_TOKEN": "token"}, clear=False
+        ), patch.object(
             check_deepsource_zero,
             "_parse_args",
             return_value=args,
@@ -354,7 +385,9 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
         evaluate_visible_issues_mock.assert_not_called()
         self.assertEqual(write_report_mock.call_args.args[0]["status"], "fail")
 
-        with patch.dict("os.environ", {"GITHUB_TOKEN": "token"}, clear=False), patch.object(
+        with patch.dict(
+            "os.environ", {"GITHUB_TOKEN": "token"}, clear=False
+        ), patch.object(
             check_deepsource_zero,
             "_parse_args",
             return_value=args,
@@ -366,29 +399,25 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
             check_deepsource_zero,
             "_evaluate_visible_issues",
             return_value=(0, []),
-        ), patch.object(check_deepsource_zero, "write_report", return_value=7):
+        ), patch.object(
+            check_deepsource_zero, "write_report", return_value=7
+        ):
             self.assertEqual(check_deepsource_zero.main(), 7)
 
-        with patch.dict("os.environ", {"GITHUB_TOKEN": "token"}, clear=False), patch.object(
+        assert_main_reports_provider_failure(
+            self,
             check_deepsource_zero,
-            "_parse_args",
-            return_value=args,
-        ), patch.object(
-            check_deepsource_zero,
-            "_wait_for_status_contexts",
-            side_effect=RuntimeError("provider timeout"),
-        ), patch.object(
-            check_deepsource_zero,
-            "write_report",
-            return_value=0,
-        ) as write_report_mock:
-            self.assertEqual(check_deepsource_zero.main(), 1)
-        self.assertEqual(
-            write_report_mock.call_args.args[0]["findings"],
-            ["DeepSource request failed: provider timeout"],
+            {
+                "env": {"GITHUB_TOKEN": "token"},
+                "args": args,
+                "operation_name": "_wait_for_status_contexts",
+                "failure_message": "provider timeout",
+                "expected_finding": "DeepSource request failed: provider timeout",
+            },
         )
 
     def test_parse_args_render_markdown_and_script_entrypoint(self) -> None:
+        """Cover parse args render markdown and script entrypoint."""
         with patch.object(sys, "argv", ["check_deepsource_zero.py"]):
             args = check_deepsource_zero._parse_args()
         self.assertEqual(args.status_prefix, "DeepSource")

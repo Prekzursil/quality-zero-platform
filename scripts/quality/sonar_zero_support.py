@@ -5,7 +5,6 @@ from __future__ import absolute_import
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Tuple
 
-
 PendingFn = Callable[[Any, str], str | None]
 RequestFn = Callable[[str, str], Dict[str, Any]]
 RetryFetchFn = Callable[[Any, str], Tuple[int, str, List[str]]]
@@ -287,7 +286,11 @@ def load_sonar_findings_with_retry(
             return open_issues, quality_gate, findings
         if attempt != settings.attempts - 1:
             handlers.sleep_fn(max(0.0, settings.sleep_seconds))
-    return open_issues, quality_gate, handlers.final_findings_fn(
-        findings,
-        pending_message,
+    return (
+        open_issues,
+        quality_gate,
+        handlers.final_findings_fn(
+            findings,
+            pending_message,
+        ),
     )

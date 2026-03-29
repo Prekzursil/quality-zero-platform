@@ -62,6 +62,9 @@ export const PROVIDERS = Object.freeze({
 
 export const PROVIDER_KEYS = Object.freeze(Object.keys(PROVIDERS));
 
+/**
+ * Handle build repo target url.
+ */
 function buildRepoTargetUrl(providerKey, repoSlug) {
   switch (providerKey) {
     case 'codecov':
@@ -73,29 +76,47 @@ function buildRepoTargetUrl(providerKey, repoSlug) {
   }
 }
 
+/**
+ * Handle resolve state base dir.
+ */
 function resolveStateBaseDir(env = process.env) {
   return env.LOCALAPPDATA
     ? path.join(env.LOCALAPPDATA, 'quality-zero-platform')
     : path.join(os.homedir(), '.quality-zero-platform');
 }
 
+/**
+ * Handle get default state root.
+ */
 export function getDefaultStateRoot(env = process.env) {
   const explicit = env.QUALITY_ZERO_PROVIDER_UI_HOME;
   return explicit ? path.resolve(explicit) : path.join(resolveStateBaseDir(env), 'provider-ui');
 }
 
+/**
+ * Handle get default profile dir.
+ */
 export function getDefaultProfileDir(env = process.env) {
   return path.join(getDefaultStateRoot(env), 'chromium-profile');
 }
 
+/**
+ * Handle get default runner dir.
+ */
 export function getDefaultRunnerDir(env = process.env) {
   return path.join(getDefaultStateRoot(env), 'pw-runner');
 }
 
+/**
+ * Handle get runner dir for state root.
+ */
 export function getRunnerDirForStateRoot(stateRoot) {
   return path.join(stateRoot, 'pw-runner');
 }
 
+/**
+ * Handle normalize provider.
+ */
 export function normalizeProvider(provider) {
   if (!provider) {
     throw new Error(`Provider is required. Supported values: ${PROVIDER_KEYS.join(', ')}`);
@@ -109,6 +130,9 @@ export function normalizeProvider(provider) {
   return normalized;
 }
 
+/**
+ * Handle normalize repo slug.
+ */
 export function normalizeRepoSlug(repo, owner = 'Prekzursil') {
   if (!repo) {
     return null;
@@ -126,6 +150,9 @@ export function normalizeRepoSlug(repo, owner = 'Prekzursil') {
   return `${owner}/${trimmed}`;
 }
 
+/**
+ * Handle resolve provider target.
+ */
 export function resolveProviderTarget(provider, { repo = null, owner = 'Prekzursil' } = {}) {
   const providerKey = normalizeProvider(provider);
   const definition = PROVIDERS[providerKey];
@@ -139,6 +166,9 @@ export function resolveProviderTarget(provider, { repo = null, owner = 'Prekzurs
   };
 }
 
+/**
+ * Handle shift required value.
+ */
 function shiftRequiredValue(tokens, option) {
   const value = tokens.shift();
   if (value === undefined) {
@@ -173,6 +203,9 @@ const TOGGLE_ARGUMENTS = Object.freeze({
 
 const HELP_ARGUMENTS = Object.freeze(new Set(['--help', '-h']));
 
+/**
+ * Handle apply string value argument.
+ */
 function applyStringValueArgument(args, tokens, token) {
   const handler = STRING_ARGUMENTS[token];
   if (!handler) {
@@ -183,6 +216,9 @@ function applyStringValueArgument(args, tokens, token) {
   return true;
 }
 
+/**
+ * Handle apply path value argument.
+ */
 function applyPathValueArgument(args, tokens, token) {
   const handler = PATH_ARGUMENTS[token];
   if (!handler) {
@@ -193,6 +229,9 @@ function applyPathValueArgument(args, tokens, token) {
   return true;
 }
 
+/**
+ * Handle apply numeric value argument.
+ */
 function applyNumericValueArgument(args, tokens, token) {
   const handler = NUMERIC_ARGUMENTS[token];
   if (!handler) {
@@ -203,6 +242,9 @@ function applyNumericValueArgument(args, tokens, token) {
   return true;
 }
 
+/**
+ * Handle apply value argument.
+ */
 function applyValueArgument(args, tokens, token) {
   if (applyStringValueArgument(args, tokens, token)) {
     return true;
@@ -210,12 +252,12 @@ function applyValueArgument(args, tokens, token) {
   if (applyPathValueArgument(args, tokens, token)) {
     return true;
   }
-  if (applyNumericValueArgument(args, tokens, token)) {
-    return true;
-  }
-  return false;
+  return applyNumericValueArgument(args, tokens, token);
 }
 
+/**
+ * Handle apply toggle argument.
+ */
 function applyToggleArgument(args, token) {
   const handler = TOGGLE_ARGUMENTS[token];
   if (!handler) {
@@ -226,6 +268,9 @@ function applyToggleArgument(args, token) {
   return true;
 }
 
+/**
+ * Handle apply help argument.
+ */
 function applyHelpArgument(args, token) {
   if (!HELP_ARGUMENTS.has(token)) {
     return false;
@@ -234,6 +279,9 @@ function applyHelpArgument(args, token) {
   return true;
 }
 
+/**
+ * Handle apply argument token.
+ */
 function applyArgumentToken(args, tokens, token) {
   if (applyValueArgument(args, tokens, token)) {
     return;
@@ -247,6 +295,9 @@ function applyArgumentToken(args, tokens, token) {
   throw new Error(`Unknown argument: ${token}`);
 }
 
+/**
+ * Handle validate numeric args.
+ */
 function validateNumericArgs(args) {
   if (!Number.isFinite(args.timeoutMs) || args.timeoutMs <= 0) {
     throw new Error(`Invalid --timeout-ms value: ${args.timeoutMs}`);
@@ -257,6 +308,9 @@ function validateNumericArgs(args) {
   }
 }
 
+/**
+ * Handle finalize args.
+ */
 function finalizeArgs(args) {
   validateNumericArgs(args);
   if (!args.profileDir) {
@@ -265,6 +319,9 @@ function finalizeArgs(args) {
   return args;
 }
 
+/**
+ * Handle parse args.
+ */
 export function parseArgs(argv) {
   const args = {
     command: 'help',
@@ -291,6 +348,9 @@ export function parseArgs(argv) {
   return finalizeArgs(args);
 }
 
+/**
+ * Handle render help.
+ */
 export function renderHelp() {
   return `provider-admin-bootstrap
 

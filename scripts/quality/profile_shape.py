@@ -1,7 +1,8 @@
+"""Profile shape."""
+
 from __future__ import absolute_import
 
 from typing import Any, Dict, List, Mapping, Set
-
 
 TOP_LEVEL_KEYS: Set[str] = {
     "slug",

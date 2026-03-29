@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Normalize coverage for qlty."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -15,7 +17,6 @@ from scripts.quality.coverage_paths import (
     _coverage_source_candidates,
     _normalize_source_path,
 )
-
 
 _XML_FILENAME_RE = re.compile(
     r'(?P<prefix><[^>]+\bfilename=(?P<quote>["\']))(?P<value>.*?)(?P=quote)'

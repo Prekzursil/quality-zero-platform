@@ -1,3 +1,5 @@
+"""Test qlty coverage normalization."""
+
 from __future__ import absolute_import
 
 import io
@@ -57,7 +59,9 @@ class QltyCoverageNormalizationTests(unittest.TestCase):
         """Read one normalized coverage artifact from a manifest entry."""
         normalized = payload_entry["normalized"]
         if not isinstance(normalized, str):
-            raise AssertionError("Normalized coverage manifest entry must be a string path.")
+            raise AssertionError(
+                "Normalized coverage manifest entry must be a string path."
+            )
         return Path(normalized).read_text(encoding="utf-8")
 
     def _sample_xml_payload(
@@ -165,9 +169,7 @@ class QltyCoverageNormalizationTests(unittest.TestCase):
             payload = json.loads(stdout.getvalue())
             normalized = payload[0]["normalized"]
             self.assertIsInstance(normalized, str)
-            self.assertTrue(
-                normalized.startswith(str(out_dir.resolve()))
-            )
+            self.assertTrue(normalized.startswith(str(out_dir.resolve())))
             self.assertTrue(normalized.endswith("report-1.info"))
 
     def test_existing_candidate_covers_fallback_and_empty_paths(self) -> None:

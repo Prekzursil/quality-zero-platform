@@ -1,3 +1,6 @@
+/**
+ * Handle load dashboard.
+ */
 async function loadDashboard() {
   const response = await fetch('data/dashboard.json');
   if (!response.ok) {
@@ -6,10 +9,16 @@ async function loadDashboard() {
   return response.json();
 }
 
+/**
+ * Handle safe text.
+ */
 function safeText(value, fallback = 'unknown') {
   return value === null || value === undefined || value === '' ? fallback : String(value);
 }
 
+/**
+ * Handle create element.
+ */
 function createElement(tagName, options = {}) {
   const element = document.createElement(tagName);
   if (options.className) {
@@ -21,12 +30,18 @@ function createElement(tagName, options = {}) {
   return element;
 }
 
+/**
+ * Handle create badge.
+ */
 function createBadge(label) {
   const value = safeText(label).toLowerCase();
   const badge = createElement('span', { className: `badge ${value}`, text: safeText(label) });
   return badge;
 }
 
+/**
+ * Handle append summary card.
+ */
 function appendSummaryCard(container, title, value) {
   const card = createElement('article', { className: 'summary-card' });
   card.append(createElement('h3', { text: title }));
@@ -34,6 +49,9 @@ function appendSummaryCard(container, title, value) {
   container.append(card);
 }
 
+/**
+ * Handle render summary.
+ */
 function renderSummary(payload) {
   const repos = payload.repos || [];
   const passing = repos.filter(repo => repo.default_branch_health === 'success').length;
@@ -46,21 +64,33 @@ function renderSummary(payload) {
   appendSummaryCard(summary, 'Main partial', safeText(failing, '0'));
 }
 
+/**
+ * Handle issue policy text.
+ */
 function issuePolicyText(repo) {
   const baseline = repo.issue_policy_baseline_ref ? ` (${repo.issue_policy_baseline_ref})` : '';
   return `${safeText(repo.issue_policy_mode)}${baseline}`;
 }
 
+/**
+ * Handle create row cell.
+ */
 function createRowCell(text) {
   return createElement('td', { text });
 }
 
+/**
+ * Handle create badge cell.
+ */
 function createBadgeCell(text) {
   const cell = document.createElement('td');
   cell.append(createBadge(text));
   return cell;
 }
 
+/**
+ * Handle render table.
+ */
 function renderTable(payload) {
   const searchInput = document.getElementById('searchInput');
   const filter = safeText(searchInput.value, '').toLowerCase();
@@ -88,6 +118,9 @@ function renderTable(payload) {
   });
 }
 
+/**
+ * Handle create detail line.
+ */
 function createDetailLine(label, value) {
   const paragraph = createElement('p', { className: 'small' });
   const prefix = createElement('span', { text: `${label}: ` });
@@ -96,6 +129,9 @@ function createDetailLine(label, value) {
   return paragraph;
 }
 
+/**
+ * Handle create detail status line.
+ */
 function createDetailStatusLine(repo) {
   const paragraph = createElement('p', { className: 'small' });
   paragraph.append(createElement('span', { text: 'Main branch: ' }));
@@ -107,6 +143,9 @@ function createDetailStatusLine(repo) {
   return paragraph;
 }
 
+/**
+ * Handle open detail.
+ */
 function openDetail(repo) {
   document.getElementById('detailTitle').textContent = safeText(repo.slug, 'Repo detail');
   const detailContent = document.getElementById('detailContent');
@@ -120,6 +159,9 @@ function openDetail(repo) {
   document.getElementById('detailPanel').classList.remove('hidden');
 }
 
+/**
+ * Handle render error.
+ */
 function renderError(message) {
   const body = document.body;
   const main = createElement('main', { className: 'topbar' });

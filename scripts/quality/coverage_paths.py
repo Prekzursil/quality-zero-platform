@@ -1,3 +1,5 @@
+"""Coverage paths."""
+
 from __future__ import absolute_import
 
 import re
@@ -20,6 +22,7 @@ _IGNORED_SOURCE_PARTS = {
 
 
 def _workspace_relative_path_text(text: str, workspace_root: str) -> str:
+    """Handle workspace relative path text."""
     path_obj = Path(text)
     if not path_obj.is_absolute():
         return text
@@ -34,9 +37,11 @@ def _workspace_relative_path_text(text: str, workspace_root: str) -> str:
 
 
 def _candidate_suffixes(candidate_text: str) -> List[str]:
+    """Handle candidate suffixes."""
     candidates: List[str] = []
 
     def _remember(value: str) -> None:
+        """Handle remember."""
         cleaned = str(value or "").strip().replace("\\", "/").lstrip("./")
         if cleaned and cleaned not in candidates:
             candidates.append(cleaned)
@@ -51,15 +56,24 @@ def _candidate_suffixes(candidate_text: str) -> List[str]:
 
 
 def _existing_repo_file_candidate(normalized_path: str) -> str:
+    """Handle existing repo file candidate."""
     candidate_text = str(normalized_path or "").strip().replace("\\", "/")
     if not candidate_text or candidate_text == ".":
         return ""
 
-    first_existing = next((candidate for candidate in _candidate_suffixes(candidate_text) if Path(candidate).is_file()), "")
+    first_existing = next(
+        (
+            candidate
+            for candidate in _candidate_suffixes(candidate_text)
+            if Path(candidate).is_file()
+        ),
+        "",
+    )
     return Path(first_existing).as_posix() if first_existing else ""
 
 
 def _normalize_source_path(raw_path: str) -> str:
+    """Handle normalize source path."""
     text = str(raw_path or "").strip().replace("\\", "/")
     text = re.sub(r"/+", "/", text)
     if not text or text == ".":
@@ -78,19 +92,31 @@ def _normalize_source_path(raw_path: str) -> str:
 
 
 def _is_ignored_coverage_source(normalized: str) -> bool:
+    """Handle is ignored coverage source."""
     parts = PurePosixPath(normalized).parts
-    return normalized.startswith(_IGNORED_SOURCE_PREFIXES) or any(part in _IGNORED_SOURCE_PARTS for part in parts)
+    return normalized.startswith(_IGNORED_SOURCE_PREFIXES) or any(
+        part in _IGNORED_SOURCE_PARTS for part in parts
+    )
 
 
 def _should_track_coverage_source(source_path: str) -> bool:
+    """Handle should track coverage source."""
     normalized = _normalize_source_path(source_path)
-    return bool(normalized) and not _is_ignored_coverage_source(normalized) and Path(normalized).is_file()
+    return (
+        bool(normalized)
+        and not _is_ignored_coverage_source(normalized)
+        and Path(normalized).is_file()
+    )
 
 
-def _coverage_source_candidates(raw_path: str, source_roots: List[str] | None = None) -> List[str]:
+def _coverage_source_candidates(
+    raw_path: str, source_roots: List[str] | None = None
+) -> List[str]:
+    """Handle coverage source candidates."""
     candidates: List[str] = []
 
     def _remember(value: str) -> None:
+        """Handle remember."""
         normalized = _normalize_source_path(value)
         if normalized and normalized not in candidates:
             candidates.append(normalized)
@@ -99,5 +125,7 @@ def _coverage_source_candidates(raw_path: str, source_roots: List[str] | None = 
     for source_root in source_roots or []:
         source_root_text = str(source_root or "").strip()
         if source_root_text:
-            _remember(f"{source_root_text.rstrip('/')}/{str(raw_path or '').lstrip('./')}")
+            _remember(
+                f"{source_root_text.rstrip('/')}/{str(raw_path or '').lstrip('./')}"
+            )
     return candidates

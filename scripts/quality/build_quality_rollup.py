@@ -23,7 +23,6 @@ from scripts.quality.check_required_checks import (
 )
 from scripts.security_helpers import load_json_https
 
-
 GITHUB_API_BASE = "https://api.github.com"
 DEFAULT_ROLLUP_JSON = "quality-rollup/summary.json"
 DEFAULT_ROLLUP_MD = "quality-rollup/summary.md"
@@ -231,9 +230,7 @@ def render_markdown(payload: Mapping[str, Any]) -> str:
         "| --- | --- | --- |",
     ]
     for item in payload.get("contexts", []):
-        lines.append(
-            f"| `{item['context']}` | `{item['status']}` | {item['detail']} |"
-        )
+        lines.append(f"| `{item['context']}` | `{item['status']}` | {item['detail']} |")
     return "\n".join(lines) + "\n"
 
 

@@ -1,3 +1,5 @@
+"""Test admin dashboard."""
+
 from __future__ import absolute_import
 
 import tempfile
@@ -8,7 +10,10 @@ from scripts.quality import build_admin_dashboard
 
 
 class AdminDashboardTests(unittest.TestCase):
+    """Admin Dashboard Tests."""
+
     def test_build_dashboard_payload_summarizes_repos_profiles_and_health(self) -> None:
+        """Cover build dashboard payload summarizes repos profiles and health."""
         payload = build_admin_dashboard.build_dashboard_payload(
             inventory={
                 "repos": [
@@ -48,6 +53,7 @@ class AdminDashboardTests(unittest.TestCase):
         self.assertFalse(repo["ruleset_present"])
 
     def test_render_dashboard_html_includes_controls_and_repo_rows(self) -> None:
+        """Cover render dashboard html includes controls and repo rows."""
         payload = {
             "generated_at": "2026-03-23T00:00:00Z",
             "repo_count": 1,
@@ -79,6 +85,7 @@ class AdminDashboardTests(unittest.TestCase):
         self.assertIn("zero_critical", html)
 
     def test_write_dashboard_outputs_static_assets_and_data_json(self) -> None:
+        """Cover write dashboard outputs static assets and data json."""
         payload = {
             "generated_at": "2026-03-23T00:00:00Z",
             "repo_count": 0,
@@ -94,7 +101,9 @@ class AdminDashboardTests(unittest.TestCase):
             (assets_dir / "app.js").write_text("console.log('ok')\n", encoding="utf-8")
 
             output_dir = root / "site"
-            build_admin_dashboard.write_dashboard(output_dir, payload, assets_dir=assets_dir)
+            build_admin_dashboard.write_dashboard(
+                output_dir, payload, assets_dir=assets_dir
+            )
 
             self.assertTrue((output_dir / "index.html").is_file())
             self.assertTrue((output_dir / "styles.css").is_file())

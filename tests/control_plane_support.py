@@ -1,10 +1,11 @@
+"""Control plane support."""
+
 from __future__ import absolute_import
 
 from pathlib import Path
 from typing import Collection, Dict, Protocol, Set
 
 from scripts.quality.control_plane import load_inventory, load_repo_profile
-
 
 ROOT = Path(__file__).resolve().parents[1]
 

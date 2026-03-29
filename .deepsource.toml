@@ -6,6 +6,7 @@ exclude_patterns = [
   "htmlcov/**",
   "docs/admin/**",
   "profiles/**",
+  "scripts/**",
   "tests/**",
   "scripts/**/*.test.mjs",
 ]

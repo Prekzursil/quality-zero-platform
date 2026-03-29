@@ -9,7 +9,7 @@ import os
 import sys
 from contextlib import contextmanager
 from pathlib import Path, PureWindowsPath
-from typing import Any, Dict, List, cast
+from typing import Any, Dict, List, Tuple, cast
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -43,7 +43,7 @@ def _required_contexts(profile: Dict[str, Any]) -> List[str]:
     raise SystemExit("Resolved profile did not include active_required_contexts")
 
 
-def _resolve_build_args(*args: Any, **kwargs: Any) -> tuple[Any, Any, Any]:
+def _resolve_build_args(*args: Any, **kwargs: Any) -> Tuple[Any, Any, Any]:
     """Normalize positional and keyword arguments for argv construction."""
     if args:
         if len(args) != 3:

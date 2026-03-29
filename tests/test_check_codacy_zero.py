@@ -1003,6 +1003,89 @@ class CodacyZeroTests(unittest.TestCase):
             findings, ["Codacy analysis status request failed: status broke"]
         )
 
+    def test_commit_scope_fallback_ignores_non_stale_findings(self) -> None:
+        """Do not trigger commit fallback when PR findings are not stale-state messages."""
+        self.assertIsNone(
+            check_codacy_zero._commit_scope_fallback(
+                self._base_query(pull_request="68", sha="targetsha"),
+                "token",
+                ("gh",),
+                ["Codacy reports 2 open issues (expected 0)."],
+            )
+        )
+
+    def test_commit_scope_fallback_uses_commit_query_for_stale_pr_findings(
+        self,
+    ) -> None:
+        """Use the commit-scoped Codacy query when PR issue data stays stale."""
+        with patch.object(
+            check_codacy_zero,
+            "_query_codacy_open_issues",
+            return_value=(0, [], None),
+        ) as query_mock:
+            self.assertEqual(
+                check_codacy_zero._commit_scope_fallback(
+                    self._base_query(pull_request="68", sha="targetsha"),
+                    "token",
+                    ("gh", "github"),
+                    [
+                        "Codacy reports 18 open issues (expected 0).",
+                        (
+                            "Codacy analysis for pull request 68 issues is still on "
+                            "oldsha (waiting for targetsha)."
+                        ),
+                    ],
+                ),
+                (0, []),
+            )
+
+        commit_query = query_mock.call_args.args[0]
+        self.assertEqual(commit_query.pull_request, "")
+        self.assertEqual(commit_query.sha, "targetsha")
+        self.assertEqual(query_mock.call_args.args[2], ("gh", "github"))
+
+    def test_resolve_codacy_status_prefers_commit_scope_when_pr_payload_is_stale(
+        self,
+    ) -> None:
+        """Resolve PR status from commit-scoped Codacy data when PR data is stale."""
+        args = Namespace(
+            provider="gh",
+            owner="Prekzursil",
+            repo="quality-zero-platform",
+            pull_request="68",
+            sha="targetsha",
+            token="explicit-token",
+            policy_mode="ratchet",
+            out_json="codacy-zero/codacy.json",
+            out_md="codacy-zero/codacy.md",
+        )
+        with (
+            patch.object(
+                check_codacy_zero,
+                "load_codacy_findings_with_retry",
+                return_value=(
+                    18,
+                    [
+                        "Codacy reports 18 open issues (expected 0).",
+                        (
+                            "Codacy analysis for pull request 68 issues is still on "
+                            "oldsha (waiting for targetsha)."
+                        ),
+                    ],
+                ),
+            ),
+            patch.object(
+                check_codacy_zero,
+                "_query_codacy_open_issues",
+                return_value=(0, [], None),
+            ),
+        ):
+            result = check_codacy_zero._resolve_codacy_status(args)
+
+        self.assertEqual(result.status, "pass")
+        self.assertEqual(result.open_issues, 0)
+        self.assertEqual(result.findings, [])
+
     def test_payload_and_report_helpers(self) -> None:
         """Cover payload and report helpers."""
         payload = _build_payload(

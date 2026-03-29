@@ -1,3 +1,5 @@
+"""Parse visible issue counts from DeepSource HTML pages."""
+
 from __future__ import absolute_import
 
 import re
@@ -13,6 +15,7 @@ ISSUE_LINK_SUFFIX = "/occurrences?listindex=0"
 
 
 def human_count_to_int(raw_value: str) -> int | None:
+    """Convert a DeepSource count string into an integer."""
     value = raw_value.strip().lower().replace(",", "")
     if not value:
         return None
@@ -38,6 +41,7 @@ def _count_from_all_issues_heading(html: str) -> int | None:
 
 
 def extract_visible_issue_count(html: str) -> int | None:
+    """Extract the visible issue count from a DeepSource page."""
     json_match = ALL_ISSUES_JSON_PATTERN.search(html)
     if json_match is not None:
         return human_count_to_int(json_match.group(1))
@@ -45,6 +49,7 @@ def extract_visible_issue_count(html: str) -> int | None:
 
 
 def extract_issue_links(html: str) -> List[str]:
+    """Extract issue detail links from a DeepSource page."""
     links = set()
     search_start = 0
     while True:

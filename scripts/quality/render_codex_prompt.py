@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Render Codex remediation and backlog prompts from repo profiles."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -98,6 +100,7 @@ def _render_prompt(*args: object, **kwargs: object) -> str:
 
 
 def main() -> int:
+    """Render a Codex prompt to stdout or a file."""
     args = _parse_args()
     inventory = load_inventory(args.inventory) if args.inventory else load_inventory()
     profile = load_repo_profile(inventory, args.repo_slug)

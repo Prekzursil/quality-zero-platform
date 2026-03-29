@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Export resolved control-plane profiles for workflow consumers."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -100,6 +102,7 @@ def _write_github_output(path: Path, profile: Dict[str, Any], event_name: str) -
 
 
 def main() -> int:
+    """Export a resolved profile to stdout, JSON, or GitHub output."""
     args = _parse_args()
     inventory = load_inventory(args.inventory) if args.inventory else load_inventory()
     profile = load_repo_profile(inventory, args.repo_slug)

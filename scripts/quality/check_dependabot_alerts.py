@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Check Dependabot alerts against the configured policy."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -56,6 +58,7 @@ def _request_alerts(repo: str, token: str, *, scope: str) -> List[Dict[str, Any]
 
 
 def filter_alerts(alerts: List[Dict[str, Any]], *, policy: str) -> List[Dict[str, Any]]:
+    """Filter alerts down to those that violate the selected policy."""
     order = {"critical": 3, "high": 2, "moderate": 1, "medium": 1, "low": 0}
     threshold = {"zero_critical": 3, "zero_high": 2, "zero_any": 0}[policy]
     filtered: List[Dict[str, Any]] = []
@@ -84,6 +87,7 @@ def _render_md(payload: Mapping[str, Any]) -> str:
 
 
 def main() -> int:
+    """Run the Dependabot alerts gate and write its report."""
     args = _parse_args()
     token = (args.token or os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")).strip()
     findings: List[str] = []

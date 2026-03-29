@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Run QLTY checks and emit a gate summary."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -120,6 +122,7 @@ def _render_md(payload: Mapping[str, Any]) -> str:
 
 
 def cast_mapping(value: Any) -> Mapping[str, Any]:
+    """Return ``value`` when it is a mapping, otherwise an empty mapping."""
     return value if isinstance(value, Mapping) else {}
 
 
@@ -243,6 +246,7 @@ def _build_missing_command_payload() -> Dict[str, Any]:
 
 
 def main() -> int:
+    """Run the QLTY gate and write its report."""
     args = _parse_args()
     repo_dir = Path(args.repo_dir).resolve()
 

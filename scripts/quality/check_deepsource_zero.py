@@ -45,7 +45,6 @@ class StatusPollRequest:
 
 def _parse_args() -> argparse.Namespace:
     """Parse CLI arguments for the DeepSource visible-zero gate."""
-
     parser = argparse.ArgumentParser(
         description="Assert DeepSource has zero visible default-branch issues."
     )
@@ -62,7 +61,6 @@ def _parse_args() -> argparse.Namespace:
 
 def _github_repo(args: argparse.Namespace) -> str:
     """Resolve the repository slug from flags or the GitHub Actions env."""
-
     return (
         args.repo
         or os.environ.get("REPO_SLUG", "")
@@ -72,7 +70,6 @@ def _github_repo(args: argparse.Namespace) -> str:
 
 def _github_sha(args: argparse.Namespace) -> str:
     """Resolve the target commit SHA from flags or the GitHub Actions env."""
-
     return (
         args.sha or os.environ.get("TARGET_SHA", "") or os.environ.get("GITHUB_SHA", "")
     ).strip()
@@ -80,7 +77,6 @@ def _github_sha(args: argparse.Namespace) -> str:
 
 def _issues_url(args: argparse.Namespace) -> str:
     """Resolve the default-branch DeepSource issues URL for the repo."""
-
     explicit = (args.issues_url or os.environ.get("DEEPSOURCE_ISSUES_URL", "")).strip()
     if explicit:
         return normalize_https_url(explicit, allowed_hosts={"app.deepsource.com"})
@@ -95,7 +91,6 @@ def _issues_url(args: argparse.Namespace) -> str:
 
 def _github_status_payload(repo: str, sha: str, token: str) -> Dict[str, Any]:
     """Fetch the GitHub status payload for a commit."""
-
     payload, _ = load_json_https(
         f"{GITHUB_API_BASE}/repos/{repo}/commits/{sha}/status",
         allowed_hosts={"api.github.com"},
@@ -113,7 +108,6 @@ def _github_status_payload(repo: str, sha: str, token: str) -> Dict[str, Any]:
 
 def _request_html(url: str) -> str:
     """Fetch a DeepSource HTML page as UTF-8 text."""
-
     payload, _ = load_bytes_https(
         url,
         allowed_hosts={"app.deepsource.com"},
@@ -127,7 +121,6 @@ def _request_html(url: str) -> str:
 
 def _status_contexts(payload: Mapping[str, Any], prefix: str) -> List[Dict[str, Any]]:
     """Collect GitHub commit statuses whose contexts belong to DeepSource."""
-
     normalized_prefix = prefix.strip().lower()
     return [
         item
@@ -140,7 +133,6 @@ def _status_contexts(payload: Mapping[str, Any], prefix: str) -> List[Dict[str, 
 
 def _status_target_urls(statuses: Sequence[Mapping[str, Any]]) -> List[str]:
     """Collect unique DeepSource target URLs from GitHub statuses."""
-
     return list(
         dict.fromkeys(
             target_url
@@ -152,7 +144,6 @@ def _status_target_urls(statuses: Sequence[Mapping[str, Any]]) -> List[str]:
 
 def _status_finding(item: Mapping[str, Any], prefix: str) -> str | None:
     """Convert one DeepSource GitHub status context into a gate finding."""
-
     context = str(item.get("context") or prefix).strip()
     state = str(item.get("state") or "").strip()
     if state == "success":
@@ -163,7 +154,6 @@ def _status_finding(item: Mapping[str, Any], prefix: str) -> str | None:
 
 def _status_findings(statuses: Sequence[Mapping[str, Any]], prefix: str) -> List[str]:
     """Return gate findings for missing or failing DeepSource statuses."""
-
     if not statuses:
         return [f"{prefix} GitHub status contexts are missing."]
     return [
@@ -175,7 +165,6 @@ def _status_findings(statuses: Sequence[Mapping[str, Any]], prefix: str) -> List
 
 def _statuses_are_ready(statuses: Sequence[Mapping[str, Any]]) -> bool:
     """Return ``True`` when all observed statuses have settled."""
-
     return bool(statuses) and all(
         str(item.get("state") or "").strip() != "pending"
         for item in statuses
@@ -186,7 +175,6 @@ def _wait_for_status_contexts(
     request: StatusPollRequest,
 ) -> Tuple[List[Dict[str, Any]], List[str]]:
     """Poll GitHub statuses until DeepSource contexts settle or time runs out."""
-
     deadline = time.time() + max(request.timeout_seconds, 1)
     statuses: List[Dict[str, Any]] = []
     while time.time() <= deadline:
@@ -200,7 +188,6 @@ def _wait_for_status_contexts(
 
 def _evaluate_visible_issues(issues_url: str) -> Tuple[int, List[str]]:
     """Evaluate the public DeepSource issues page for visible backlog."""
-
     html = _request_html(issues_url)
     open_issues = extract_visible_issue_count(html)
     issue_links = extract_issue_links(html)
@@ -222,7 +209,6 @@ def _evaluate_visible_issues(issues_url: str) -> Tuple[int, List[str]]:
 
 def _validate_inputs(repo: str, sha: str, issues_url: str, token: str) -> List[str]:
     """Return input validation findings for the current execution context."""
-
     return [
         message
         for message, value in (
@@ -237,7 +223,6 @@ def _validate_inputs(repo: str, sha: str, issues_url: str, token: str) -> List[s
 
 def _render_md(payload: Mapping[str, Any]) -> str:
     """Render a markdown summary for the DeepSource visible-zero lane."""
-
     lines = [
         "# DeepSource Visible Zero Gate",
         "",
@@ -258,7 +243,6 @@ def _render_md(payload: Mapping[str, Any]) -> str:
 
 def main() -> int:
     """Run the DeepSource visible-zero gate."""
-
     args = _parse_args()
     token = (
         os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")

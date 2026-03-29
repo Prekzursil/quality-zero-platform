@@ -1,3 +1,5 @@
+"""Normalization helpers for quality profile configuration."""
+
 from __future__ import absolute_import
 
 from copy import deepcopy
@@ -28,6 +30,7 @@ def _merge_issue_policy_defaults(mode: str, payload: Mapping[str, Any]) -> Dict[
 
 
 def normalize_issue_policy(raw_issue_policy: Mapping[str, Any] | str | None) -> Dict[str, str]:
+    """Normalize issue policy configuration."""
     if isinstance(raw_issue_policy, str):
         return _issue_policy_defaults(str(raw_issue_policy or "").strip() or "ratchet")
 
@@ -37,6 +40,7 @@ def normalize_issue_policy(raw_issue_policy: Mapping[str, Any] | str | None) -> 
 
 
 def normalize_deps(raw_deps: Mapping[str, Any] | None) -> Dict[str, Any]:
+    """Normalize dependency policy configuration."""
     payload = deepcopy(raw_deps or {}) if isinstance(raw_deps, dict) else {}
     return {
         "enabled": bool(payload.get("enabled", False)),
@@ -46,6 +50,7 @@ def normalize_deps(raw_deps: Mapping[str, Any] | None) -> Dict[str, Any]:
 
 
 def normalize_required_contexts(raw: Mapping[str, Any] | None) -> Dict[str, List[str]]:
+    """Normalize required status contexts."""
     payload = deepcopy(raw or {}) if isinstance(raw, dict) else {}
     always = dedupe_strings(payload.get("always", []))
     pull_request_only = [item for item in dedupe_strings(payload.get("pull_request_only", [])) if item not in always]
@@ -60,6 +65,7 @@ def normalize_required_contexts(raw: Mapping[str, Any] | None) -> Dict[str, List
 
 
 def merge_required_contexts(base: Mapping[str, Any] | None, overlay: Mapping[str, Any] | None) -> Dict[str, List[str]]:
+    """Merge two required-context payloads."""
     base_payload = base if isinstance(base, Mapping) else {}
     overlay_payload = overlay if isinstance(overlay, Mapping) else {}
     return normalize_required_contexts(
@@ -73,34 +79,42 @@ def merge_required_contexts(base: Mapping[str, Any] | None, overlay: Mapping[str
 
 
 def normalize_coverage_inputs(raw_inputs: Any) -> List[Dict[str, str]]:
+    """Normalize coverage input declarations."""
     return profile_coverage_normalization.normalize_coverage_inputs(raw_inputs)
 
 
 def infer_coverage_inputs(coverage: Mapping[str, Any] | None) -> List[Dict[str, str]]:
+    """Infer coverage inputs from coverage config."""
     return profile_coverage_normalization.infer_coverage_inputs(coverage)
 
 
 def infer_required_sources(raw_coverage: Mapping[str, Any] | None) -> List[str]:
+    """Infer required source paths from coverage data."""
     return profile_coverage_normalization.infer_required_sources(raw_coverage)
 
 
 def normalize_java_setup(raw_java: Any) -> Dict[str, Any]:
+    """Normalize Java setup configuration."""
     return profile_coverage_normalization.normalize_java_setup(raw_java)
 
 
 def normalize_coverage_setup(raw_setup: Any) -> Dict[str, Any]:
+    """Normalize coverage setup configuration."""
     return profile_coverage_normalization.normalize_coverage_setup(raw_setup)
 
 
 def normalize_coverage_assert_mode(raw_assert_mode: Any) -> Dict[str, str]:
+    """Normalize coverage assert-mode configuration."""
     return profile_coverage_normalization.normalize_coverage_assert_mode(raw_assert_mode)
 
 
 def normalize_coverage(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
+    """Normalize coverage configuration."""
     return profile_coverage_normalization.normalize_coverage(raw)
 
 
 def normalize_codex_environment(raw: Mapping[str, Any] | None, *, verify_command: str) -> Dict[str, Any]:
+    """Normalize Codex environment configuration."""
     payload = deepcopy(raw or {}) if isinstance(raw, dict) else {}
     return {
         "mode": str(payload.get("mode", "automatic")).strip() or "automatic",

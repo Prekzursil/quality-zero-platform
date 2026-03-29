@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Run the required-checks probe for the quality-zero gate."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -96,6 +98,7 @@ def _run_required_checks(argv: List[str], *, repo_dir: Path) -> int:
 
 
 def main() -> int:
+    """Run the quality-zero gate and return the probe exit code."""
     args = _parse_args()
     profile = json.loads(Path(args.profile_json).read_text(encoding="utf-8"))
     sha = (os.environ.get("TARGET_SHA", "").strip() or os.environ.get("GITHUB_SHA", "").strip())

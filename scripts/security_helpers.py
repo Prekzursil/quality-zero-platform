@@ -1,3 +1,5 @@
+"""HTTPS validation and fetch helpers for quality scripts."""
+
 from __future__ import absolute_import
 
 from dataclasses import dataclass
@@ -256,6 +258,7 @@ def _read_bytes_response(parsed: ParseResult, *args: Any, **kwargs: Any) -> Tupl
 
 
 def load_json_https(raw_url: str, *args: Any, **kwargs: Any) -> Tuple[Any, Dict[str, str]]:
+    """Fetch and decode a JSON document over HTTPS."""
     if args:
         raise TypeError("load_json_https expects keyword arguments only")
     parsed, request_kwargs = _prepare_https_request(raw_url, function_name="load_json_https", kwargs=kwargs)
@@ -266,6 +269,7 @@ def load_json_https(raw_url: str, *args: Any, **kwargs: Any) -> Tuple[Any, Dict[
 
 
 def load_bytes_https(raw_url: str, *args: Any, **kwargs: Any) -> Tuple[bytes, Dict[str, str]]:
+    """Fetch raw bytes over HTTPS."""
     if args:
         raise TypeError("load_bytes_https expects keyword arguments only")
     parsed, request_kwargs = _prepare_https_request(raw_url, function_name="load_bytes_https", kwargs=kwargs)

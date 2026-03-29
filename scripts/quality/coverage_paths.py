@@ -1,3 +1,5 @@
+"""Normalize and classify coverage source paths."""
+
 from __future__ import absolute_import
 
 import re

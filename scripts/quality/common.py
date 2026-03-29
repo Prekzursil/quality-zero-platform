@@ -1,3 +1,5 @@
+"""Shared helpers for quality-zero script tooling."""
+
 from __future__ import absolute_import
 
 import json
@@ -16,6 +18,8 @@ NONE_BULLET = "- None"
 
 @dataclass(frozen=True, slots=True)
 class ReportSpec:
+    """Describe the report paths and renderer used by ``write_report``."""
+
     out_json: str
     out_md: str
     default_json: str
@@ -24,15 +28,18 @@ class ReportSpec:
 
 
 def utc_timestamp() -> str:
+    """Return the current UTC timestamp."""
     return datetime.now(timezone.utc).isoformat()
 
 
 def dedupe_strings(items: Iterable[str | None]) -> List[str]:
+    """Return ordered, unique, non-empty string values."""
     normalized = (str(item or "").strip() for item in items)
     return list(dict.fromkeys(value for value in normalized if value))
 
 
 def safe_output_path(raw: str, fallback: str, base: Path | None = None) -> Path:
+    """Resolve an output path inside the workspace root."""
     root = (base or Path.cwd()).resolve()
     candidate = Path((raw or "").strip() or fallback)
     resolved = candidate.resolve(strict=False) if candidate.is_absolute() else (root / candidate).resolve(strict=False)
@@ -86,6 +93,7 @@ def _report_spec_from_kwargs(values: Mapping[str, Any]) -> ReportSpec:
 
 
 def write_report(payload: Mapping[str, Any], *args: Any, **kwargs: Any) -> int:
+    """Write JSON and markdown reports for a payload."""
     spec = _resolve_report_spec(*args, **kwargs)
     try:
         json_path = safe_output_path(spec.out_json, spec.default_json)
@@ -103,72 +111,84 @@ def write_report(payload: Mapping[str, Any], *args: Any, **kwargs: Any) -> int:
 
 
 def normalize_required_contexts(raw: Mapping[str, Any] | None) -> Dict[str, List[str]]:
+    """Normalize required status contexts."""
     from scripts.quality.profile_normalization import normalize_required_contexts as impl
 
     return impl(raw)
 
 
 def merge_required_contexts(base: Mapping[str, Any] | None, overlay: Mapping[str, Any] | None) -> Dict[str, List[str]]:
+    """Merge two required-context payloads."""
     from scripts.quality.profile_normalization import merge_required_contexts as impl
 
     return impl(base, overlay)
 
 
 def normalize_coverage_inputs(raw_inputs: Any) -> List[Dict[str, str]]:
+    """Normalize coverage input declarations."""
     from scripts.quality.profile_normalization import normalize_coverage_inputs as impl
 
     return impl(raw_inputs)
 
 
 def infer_coverage_inputs(coverage: Mapping[str, Any] | None) -> List[Dict[str, str]]:
+    """Infer coverage inputs from coverage config."""
     from scripts.quality.profile_normalization import infer_coverage_inputs as impl
 
     return impl(coverage)
 
 
 def normalize_java_setup(raw_java: Any) -> Dict[str, Any]:
+    """Normalize Java setup configuration."""
     from scripts.quality.profile_normalization import normalize_java_setup as impl
 
     return impl(raw_java)
 
 
 def normalize_coverage_setup(raw_setup: Any) -> Dict[str, Any]:
+    """Normalize coverage setup configuration."""
     from scripts.quality.profile_normalization import normalize_coverage_setup as impl
 
     return impl(raw_setup)
 
 
 def normalize_coverage_assert_mode(raw_assert_mode: Any) -> Dict[str, str]:
+    """Normalize coverage assert-mode configuration."""
     from scripts.quality.profile_normalization import normalize_coverage_assert_mode as impl
 
     return impl(raw_assert_mode)
 
 
 def normalize_coverage(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
+    """Normalize coverage configuration."""
     from scripts.quality.profile_normalization import normalize_coverage as impl
 
     return impl(raw)
 
 
 def normalize_issue_policy(raw: Mapping[str, Any] | str | None) -> Dict[str, str]:
+    """Normalize issue policy configuration."""
     from scripts.quality.profile_normalization import normalize_issue_policy as impl
 
     return impl(raw)
 
 
 def normalize_deps(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
+    """Normalize dependency policy configuration."""
     from scripts.quality.profile_normalization import normalize_deps as impl
 
     return impl(raw)
 
 
 def normalize_codex_environment(raw: Mapping[str, Any] | None, *, verify_command: str) -> Dict[str, Any]:
+    """Normalize Codex environment configuration."""
     from scripts.quality.profile_normalization import normalize_codex_environment as impl
 
     return impl(raw, verify_command=verify_command)
 
 
 def finalize_vendors(profile: Mapping[str, Any] | None) -> Dict[str, Any]:
+    """Combine vendor and provider settings."""
     payload = deepcopy(profile or {}) if isinstance(profile, dict) else {}
     return _deep_merge(payload.get("vendors", {}), payload.get("providers", {}))
 

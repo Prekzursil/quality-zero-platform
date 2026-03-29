@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Mutate quality control-plane inventory and repo profile YAML."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -27,6 +29,8 @@ def _write_yaml(path: Path, payload: Dict[str, Any]) -> None:
 
 @dataclass(frozen=True)
 class EnrollmentRequest:
+    """Describe a repository enrollment request."""
+
     repo_slug: str
     profile_id: str
     stack: str
@@ -36,6 +40,8 @@ class EnrollmentRequest:
 
 @dataclass(frozen=True)
 class RequiredContextMutation:
+    """Describe a required-context membership update."""
+
     profile_id: str
     context_set: str
     context_name: str
@@ -43,6 +49,7 @@ class RequiredContextMutation:
 
 
 def enroll_repo(*, repo_root: Path, request: EnrollmentRequest) -> None:
+    """Enroll a repository in the control-plane inventory."""
     inventory_path = repo_root / "inventory" / "repos.yml"
     inventory = _load_yaml(inventory_path)
     inventory.setdefault("version", 1)
@@ -68,6 +75,7 @@ def _profile_path(repo_root: Path, profile_id: str) -> Path:
 
 
 def set_scanner(*, repo_root: Path, profile_id: str, scanner: str, enabled: bool) -> None:
+    """Enable or disable a scanner in a repository profile."""
     path = _profile_path(repo_root, profile_id)
     payload = _load_yaml(path)
     enabled_scanners = payload.setdefault("enabled_scanners", {})
@@ -76,6 +84,7 @@ def set_scanner(*, repo_root: Path, profile_id: str, scanner: str, enabled: bool
 
 
 def set_issue_policy(*, repo_root: Path, profile_id: str, mode: str, baseline_ref: str = "") -> None:
+    """Update the issue policy for a repository profile."""
     path = _profile_path(repo_root, profile_id)
     payload = _load_yaml(path)
     issue_policy = {"mode": mode}
@@ -87,6 +96,7 @@ def set_issue_policy(*, repo_root: Path, profile_id: str, mode: str, baseline_re
 
 
 def set_coverage_mode(*, repo_root: Path, profile_id: str, event_name: str, mode: str) -> None:
+    """Set the coverage assertion mode for one event type."""
     path = _profile_path(repo_root, profile_id)
     payload = _load_yaml(path)
     coverage = payload.setdefault("coverage", {})
@@ -100,6 +110,7 @@ def set_required_context(
     repo_root: Path,
     mutation: RequiredContextMutation,
 ) -> None:
+    """Add or remove a required context from a profile."""
     path = _profile_path(repo_root, mutation.profile_id)
     payload = _load_yaml(path)
     required_contexts = payload.setdefault("required_contexts", {})
@@ -115,6 +126,7 @@ def set_required_context(
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for the admin helper."""
     parser = argparse.ArgumentParser(description="Mutate inventory or profile YAML for admin PR workflows.")
     parser.add_argument("--repo-root", default=".")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -150,6 +162,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    """Run the control-plane admin mutation command."""
     args = parse_args()
     repo_root = Path(args.repo_root).resolve()
     if args.command == "enroll-repo":

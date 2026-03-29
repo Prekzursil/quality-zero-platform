@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Wait for and validate required GitHub status checks."""
+
 from __future__ import absolute_import
 
 import argparse

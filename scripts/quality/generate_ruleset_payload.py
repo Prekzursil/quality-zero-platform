@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Generate JSON ruleset payloads from control-plane profiles."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -21,6 +23,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    """Generate ruleset payloads for the selected repositories."""
     args = _parse_args()
     inventory = load_inventory(args.inventory) if args.inventory else load_inventory()
     output_dir = Path(args.output_dir)

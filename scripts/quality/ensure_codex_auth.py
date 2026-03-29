@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Ensure the Codex auth file exists on a trusted private runner."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -47,6 +49,7 @@ def _resolve_auth_payload(args: argparse.Namespace) -> Dict[str, str]:
 
 
 def main() -> int:
+    """Resolve and emit the Codex auth payload."""
     args = _parse_args()
     payload = _resolve_auth_payload(args)
     _write_payload(args.out_json, payload)

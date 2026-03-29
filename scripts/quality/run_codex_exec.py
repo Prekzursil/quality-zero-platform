@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Run ``codex exec`` non-interactively from a trusted runner."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -114,6 +116,7 @@ def _run_codex_exec(args: argparse.Namespace, prompt_text: str) -> subprocess.Co
 
 
 def main() -> int:
+    """Run Codex with the validated prompt and mirror its output."""
     args = _parse_args()
     prompt_text = Path(args.prompt_file).read_text(encoding="utf-8")
 

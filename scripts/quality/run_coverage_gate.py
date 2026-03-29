@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Run repo-specific coverage collection and assert the configured gate."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -290,6 +292,7 @@ def _write_non_regression_report(current: Dict[str, Any], baseline: Dict[str, An
 
 
 def main() -> int:
+    """Run the coverage gate for the current repo and profile."""
     args = _parse_args()
     profile = json.loads(Path(args.profile_json).read_text(encoding="utf-8"))
     repo_dir = Path(args.repo_dir).resolve()

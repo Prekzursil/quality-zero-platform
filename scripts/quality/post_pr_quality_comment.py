@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Post sticky quality rollup comments on pull requests."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -20,6 +22,7 @@ GITHUB_API_BASE = "https://api.github.com"
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for the PR comment helper."""
     parser = argparse.ArgumentParser(description="Create or update the sticky quality rollup PR comment.")
     parser.add_argument("--repo", required=True)
     parser.add_argument("--pull-request", required=True)
@@ -28,6 +31,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def render_comment_body(markdown: str) -> str:
+    """Wrap markdown in the sticky quality rollup marker."""
     return f"{MARKER}\n\n{markdown.strip()}\n"
 
 
@@ -49,6 +53,7 @@ def _github_request(url: str, token: str, *, method: str = "GET", data: Dict[str
 
 
 def upsert_comment(*, repo: str, pull_request: str, body: str, token: str) -> int:
+    """Create or update the sticky quality rollup comment."""
     issue_comments_url = f"{GITHUB_API_BASE}/repos/{repo}/issues/{pull_request}/comments"
     comments = _github_request(issue_comments_url, token)
     if isinstance(comments, list):
@@ -68,6 +73,7 @@ def upsert_comment(*, repo: str, pull_request: str, body: str, token: str) -> in
 
 
 def main() -> int:
+    """Run the sticky quality rollup comment updater."""
     args = parse_args()
     token = (os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")).strip()
     if not token:

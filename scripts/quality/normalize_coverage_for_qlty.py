@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Normalize coverage reports into QLTY-friendly artifacts."""
+
 from __future__ import absolute_import
 
 import argparse

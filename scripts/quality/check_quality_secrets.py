@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Validate the presence of quality-gate secrets and variables."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -84,6 +86,7 @@ def _build_payload(
 
 
 def main() -> int:
+    """Run the quality secrets preflight and write its report."""
     args = _parse_args()
     required_secrets = dedupe_strings(args.required_secret or [])
     conditional_secrets = dedupe_strings(args.conditional_secret or [])

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Assert that configured Sentry projects have zero unresolved issues."""
+
 from __future__ import absolute_import
 
 import argparse

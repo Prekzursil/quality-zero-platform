@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Check DeepScan for zero open issues."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -44,6 +46,7 @@ def _nested_payload_values(payload: Any) -> List[Any]:
 
 
 def extract_total_open(payload: Any) -> int | None:
+    """Extract the total open issue count from a nested DeepScan payload."""
     if isinstance(payload, dict):
         for key, value in payload.items():
             if key in TOTAL_KEYS and isinstance(value, (int, float)):
@@ -223,6 +226,7 @@ def _evaluate_deepscan_policy(args: argparse.Namespace, *call_args: Any, **kwarg
 
 
 def main() -> int:
+    """Run the DeepScan gate and write its report."""
     args = _parse_args()
     token = (args.token or os.environ.get("DEEPSCAN_API_TOKEN", "")).strip()
     github_token = os.environ.get("GITHUB_TOKEN", "").strip() or os.environ.get("GH_TOKEN", "").strip()

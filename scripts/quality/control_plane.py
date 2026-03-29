@@ -1,3 +1,5 @@
+"""Load, merge, and validate quality control-plane profiles."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -39,6 +41,8 @@ DEFAULT_INVENTORY_PATH = ROOT / "inventory" / "repos.yml"
 
 @dataclass(frozen=True)
 class RepoSources:
+    """Collect the YAML sources that define a repository profile."""
+
     repo_entry: Dict[str, Any]
     profile_id: str
     repo_profile: Dict[str, Any]
@@ -48,6 +52,8 @@ class RepoSources:
 
 @dataclass(frozen=True)
 class InventoryOverrides:
+    """Capture inventory-derived overrides for a repository profile."""
+
     repo_entry: Dict[str, Any]
     repo_slug: str
     profile_id: str
@@ -56,6 +62,7 @@ class InventoryOverrides:
 
 
 def repo_root() -> Path:
+    """Return the repository root for control-plane operations."""
     return ROOT
 
 
@@ -75,6 +82,7 @@ def _inventory_root(inventory: Dict[str, Any]) -> Path:
 
 
 def load_inventory(path: Path | str = DEFAULT_INVENTORY_PATH) -> Dict[str, Any]:
+    """Load the inventory YAML and normalize its top-level shape."""
     inventory_path = Path(path).resolve()
     payload = _load_yaml(inventory_path)
     payload.setdefault("version", 1)
@@ -246,6 +254,7 @@ def _finalize_repo_profile(merged: Dict[str, Any], repo_slug: str) -> Dict[str, 
 
 
 def load_repo_profile(inventory: Dict[str, Any], repo_slug: str) -> Dict[str, Any]:
+    """Load and finalize the merged profile for one repository."""
     repo_sources = _resolve_repo_sources(inventory, repo_slug)
     repo_entry = repo_sources.repo_entry
     profile_id = repo_sources.profile_id
@@ -267,6 +276,7 @@ def load_repo_profile(inventory: Dict[str, Any], repo_slug: str) -> Dict[str, An
 
 
 def active_required_contexts(profile: Dict[str, Any], *, event_name: str) -> List[str]:
+    """Return the required contexts that apply to an event name."""
     required_contexts = profile["required_contexts"]
     if event_name == "ruleset":
         return dedupe_strings(required_contexts.get("required_now", []))
@@ -278,6 +288,7 @@ def active_required_contexts(profile: Dict[str, Any], *, event_name: str) -> Lis
 
 
 def build_ruleset_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
+    """Build the GitHub ruleset payload from a finalized profile."""
     contexts = active_required_contexts(profile, event_name="ruleset")
     return {
         "profile_id": profile["profile_id"],
@@ -318,6 +329,7 @@ def build_ruleset_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def validate_profile(profile: Dict[str, Any]) -> List[str]:
+    """Validate a finalized profile and return configuration errors."""
     return profile_contract_validation.validate_profile(profile, active_required_contexts_fn=active_required_contexts)
 
 
@@ -339,6 +351,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    """Run the control-plane profile builder or validator."""
     args = _parse_args()
     inventory = load_inventory(args.inventory)
     profile = load_repo_profile(inventory, args.repo_slug)

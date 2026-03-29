@@ -1,3 +1,5 @@
+"""Compute coverage findings from parsed coverage statistics."""
+
 from __future__ import absolute_import
 
 from typing import List, Set, TYPE_CHECKING, Tuple

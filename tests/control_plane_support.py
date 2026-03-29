@@ -1,3 +1,5 @@
+"""Shared assertion helpers for control-plane profile regression tests."""
+
 from __future__ import absolute_import
 
 from pathlib import Path

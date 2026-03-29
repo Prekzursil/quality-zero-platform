@@ -1,3 +1,5 @@
+"""Parse coverage reports for the quality control plane."""
+
 from __future__ import absolute_import
 
 import re
@@ -23,6 +25,7 @@ _XML_SOURCE_RE = re.compile(r"<source>(?P<value>.*?)</source>")
 
 
 def coverage_sources_from_xml(path: Path) -> Set[str]:
+    """Extract tracked source paths from a Cobertura XML report."""
     text = path.read_text(encoding="utf-8")
     covered_sources: Set[str] = set()
     source_roots = [match.group("value").strip() for match in _XML_SOURCE_RE.finditer(text)]
@@ -35,6 +38,7 @@ def coverage_sources_from_xml(path: Path) -> Set[str]:
 
 
 def coverage_sources_from_lcov(path: Path) -> Set[str]:
+    """Extract tracked source paths from an LCOV report."""
     return {
         filename
         for raw in path.read_text(encoding="utf-8").splitlines()
@@ -45,6 +49,7 @@ def coverage_sources_from_lcov(path: Path) -> Set[str]:
 
 
 def parse_coverage_xml(name: str, path: Path) -> "CoverageStats":
+    """Parse coverage totals from a Cobertura XML report."""
     from scripts.quality.assert_coverage_100 import CoverageStats
 
     text = path.read_text(encoding="utf-8")
@@ -114,6 +119,7 @@ def _iter_included_lcov_lines(path: Path) -> List[str]:
 
 
 def parse_lcov(name: str, path: Path) -> "CoverageStats":
+    """Parse coverage totals from an LCOV report."""
     from scripts.quality.assert_coverage_100 import CoverageStats
 
     counters = {

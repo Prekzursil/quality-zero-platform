@@ -27,6 +27,7 @@ class ControlPlaneAssertions(_AssertionProtocol):
 
     @staticmethod
     def _zero_gate_provider_contexts() -> Set[str]:
+        """Return the direct provider-owned zero-gate status contexts."""
         return {
             "Codecov Analytics",
             "Coverage 100 Gate",
@@ -40,6 +41,7 @@ class ControlPlaneAssertions(_AssertionProtocol):
 
     @staticmethod
     def _shared_zero_gate_contexts() -> Set[str]:
+        """Return the shared reusable-workflow zero-gate status contexts."""
         return {
             "shared-codecov-analytics / Codecov Analytics",
             "shared-scanner-matrix / Coverage 100 Gate",
@@ -56,6 +58,7 @@ class ControlPlaneAssertions(_AssertionProtocol):
         contexts: Collection[str],
         expected_contexts: Collection[str],
     ) -> None:
+        """Assert that every expected context is present in the active set."""
         self.assertEqual(set(expected_contexts) - set(contexts), set())
 
     @staticmethod

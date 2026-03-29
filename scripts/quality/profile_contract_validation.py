@@ -247,8 +247,12 @@ def _validate_visual_pair_contract(
         (target_contexts, "target"),
     ]
     findings.extend(
-        f"{profile['slug']}: visual_pair_required needs both Chromatic and "
-        f"Applitools contexts in {label}"
+        " ".join(
+            [
+                f"{profile['slug']}: visual_pair_required needs both Chromatic",
+                f"and Applitools contexts in {label}",
+            ]
+        )
         for contexts, label in paired_contexts
         if (chromatic in contexts) != (applitools in contexts)
     )
@@ -282,8 +286,12 @@ def _validate_coverage_contract(profile: Dict[str, Any]) -> List[str]:
     if coverage.get("shell") not in {"bash", "pwsh"}:
         findings.append(f"{profile['slug']}: coverage.shell must be bash or pwsh")
     findings.extend(
-        f"{profile['slug']}: coverage.assert_mode.{mode_name} must be "
-        f"enforce, evidence_only, or non_regression"
+        " ".join(
+            [
+                f"{profile['slug']}: coverage.assert_mode.{mode_name} must be",
+                "enforce, evidence_only, or non_regression",
+            ]
+        )
         for mode_name, mode_value in coverage.get("assert_mode", {}).items()
         if mode_value not in {"enforce", "evidence_only", "non_regression"}
     )

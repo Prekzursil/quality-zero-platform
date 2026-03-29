@@ -1,5 +1,7 @@
 version = 1
 
+# Keep this file explicit so provider-side analysis re-reads repo scope changes.
+
 exclude_patterns = [
   "build/**",
   "generated/**",

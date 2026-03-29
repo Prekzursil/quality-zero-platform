@@ -28,6 +28,7 @@ def human_count_to_int(raw_value: str) -> int | None:
 
 
 def _count_from_all_issues_heading(html: str) -> int | None:
+    """Extract the visible issue count from the rendered All issues heading."""
     heading_index = html.find("All issues")
     if heading_index == -1:
         return None

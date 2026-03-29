@@ -16,12 +16,19 @@ _CODEX_EXECUTABLE = "codex"
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run `codex exec` non-interactively from a trusted runner.")
+    """Parse CLI arguments for non-interactive ``codex exec`` runs."""
+    parser = argparse.ArgumentParser(
+        description="Run `codex exec` non-interactively from a trusted runner."
+    )
     parser.add_argument("--repo-dir", required=True)
     parser.add_argument("--prompt-file", required=True)
     parser.add_argument("--output-last-message", required=True)
     parser.add_argument("--json-log", default="")
-    parser.add_argument("--sandbox", default="workspace-write", choices=["read-only", "workspace-write", "danger-full-access"])
+    parser.add_argument(
+        "--sandbox",
+        default="workspace-write",
+        choices=["read-only", "workspace-write", "danger-full-access"],
+    )
     parser.add_argument("--config", action="append", default=[])
     parser.add_argument("--profile", default="")
     parser.add_argument("--model", default="")
@@ -29,6 +36,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _validate_cli_token(value: str, *, flag_name: str) -> str:
+    """Validate a single CLI token that will be passed through as argv."""
     if not value:
         raise ValueError(f"{flag_name} cannot be empty")
     if any(character in value for character in ("\0", "\r", "\n")):
@@ -39,37 +47,46 @@ def _validate_cli_token(value: str, *, flag_name: str) -> str:
 
 
 def _resolved_codex_executable_path() -> str:
+    """Resolve the absolute path to the required ``codex`` executable."""
     codex_executable = shutil.which(_CODEX_EXECUTABLE)
     if not codex_executable:
-        raise FileNotFoundError(f"Unable to locate required executable: {_CODEX_EXECUTABLE}")
+        raise FileNotFoundError(
+            f"Unable to locate required executable: {_CODEX_EXECUTABLE}"
+        )
     return codex_executable
 
 
 def _resolved_repo_dir(args: argparse.Namespace) -> str:
+    """Resolve the repository directory to an absolute path."""
     return str(Path(args.repo_dir).resolve())
 
 
 def _resolved_output_path(args: argparse.Namespace) -> str:
+    """Resolve the last-message output file to an absolute path."""
     return str(Path(args.output_last_message).resolve())
 
 
 def _validated_sandbox(args: argparse.Namespace) -> str:
+    """Validate the sandbox mode selected for the Codex run."""
     return _validate_cli_token(args.sandbox, flag_name="--sandbox")
 
 
 def _validated_profile_args(args: argparse.Namespace) -> List[str]:
+    """Build validated argv fragments for the optional profile flag."""
     if not args.profile:
         return []
     return ["-p", _validate_cli_token(args.profile, flag_name="--profile")]
 
 
 def _validated_model_args(args: argparse.Namespace) -> List[str]:
+    """Build validated argv fragments for the optional model flag."""
     if not args.model:
         return []
     return ["-m", _validate_cli_token(args.model, flag_name="--model")]
 
 
 def _validated_config_args(args: argparse.Namespace) -> List[str]:
+    """Build validated argv fragments for repeated config flags."""
     config_args: List[str] = []
     for item in args.config:
         config_args.extend(["-c", _validate_cli_token(item, flag_name="--config")])
@@ -98,13 +115,18 @@ def build_codex_command(args: argparse.Namespace) -> List[str]:
     return cmd
 
 
-def _run_codex_exec(args: argparse.Namespace, prompt_text: str) -> subprocess.CompletedProcess:
+def _run_codex_exec(
+    args: argparse.Namespace,
+    prompt_text: str,
+) -> subprocess.CompletedProcess:
     """Run codex with a static literal argv list and prompt text passed via stdin."""
     executable_path = _resolved_codex_executable_path()
     command = build_codex_command(args)
-    # Safe-by-construction: a fixed literal executable name, explicit argv, shell=False,
-    # validated tokens as plain arguments, and prompt content flowing only through stdin.
-    return subprocess.run(  # nosec B603  # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit
+    # Safe-by-construction: a fixed literal executable name, explicit argv,
+    # shell=False, validated tokens as plain arguments, and prompt content
+    # flowing only through stdin.
+    # nosemgrep
+    return subprocess.run(  # nosec B603
         command,
         executable=executable_path,
         input=prompt_text,

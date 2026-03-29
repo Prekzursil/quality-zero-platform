@@ -70,6 +70,7 @@ class CodacyZeroRetryTests(unittest.TestCase):
         calls: List[int] = []
 
         def fake_query(*_args, **_kwargs):
+            """Return a retryable 404 once, then a clean zero-issue result."""
             calls.append(len(calls))
             if len(calls) == 1:
                 return (
@@ -156,6 +157,7 @@ class CodacyZeroRetryTests(unittest.TestCase):
         ]
 
         def fake_query(*_args, **_kwargs):
+            """Return one successful issue query while the status poll is pending."""
             attempts.append(len(attempts) + 1)
             return 0, [], None
 

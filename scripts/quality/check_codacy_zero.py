@@ -231,6 +231,7 @@ def _fallback_public_issues(
         public_issue_query=_query_codacy_public_repository_issues,
     )
 
+
 _http_error_findings = codacy_zero_support.http_error_findings
 _not_found_findings = codacy_zero_support.not_found_findings
 _provider_query = codacy_zero_support.provider_query
@@ -268,6 +269,7 @@ def _handle_codacy_http_error(
             error_findings=_http_error_findings,
         ),
     )
+
 
 def _query_codacy_candidate(
     query: CodacyQuery,

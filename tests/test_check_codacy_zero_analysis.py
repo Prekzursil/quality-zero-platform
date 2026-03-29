@@ -216,6 +216,7 @@ class CodacyZeroAnalysisTests(unittest.TestCase):
         responses = [Exception("sentinel"), {"total": 0}]
 
         def fake_request(url: str, token: str, *, method: str = "GET", data=None):
+            """Return one mocked request payload for the open-issue query path."""
             current = responses.pop(0)
             if isinstance(current, Exception):
                 raise HTTPError(url, 404, "Not Found", hdrs=Message(), fp=None)
@@ -233,6 +234,7 @@ class CodacyZeroAnalysisTests(unittest.TestCase):
         captured: List[Tuple[str, str, object | None]] = []
 
         def capture_request(url: str, token: str, *, method: str = "GET", data=None):
+            """Capture the request details for one open-issue query call."""
             captured.append((url, method, data))
             return {"total": 0}
 
@@ -307,6 +309,7 @@ class CodacyZeroAnalysisTests(unittest.TestCase):
     def test_open_issue_not_found_paths(self) -> None:
         """Cover not-found provider alias handling for issue queries."""
         def fake_provider(*_args, **_kwargs):
+            """Raise one provider 404 to cover not-found alias handling."""
             raise HTTPError(
                 "https://api.codacy.com", 404, "Not Found", hdrs=Message(), fp=None
             )

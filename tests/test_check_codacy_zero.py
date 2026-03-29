@@ -3,6 +3,7 @@
 from __future__ import absolute_import
 
 import unittest
+from typing import List, Tuple
 from unittest.mock import patch
 
 import scripts.quality.check_codacy_zero as check_codacy_zero

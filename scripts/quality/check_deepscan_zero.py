@@ -22,6 +22,7 @@ GITHUB_API_BASE = "https://api.github.com"
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for the DeepScan gate."""
     parser = argparse.ArgumentParser(
         description="Assert DeepScan has zero open issues.",
     )
@@ -36,10 +37,12 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _event_name() -> str:
+    """Return the current GitHub event name, if any."""
     return os.environ.get("EVENT_NAME", "").strip()
 
 
 def _nested_payload_values(payload: Any) -> List[Any]:
+    """Return nested payload values for recursive issue-count discovery."""
     if isinstance(payload, dict):
         return list(payload.values())
     if isinstance(payload, list):
@@ -61,6 +64,7 @@ def extract_total_open(payload: Any) -> int | None:
 
 
 def _request_json(url: str, token: str) -> Dict[str, Any]:
+    """Fetch a JSON payload from the DeepScan API."""
     payload, _ = load_json_https(
         url,
         allowed_host_suffixes={"deepscan.io"},
@@ -76,6 +80,7 @@ def _request_json(url: str, token: str) -> Dict[str, Any]:
 
 
 def _github_status_payload(repo: str, sha: str, token: str) -> Dict[str, Any]:
+    """Fetch the GitHub commit status payload for a repository SHA."""
     payload, _ = load_json_https(
         f"{GITHUB_API_BASE}/repos/{repo}/commits/{sha}/status",
         allowed_hosts={"api.github.com"},
@@ -92,6 +97,7 @@ def _github_status_payload(repo: str, sha: str, token: str) -> Dict[str, Any]:
 
 
 def _render_md(payload: Mapping[str, Any]) -> str:
+    """Render the DeepScan result payload as markdown."""
     lines = [
         "# DeepScan Zero Gate",
         "",
@@ -107,6 +113,7 @@ def _render_md(payload: Mapping[str, Any]) -> str:
 
 
 def _policy_mode(args: argparse.Namespace) -> str:
+    """Resolve the DeepScan policy mode from CLI args or environment."""
     return (
         (args.policy_mode or os.environ.get("DEEPSCAN_POLICY_MODE", "")).strip()
         or "github_check_context"
@@ -114,6 +121,7 @@ def _policy_mode(args: argparse.Namespace) -> str:
 
 
 def _github_repo(args: argparse.Namespace) -> str:
+    """Resolve the GitHub repository slug from CLI args or environment."""
     return (
         args.repo
         or os.environ.get("REPO_SLUG", "")
@@ -122,6 +130,7 @@ def _github_repo(args: argparse.Namespace) -> str:
 
 
 def _github_sha(args: argparse.Namespace) -> str:
+    """Resolve the target commit SHA from CLI args or environment."""
     return (
         args.sha
         or os.environ.get("TARGET_SHA", "")
@@ -134,6 +143,7 @@ def _validate_github_check_context_inputs(
     repo: str,
     sha: str,
 ) -> List[str]:
+    """Validate inputs required for GitHub status-context mode."""
     findings: List[str] = []
     if not github_token:
         findings.append("GITHUB_TOKEN is missing for github_check_context mode.")
@@ -149,6 +159,7 @@ def _validate_github_check_context_inputs(
 
 
 def _validate_open_issues_mode_inputs(token: str, open_issues_url: str) -> List[str]:
+    """Validate inputs required for direct DeepScan open-issues mode."""
     findings: List[str] = []
     if not token:
         findings.append("DEEPSCAN_API_TOKEN is missing.")
@@ -158,6 +169,7 @@ def _validate_open_issues_mode_inputs(token: str, open_issues_url: str) -> List[
 
 
 def _validate_deepscan_inputs(*args: Any, **kwargs: Any) -> List[str]:
+    """Validate DeepScan inputs for the selected policy mode."""
     if args:
         raise TypeError("_validate_deepscan_inputs expects keyword arguments only")
     try:
@@ -180,6 +192,7 @@ def _validate_deepscan_inputs(*args: Any, **kwargs: Any) -> List[str]:
 
 
 def _normalized_open_issues_url(open_issues_url: str) -> str:
+    """Normalize and validate the DeepScan open-issues URL."""
     return normalize_https_url(open_issues_url, allowed_host_suffixes={"deepscan.io"})
 
 
@@ -187,6 +200,7 @@ def _evaluate_deepscan_open_issues(
     open_issues_url: str,
     token: str,
 ) -> Tuple[int | None, List[str]]:
+    """Evaluate a DeepScan open-issues endpoint and collect findings."""
     findings: List[str] = []
     payload = _request_json(open_issues_url, token)
     open_issues = extract_total_open(payload)
@@ -200,6 +214,7 @@ def _evaluate_deepscan_open_issues(
 
 
 def _find_github_status(payload: Dict[str, Any], context: str) -> Dict[str, Any] | None:
+    """Return the matching GitHub commit status for the requested context."""
     for item in payload.get("statuses", []) or []:
         if str(item.get("context") or "").strip() == context:
             return item
@@ -207,10 +222,12 @@ def _find_github_status(payload: Dict[str, Any], context: str) -> Dict[str, Any]
 
 
 def _status_target_url(status: Dict[str, Any] | None) -> str:
+    """Extract the target URL from a GitHub commit status payload."""
     return str((status or {}).get("target_url") or "").strip()
 
 
 def _status_findings(status: Dict[str, Any] | None, context: str) -> List[str]:
+    """Translate a GitHub commit status into gate findings."""
     if status is None:
         return [f"{context} GitHub status context is missing."]
 
@@ -224,6 +241,7 @@ def _evaluate_github_check_context(
     args: argparse.Namespace,
     token: str,
 ) -> Tuple[int | None, str, List[str]]:
+    """Evaluate DeepScan via the GitHub commit-status context."""
     payload = _github_status_payload(_github_repo(args), _github_sha(args), token)
     github_context = getattr(args, "github_context", DEEPSCAN_STATUS_CONTEXT)
     context = str(github_context or DEEPSCAN_STATUS_CONTEXT)
@@ -239,6 +257,7 @@ def _evaluate_open_issues_mode(
     open_issues_url: str,
     token: str,
 ) -> Tuple[int | None, str, List[str]]:
+    """Evaluate DeepScan via a direct open-issues API URL."""
     normalized_url = _normalized_open_issues_url(open_issues_url)
     open_issues, findings = _evaluate_deepscan_open_issues(normalized_url, token)
     return open_issues, normalized_url, findings
@@ -249,6 +268,7 @@ def _evaluate_deepscan_policy(
     *call_args: Any,
     **kwargs: Any,
 ) -> Tuple[int | None, str, List[str]]:
+    """Dispatch DeepScan evaluation according to the selected policy mode."""
     if call_args:
         raise TypeError("_evaluate_deepscan_policy expects keyword arguments only")
     try:

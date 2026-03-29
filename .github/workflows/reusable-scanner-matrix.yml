@@ -383,6 +383,7 @@ jobs:
           from pathlib import Path
           import shutil
           import subprocess
+          import sys
           import urllib.parse
           import urllib.request
 
@@ -429,6 +430,28 @@ jobs:
               qlty_executable = shutil.which("qlty")
           if not qlty_executable:
               raise SystemExit("Unable to locate qlty on PATH")
+          normalize_command = [
+              sys.executable,
+              str((Path.cwd().parent / "platform" / "scripts/quality/normalize_coverage_for_qlty.py").resolve()),
+              "--repo-dir",
+              str(Path.cwd().resolve()),
+              "--out-dir",
+              ".qlty-coverage",
+              *items,
+          ]
+          normalized_payload = json.loads(
+              subprocess.run(
+                  normalize_command,
+                  check=True,
+                  capture_output=True,
+                  text=True,
+                  env={
+                      **os.environ,
+                      "PYTHONPATH": str((Path.cwd().parent / "platform").resolve()),
+                  },
+              ).stdout
+          )
+          normalized_items = [entry["normalized"] for entry in normalized_payload]
           command = [
               "qlty",
               "coverage",
@@ -439,7 +462,7 @@ jobs:
               os.environ["BRANCH_NAME"],
               "--output-dir",
               os.environ["RUNNER_TEMP"],
-              *items,
+              *normalized_items,
           ]
           subprocess.run(command, executable=qlty_executable, check=True)
           PY

@@ -62,6 +62,14 @@ class CodacyPendingMessageDeps:
 
 
 @dataclass(frozen=True)
+class CodacyIssuePendingDeps:
+    """Bundle helpers for Codacy pull-request issue payload checks."""
+
+    text_deps: CodacyTextDeps
+    sha_wait_message: Callable[[str, str, str], str | None]
+
+
+@dataclass(frozen=True)
 class CodacyCandidateDeps:
     """Bundle query helpers for one Codacy provider candidate."""
 
@@ -276,6 +284,38 @@ def pull_request_pending_message(
     )
 
 
+def pull_request_issue_pending_message(
+    payload: Dict[str, Any],
+    query: Any,
+    target_sha: str,
+    *,
+    deps: CodacyIssuePendingDeps,
+) -> str | None:
+    """Return the pending status for a Codacy pull-request issues payload."""
+    if payload.get("analyzed") is False:
+        return (
+            f"Codacy issues for pull request {query.pull_request} are not "
+            "available yet."
+        )
+
+    issue_records = payload.get("data")
+    if not isinstance(issue_records, list) or not issue_records:
+        return None
+
+    for item in issue_records:
+        issue_mapping = deps.text_deps.mapping_or_empty(item)
+        commit_issue = deps.text_deps.mapping_or_empty(issue_mapping.get("commitIssue"))
+        commit_info = deps.text_deps.mapping_or_empty(commit_issue.get("commitInfo"))
+        observed_sha = deps.text_deps.preferred_text(commit_info.get("sha")).lower()
+        if observed_sha:
+            return deps.sha_wait_message(
+                f"pull request {query.pull_request} issues",
+                observed_sha,
+                target_sha,
+            )
+    return None
+
+
 def repository_pending_message(
     payload: Dict[str, Any],
     target_sha: str,
@@ -358,6 +398,26 @@ def final_retry_findings(
     if pending_message is not None and pending_message not in final_findings:
         final_findings.append(pending_message)
     return open_issues, final_findings
+
+
+def stale_pull_request_findings(
+    pull_request: str,
+    findings: Iterable[str],
+) -> bool:
+    """Return whether Codacy is still serving stale pull-request-scoped data."""
+    normalized_pr = str(pull_request).strip()
+    if not normalized_pr:
+        return False
+    prefixes = (
+        f"Codacy is still analysing pull request {normalized_pr}.",
+        f"Codacy analysis for pull request {normalized_pr} is not available yet.",
+        f"Codacy analysis for pull request {normalized_pr} is still on ",
+        f"Codacy issues for pull request {normalized_pr} are not available yet.",
+        f"Codacy analysis for pull request {normalized_pr} issues is still on ",
+    )
+    return any(
+        any(item.startswith(prefix) for prefix in prefixes) for item in findings
+    )
 
 
 def load_codacy_findings_with_retry(

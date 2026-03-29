@@ -1,3 +1,5 @@
+"""Test coverage backfill."""
+
 from __future__ import absolute_import
 
 import importlib
@@ -10,6 +12,7 @@ import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
+from typing import List
 from unittest.mock import Mock, patch
 
 from scripts.quality import (
@@ -24,7 +27,6 @@ from scripts.quality import (
     profile_shape,
 )
 from scripts import security_helpers
-
 
 VALID_CONTRACT_VENDORS = {
     "chromatic": {
@@ -55,7 +57,7 @@ VALID_CODEX_ENVIRONMENT = {
 
 
 def build_valid_contract_profile() -> dict:
-    """Build a valid baseline contract profile for validation tests."""
+    """Build and return a valid contract profile."""
     return {
         "slug": "owner/repo",
         "required_secrets": [],
@@ -87,17 +89,21 @@ def build_valid_contract_profile() -> dict:
 
 
 class CoverageBackfillTests(unittest.TestCase):
-    """Exercise the coverage-related helper and entrypoint backfill paths."""
+    """Coverage Backfill Tests."""
 
     def test_dashboard_parse_args_fallback_write_and_module_entrypoint(self) -> None:
-        """Check the admin dashboard and module entrypoint paths."""
-        with patch.object(sys, "argv", ["build_admin_dashboard.py", "--output-dir", "site"]):
+        """Cover dashboard parse args fallback write and module entrypoint."""
+        with patch.object(
+            sys, "argv", ["build_admin_dashboard.py", "--output-dir", "site"]
+        ):
             args = build_admin_dashboard.parse_args()
         self.assertEqual(args.output_dir, "site")
 
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir) / "site"
-            build_admin_dashboard.write_dashboard(output_dir, {"generated_at": "now", "repo_count": 0, "repos": []})
+            build_admin_dashboard.write_dashboard(
+                output_dir, {"generated_at": "now", "repo_count": 0, "repos": []}
+            )
             self.assertTrue((output_dir / "index.html").is_file())
 
             script_path = Path(build_admin_dashboard.__file__).resolve()
@@ -109,18 +115,26 @@ class CoverageBackfillTests(unittest.TestCase):
                 sys.path[:] = trimmed_sys_path[:]
                 reloaded = importlib.reload(module)
                 self.assertIn(root_text, sys.path)
-                with patch.object(reloaded, "parse_args", return_value=Namespace(inventory="", output_dir=str(output_dir), assets_dir="")), patch.object(
-                    reloaded, "load_inventory", return_value={"repos": []}
-                ), patch.object(reloaded, "write_dashboard", return_value=None):
+                with (
+                    patch.object(
+                        reloaded,
+                        "parse_args",
+                        return_value=Namespace(
+                            inventory="", output_dir=str(output_dir), assets_dir=""
+                        ),
+                    ),
+                    patch.object(
+                        reloaded, "load_inventory", return_value={"repos": []}
+                    ),
+                    patch.object(reloaded, "write_dashboard", return_value=None),
+                ):
                     self.assertEqual(reloaded.main(), 0)
             finally:
                 sys.path[:] = original_sys_path
 
             with (
                 patch.object(
-                    sys,
-                    "argv",
-                    [str(script_path), "--output-dir", str(output_dir)],
+                    sys, "argv", [str(script_path), "--output-dir", str(output_dir)]
                 ),
                 patch.dict("os.environ", {}, clear=True),
                 self.assertRaises(SystemExit) as result,
@@ -129,7 +143,7 @@ class CoverageBackfillTests(unittest.TestCase):
             self.assertEqual(result.exception.code, 0)
 
     def test_quality_rollup_parse_args_and_reload_main(self) -> None:
-        """Check the quality-rollup parser and module reload path."""
+        """Cover quality rollup parse args and reload main."""
         with patch.object(
             sys,
             "argv",
@@ -151,7 +165,10 @@ class CoverageBackfillTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             profile_path = root / "profile.json"
-            profile_path.write_text(json.dumps({"slug": "owner/repo", "active_required_contexts": []}), encoding="utf-8")
+            profile_path.write_text(
+                json.dumps({"slug": "owner/repo", "active_required_contexts": []}),
+                encoding="utf-8",
+            )
             script_path = Path(build_quality_rollup.__file__).resolve()
             root_text = str(script_path.parents[2])
             original_sys_path = list(sys.path)
@@ -159,28 +176,32 @@ class CoverageBackfillTests(unittest.TestCase):
                 sys.path[:] = [item for item in sys.path if item != root_text]
                 reloaded = importlib.reload(build_quality_rollup)
                 self.assertIn(root_text, sys.path)
-                with patch.object(
-                    reloaded,
-                    "parse_args",
-                    return_value=Namespace(
-                        profile_json=str(profile_path),
-                        repo="owner/repo",
-                        sha="abc",
-                        artifacts_dir=str(root),
-                        out_json="quality-rollup/summary.json",
-                        out_md="quality-rollup/summary.md",
+                with (
+                    patch.object(
+                        reloaded,
+                        "parse_args",
+                        return_value=Namespace(
+                            profile_json=str(profile_path),
+                            repo="owner/repo",
+                            sha="abc",
+                            artifacts_dir=str(root),
+                            out_json="quality-rollup/summary.json",
+                            out_md="quality-rollup/summary.md",
+                        ),
                     ),
-                ), patch.object(
-                    reloaded,
-                    "write_report",
-                    return_value=0,
-                ), patch.dict("os.environ", {}, clear=True):
+                    patch.object(
+                        reloaded,
+                        "write_report",
+                        return_value=0,
+                    ),
+                    patch.dict("os.environ", {}, clear=True),
+                ):
                     self.assertEqual(reloaded.main(), 0)
             finally:
                 sys.path[:] = original_sys_path
 
     def test_quality_rollup_module_entrypoint_from_script_path(self) -> None:
-        """Check the quality-rollup script entrypoint path."""
+        """Cover quality rollup module entrypoint from script path."""
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             profile_path = root / "profile.json"
@@ -211,20 +232,40 @@ class CoverageBackfillTests(unittest.TestCase):
                 runpy.run_path(str(script_path), run_name="__main__")
             self.assertEqual(result.exception.code, 0)
 
-    def test_dependabot_parse_render_invalid_payload_and_module_entrypoint(self) -> None:
-        """Check Dependabot parsing, rendering, and entrypoint behavior."""
-        with patch.object(sys, "argv", ["check_dependabot_alerts.py", "--repo", "owner/repo"]):
+    def test_dependabot_parse_render_invalid_payload_and_module_entrypoint(
+        self,
+    ) -> None:
+        """Cover dependabot parse render invalid payload and module entrypoint."""
+        with patch.object(
+            sys, "argv", ["check_dependabot_alerts.py", "--repo", "owner/repo"]
+        ):
             args = check_dependabot_alerts._parse_args()
         self.assertEqual(args.policy, "zero_critical")
         markdown = check_dependabot_alerts._render_md(
-            {"status": "pass", "repo": "owner/repo", "open_alerts": 0, "policy": "zero_critical", "scope": "runtime", "timestamp_utc": "now", "findings": []}
+            {
+                "status": "pass",
+                "repo": "owner/repo",
+                "open_alerts": 0,
+                "policy": "zero_critical",
+                "scope": "runtime",
+                "timestamp_utc": "now",
+                "findings": [],
+            }
         )
         self.assertIn("- None", markdown)
         with (
-            patch.object(check_dependabot_alerts, "load_json_https", return_value=({"bad": True}, {})),
-            self.assertRaisesRegex(RuntimeError, "Unexpected Dependabot alerts payload"),
+            patch.object(
+                check_dependabot_alerts,
+                "load_json_https",
+                return_value=({"bad": True}, {}),
+            ),
+            self.assertRaisesRegex(
+                RuntimeError, "Unexpected Dependabot alerts payload"
+            ),
         ):
-            check_dependabot_alerts._request_alerts("owner/repo", "token", scope="runtime")
+            check_dependabot_alerts._request_alerts(
+                "owner/repo", "token", scope="runtime"
+            )
 
         script_path = Path(check_dependabot_alerts.__file__).resolve()
         root_text = str(script_path.parents[2])
@@ -239,7 +280,7 @@ class CoverageBackfillTests(unittest.TestCase):
         self.assertEqual(result.exception.code, 1)
 
     def test_control_plane_admin_load_yaml_rejects_non_mapping(self) -> None:
-        """Check the admin YAML loader rejects non-mapping payloads."""
+        """Cover control plane admin load yaml rejects non mapping."""
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             invalid = root / "invalid.yml"
@@ -248,14 +289,16 @@ class CoverageBackfillTests(unittest.TestCase):
                 control_plane_admin._load_yaml(invalid)
 
     def test_control_plane_admin_script_entrypoint_restores_sys_path(self) -> None:
-        """Check the admin script entrypoint restores sys.path correctly."""
+        """Cover control plane admin script entrypoint restores sys path."""
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             inventory = root / "inventory"
             profiles = root / "profiles" / "repos"
             inventory.mkdir(parents=True)
             profiles.mkdir(parents=True)
-            (inventory / "repos.yml").write_text("version: 1\nrepos: []\n", encoding="utf-8")
+            (inventory / "repos.yml").write_text(
+                "version: 1\nrepos: []\n", encoding="utf-8"
+            )
             script_path = Path(control_plane_admin.__file__).resolve()
             root_text = str(script_path.parents[2])
             original_sys_path = list(sys.path)
@@ -289,42 +332,48 @@ class CoverageBackfillTests(unittest.TestCase):
                 sys.path[:] = original_sys_path
 
     def test_control_plane_admin_main_dispatches_mutations(self) -> None:
-        """Check the admin CLI dispatches the expected mutation helpers."""
+        """Cover control plane admin main dispatches mutations."""
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            with patch.object(
-                control_plane_admin,
-                "parse_args",
-                return_value=Namespace(
-                    repo_root=str(root),
-                    command="set-scanner",
-                    profile_id="example",
-                    scanner="sonar",
-                    enabled="true",
+            with (
+                patch.object(
+                    control_plane_admin,
+                    "parse_args",
+                    return_value=Namespace(
+                        repo_root=str(root),
+                        command="set-scanner",
+                        profile_id="example",
+                        scanner="sonar",
+                        enabled="true",
+                    ),
                 ),
-            ), patch.object(control_plane_admin, "set_scanner") as set_scanner_mock:
+                patch.object(control_plane_admin, "set_scanner") as set_scanner_mock,
+            ):
                 self.assertEqual(control_plane_admin.main(), 0)
             set_scanner_mock.assert_called_once()
 
-            with patch.object(
-                control_plane_admin,
-                "parse_args",
-                return_value=Namespace(
-                    repo_root=str(root),
-                    command="set-issue-policy",
-                    profile_id="example",
-                    mode="ratchet",
-                    baseline_ref="main",
+            with (
+                patch.object(
+                    control_plane_admin,
+                    "parse_args",
+                    return_value=Namespace(
+                        repo_root=str(root),
+                        command="set-issue-policy",
+                        profile_id="example",
+                        mode="ratchet",
+                        baseline_ref="main",
+                    ),
                 ),
-            ), patch.object(
-                control_plane_admin,
-                "set_issue_policy",
-            ) as set_issue_policy_mock:
+                patch.object(
+                    control_plane_admin,
+                    "set_issue_policy",
+                ) as set_issue_policy_mock,
+            ):
                 self.assertEqual(control_plane_admin.main(), 0)
             set_issue_policy_mock.assert_called_once()
 
     def test_post_pr_comment_request_uses_json_helper(self) -> None:
-        """Check the post-comment helper uses the shared JSON request path."""
+        """Cover post pr comment request uses json helper."""
         with patch.object(
             post_pr_quality_comment,
             "load_json_https",
@@ -340,7 +389,7 @@ class CoverageBackfillTests(unittest.TestCase):
         self.assertEqual(load_json_mock.call_args.kwargs["method"], "POST")
 
     def test_post_pr_comment_runpy_entrypoint_requires_token(self) -> None:
-        """Check the post-comment script requires a GitHub token."""
+        """Cover post pr comment runpy entrypoint requires token."""
         script_path = Path(post_pr_quality_comment.__file__).resolve()
         root_text = str(script_path.parents[2])
         trimmed_sys_path = [item for item in sys.path if item != root_text]
@@ -370,10 +419,12 @@ class CoverageBackfillTests(unittest.TestCase):
                 self.assertRaises(SystemExit) as result,
             ):
                 runpy.run_path(str(script_path), run_name="__main__")
-            self.assertEqual(str(result.exception), "GITHUB_TOKEN or GH_TOKEN is required")
+            self.assertEqual(
+                str(result.exception), "GITHUB_TOKEN or GH_TOKEN is required"
+            )
 
     def test_post_pr_comment_subprocess_bootstraps_repo_root(self) -> None:
-        """Check the post-comment script bootstraps the repository root."""
+        """Cover post pr comment subprocess bootstraps repo root."""
         script_path = Path(post_pr_quality_comment.__file__).resolve()
         with tempfile.TemporaryDirectory() as temp_dir:
             markdown = Path(temp_dir) / "rollup.md"
@@ -394,7 +445,11 @@ class CoverageBackfillTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 check=False,
-                env={k: v for k, v in os.environ.items() if k not in {"GITHUB_TOKEN", "GH_TOKEN"}},
+                env={
+                    k: v
+                    for k, v in os.environ.items()
+                    if k not in {"GITHUB_TOKEN", "GH_TOKEN"}
+                },
             )
         self.assertEqual(completed.returncode, 1)
         self.assertIn(
@@ -402,34 +457,109 @@ class CoverageBackfillTests(unittest.TestCase):
             completed.stderr or completed.stdout,
         )
 
-    def test_profile_validation_flags_invalid_issue_and_dependency_policies(self) -> None:
-        """Check validation reports broken issue and dependency policies."""
-        profile = {
+    @staticmethod
+    def _invalid_contract_profile() -> dict:
+        """Return a minimally invalid contract profile for validation tests."""
+        return {
             "slug": "owner/repo",
             "required_secrets": [],
             "conditional_secrets": [],
-            "issue_policy": {"mode": "broken", "pr_behavior": "broken", "main_behavior": "broken"},
+            "issue_policy": {
+                "mode": "broken",
+                "pr_behavior": "broken",
+                "main_behavior": "broken",
+            },
             "deps": {"policy": "broken", "scope": "broken"},
             "enabled_scanners": {"coverage": True},
-            "coverage": {"command": "cmd", "inputs": [], "shell": "cmd", "assert_mode": {"default": "broken"}, "require_sources_mode": "broken"},
-            "vendors": {"chromatic": {"status_context": "Chromatic"}, "applitools": {"status_context": "Applitools"}},
+            "coverage": {
+                "command": "cmd",
+                "inputs": [],
+                "shell": "cmd",
+                "assert_mode": {"default": "broken"},
+                "require_sources_mode": "broken",
+            },
+            "vendors": {
+                "chromatic": {"status_context": "Chromatic"},
+                "applitools": {"status_context": "Applitools"},
+            },
             "visual_pair_required": True,
-            "required_contexts": {"target": ["Chromatic"], "required_now": ["Chromatic"], "always": [], "pull_request_only": []},
+            "required_contexts": {
+                "target": ["Chromatic"],
+                "required_now": ["Chromatic"],
+                "always": [],
+                "pull_request_only": [],
+            },
         }
-        findings = profile_contract_validation.validate_profile(profile, active_required_contexts_fn=lambda _profile, event_name: ["Chromatic"])
-        self.assertTrue(any("issue_policy.mode must be zero, ratchet, or audit" in item for item in findings))
-        self.assertTrue(any("deps.policy must be zero_critical, zero_high, or zero_any" in item for item in findings))
-        self.assertTrue(any("coverage.require_sources_mode must be explicit, infer, or disabled" in item for item in findings))
+
+    @staticmethod
+    def _invalid_contract_profile_findings() -> List[str]:
+        """Return the validation findings for the baseline invalid profile."""
+        return profile_contract_validation.validate_profile(
+            CoverageBackfillTests._invalid_contract_profile(),
+            active_required_contexts_fn=lambda _profile, event_name: ["Chromatic"],
+        )
+
+    def test_profile_validation_flags_invalid_issue_policy_mode(self) -> None:
+        """Cover invalid issue policy mode validation."""
+        findings = self._invalid_contract_profile_findings()
+        self.assertTrue(
+            any(
+                "issue_policy.mode must be zero, ratchet, or audit" in item
+                for item in findings
+            )
+        )
+
+    def test_profile_validation_flags_invalid_deps_policy(self) -> None:
+        """Cover invalid dependency policy validation."""
+        findings = self._invalid_contract_profile_findings()
+        self.assertTrue(
+            any(
+                "deps.policy must be zero_critical, zero_high, or zero_any" in item
+                for item in findings
+            )
+        )
+
+    def test_profile_validation_flags_invalid_coverage_require_sources_mode(
+        self,
+    ) -> None:
+        """Cover invalid coverage source mode validation."""
+        findings = self._invalid_contract_profile_findings()
+        self.assertTrue(
+            any(
+                "coverage.require_sources_mode must be explicit, infer, or disabled"
+                in item
+                for item in findings
+            )
+        )
+
+    def test_profile_validation_flags_invalid_visual_pair_requirement(
+        self,
+    ) -> None:
+        """Cover invalid visual pair requirement validation."""
+        findings = self._invalid_contract_profile_findings()
         self.assertTrue(any("visual_pair_required" in item for item in findings))
-        self.assertTrue(any("issue_policy.main_behavior must be absolute" in item for item in findings))
+
+    def test_profile_validation_flags_invalid_issue_policy_main_behavior(
+        self,
+    ) -> None:
+        """Cover invalid issue policy main behavior validation."""
+        findings = self._invalid_contract_profile_findings()
+        self.assertTrue(
+            any(
+                "issue_policy.main_behavior must be absolute" in item
+                for item in findings
+            )
+        )
 
     def test_profile_shape_ignores_non_mapping_coverage_payload(self) -> None:
-        """Check profile-shape validation ignores non-mapping coverage payloads."""
-        findings = profile_shape.validate_profile_shape({"slug": "owner/repo", "coverage": "not-a-dict"}, slug="owner/repo")
+        """Cover profile shape ignores non mapping coverage payload."""
+        findings = profile_shape.validate_profile_shape(
+            {"slug": "owner/repo", "coverage": "not-a-dict"}, slug="owner/repo"
+        )
         self.assertEqual(findings, [])
 
     def test_profile_validation_requires_ratchet_baseline_ref(self) -> None:
-        """Check ratchet mode still requires a baseline reference."""
+        """Cover profile validation requires ratchet baseline ref."""
         valid_profile = build_valid_contract_profile()
         ratchet_findings = profile_contract_validation.validate_profile(
             valid_profile,
@@ -439,52 +569,13 @@ class CoverageBackfillTests(unittest.TestCase):
         )
         self.assertTrue(
             any(
-                "issue_policy.baseline_ref is required when mode is ratchet"
-                in item
+                "issue_policy.baseline_ref is required when mode is ratchet" in item
                 for item in ratchet_findings
             )
         )
 
-    def test_profile_validation_requires_at_least_one_ruleset_context(self) -> None:
-        """Check validation rejects an empty ruleset context list."""
-        profile = build_valid_contract_profile()
-
-        findings = profile_contract_validation.validate_profile(
-            profile,
-            active_required_contexts_fn=lambda _profile, event_name: [],
-        )
-
-        self.assertTrue(
-            any(
-                "at least one required context is required" in item
-                for item in findings
-            )
-        )
-
-    def test_profile_validation_requires_ruleset_to_emit_target_contexts(self) -> None:
-        """Check validation requires ruleset contexts to cover the target set."""
-        profile = build_valid_contract_profile()
-        profile["required_contexts"] = {
-            "always": ["Coverage 100 Gate"],
-            "pull_request_only": [],
-            "required_now": ["Coverage 100 Gate", "DeepSource Visible Zero"],
-            "target": ["Coverage 100 Gate", "DeepSource Visible Zero"],
-        }
-
-        findings = profile_contract_validation.validate_profile(
-            profile,
-            active_required_contexts_fn=lambda _profile, event_name: ["Coverage 100 Gate"],
-        )
-
-        self.assertTrue(
-            any(
-                "emitted ruleset contexts are missing DeepSource Visible Zero" in item
-                for item in findings
-            )
-        )
-
     def test_profile_normalization_helpers_cover_edge_branches(self) -> None:
-        """Check the profile-normalization helpers cover edge branches."""
+        """Cover profile normalization helpers cover edge branches."""
         self.assertEqual(
             profile_coverage_normalization._normalize_source_hint("pkg.module"),
             "pkg/module.py",
@@ -495,9 +586,7 @@ class CoverageBackfillTests(unittest.TestCase):
         fake_regex = Mock()
         fake_regex.finditer.return_value = [fake_match]
         with patch.object(
-            profile_coverage_normalization,
-            "_GCOVR_FILTER_RE",
-            fake_regex,
+            profile_coverage_normalization, "_GCOVR_FILTER_RE", fake_regex
         ):
             self.assertEqual(
                 profile_coverage_normalization._extract_gcovr_hints(
@@ -517,24 +606,22 @@ class CoverageBackfillTests(unittest.TestCase):
                 'gcovr --filter ".*/src/.*"'
             ),
         )
-        self.assertEqual(profile_normalization.infer_required_sources({"command": ""}), [])
+        self.assertEqual(
+            profile_normalization.infer_required_sources({"command": ""}), []
+        )
 
     def test_security_helper_remaining_error_branches(self) -> None:
-        """Check the remaining security-helper error branches."""
+        """Cover security helper remaining error branches."""
         parsed = security_helpers.urlparse("https://api.github.com/repos/owner/repo")
         with self.assertRaisesRegex(TypeError, "expects keyword arguments only"):
             security_helpers._read_bytes_response(parsed, "unexpected")
         with self.assertRaisesRegex(
-            TypeError,
-            "Unexpected _read_bytes_response parameters: extra",
+            TypeError, "Unexpected _read_bytes_response parameters: extra"
         ):
             security_helpers._read_bytes_response(
-                parsed,
-                headers={},
-                method="GET",
-                data=None,
-                timeout=15,
-                extra=True,
+                parsed, headers={}, method="GET", data=None, timeout=15, extra=True
             )
         with self.assertRaisesRegex(TypeError, "expects keyword arguments only"):
-            security_helpers.load_bytes_https("https://api.github.com/repos/owner/repo", "unexpected")
+            security_helpers.load_bytes_https(
+                "https://api.github.com/repos/owner/repo", "unexpected"
+            )

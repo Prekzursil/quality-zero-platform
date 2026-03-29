@@ -23,11 +23,32 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
             ["/gh/Prekzursil/event-link/issue/JS-0125/occurrences?listindex=0"],
         )
         self.assertEqual(
+            check_deepsource_zero.extract_issue_links(
+                '<a href="/gh/Prekzursil/event-link/dashboard">ignore</a>'
+                '<a href="/gh/Prekzursil/event-link/issue/JS-0125/'
+                'occurrences?listindex=0">keep</a>'
+            ),
+            ["/gh/Prekzursil/event-link/issue/JS-0125/occurrences?listindex=0"],
+        )
+        self.assertEqual(
+            check_deepsource_zero.extract_issue_links(
+                '<a href="/gh/Prekzursil/event-link/issue/JS-0125/'
+                "occurrences?listindex=0>broken</a>"
+            ),
+            [],
+        )
+        self.assertEqual(
             check_deepsource_zero.extract_visible_issue_count(
                 '<span class="flex-1">All issues</span>'
                 '<div class="rounded-3px">854</div>'
             ),
             854,
+        )
+        self.assertIsNone(
+            check_deepsource_zero.extract_visible_issue_count(
+                '<span class="flex-1">All issues</span>'
+                '<div class="rounded-3px">bogus</div>'
+            )
         )
         self.assertEqual(
             check_deepsource_zero.extract_visible_issue_count('"all",854,"recommended"'),

@@ -231,12 +231,16 @@ function listProviders(args) {
  */
 function waitForKeepOpenExit(context) {
   return new Promise((resolve) => {
-    const finish = () => {
+    /**
+     * Detach signal handlers and resolve the keep-open wait.
+     * @returns {void}
+     */
+    function finish() {
       process.off('SIGINT', finish);
       process.off('SIGTERM', finish);
       context.off('close', finish);
       resolve();
-    };
+    }
 
     process.once('SIGINT', finish);
     process.once('SIGTERM', finish);

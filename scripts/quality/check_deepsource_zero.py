@@ -4,9 +4,7 @@
 from __future__ import absolute_import
 
 import argparse
-import math
 import os
-import re
 import sys
 import time
 from dataclasses import dataclass
@@ -17,27 +15,22 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.quality.common import utc_timestamp, write_report
-from scripts.security_helpers import load_bytes_https, load_json_https, normalize_https_url
+from scripts.quality.deepsource_html import (
+    extract_issue_links,
+    extract_visible_issue_count,
+    human_count_to_int as _human_count_to_int,
+)
+from scripts.security_helpers import (
+    load_bytes_https,
+    load_json_https,
+    normalize_https_url,
+)
 
 
 DEEPSOURCE_STATUS_PREFIX = "DeepSource"
 DEFAULT_TIMEOUT_SECONDS = 900
 DEFAULT_POLL_SECONDS = 20
 GITHUB_API_BASE = "https://api.github.com"
-ALL_ISSUES_PATTERNS = (
-    re.compile(
-        r"All issues.*?<div[^>]*>([\d.,kK]+)</div>",
-        re.IGNORECASE | re.DOTALL,
-    ),
-    re.compile(r'"all"\s*,\s*([\d.,kK]+)\s*,\s*"recommended"', re.IGNORECASE),
-    re.compile(
-        r">\s*All issues\s*<.*?>([\d.,kK]+)<",
-        re.IGNORECASE | re.DOTALL,
-    ),
-)
-ISSUE_LINK_PATTERN = re.compile(r'href="(/gh/[^"]+/issue/[^"]+/occurrences\?listindex=0)"')
-
-
 @dataclass(frozen=True)
 class StatusPollRequest:
     """Describe the GitHub status contexts required for a DeepSource check."""
@@ -130,37 +123,6 @@ def _request_html(url: str) -> str:
         },
     )
     return payload.decode("utf-8", "ignore")
-
-
-def _human_count_to_int(raw_value: str) -> int | None:
-    """Convert raw DeepSource count strings like ``1.9k`` into integers."""
-
-    value = raw_value.strip().lower().replace(",", "")
-    if not value:
-        return None
-    multiplier = 1000 if value.endswith("k") else 1
-    numeric_value = value[:-1] if multiplier != 1 else value
-    try:
-        return int(math.ceil(float(numeric_value) * multiplier))
-    except ValueError:
-        return None
-
-
-def extract_visible_issue_count(html: str) -> int | None:
-    """Extract the visible issue count from the public DeepSource issues page."""
-
-    for pattern in ALL_ISSUES_PATTERNS:
-        match = pattern.search(html)
-        parsed = _human_count_to_int(match.group(1)) if match else None
-        if parsed is not None:
-            return parsed
-    return None
-
-
-def extract_issue_links(html: str) -> List[str]:
-    """Extract unique DeepSource issue occurrence links from an issues page."""
-
-    return sorted(set(ISSUE_LINK_PATTERN.findall(html)))
 
 
 def _status_contexts(payload: Mapping[str, Any], prefix: str) -> List[Dict[str, Any]]:
@@ -298,7 +260,9 @@ def main() -> int:
     """Run the DeepSource visible-zero gate."""
 
     args = _parse_args()
-    token = (os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")).strip()
+    token = (
+        os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")
+    ).strip()
     repo = _github_repo(args)
     sha = _github_sha(args)
     issues_url = _issues_url(args)

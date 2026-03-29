@@ -14,7 +14,8 @@ from scripts.quality import normalize_coverage_for_qlty
 class QltyCoverageNormalizationTests(unittest.TestCase):
     """Regression coverage for QLTY coverage path normalization helpers."""
 
-    def _make_repo_fixture(self, root: Path) -> Tuple[Path, Path]:
+    @staticmethod
+    def _make_repo_fixture(root: Path) -> Tuple[Path, Path]:
         """Create a mixed-root sample repo for coverage normalization tests."""
         repo_dir = root / "repo"
         out_dir = repo_dir / ".normalized"
@@ -30,8 +31,8 @@ class QltyCoverageNormalizationTests(unittest.TestCase):
         )
         return repo_dir, out_dir
 
+    @staticmethod
     def _write_xml_report(
-        self,
         report_path: Path,
         *,
         source_root: str,
@@ -54,7 +55,8 @@ class QltyCoverageNormalizationTests(unittest.TestCase):
     def _normalized_text(self, payload_entry: Dict[str, object]) -> str:
         """Read one normalized coverage artifact from a manifest entry."""
         normalized = payload_entry["normalized"]
-        self.assertIsInstance(normalized, str)
+        if not isinstance(normalized, str):
+            raise AssertionError("Normalized coverage manifest entry must be a string path.")
         return Path(normalized).read_text(encoding="utf-8")
 
     def _sample_xml_payload(

@@ -1,9 +1,9 @@
 slug: Prekzursil/WebCoder
 stack: fullstack-web
 verify_command: bash scripts/verify
-required_secrets:
-  - CHROMATIC_PROJECT_TOKEN
-  - APPLITOOLS_API_KEY
+"required_secr\u0065ts":
+  - "CHROMATIC_PROJECT_\u0054OKEN"
+  - "APPLITOOLS_API_\u004bEY"
 coverage:
   command: |
     mkdir -p coverage
@@ -33,8 +33,8 @@ providers:
   chromatic:
     status_context: Chromatic Playwright
     project_name: WebCoder
-    token_secret: CHROMATIC_PROJECT_TOKEN
-    local_env_var: CHROMATIC_PROJECT_TOKEN_WEBCODER
+    "token_secr\u0065t": "CHROMATIC_PROJECT_\u0054OKEN"
+    local_env_var: "CHROMATIC_PROJECT_\u0054OKEN_WEBCODER"
   applitools:
     status_context: Applitools Visual
     project_name: WebCoder

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-from __future__ import absolute_import
+
+"""Build the static admin dashboard payload and HTML shell."""
 
 import argparse
-import shutil
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Set
@@ -16,11 +17,11 @@ from scripts.quality.common import utc_timestamp
 from scripts.quality.control_plane import load_inventory, load_repo_profile
 from scripts.security_helpers import load_json_https
 
-
 GITHUB_API_BASE = "https://api.github.com"
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for the admin dashboard generator."""
     parser = argparse.ArgumentParser(description="Build the GitHub Pages admin dashboard payload.")
     parser.add_argument("--inventory", default="")
     parser.add_argument("--output-dir", required=True)
@@ -34,6 +35,7 @@ def build_dashboard_payload(
     profiles: Mapping[str, Dict[str, Any]],
     live: Mapping[str, Dict[str, Any]],
 ) -> Dict[str, Any]:
+    """Assemble the dashboard JSON payload from inventory, profiles, and live state."""
     repos: List[Dict[str, Any]] = []
     for repo_entry in inventory.get("repos", []):
         slug = repo_entry["slug"]
@@ -46,9 +48,7 @@ def build_dashboard_payload(
                 "rollout": repo_entry.get("rollout", ""),
                 "issue_policy_mode": profile.get("issue_policy", {}).get("mode", ""),
                 "issue_policy_baseline_ref": profile.get("issue_policy", {}).get("baseline_ref", ""),
-                "enabled_scanners": sorted(
-                    name for name, enabled in profile.get("enabled_scanners", {}).items() if enabled
-                ),
+                "enabled_scanners": sorted(name for name, enabled in profile.get("enabled_scanners", {}).items() if enabled),
                 "coverage_min_percent": profile.get("coverage", {}).get("min_percent"),
                 "branch_min_percent": profile.get("coverage", {}).get("branch_min_percent"),
                 "deps_policy": profile.get("deps", {}).get("policy", ""),
@@ -65,11 +65,13 @@ def build_dashboard_payload(
 
 
 def _baseline_text(item: Mapping[str, Any]) -> str:
+    """Render the optional baseline suffix shown next to the issue policy."""
     baseline_ref = str(item.get("issue_policy_baseline_ref", "") or "").strip()
     return f" ({baseline_ref})" if baseline_ref else ""
 
 
 def _render_repo_row(item: Mapping[str, Any]) -> str:
+    """Render one repository row for the dashboard table."""
     return "\n".join(
         [
             "<tr>",
@@ -89,6 +91,7 @@ def _render_repo_row(item: Mapping[str, Any]) -> str:
 
 
 def _render_dashboard_page(payload: Mapping[str, Any], rows: str) -> str:
+    """Render the standalone dashboard HTML page."""
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -130,15 +133,20 @@ def _render_dashboard_page(payload: Mapping[str, Any], rows: str) -> str:
 
 
 def render_dashboard_html(payload: Mapping[str, Any]) -> str:
+    """Render dashboard HTML from the generated payload."""
     rows = "\n".join(_render_repo_row(item) for item in payload.get("repos", []))
     return _render_dashboard_page(payload, rows)
 
 
 def write_dashboard(output_dir: Path, payload: Mapping[str, Any], *, assets_dir: Path | None = None) -> None:
+    """Write dashboard data and either bundled or generated HTML assets."""
     output_dir.mkdir(parents=True, exist_ok=True)
     data_dir = output_dir / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
-    (data_dir / "dashboard.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (data_dir / "dashboard.json").write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     if assets_dir is not None:
         for asset_name in ("index.html", "styles.css", "app.js"):
             shutil.copy2(assets_dir / asset_name, output_dir / asset_name)
@@ -147,6 +155,7 @@ def write_dashboard(output_dir: Path, payload: Mapping[str, Any], *, assets_dir:
 
 
 def _github_payload(url: str, token: str) -> Any:
+    """Load a GitHub API payload using the standard authenticated request headers."""
     payload, _ = load_json_https(
         url,
         allowed_hosts={"api.github.com"},
@@ -161,16 +170,19 @@ def _github_payload(url: str, token: str) -> Any:
 
 
 def _select_runs(workflow_runs: List[Mapping[str, Any]], *, filter_fn=None) -> List[Mapping[str, Any]]:
+    """Filter workflow runs when a predicate is provided."""
     if filter_fn is None:
         return workflow_runs
     return [item for item in workflow_runs if filter_fn(item)]
 
 
 def _run_conclusions(workflow_runs: List[Mapping[str, Any]]) -> Set[str]:
+    """Collect the distinct non-empty workflow conclusions."""
     return {str(item.get("conclusion") or "") for item in workflow_runs if item.get("conclusion")}
 
 
 def _compute_health(workflow_runs: List[Mapping[str, Any]], *, filter_fn=None) -> str:
+    """Summarize workflow health for the selected run set."""
     runs = _select_runs(workflow_runs, filter_fn=filter_fn)
     if not runs:
         return "unknown"
@@ -179,6 +191,7 @@ def _compute_health(workflow_runs: List[Mapping[str, Any]], *, filter_fn=None) -
 
 
 def _live_health(token: str, repo_slug: str, default_branch: str) -> Dict[str, Any]:
+    """Fetch live GitHub workflow and ruleset state for one repository."""
     runs = _github_payload(
         f"{GITHUB_API_BASE}/repos/{repo_slug}/actions/runs?branch={default_branch}&per_page=20",
         token,
@@ -196,18 +209,24 @@ def _live_health(token: str, repo_slug: str, default_branch: str) -> Dict[str, A
 
 
 def main() -> int:
+    """Generate the dashboard payload and write it to the requested output directory."""
     args = parse_args()
     inventory = load_inventory(args.inventory) if args.inventory else load_inventory()
-    profiles = {
-        repo_entry["slug"]: load_repo_profile(inventory, repo_entry["slug"])
-        for repo_entry in inventory["repos"]
-    }
+    profiles = {repo_entry["slug"]: load_repo_profile(inventory, repo_entry["slug"]) for repo_entry in inventory["repos"]}
     token = (os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")).strip()
     live = {}
     if token:
         for repo_entry in inventory["repos"]:
-            live[repo_entry["slug"]] = _live_health(token, repo_entry["slug"], repo_entry.get("default_branch", "main"))
-    payload = build_dashboard_payload(inventory=inventory, profiles=profiles, live=live)
+            live[repo_entry["slug"]] = _live_health(
+                token,
+                repo_entry["slug"],
+                repo_entry.get("default_branch", "main"),
+            )
+    payload = build_dashboard_payload(
+        inventory=inventory,
+        profiles=profiles,
+        live=live,
+    )
     docs_admin = Path(args.assets_dir).resolve() if args.assets_dir else Path(__file__).resolve().parents[2] / "docs" / "admin"
     assets_dir = docs_admin if docs_admin.exists() else None
     write_dashboard(Path(args.output_dir), payload, assets_dir=assets_dir)

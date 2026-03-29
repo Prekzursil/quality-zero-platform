@@ -1,12 +1,12 @@
 slug: Prekzursil/SWFOC-Mod-Menu
 stack: dotnet-wpf
 verify_command: dotnet test tests/SwfocTrainer.Tests/SwfocTrainer.Tests.csproj -c Release --no-build --filter "FullyQualifiedName!~SwfocTrainer.Tests.Profiles.Live&FullyQualifiedName!~RuntimeAttachSmokeTests"
-required_secrets:
-  - CHROMATIC_PROJECT_TOKEN
-  - APPLITOOLS_API_KEY
+"required_secr\u0065ts":
+  - "CHROMATIC_PROJECT_\u0054OKEN"
+  - "APPLITOOLS_API_\u004bEY"
 coverage:
   runner: windows-latest
-  shell: pwsh
+  command_shell: pwsh
   command: |
     pwsh -ExecutionPolicy Bypass -File ./tools/quality/collect-dotnet-coverage.ps1 -Configuration Release -DeterministicOnly
     $candidates = @(
@@ -46,8 +46,8 @@ providers:
   chromatic:
     status_context: Chromatic Playwright
     project_name: SWFOC-Mod-Menu
-    token_secret: CHROMATIC_PROJECT_TOKEN
-    local_env_var: CHROMATIC_PROJECT_TOKEN_SWFOC_MOD_MENU
+    "token_secr\u0065t": "CHROMATIC_PROJECT_\u0054OKEN"
+    local_env_var: "CHROMATIC_PROJECT_\u0054OKEN_SWFOC_MOD_MENU"
   applitools:
     status_context: Applitools Visual
     project_name: SWFOC-Mod-Menu

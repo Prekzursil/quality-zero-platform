@@ -62,6 +62,13 @@ export const PROVIDERS = Object.freeze({
 
 export const PROVIDER_KEYS = Object.freeze(Object.keys(PROVIDERS));
 
+/**
+ * Build a provider deep-link for repository-aware providers.
+ *
+ * @param {string} providerKey
+ * @param {string} repoSlug
+ * @returns {string | null}
+ */
 function buildRepoTargetUrl(providerKey, repoSlug) {
   switch (providerKey) {
     case 'codecov':
@@ -73,29 +80,65 @@ function buildRepoTargetUrl(providerKey, repoSlug) {
   }
 }
 
+/**
+ * Resolve the parent directory for persisted provider UI state.
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string}
+ */
 function resolveStateBaseDir(env = process.env) {
   return env.LOCALAPPDATA
     ? path.join(env.LOCALAPPDATA, 'quality-zero-platform')
     : path.join(os.homedir(), '.quality-zero-platform');
 }
 
+/**
+ * Return the default root used for persisted provider UI state.
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string}
+ */
 export function getDefaultStateRoot(env = process.env) {
   const explicit = env.QUALITY_ZERO_PROVIDER_UI_HOME;
   return explicit ? path.resolve(explicit) : path.join(resolveStateBaseDir(env), 'provider-ui');
 }
 
+/**
+ * Return the default Chromium profile directory for provider UI sessions.
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string}
+ */
 export function getDefaultProfileDir(env = process.env) {
   return path.join(getDefaultStateRoot(env), 'chromium-profile');
 }
 
+/**
+ * Return the default Playwright runner directory for provider UI sessions.
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string}
+ */
 export function getDefaultRunnerDir(env = process.env) {
   return path.join(getDefaultStateRoot(env), 'pw-runner');
 }
 
+/**
+ * Return the Playwright runner directory for an explicit state root.
+ *
+ * @param {string} stateRoot
+ * @returns {string}
+ */
 export function getRunnerDirForStateRoot(stateRoot) {
   return path.join(stateRoot, 'pw-runner');
 }
 
+/**
+ * Normalize a provider identifier to the canonical key.
+ *
+ * @param {string} provider
+ * @returns {string}
+ */
 export function normalizeProvider(provider) {
   if (!provider) {
     throw new Error(`Provider is required. Supported values: ${PROVIDER_KEYS.join(', ')}`);
@@ -109,6 +152,13 @@ export function normalizeProvider(provider) {
   return normalized;
 }
 
+/**
+ * Normalize a repository slug, applying the default owner when needed.
+ *
+ * @param {string | null} repo
+ * @param {string} [owner]
+ * @returns {string | null}
+ */
 export function normalizeRepoSlug(repo, owner = 'Prekzursil') {
   if (!repo) {
     return null;
@@ -126,11 +176,21 @@ export function normalizeRepoSlug(repo, owner = 'Prekzursil') {
   return `${owner}/${trimmed}`;
 }
 
+/**
+ * Resolve provider metadata and the appropriate landing URL.
+ *
+ * @param {string} provider
+ * @param {{ repo?: string | null, owner?: string }} [options]
+ * @returns {{ key: string, label: string, homeUrl: string, supportsRepoTarget: boolean, loginHint: string, repoSlug: string | null, targetUrl: string | null }}
+ */
 export function resolveProviderTarget(provider, { repo = null, owner = 'Prekzursil' } = {}) {
   const providerKey = normalizeProvider(provider);
   const definition = PROVIDERS[providerKey];
   const repoSlug = normalizeRepoSlug(repo, owner);
-  const targetUrl = definition.supportsRepoTarget && repoSlug ? buildRepoTargetUrl(providerKey, repoSlug) : definition.homeUrl;
+  const canResolveRepoTarget = definition.supportsRepoTarget && repoSlug !== null;
+  const targetUrl = canResolveRepoTarget
+    ? buildRepoTargetUrl(providerKey, repoSlug)
+    : definition.homeUrl;
 
   return {
     ...definition,
@@ -139,6 +199,13 @@ export function resolveProviderTarget(provider, { repo = null, owner = 'Prekzurs
   };
 }
 
+/**
+ * Shift the next argument token or raise when the option is incomplete.
+ *
+ * @param {string[]} tokens
+ * @param {string} option
+ * @returns {string}
+ */
 function shiftRequiredValue(tokens, option) {
   const value = tokens.shift();
   if (value === undefined) {
@@ -173,6 +240,14 @@ const TOGGLE_ARGUMENTS = Object.freeze({
 
 const HELP_ARGUMENTS = Object.freeze(new Set(['--help', '-h']));
 
+/**
+ * Apply a string-valued argument handler when the token matches.
+ *
+ * @param {Record<string, unknown>} args
+ * @param {string[]} tokens
+ * @param {string} token
+ * @returns {boolean}
+ */
 function applyStringValueArgument(args, tokens, token) {
   const handler = STRING_ARGUMENTS[token];
   if (!handler) {
@@ -183,6 +258,14 @@ function applyStringValueArgument(args, tokens, token) {
   return true;
 }
 
+/**
+ * Apply a path-valued argument handler when the token matches.
+ *
+ * @param {Record<string, unknown>} args
+ * @param {string[]} tokens
+ * @param {string} token
+ * @returns {boolean}
+ */
 function applyPathValueArgument(args, tokens, token) {
   const handler = PATH_ARGUMENTS[token];
   if (!handler) {
@@ -193,6 +276,14 @@ function applyPathValueArgument(args, tokens, token) {
   return true;
 }
 
+/**
+ * Apply a numeric argument handler when the token matches.
+ *
+ * @param {Record<string, unknown>} args
+ * @param {string[]} tokens
+ * @param {string} token
+ * @returns {boolean}
+ */
 function applyNumericValueArgument(args, tokens, token) {
   const handler = NUMERIC_ARGUMENTS[token];
   if (!handler) {
@@ -203,6 +294,14 @@ function applyNumericValueArgument(args, tokens, token) {
   return true;
 }
 
+/**
+ * Apply any value-bearing argument handler that matches the token.
+ *
+ * @param {Record<string, unknown>} args
+ * @param {string[]} tokens
+ * @param {string} token
+ * @returns {boolean}
+ */
 function applyValueArgument(args, tokens, token) {
   if (applyStringValueArgument(args, tokens, token)) {
     return true;
@@ -216,6 +315,13 @@ function applyValueArgument(args, tokens, token) {
   return false;
 }
 
+/**
+ * Apply a toggle argument handler when the token matches.
+ *
+ * @param {Record<string, unknown>} args
+ * @param {string} token
+ * @returns {boolean}
+ */
 function applyToggleArgument(args, token) {
   const handler = TOGGLE_ARGUMENTS[token];
   if (!handler) {
@@ -226,6 +332,13 @@ function applyToggleArgument(args, token) {
   return true;
 }
 
+/**
+ * Switch into help mode when the token requests it.
+ *
+ * @param {Record<string, unknown>} args
+ * @param {string} token
+ * @returns {boolean}
+ */
 function applyHelpArgument(args, token) {
   if (!HELP_ARGUMENTS.has(token)) {
     return false;
@@ -234,6 +347,14 @@ function applyHelpArgument(args, token) {
   return true;
 }
 
+/**
+ * Dispatch a single CLI token to the correct parser handler.
+ *
+ * @param {Record<string, unknown>} args
+ * @param {string[]} tokens
+ * @param {string} token
+ * @returns {void}
+ */
 function applyArgumentToken(args, tokens, token) {
   if (applyValueArgument(args, tokens, token)) {
     return;
@@ -247,6 +368,12 @@ function applyArgumentToken(args, tokens, token) {
   throw new Error(`Unknown argument: ${token}`);
 }
 
+/**
+ * Validate timeout-related numeric arguments.
+ *
+ * @param {{ timeoutMs: number, slowMoMs: number }} args
+ * @returns {void}
+ */
 function validateNumericArgs(args) {
   if (!Number.isFinite(args.timeoutMs) || args.timeoutMs <= 0) {
     throw new Error(`Invalid --timeout-ms value: ${args.timeoutMs}`);
@@ -257,6 +384,12 @@ function validateNumericArgs(args) {
   }
 }
 
+/**
+ * Apply derived defaults after argument parsing completes.
+ *
+ * @param {Record<string, unknown>} args
+ * @returns {Record<string, unknown>}
+ */
 function finalizeArgs(args) {
   validateNumericArgs(args);
   if (!args.profileDir) {
@@ -265,6 +398,12 @@ function finalizeArgs(args) {
   return args;
 }
 
+/**
+ * Parse CLI arguments for the provider admin bootstrap entrypoint.
+ *
+ * @param {string[]} argv
+ * @returns {{ command: string, provider: string | null, repo: string | null, owner: string, stateRoot: string, profileDir: string, timeoutMs: number, headless: boolean | null, keepOpen: boolean, slowMoMs: number }}
+ */
 export function parseArgs(argv) {
   const args = {
     command: 'help',
@@ -291,6 +430,11 @@ export function parseArgs(argv) {
   return finalizeArgs(args);
 }
 
+/**
+ * Render the CLI help text for provider admin bootstrap.
+ *
+ * @returns {string}
+ */
 export function renderHelp() {
   return `provider-admin-bootstrap
 

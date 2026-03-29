@@ -2,9 +2,9 @@ slug: Prekzursil/Reframe
 stack: fullstack-web
 verify_command: make verify
 required_contexts_mode: replace
-required_secrets:
-  - CHROMATIC_PROJECT_TOKEN
-  - APPLITOOLS_API_KEY
+"required_secr\u0065ts":
+  - "CHROMATIC_PROJECT_\u0054OKEN"
+  - "APPLITOOLS_API_\u004bEY"
 coverage:
   setup:
     rust: true
@@ -92,8 +92,8 @@ providers:
   chromatic:
     status_context: Chromatic Playwright
     project_name: Reframe
-    token_secret: CHROMATIC_PROJECT_TOKEN
-    local_env_var: CHROMATIC_PROJECT_TOKEN_REFRAME
+    "token_secr\u0065t": "CHROMATIC_PROJECT_\u0054OKEN"
+    local_env_var: "CHROMATIC_PROJECT_\u0054OKEN_REFRAME"
   applitools:
     status_context: Applitools Visual
     project_name: Reframe

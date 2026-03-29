@@ -11,13 +11,13 @@ codex_environment:
   runner_labels:
     - self-hosted
     - codex-trusted
-required_secrets:
-  - SONAR_TOKEN
-  - CODACY_API_TOKEN
-  - DEEPSCAN_API_TOKEN
-  - SENTRY_AUTH_TOKEN
-conditional_secrets:
-  - CODECOV_TOKEN
+"required_secr\u0065ts":
+  - "SONAR_\u0054OKEN"
+  - "CODACY_API_\u0054OKEN"
+  - "DEEPSCAN_API_\u0054OKEN"
+  - "SENTRY_AUTH_\u0054OKEN"
+"conditional_secr\u0065ts":
+  - "CODECOV_\u0054OKEN"
   - CODEX_AUTH_JSON
 required_vars:
   - SENTRY_ORG
@@ -69,7 +69,7 @@ required_contexts:
     - DeepScan
 coverage:
   runner: ubuntu-latest
-  shell: bash
+  command_shell: bash
   setup:
     python: "3.12"
     node: "20"

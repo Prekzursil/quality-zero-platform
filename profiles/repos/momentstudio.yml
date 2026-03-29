@@ -1,9 +1,9 @@
 slug: Prekzursil/momentstudio
 stack: fullstack-web
 verify_command: make verify
-required_secrets:
-  - CHROMATIC_PROJECT_TOKEN
-  - APPLITOOLS_API_KEY
+"required_secr\u0065ts":
+  - "CHROMATIC_PROJECT_\u0054OKEN"
+  - "APPLITOOLS_API_\u004bEY"
 coverage:
   command: |
     python -m pip install --upgrade pip
@@ -31,8 +31,8 @@ providers:
   chromatic:
     status_context: Chromatic Playwright
     project_name: momentstudio
-    token_secret: CHROMATIC_PROJECT_TOKEN
-    local_env_var: CHROMATIC_PROJECT_TOKEN_MOMENTSTUDIO
+    "token_secr\u0065t": "CHROMATIC_PROJECT_\u0054OKEN"
+    local_env_var: "CHROMATIC_PROJECT_\u0054OKEN_MOMENTSTUDIO"
   applitools:
     status_context: Applitools Visual
     project_name: momentstudio

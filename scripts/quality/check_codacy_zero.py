@@ -87,7 +87,9 @@ def _preferred_text(*values: Any) -> str:
 
 def _parse_args() -> argparse.Namespace:
     """Parse CLI arguments for the Codacy zero gate."""
-    parser = argparse.ArgumentParser(description="Assert Codacy has zero total open issues.")
+    parser = argparse.ArgumentParser(
+        description="Assert Codacy has zero total open issues."
+    )
     parser.add_argument("--provider", default="gh")
     parser.add_argument("--owner", required=True)
     parser.add_argument("--repo", required=True)
@@ -190,7 +192,11 @@ def _build_retry_config(
     sleep_seconds: float = 5.0,
 ) -> CodacyRetryConfig:
     """Build the retry configuration for one Codacy zero-gate lookup."""
-    attempts = SCOPED_ANALYSIS_RETRY_ATTEMPTS if _preferred_text(query.pull_request, query.sha) else 1
+    attempts = (
+        SCOPED_ANALYSIS_RETRY_ATTEMPTS
+        if _preferred_text(query.pull_request, query.sha)
+        else 1
+    )
     return CodacyRetryConfig(
         provider_candidates=tuple(provider_candidates),
         attempts=max(1, attempts),
@@ -211,16 +217,26 @@ def build_issues_url(
         urllib.parse.urlencode({"limit": "1"}),
         urllib.parse.urlencode({"status": "new", "limit": "1"}),
     ][bool(pull_request)]
-    pull_request_url = f"{CODACY_APP_API_BASE}/analysis/organizations/" f"{provider}/{owner}/repositories/{repo}" f"/pull-requests/{pull_request}/issues?{query}"
+    pull_request_url = (
+        f"{CODACY_APP_API_BASE}/analysis/organizations/"
+        f"{provider}/{owner}/repositories/{repo}"
+        f"/pull-requests/{pull_request}/issues?{query}"
+    )
     return [
-        (f"{CODACY_API_BASE}/api/v3/analysis/organizations/" f"{provider}/{owner}/repositories/{repo}/issues/search?{query}"),
+        (
+            f"{CODACY_API_BASE}/api/v3/analysis/organizations/"
+            f"{provider}/{owner}/repositories/{repo}/issues/search?{query}"
+        ),
         pull_request_url,
     ][bool(pull_request)]
 
 
 def build_repository_analysis_url(provider: str, owner: str, repo: str) -> str:
     """Build the public repository analysis endpoint for one Codacy project."""
-    return f"{CODACY_APP_API_BASE}/analysis/organizations/" f"{provider}/{owner}/repositories/{repo}"
+    return (
+        f"{CODACY_APP_API_BASE}/analysis/organizations/"
+        f"{provider}/{owner}/repositories/{repo}"
+    )
 
 
 def build_pull_request_analysis_url(
@@ -230,7 +246,11 @@ def build_pull_request_analysis_url(
     pull_request: str,
 ) -> str:
     """Build the public analysis endpoint for one Codacy pull request."""
-    return f"{CODACY_APP_API_BASE}/analysis/organizations/" f"{provider}/{owner}/repositories/{repo}" f"/pull-requests/{pull_request}"
+    return (
+        f"{CODACY_APP_API_BASE}/analysis/organizations/"
+        f"{provider}/{owner}/repositories/{repo}"
+        f"/pull-requests/{pull_request}"
+    )
 
 
 def _request_mode(query: CodacyQuery) -> Tuple[str, Dict[str, Any] | None]:

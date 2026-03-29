@@ -23,7 +23,9 @@ GITHUB_API_BASE = "https://api.github.com"
 
 def parse_args() -> argparse.Namespace:
     """Handle parse args."""
-    parser = argparse.ArgumentParser(description="Build the GitHub Pages admin dashboard payload.")
+    parser = argparse.ArgumentParser(
+        description="Build the GitHub Pages admin dashboard payload."
+    )
     parser.add_argument("--inventory", default="")
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--assets-dir", default="")
@@ -48,12 +50,22 @@ def build_dashboard_payload(
                 "profile": repo_entry.get("profile", ""),
                 "rollout": repo_entry.get("rollout", ""),
                 "issue_policy_mode": profile.get("issue_policy", {}).get("mode", ""),
-                "issue_policy_baseline_ref": profile.get("issue_policy", {}).get("baseline_ref", ""),
-                "enabled_scanners": sorted(name for name, enabled in profile.get("enabled_scanners", {}).items() if enabled),
+                "issue_policy_baseline_ref": profile.get("issue_policy", {}).get(
+                    "baseline_ref", ""
+                ),
+                "enabled_scanners": sorted(
+                    name
+                    for name, enabled in profile.get("enabled_scanners", {}).items()
+                    if enabled
+                ),
                 "coverage_min_percent": profile.get("coverage", {}).get("min_percent"),
-                "branch_min_percent": profile.get("coverage", {}).get("branch_min_percent"),
+                "branch_min_percent": profile.get("coverage", {}).get(
+                    "branch_min_percent"
+                ),
                 "deps_policy": profile.get("deps", {}).get("policy", ""),
-                "default_branch_health": live_state.get("default_branch_health", "unknown"),
+                "default_branch_health": live_state.get(
+                    "default_branch_health", "unknown"
+                ),
                 "open_pr_health": live_state.get("open_pr_health", "unknown"),
                 "ruleset_present": bool(live_state.get("ruleset_present", False)),
             }
@@ -139,17 +151,23 @@ def render_dashboard_html(payload: Mapping[str, Any]) -> str:
     return _render_dashboard_page(payload, rows)
 
 
-def write_dashboard(output_dir: Path, payload: Mapping[str, Any], *, assets_dir: Path | None = None) -> None:
+def write_dashboard(
+    output_dir: Path, payload: Mapping[str, Any], *, assets_dir: Path | None = None
+) -> None:
     """Handle write dashboard."""
     output_dir.mkdir(parents=True, exist_ok=True)
     data_dir = output_dir / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
-    (data_dir / "dashboard.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (data_dir / "dashboard.json").write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     if assets_dir is not None:
         for asset_name in ("index.html", "styles.css", "app.js"):
             shutil.copy2(assets_dir / asset_name, output_dir / asset_name)
         return
-    (output_dir / "index.html").write_text(render_dashboard_html(payload), encoding="utf-8")
+    (output_dir / "index.html").write_text(
+        render_dashboard_html(payload), encoding="utf-8"
+    )
 
 
 def _github_payload(url: str, token: str) -> Any:
@@ -167,7 +185,9 @@ def _github_payload(url: str, token: str) -> Any:
     return payload
 
 
-def _select_runs(workflow_runs: List[Mapping[str, Any]], *, filter_fn=None) -> List[Mapping[str, Any]]:
+def _select_runs(
+    workflow_runs: List[Mapping[str, Any]], *, filter_fn=None
+) -> List[Mapping[str, Any]]:
     """Handle select runs."""
     if filter_fn is None:
         return workflow_runs
@@ -176,7 +196,11 @@ def _select_runs(workflow_runs: List[Mapping[str, Any]], *, filter_fn=None) -> L
 
 def _run_conclusions(workflow_runs: List[Mapping[str, Any]]) -> Set[str]:
     """Handle run conclusions."""
-    return {str(item.get("conclusion") or "") for item in workflow_runs if item.get("conclusion")}
+    return {
+        str(item.get("conclusion") or "")
+        for item in workflow_runs
+        if item.get("conclusion")
+    }
 
 
 def _compute_health(workflow_runs: List[Mapping[str, Any]], *, filter_fn=None) -> str:
@@ -210,14 +234,25 @@ def main() -> int:
     """Handle main."""
     args = parse_args()
     inventory = load_inventory(args.inventory) if args.inventory else load_inventory()
-    profiles = {repo_entry["slug"]: load_repo_profile(inventory, repo_entry["slug"]) for repo_entry in inventory["repos"]}
-    token = (os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")).strip()
+    profiles = {
+        repo_entry["slug"]: load_repo_profile(inventory, repo_entry["slug"])
+        for repo_entry in inventory["repos"]
+    }
+    token = (
+        os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")
+    ).strip()
     live = {}
     if token:
         for repo_entry in inventory["repos"]:
-            live[repo_entry["slug"]] = _live_health(token, repo_entry["slug"], repo_entry.get("default_branch", "main"))
+            live[repo_entry["slug"]] = _live_health(
+                token, repo_entry["slug"], repo_entry.get("default_branch", "main")
+            )
     payload = build_dashboard_payload(inventory=inventory, profiles=profiles, live=live)
-    docs_admin = Path(args.assets_dir).resolve() if args.assets_dir else Path(__file__).resolve().parents[2] / "docs" / "admin"
+    docs_admin = (
+        Path(args.assets_dir).resolve()
+        if args.assets_dir
+        else Path(__file__).resolve().parents[2] / "docs" / "admin"
+    )
     assets_dir = docs_admin if docs_admin.exists() else None
     write_dashboard(Path(args.output_dir), payload, assets_dir=assets_dir)
     return 0

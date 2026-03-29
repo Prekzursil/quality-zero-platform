@@ -1,3 +1,5 @@
+"""Validate normalized control-plane profile contracts."""
+
 from __future__ import absolute_import
 
 from typing import Any, Dict, List, Set, Tuple, Union
@@ -8,14 +10,17 @@ from scripts.security_helpers import normalize_https_url
 
 
 def _require_values(slug: str, required_values: List[Tuple[str, Any]]) -> List[str]:
+    """Return findings for required profile fields that are empty."""
     return [f"{slug}: {field_name} is required" for field_name, value in required_values if not value]
 
 
 def _require_expected_values(slug: str, expected_values: List[Tuple[str, Any, Any]]) -> List[str]:
+    """Return findings for profile fields that differ from expected values."""
     return [f"{slug}: {field_name} must be {expected}" for field_name, actual, expected in expected_values if actual != expected]
 
 
 def _validate_codex_environment(profile: Dict[str, Any], codex_environment: Dict[str, Any]) -> List[str]:
+    """Validate the codex runner contract required by the control plane."""
     slug = profile["slug"]
     findings = _require_expected_values(
         slug,
@@ -42,6 +47,7 @@ def _validate_codex_environment(profile: Dict[str, Any], codex_environment: Dict
 
 
 def _validate_control_plane_lanes(profile: Dict[str, Any], *, active_required_contexts_fn) -> List[str]:
+    """Validate core control-plane lane defaults for one profile."""
     slug = profile["slug"]
     findings = _require_values(slug, [("verify_command", profile.get("verify_command"))])
     findings.extend(
@@ -59,6 +65,7 @@ def _validate_control_plane_lanes(profile: Dict[str, Any], *, active_required_co
 
 
 def _matches_required_context(actual_context: str, expected_context: str) -> bool:
+    """Return whether one emitted status context satisfies the expected name."""
     current = str(actual_context or "").strip()
     expected = str(expected_context or "").strip()
     return bool(current) and bool(expected) and (
@@ -67,10 +74,12 @@ def _matches_required_context(actual_context: str, expected_context: str) -> boo
 
 
 def _contains_required_context(contexts: Union[List[str], Set[str]], expected_context: str) -> bool:
+    """Return whether any available context matches the expected status check."""
     return any(_matches_required_context(actual_context, expected_context) for actual_context in contexts)
 
 
 def _validate_required_context_sets(profile: Dict[str, Any], *, active_required_contexts_fn) -> List[str]:
+    """Validate the relationship between always, target, and required-now checks."""
     findings: List[str] = []
     if not active_required_contexts_fn(profile, event_name="ruleset"):
         findings.append(f"{profile['slug']}: at least one required context is required")
@@ -93,6 +102,7 @@ def _validate_required_context_sets(profile: Dict[str, Any], *, active_required_
 
 
 def _validate_secret_contract(profile: Dict[str, Any]) -> List[str]:
+    """Validate required and conditional secret declarations."""
     findings: List[str] = []
     duplicate_conditional = [name for name in profile.get("conditional_secrets", []) if name in profile.get("required_secrets", [])]
     if duplicate_conditional:
@@ -108,6 +118,7 @@ def _validate_secret_contract(profile: Dict[str, Any]) -> List[str]:
 
 
 def _validate_issue_policy_contract(profile: Dict[str, Any]) -> List[str]:
+    """Validate the issue policy block for one repository profile."""
     issue_policy = profile.get("issue_policy", {})
     findings: List[str] = []
     if issue_policy.get("mode") not in {"zero", "ratchet", "audit"}:
@@ -122,6 +133,7 @@ def _validate_issue_policy_contract(profile: Dict[str, Any]) -> List[str]:
 
 
 def _validate_deps_contract(profile: Dict[str, Any]) -> List[str]:
+    """Validate dependency-alert policy settings for one profile."""
     deps = profile.get("deps", {})
     findings: List[str] = []
     if deps.get("policy") not in {"zero_critical", "zero_high", "zero_any"}:
@@ -132,6 +144,7 @@ def _validate_deps_contract(profile: Dict[str, Any]) -> List[str]:
 
 
 def _validate_visual_pair_contract(profile: Dict[str, Any], *, active_required_contexts_fn) -> List[str]:
+    """Validate repositories that require paired visual-review providers."""
     if not profile.get("visual_pair_required"):
         return []
 
@@ -164,6 +177,7 @@ def _validate_visual_pair_contract(profile: Dict[str, Any], *, active_required_c
 
 
 def _validate_coverage_contract(profile: Dict[str, Any]) -> List[str]:
+    """Validate coverage collection and assertion settings for one profile."""
     coverage = profile.get("coverage", {})
     if not profile.get("enabled_scanners", {}).get("coverage", False):
         return []
@@ -184,6 +198,7 @@ def _validate_coverage_contract(profile: Dict[str, Any]) -> List[str]:
 
 
 def _validate_vendor_urls(profile: Dict[str, Any]) -> List[str]:
+    """Validate all vendor URL fields after profile normalization."""
     findings: List[str] = []
     for vendor_name, vendor_payload in profile["vendors"].items():
         if not isinstance(vendor_payload, dict):
@@ -198,6 +213,7 @@ def _validate_vendor_urls(profile: Dict[str, Any]) -> List[str]:
 
 
 def validate_profile(profile: Dict[str, Any], *, active_required_contexts_fn) -> List[str]:
+    """Run every profile-contract validator and return the combined findings."""
     findings: List[str] = validate_profile_shape(profile, slug=profile["slug"])
     validators = (
         lambda current: _validate_control_plane_lanes(current, active_required_contexts_fn=active_required_contexts_fn),

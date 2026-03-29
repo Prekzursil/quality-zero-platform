@@ -29,6 +29,7 @@ from scripts.security_helpers import load_bytes_https, normalize_https_url
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for the coverage gate runner."""
     parser = argparse.ArgumentParser(
         description=(
             "Run repo-specific coverage collection and assert "
@@ -43,6 +44,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _coverage_mode(coverage: Dict[str, Any], event_name: str) -> str:
+    """Resolve the configured coverage mode for the current event."""
     assert_mode = cast(Dict[str, Any], coverage.get("assert_mode", {}))
     if event_name in assert_mode:
         return str(assert_mode[event_name])
@@ -50,6 +52,7 @@ def _coverage_mode(coverage: Dict[str, Any], event_name: str) -> str:
 
 
 def _run_shell(command: str, *, shell_name: str, cwd: Path) -> None:
+    """Run the configured repo coverage command in the requested shell."""
     if not command.strip():
         return
     # Safe-by-construction: the interpreter argv is static,
@@ -101,12 +104,14 @@ def _run_shell(command: str, *, shell_name: str, cwd: Path) -> None:
 
 
 def _path_exists(raw_path: str) -> bool:
+    """Return whether the given absolute shell path exists."""
     return Path(raw_path).exists()
 
 
 def _build_assert_coverage_argv(
     coverage: Dict[str, Any], platform_dir: Path
 ) -> List[str]:
+    """Build argv for the shared assert_coverage_100 entrypoint."""
     cmd = [str(platform_dir / "scripts" / "quality" / "assert_coverage_100.py")]
     for item in cast(List[Dict[str, Any]], coverage.get("inputs", [])):
         flag = "--xml" if item.get("format") == "xml" else "--lcov"
@@ -122,6 +127,7 @@ def _build_assert_coverage_argv(
 
 @contextmanager
 def _working_directory(path: Path):
+    """Temporarily switch the process working directory."""
     previous = Path.cwd()
     os.chdir(path)
     try:
@@ -133,6 +139,7 @@ def _working_directory(path: Path):
 def _run_assert_coverage_100(
     coverage: Dict[str, Any], *, repo_dir: Path, platform_dir: Path
 ) -> int:
+    """Run the shared coverage assertion entrypoint in-process."""
     argv = _build_assert_coverage_argv(coverage, platform_dir)
     previous_argv = sys.argv
     sys.argv = argv
@@ -144,6 +151,7 @@ def _run_assert_coverage_100(
 
 
 def _render_evidence_md(payload: dict) -> str:
+    """Render the evidence-only coverage report as markdown."""
     lines = [
         "# Coverage 100 Gate",
         "",
@@ -159,6 +167,7 @@ def _render_evidence_md(payload: dict) -> str:
 
 
 def _write_evidence_only_report(note: str) -> int:
+    """Write an evidence-only coverage report without enforcing thresholds."""
     payload = {
         "status": "pass",
         "mode": "evidence_only",
@@ -176,6 +185,7 @@ def _write_evidence_only_report(note: str) -> int:
 
 
 def _combined_coverage_percent(payload: Dict[str, Any]) -> float:
+    """Compute combined coverage percent from a coverage payload."""
     components = payload.get("components", [])
     if not isinstance(components, list):
         return 100.0
@@ -191,6 +201,7 @@ def _combined_coverage_percent(payload: Dict[str, Any]) -> float:
 def _collect_current_coverage_payload(
     coverage: Dict[str, Any], *, repo_dir: Path, platform_dir: Path
 ) -> Dict[str, Any]:
+    """Run current coverage collection and load the generated payload."""
     result = _run_assert_coverage_100(
         coverage,
         repo_dir=repo_dir,
@@ -203,6 +214,7 @@ def _collect_current_coverage_payload(
 
 
 def _download_bytes(url: str, token: str) -> bytes:
+    """Download raw bytes from the GitHub API with standard headers."""
     payload, _ = load_bytes_https(
         url,
         allowed_hosts={"api.github.com"},
@@ -218,6 +230,7 @@ def _download_bytes(url: str, token: str) -> bytes:
 
 
 def _github_api_token() -> str:
+    """Return the GitHub token used for baseline coverage downloads."""
     token = (
         os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")
     ).strip()
@@ -232,6 +245,7 @@ def _github_api_token() -> str:
 def _find_successful_run_id(
     workflow_runs: List[Dict[str, Any]], workflow_name: str
 ) -> int | None:
+    """Return the first successful workflow run id matching the given name."""
     return next(
         (
             int(item["id"])
@@ -245,6 +259,7 @@ def _find_successful_run_id(
 def _find_artifact_by_name(
     artifacts: List[Dict[str, Any]], name: str
 ) -> Dict[str, Any] | None:
+    """Return the first workflow artifact matching the requested name."""
     return next((item for item in artifacts if item.get("name") == name), None)
 
 
@@ -297,6 +312,7 @@ def _load_baseline_coverage_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _render_non_regression_md(payload: dict) -> str:
+    """Render the non-regression coverage report as markdown."""
     lines = [
         "# Coverage 100 Gate",
         "",
@@ -315,6 +331,7 @@ def _render_non_regression_md(payload: dict) -> str:
 def _write_non_regression_report(
     current: Dict[str, Any], baseline: Dict[str, Any]
 ) -> int:
+    """Write a report comparing current coverage against the baseline run."""
     current_percent = _combined_coverage_percent(current)
     baseline_percent = _combined_coverage_percent(baseline)
     findings = []

@@ -23,33 +23,41 @@ _FORBIDDEN_IP_FLAGS = (
 
 @dataclass(frozen=True, slots=True)
 class _HttpsRequest:
+    """Describe a validated HTTPS request for the fetch helpers."""
+
     full_url: str
     data: bytes | None
     headers: Dict[str, str]
     method: str
 
     def get_method(self) -> str:
+        """Return the HTTP method."""
         return self.method
 
     def header_items(self) -> List[Tuple[str, str]]:
+        """Return request headers as a list of key-value pairs."""
         return list(self.headers.items())
 
 
 def _get_ip_flag(ip_value: Any, flag_name: str) -> bool:
+    """Return an IP address property as a boolean."""
     value = getattr(ip_value, flag_name)
     return bool(value() if callable(value) else value)
 
 
 def _is_forbidden_ip_address(ip_value: ipaddress._BaseAddress) -> bool:
+    """Return ``True`` when an IP address is private or otherwise disallowed."""
     return any(_get_ip_flag(ip_value, flag_name) for flag_name in _FORBIDDEN_IP_FLAGS)
 
 
 def _require_https_scheme(parsed: ParseResult, raw_url: str) -> None:
+    """Reject URLs that do not use HTTPS."""
     if parsed.scheme != "https":
         raise ValueError(f"Only https URLs are allowed: {raw_url!r}")
 
 
 def _normalize_hostname(parsed: ParseResult, raw_url: str) -> str:
+    """Normalize a parsed hostname and reject missing credentials."""
     if not parsed.hostname:
         raise ValueError(f"URL is missing a hostname: {raw_url!r}")
     if parsed.username or parsed.password:
@@ -58,18 +66,26 @@ def _normalize_hostname(parsed: ParseResult, raw_url: str) -> str:
 
 
 def _normalized_allowlist(values: Set[str] | None) -> Set[str]:
+    """Normalize allowlist values to lowercase host labels."""
     return {value.lower().strip(".") for value in (values or set()) if value.strip(".")}
 
 
 def _validate_exact_hostname(hostname: str, allowed_hosts: Set[str] | None) -> None:
+    """Require the hostname to match an exact allowlist entry."""
     normalized_hosts = _normalized_allowlist(allowed_hosts)
     if normalized_hosts and hostname not in normalized_hosts:
         raise ValueError(f"URL host is not in allowlist: {hostname}")
 
 
-def _validate_hostname_suffixes(hostname: str, allowed_host_suffixes: Set[str] | None) -> None:
+def _validate_hostname_suffixes(
+    hostname: str,
+    allowed_host_suffixes: Set[str] | None,
+) -> None:
+    """Require the hostname to match an allowed suffix."""
     suffixes = _normalized_allowlist(allowed_host_suffixes)
-    if suffixes and not any(hostname == suffix or hostname.endswith(f".{suffix}") for suffix in suffixes):
+    if suffixes and not any(
+        hostname == suffix or hostname.endswith(f".{suffix}") for suffix in suffixes
+    ):
         raise ValueError(f"URL host is not in suffix allowlist: {hostname}")
 
 
@@ -79,11 +95,13 @@ def _validate_allowed_hostname(
     allowed_hosts: Set[str] | None = None,
     allowed_host_suffixes: Set[str] | None = None,
 ) -> None:
+    """Apply the exact-host and suffix allowlist checks."""
     _validate_exact_hostname(hostname, allowed_hosts)
     _validate_hostname_suffixes(hostname, allowed_host_suffixes)
 
 
 def _validate_public_hostname(hostname: str) -> None:
+    """Reject local and private hostnames."""
     try:
         ip_value = ipaddress.ip_address(hostname)
     except ValueError:
@@ -97,6 +115,7 @@ def _validate_public_hostname(hostname: str) -> None:
 
 
 def _sanitize_url(parsed: ParseResult, *, strip_query: bool) -> str:
+    """Remove fragments and optional query parameters from a parsed URL."""
     sanitized = parsed._replace(fragment="", params="")
     if strip_query:
         sanitized = sanitized._replace(query="")
@@ -123,7 +142,14 @@ def normalize_https_url(
     return _sanitize_url(parsed, strip_query=strip_query)
 
 
-def _build_request(parsed: ParseResult, *, headers: Mapping[str, str] | None, method: str, data: bytes | None) -> _HttpsRequest:
+def _build_request(
+    parsed: ParseResult,
+    *,
+    headers: Mapping[str, str] | None,
+    method: str,
+    data: bytes | None,
+) -> _HttpsRequest:
+    """Build a validated HTTPS request envelope."""
     _require_request_hostname(parsed)
     request_url = urlunparse(parsed._replace(fragment=""))
     return _HttpsRequest(
@@ -135,17 +161,20 @@ def _build_request(parsed: ParseResult, *, headers: Mapping[str, str] | None, me
 
 
 def _build_request_target(parsed: ParseResult) -> str:
+    """Return the path, params, and query portion for a request target."""
     target = urlunparse(("", "", parsed.path or "/", parsed.params, parsed.query, ""))
     return target or "/"
 
 
 def _require_request_hostname(parsed: ParseResult) -> str:
+    """Require a hostname for request URLs."""
     if not parsed.hostname:
         raise ValueError(f"Request URL is missing a hostname: {urlunparse(parsed)!r}")
     return cast(str, parsed.hostname)
 
 
 def _build_tls_context() -> ssl.SSLContext:
+    """Construct a hardened TLS client context."""
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     context.check_hostname = True
     context.verify_mode = ssl.CERT_REQUIRED
@@ -155,14 +184,26 @@ def _build_tls_context() -> ssl.SSLContext:
 
 
 class _ValidatedTLSConnection(HTTPConnection):
+    """HTTP connection that upgrades to a verified TLS socket."""
+
     default_port = HTTPS_PORT
 
     def connect(self) -> None:
+        """Connect and wrap the socket in TLS."""
         super().connect()
-        self.sock = _build_tls_context().wrap_socket(self.sock, server_hostname=self.host)
+        self.sock = _build_tls_context().wrap_socket(
+            self.sock,
+            server_hostname=self.host,
+        )
 
 
-def _prepare_https_request(raw_url: str, *, function_name: str, kwargs: Dict[str, Any]) -> Tuple[ParseResult, Dict[str, Any]]:
+def _prepare_https_request(
+    raw_url: str,
+    *,
+    function_name: str,
+    kwargs: Dict[str, Any],
+) -> Tuple[ParseResult, Dict[str, Any]]:
+    """Normalize common HTTPS request parameters for the fetch helpers."""
     allowed_hosts = kwargs.pop("allowed_hosts", None)
     allowed_host_suffixes = kwargs.pop("allowed_host_suffixes", None)
     headers = kwargs.pop("headers", None)
@@ -170,7 +211,9 @@ def _prepare_https_request(raw_url: str, *, function_name: str, kwargs: Dict[str
     data = kwargs.pop("data", None)
     timeout = int(kwargs.pop("timeout", 30))
     if kwargs:
-        raise TypeError(f"Unexpected {function_name} parameters: {', '.join(sorted(kwargs))}")
+        raise TypeError(
+            f"Unexpected {function_name} parameters: {', '.join(sorted(kwargs))}"
+        )
     safe_url = normalize_https_url(
         raw_url,
         allowed_hosts=allowed_hosts,
@@ -184,7 +227,12 @@ def _prepare_https_request(raw_url: str, *, function_name: str, kwargs: Dict[str
     }
 
 
-def _read_json_response(parsed: ParseResult, *args: Any, **kwargs: Any) -> Tuple[Any, Dict[str, str]]:
+def _read_json_response(
+    parsed: ParseResult,
+    *args: Any,
+    **kwargs: Any,
+) -> Tuple[Any, Dict[str, str]]:
+    """Read and decode a JSON HTTPS response."""
     if args:
         raise TypeError("_read_json_response expects keyword arguments only")
     headers = kwargs.pop("headers", None)
@@ -192,7 +240,9 @@ def _read_json_response(parsed: ParseResult, *args: Any, **kwargs: Any) -> Tuple
     data = kwargs.pop("data", None)
     timeout = int(kwargs.pop("timeout"))
     if kwargs:
-        raise TypeError(f"Unexpected _read_json_response parameters: {', '.join(sorted(kwargs))}")
+        raise TypeError(
+            f"Unexpected _read_json_response parameters: {', '.join(sorted(kwargs))}"
+        )
     request = _build_request(parsed, headers=headers, method=method, data=data)
     hostname = _require_request_hostname(parsed)
     connection = _ValidatedTLSConnection(
@@ -210,9 +260,17 @@ def _read_json_response(parsed: ParseResult, *args: Any, **kwargs: Any) -> Tuple
         )
         response = connection.getresponse()
         payload_bytes = response.read()
-        response_headers = {key.lower(): value for key, value in response.headers.items()}
+        response_headers = {
+            key.lower(): value for key, value in response.headers.items()
+        }
         if response.status >= 400:
-            raise HTTPError(request.full_url, response.status, response.reason, hdrs=response.headers, fp=None)
+            raise HTTPError(
+                request.full_url,
+                response.status,
+                response.reason,
+                hdrs=response.headers,
+                fp=None,
+            )
         payload = json.loads(payload_bytes.decode("utf-8"))
     finally:
         if response is not None and hasattr(response, "close"):
@@ -221,7 +279,12 @@ def _read_json_response(parsed: ParseResult, *args: Any, **kwargs: Any) -> Tuple
     return payload, response_headers
 
 
-def _read_bytes_response(parsed: ParseResult, *args: Any, **kwargs: Any) -> Tuple[bytes, Dict[str, str]]:
+def _read_bytes_response(
+    parsed: ParseResult,
+    *args: Any,
+    **kwargs: Any,
+) -> Tuple[bytes, Dict[str, str]]:
+    """Read a raw byte HTTPS response."""
     if args:
         raise TypeError("_read_bytes_response expects keyword arguments only")
     headers = kwargs.pop("headers", None)
@@ -229,7 +292,9 @@ def _read_bytes_response(parsed: ParseResult, *args: Any, **kwargs: Any) -> Tupl
     data = kwargs.pop("data", None)
     timeout = int(kwargs.pop("timeout"))
     if kwargs:
-        raise TypeError(f"Unexpected _read_bytes_response parameters: {', '.join(sorted(kwargs))}")
+        raise TypeError(
+            f"Unexpected _read_bytes_response parameters: {', '.join(sorted(kwargs))}"
+        )
     request = _build_request(parsed, headers=headers, method=method, data=data)
     hostname = _require_request_hostname(parsed)
     connection = _ValidatedTLSConnection(
@@ -247,9 +312,17 @@ def _read_bytes_response(parsed: ParseResult, *args: Any, **kwargs: Any) -> Tupl
         )
         response = connection.getresponse()
         payload_bytes = response.read()
-        response_headers = {key.lower(): value for key, value in response.headers.items()}
+        response_headers = {
+            key.lower(): value for key, value in response.headers.items()
+        }
         if response.status >= 400:
-            raise HTTPError(request.full_url, response.status, response.reason, hdrs=response.headers, fp=None)
+            raise HTTPError(
+                request.full_url,
+                response.status,
+                response.reason,
+                hdrs=response.headers,
+                fp=None,
+            )
     finally:
         if response is not None and hasattr(response, "close"):
             response.close()
@@ -257,22 +330,38 @@ def _read_bytes_response(parsed: ParseResult, *args: Any, **kwargs: Any) -> Tupl
     return payload_bytes, response_headers
 
 
-def load_json_https(raw_url: str, *args: Any, **kwargs: Any) -> Tuple[Any, Dict[str, str]]:
+def load_json_https(
+    raw_url: str,
+    *args: Any,
+    **kwargs: Any,
+) -> Tuple[Any, Dict[str, str]]:
     """Fetch and decode a JSON document over HTTPS."""
     if args:
         raise TypeError("load_json_https expects keyword arguments only")
-    parsed, request_kwargs = _prepare_https_request(raw_url, function_name="load_json_https", kwargs=kwargs)
+    parsed, request_kwargs = _prepare_https_request(
+        raw_url,
+        function_name="load_json_https",
+        kwargs=kwargs,
+    )
     return _read_json_response(
         parsed,
         **request_kwargs,
     )
 
 
-def load_bytes_https(raw_url: str, *args: Any, **kwargs: Any) -> Tuple[bytes, Dict[str, str]]:
+def load_bytes_https(
+    raw_url: str,
+    *args: Any,
+    **kwargs: Any,
+) -> Tuple[bytes, Dict[str, str]]:
     """Fetch raw bytes over HTTPS."""
     if args:
         raise TypeError("load_bytes_https expects keyword arguments only")
-    parsed, request_kwargs = _prepare_https_request(raw_url, function_name="load_bytes_https", kwargs=kwargs)
+    parsed, request_kwargs = _prepare_https_request(
+        raw_url,
+        function_name="load_bytes_https",
+        kwargs=kwargs,
+    )
     return _read_bytes_response(
         parsed,
         **request_kwargs,

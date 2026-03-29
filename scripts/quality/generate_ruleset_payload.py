@@ -19,6 +19,7 @@ from scripts.quality.control_plane import (
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for ruleset payload generation."""
     parser = argparse.ArgumentParser(
         description="Generate JSON ruleset payloads from control-plane profiles.",
     )

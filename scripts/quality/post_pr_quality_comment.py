@@ -9,7 +9,6 @@ import os
 import sys
 from pathlib import Path
 from typing import Any, Dict
-from urllib.error import HTTPError
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -44,6 +43,7 @@ def _github_request(
     method: str = "GET",
     data: Dict[str, Any] | None = None,
 ) -> Any:
+    """Send one authenticated GitHub API request and return its JSON payload."""
     payload, _ = load_json_https(
         url,
         allowed_hosts={"api.github.com"},

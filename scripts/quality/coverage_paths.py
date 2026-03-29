@@ -41,6 +41,7 @@ def _candidate_suffixes(candidate_text: str) -> List[str]:
     candidates: List[str] = []
 
     def _remember(value: str) -> None:
+        """Record one cleaned candidate path if it is unique."""
         cleaned = str(value or "").strip().replace("\\", "/").lstrip("./")
         if cleaned and cleaned not in candidates:
             candidates.append(cleaned)
@@ -116,6 +117,7 @@ def _coverage_source_candidates(
     candidates: List[str] = []
 
     def _remember(value: str) -> None:
+        """Record one normalized coverage candidate if it is unique."""
         normalized = _normalize_source_path(value)
         if normalized and normalized not in candidates:
             candidates.append(normalized)

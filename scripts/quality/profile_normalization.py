@@ -10,6 +10,7 @@ from scripts.quality import profile_coverage_normalization
 
 
 def _issue_policy_defaults(mode: str) -> Dict[str, str]:
+    """Return default issue-policy values for the selected mode."""
     zero_mode = mode == "zero"
     return {
         "mode": mode,
@@ -22,6 +23,7 @@ def _issue_policy_defaults(mode: str) -> Dict[str, str]:
 def _merge_issue_policy_defaults(
     mode: str, payload: Mapping[str, Any]
 ) -> Dict[str, str]:
+    """Merge explicit issue-policy fields over the mode defaults."""
     defaults = _issue_policy_defaults(mode)
     return {
         "mode": mode,

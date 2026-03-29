@@ -18,7 +18,10 @@ from scripts.quality import check_required_checks
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the required-checks probe for the quality-zero gate.")
+    """Parse command-line arguments for the gate runner."""
+    parser = argparse.ArgumentParser(
+        description="Run the required-checks probe for the quality-zero gate."
+    )
     parser.add_argument("--profile-json", required=True)
     parser.add_argument("--repo-dir", default=".")
     parser.add_argument("--platform-dir", default="")
@@ -28,6 +31,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _required_contexts(profile: Dict[str, Any]) -> List[str]:
+    """Return the required status contexts from a normalized profile."""
     contexts = profile.get("active_required_contexts")
     if isinstance(contexts, list):
         return [str(item).strip() for item in contexts if str(item).strip()]
@@ -39,10 +43,18 @@ def _required_contexts(profile: Dict[str, Any]) -> List[str]:
     raise SystemExit("Resolved profile did not include active_required_contexts")
 
 
-def _build_argv(profile: Dict[str, Any], sha: str, *args: Any, **kwargs: Any) -> List[str]:
+def _build_argv(
+    profile: Dict[str, Any],
+    sha: str,
+    *args: Any,
+    **kwargs: Any,
+) -> List[str]:
+    """Build argv for the required-checks probe."""
     if args:
         if len(args) != 3:
-            raise TypeError("_build_argv expects platform_dir and output paths or keyword arguments")
+            raise TypeError(
+                "_build_argv expects platform_dir and output paths or keyword arguments"
+            )
         platform_dir, out_json, out_md = args
     else:
         try:
@@ -52,13 +64,25 @@ def _build_argv(profile: Dict[str, Any], sha: str, *args: Any, **kwargs: Any) ->
         except KeyError as exc:  # pragma: no cover - defensive contract guard
             raise TypeError(f"Missing required argv parameter: {exc.args[0]}") from exc
         if kwargs:
-            raise TypeError(f"Unexpected _build_argv parameters: {', '.join(sorted(kwargs))}")
+            raise TypeError(
+                f"Unexpected _build_argv parameters: {', '.join(sorted(kwargs))}"
+            )
 
     platform_dir_text = str(platform_dir)
     script_path = (
-        str(PureWindowsPath(platform_dir_text) / "scripts" / "quality" / "check_required_checks.py")
+        str(
+            PureWindowsPath(platform_dir_text)
+            / "scripts"
+            / "quality"
+            / "check_required_checks.py"
+        )
         if "\\" in platform_dir_text and ":" in platform_dir_text
-        else str(Path(platform_dir_text) / "scripts" / "quality" / "check_required_checks.py")
+        else str(
+            Path(platform_dir_text)
+            / "scripts"
+            / "quality"
+            / "check_required_checks.py"
+        )
     )
 
     argv = [
@@ -79,6 +103,7 @@ def _build_argv(profile: Dict[str, Any], sha: str, *args: Any, **kwargs: Any) ->
 
 @contextmanager
 def _working_directory(path: Path):
+    """Temporarily change the current working directory."""
     previous = Path.cwd()
     os.chdir(path)
     try:
@@ -88,6 +113,7 @@ def _working_directory(path: Path):
 
 
 def _run_required_checks(argv: List[str], *, repo_dir: Path) -> int:
+    """Run the required-checks entry point inside the target repository."""
     previous_argv = sys.argv
     sys.argv = argv
     try:
@@ -101,12 +127,25 @@ def main() -> int:
     """Run the quality-zero gate and return the probe exit code."""
     args = _parse_args()
     profile = json.loads(Path(args.profile_json).read_text(encoding="utf-8"))
-    sha = (os.environ.get("TARGET_SHA", "").strip() or os.environ.get("GITHUB_SHA", "").strip())
+    sha = (
+        os.environ.get("TARGET_SHA", "").strip()
+        or os.environ.get("GITHUB_SHA", "").strip()
+    )
     if not sha:
         raise SystemExit("TARGET_SHA or GITHUB_SHA is required")
     repo_dir = Path(args.repo_dir).resolve()
-    platform_dir = Path(args.platform_dir).resolve() if args.platform_dir else Path(__file__).resolve().parents[2]
-    argv = _build_argv(cast(Dict[str, Any], profile), sha, platform_dir=platform_dir, out_json=args.out_json, out_md=args.out_md)
+    platform_dir = (
+        Path(args.platform_dir).resolve()
+        if args.platform_dir
+        else Path(__file__).resolve().parents[2]
+    )
+    argv = _build_argv(
+        cast(Dict[str, Any], profile),
+        sha,
+        platform_dir=platform_dir,
+        out_json=args.out_json,
+        out_md=args.out_md,
+    )
     return _run_required_checks(argv, repo_dir=repo_dir)
 
 

@@ -413,6 +413,19 @@ class CodacyZeroTests(unittest.TestCase):
         self.assertEqual((open_issues, findings), (0, []))
         self.assertEqual(len(calls), 2)
 
+    def test_load_codacy_findings_with_retry_builds_default_config(self) -> None:
+        with patch.object(
+            check_codacy_zero,
+            "_query_codacy_open_issues",
+            return_value=(0, [], None),
+        ):
+            open_issues, findings = load_codacy_findings_with_retry(
+                self._base_query(),
+                "token",
+            )
+
+        self.assertEqual((open_issues, findings), (0, []))
+
     def test_load_codacy_findings_with_retry_returns_last_findings_after_retry_budget(self) -> None:
         not_found = HTTPError("https://api.codacy.com", 404, "Not Found", hdrs=Message(), fp=None)
         with patch.object(check_codacy_zero, "SCOPED_ANALYSIS_RETRY_ATTEMPTS", 2), patch.object(

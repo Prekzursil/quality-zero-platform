@@ -70,6 +70,18 @@ class CodacyRetryConfig:
     sleep_seconds: float
 
 
+def _mapping_or_empty(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _preferred_text(*values: Any) -> str:
+    for value in values:
+        text = str("" if value is None else value).strip()
+        if text:
+            return text
+    return ""
+
+
 def _parse_args() -> argparse.Namespace:
     """Parse CLI arguments for the Codacy zero gate."""
     parser = argparse.ArgumentParser(
@@ -182,11 +194,11 @@ def _build_retry_config(
     pending_fn: CodacyPendingFn | None = None,
     sleep_seconds: float = 5.0,
 ) -> CodacyRetryConfig:
-    attempts = SCOPED_ANALYSIS_RETRY_ATTEMPTS if (query.pull_request or query.sha) else 1
+    attempts = SCOPED_ANALYSIS_RETRY_ATTEMPTS if _preferred_text(query.pull_request, query.sha) else 1
     return CodacyRetryConfig(
         provider_candidates=tuple(provider_candidates),
         attempts=max(1, attempts),
-        pending_fn=pending_fn or _analysis_pending_message,
+        pending_fn=_analysis_pending_message if pending_fn is None else pending_fn,
         sleep_seconds=max(0.0, sleep_seconds),
     )
 
@@ -407,7 +419,9 @@ def _query_codacy_open_issues(
 
 def _codacy_status(findings: List[str], policy_mode: str) -> str:
     """Resolve the final gate status from the findings and policy mode."""
-    return "pass" if policy_mode == "audit" or not findings else "fail"
+    if policy_mode == "audit":
+        return "pass"
+    return "pass" if not findings else "fail"
 
 
 def _base_query(args: argparse.Namespace, pull_request: str) -> CodacyQuery:
@@ -417,7 +431,7 @@ def _base_query(args: argparse.Namespace, pull_request: str) -> CodacyQuery:
         owner=urllib.parse.quote(args.owner.strip(), safe=""),
         repo=urllib.parse.quote(args.repo.strip(), safe=""),
         pull_request=pull_request,
-        sha=str(getattr(args, "sha", "") or "").strip().lower(),
+        sha=_preferred_text(getattr(args, "sha", "")).lower(),
     )
 
 
@@ -462,31 +476,31 @@ def _sha_wait_message(scope_label: str, observed_sha: str, target_sha: str) -> s
 def _pull_request_pending_message(payload: Dict[str, Any], query: CodacyQuery, target_sha: str) -> str | None:
     if bool(payload.get("isAnalysing")):
         return f"Codacy is still analysing pull request {query.pull_request}."
-    pull_request = payload.get("pullRequest") or {}
+    pull_request = _mapping_or_empty(payload.get("pullRequest"))
     return _sha_wait_message(
         f"pull request {query.pull_request}",
-        str(pull_request.get("headCommitSha") or "").strip().lower(),
+        _preferred_text(pull_request.get("headCommitSha")).lower(),
         target_sha,
     )
 
 
 def _repository_pending_message(payload: Dict[str, Any], target_sha: str) -> str | None:
-    repository = payload.get("data") or {}
-    last_analysed_commit = repository.get("lastAnalysedCommit") or {}
+    repository = _mapping_or_empty(payload.get("data"))
+    last_analysed_commit = _mapping_or_empty(repository.get("lastAnalysedCommit"))
     pending_message = _sha_wait_message(
         "repository",
-        str(last_analysed_commit.get("sha") or "").strip().lower(),
+        _preferred_text(last_analysed_commit.get("sha")).lower(),
         target_sha,
     )
     if pending_message is not None:
         return pending_message
-    if not str(last_analysed_commit.get("endedAnalysis") or "").strip():
+    if not _preferred_text(last_analysed_commit.get("endedAnalysis")):
         return "Codacy repository analysis has not finished yet."
     return None
 
 
 def _analysis_pending_message(query: CodacyQuery, token: str) -> str | None:
-    target_sha = str(query.sha or "").strip().lower()
+    target_sha = _preferred_text(query.sha).lower()
     if not target_sha:
         return None
 
@@ -527,7 +541,10 @@ def load_codacy_findings_with_retry(
     retry_config: CodacyRetryConfig | None = None,
 ) -> Tuple[int | None, List[str]]:
     """Load Codacy findings, retrying short-lived PR and analysis-lag states."""
-    config = retry_config or _build_retry_config(base_query, _provider_candidates(base_query.provider))
+    if retry_config is None:
+        config = _build_retry_config(base_query, _provider_candidates(base_query.provider))
+    else:
+        config = retry_config
     open_issues: int | None = None
     findings: List[str] = []
     pending_message: str | None = None
@@ -548,8 +565,8 @@ def load_codacy_findings_with_retry(
 
 def _resolve_codacy_status(args: argparse.Namespace) -> CodacyStatusResult:
     """Resolve the final Codacy gate status for the current invocation."""
-    token = (args.token or os.environ.get("CODACY_API_TOKEN", "")).strip()
-    pull_request = str(args.pull_request or "").strip()
+    token = _preferred_text(args.token, os.environ.get("CODACY_API_TOKEN", ""))
+    pull_request = _preferred_text(args.pull_request)
     if not token:
         return CodacyStatusResult(
             status="fail",
@@ -583,7 +600,7 @@ def _build_payload(
         "owner": args.owner,
         "repo": args.repo,
         "provider": args.provider,
-        "pull_request": result.pull_request or None,
+        "pull_request": result.pull_request if result.pull_request else None,
         "open_issues": result.open_issues,
         "timestamp_utc": utc_timestamp(),
         "findings": result.findings,

@@ -21,6 +21,18 @@ SONAR_API_BASE = "https://sonarcloud.io"
 SCOPED_ANALYSIS_RETRY_ATTEMPTS = 72
 
 
+def _mapping_or_empty(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _preferred_text(*values: Any) -> str:
+    for value in values:
+        text = str("" if value is None else value).strip()
+        if text:
+            return text
+    return ""
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Assert SonarCloud has zero open issues and a passing quality gate.")
     parser.add_argument("--project-key", required=True)
@@ -92,7 +104,9 @@ def _load_open_issues(args: argparse.Namespace, auth: str) -> int:
         f"{SONAR_API_BASE}/api/issues/search?{urllib.parse.urlencode(issues_query)}",
         auth,
     )
-    return int((issues_payload.get("paging") or {}).get("total") or 0)
+    paging = _mapping_or_empty(issues_payload.get("paging"))
+    total = paging.get("total")
+    return int(0 if total is None else total)
 
 
 def _load_quality_gate(args: argparse.Namespace, auth: str) -> str:
@@ -105,7 +119,8 @@ def _load_quality_gate(args: argparse.Namespace, auth: str) -> str:
         f"{SONAR_API_BASE}/api/qualitygates/project_status?{urllib.parse.urlencode(gate_query)}",
         auth,
     )
-    return str((gate_payload.get("projectStatus") or {}).get("status") or "UNKNOWN")
+    project_status = _mapping_or_empty(gate_payload.get("projectStatus"))
+    return _preferred_text(project_status.get("status"), "UNKNOWN")
 
 
 def _load_sonar_findings(args: argparse.Namespace, auth: str) -> Tuple[int, str, List[str]]:
@@ -121,16 +136,16 @@ def _load_sonar_findings(args: argparse.Namespace, auth: str) -> Tuple[int, str,
 
 
 def _is_scoped_analysis(args: argparse.Namespace) -> bool:
-    return bool(getattr(args, "branch", "").strip() or getattr(args, "pull_request", "").strip())
+    return bool(_preferred_text(getattr(args, "branch", ""), getattr(args, "pull_request", "")))
 
 
 def _target_sha(args: argparse.Namespace) -> str:
-    return str(getattr(args, "sha", "") or "").strip().lower()
+    return _preferred_text(getattr(args, "sha", "")).lower()
 
 
 def _find_named_entry(items: List[Mapping[str, Any]], key: str, value: str) -> Mapping[str, Any] | None:
     for item in items:
-        if str(item.get(key) or "").strip() == value:
+        if _preferred_text(item.get(key)) == value:
             return item
     return None
 
@@ -140,11 +155,11 @@ def _load_branch_analysis_revision(args: argparse.Namespace, auth: str) -> str:
         f"{SONAR_API_BASE}/api/project_branches/list?project={urllib.parse.quote(args.project_key, safe='')}",
         auth,
     )
-    branch_entry = _find_named_entry(list(payload.get("branches") or []), "name", str(args.branch or "").strip())
+    branch_entry = _find_named_entry(list(payload.get("branches") or []), "name", _preferred_text(args.branch))
     if branch_entry is None:
         return ""
-    commit = branch_entry.get("commit") or {}
-    return str(commit.get("sha") or "").strip().lower()
+    commit = _mapping_or_empty(branch_entry.get("commit"))
+    return _preferred_text(commit.get("sha")).lower()
 
 
 def _load_pull_request_analysis_revision(args: argparse.Namespace, auth: str) -> str:
@@ -155,22 +170,22 @@ def _load_pull_request_analysis_revision(args: argparse.Namespace, auth: str) ->
     pull_request_entry = _find_named_entry(
         list(payload.get("pullRequests") or []),
         "key",
-        str(args.pull_request or "").strip(),
+        _preferred_text(args.pull_request),
     )
     if pull_request_entry is None:
         return ""
-    commit = pull_request_entry.get("commit") or {}
-    return str(commit.get("sha") or "").strip().lower()
+    commit = _mapping_or_empty(pull_request_entry.get("commit"))
+    return _preferred_text(commit.get("sha")).lower()
 
 
 def _scoped_analysis_label(args: argparse.Namespace) -> str:
-    if str(getattr(args, "pull_request", "") or "").strip():
+    if _preferred_text(getattr(args, "pull_request", "")):
         return f"pull request {args.pull_request}"
     return f"branch {args.branch}"
 
 
 def _load_scoped_analysis_revision(args: argparse.Namespace, auth: str) -> str:
-    if str(getattr(args, "pull_request", "") or "").strip():
+    if _preferred_text(getattr(args, "pull_request", "")):
         return _load_pull_request_analysis_revision(args, auth)
     return _load_branch_analysis_revision(args, auth)
 
@@ -228,7 +243,7 @@ def _should_retry_scoped_analysis(
     findings: List[str],
     pending_message: str | None,
 ) -> bool:
-    return _is_scoped_analysis(namespace) and (bool(findings) or pending_message is not None)
+    return _is_scoped_analysis(namespace) and bool(findings or pending_message is not None)
 
 
 def _final_retry_findings(findings: List[str], pending_message: str | None) -> List[str]:
@@ -266,7 +281,7 @@ def load_sonar_findings_with_retry(*args: Any, **kwargs: Any) -> Tuple[int, str,
 
 def main() -> int:
     args = _parse_args()
-    token = (args.token or os.environ.get("SONAR_TOKEN", "")).strip()
+    token = _preferred_text(args.token, os.environ.get("SONAR_TOKEN", ""))
     findings: List[str] = []
     open_issues: int | None = None
     quality_gate: str | None = None

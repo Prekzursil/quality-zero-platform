@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Normalize coverage for qlty."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -16,18 +18,13 @@ from scripts.quality.coverage_paths import (
     _normalize_source_path,
 )
 
-
-_XML_FILENAME_RE = re.compile(
-    r'(?P<prefix><[^>]+\bfilename=(?P<quote>["\']))(?P<value>.*?)(?P=quote)'
-)
+_XML_FILENAME_RE = re.compile(r'(?P<prefix><[^>]+\bfilename=(?P<quote>["\']))(?P<value>.*?)(?P=quote)')
 _XML_SOURCE_RE = re.compile(r"<source>(?P<value>.*?)</source>")
 
 
 def _parse_args() -> argparse.Namespace:
     """Parse CLI arguments for QLTY coverage normalization."""
-    parser = argparse.ArgumentParser(
-        description="Normalize coverage report paths for QLTY uploads."
-    )
+    parser = argparse.ArgumentParser(description="Normalize coverage report paths for QLTY uploads.")
     parser.add_argument("--repo-dir", required=True)
     parser.add_argument("--out-dir", required=True)
     parser.add_argument("inputs", nargs="+")
@@ -69,24 +66,14 @@ def _existing_candidate(raw_path: str, source_roots: Iterable[str]) -> str:
 
 def _xml_source_roots(text: str) -> List[str]:
     """Collect source roots declared inside a coverage XML payload."""
-    return [
-        match.group("value").strip()
-        for match in _XML_SOURCE_RE.finditer(text)
-        if match.group("value").strip()
-    ]
+    return [match.group("value").strip() for match in _XML_SOURCE_RE.finditer(text) if match.group("value").strip()]
 
 
 def _path_within_base(base_dir: Path, candidate: Path) -> Path:
     """Resolve a path and reject candidates that escape the trusted base."""
     resolved_base = base_dir.resolve()
-    resolved_candidate = (
-        candidate.resolve(strict=False)
-        if candidate.is_absolute()
-        else (resolved_base / candidate).resolve(strict=False)
-    )
-    if os.path.commonpath([str(resolved_base), str(resolved_candidate)]) != str(
-        resolved_base
-    ):
+    resolved_candidate = candidate.resolve(strict=False) if candidate.is_absolute() else (resolved_base / candidate).resolve(strict=False)
+    if os.path.commonpath([str(resolved_base), str(resolved_candidate)]) != str(resolved_base):
         raise ValueError(f"Path escapes normalized coverage workspace: {candidate}")
     return resolved_candidate
 

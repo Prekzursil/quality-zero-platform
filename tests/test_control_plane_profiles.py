@@ -1,3 +1,5 @@
+"""Test control plane profiles."""
+
 from __future__ import absolute_import
 
 import io
@@ -52,10 +54,7 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
     def test_special_repo_coverage_profiles_capture_multi_language_inputs(self) -> None:
         """Special repos should keep their expected multi-language coverage inputs."""
         profiles = self._special_repo_profiles()
-        reframe_inputs = {
-            (item["format"], item["name"], item["path"])
-            for item in profiles["reframe"]["coverage"]["inputs"]
-        }
+        reframe_inputs = {(item["format"], item["name"], item["path"]) for item in profiles["reframe"]["coverage"]["inputs"]}
         self.assertEqual(
             reframe_inputs,
             {
@@ -63,10 +62,7 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
                 ("lcov", "desktop-ts", "apps/desktop/coverage/lcov.info"),
             },
         )
-        momentstudio_inputs = {
-            (item["format"], item["name"], item["path"])
-            for item in profiles["momentstudio"]["coverage"]["inputs"]
-        }
+        momentstudio_inputs = {(item["format"], item["name"], item["path"]) for item in profiles["momentstudio"]["coverage"]["inputs"]}
         self.assertEqual(
             momentstudio_inputs,
             {
@@ -202,9 +198,7 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
     def test_provider_metadata_tracks_real_qlty_names(self) -> None:
         """Provider metadata should expose the expected QLTY names and policy values."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
-        quality_zero_platform = load_repo_profile(
-            inventory, "Prekzursil/quality-zero-platform"
-        )
+        quality_zero_platform = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
         self.assertEqual(
             quality_zero_platform["vendors"]["qlty"]["check_names_actual"],
             ["qlty check", "qlty coverage", "qlty coverage diff"],
@@ -270,11 +264,7 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
         """Removing one visual context should trigger the visual-pair validator."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
-        profile["required_contexts"]["target"] = [
-            name
-            for name in profile["required_contexts"]["target"]
-            if name != "Applitools Visual"
-        ]
+        profile["required_contexts"]["target"] = [name for name in profile["required_contexts"]["target"] if name != "Applitools Visual"]
 
         findings = validate_profile(profile)
 
@@ -293,31 +283,19 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
         findings = validate_profile(profile)
 
         self.assertIn(
-            (
-                "Prekzursil/TanksFlashMobile: visual_pair_required "
-                "requires chromatic.project_name"
-            ),
+            ("Prekzursil/TanksFlashMobile: visual_pair_required " "requires chromatic.project_name"),
             findings,
         )
         self.assertIn(
-            (
-                "Prekzursil/TanksFlashMobile: visual_pair_required "
-                "requires chromatic.token_secret"
-            ),
+            ("Prekzursil/TanksFlashMobile: visual_pair_required " "requires chromatic.token_secret"),
             findings,
         )
         self.assertIn(
-            (
-                "Prekzursil/TanksFlashMobile: visual_pair_required "
-                "requires chromatic.local_env_var"
-            ),
+            ("Prekzursil/TanksFlashMobile: visual_pair_required " "requires chromatic.local_env_var"),
             findings,
         )
         self.assertIn(
-            (
-                "Prekzursil/TanksFlashMobile: visual_pair_required "
-                "requires applitools.project_name"
-            ),
+            ("Prekzursil/TanksFlashMobile: visual_pair_required " "requires applitools.project_name"),
             findings,
         )
 
@@ -329,9 +307,7 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
 
         findings = validate_profile(profile)
 
-        self.assertTrue(
-            any("invalid codacy.dashboard_url" in item for item in findings)
-        )
+        self.assertTrue(any("invalid codacy.dashboard_url" in item for item in findings))
 
     def test_export_profile_emits_coverage_inputs_for_codecov_and_qlty_uploads(
         self,
@@ -387,18 +363,10 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
                 self.assertEqual(export_profile_module.main(), 0)
 
             output = output_path.read_text(encoding="utf-8")
-            expected_files = (
-                "coverage_input_files="
-                "repo/coverage/python/coverage.xml,"
-                "repo/airline-gui/coverage/lcov.info,"
-                "repo/coverage/cpp/lcov.info"
-            )
+            expected_files = "coverage_input_files=" "repo/coverage/python/coverage.xml," "repo/airline-gui/coverage/lcov.info," "repo/coverage/cpp/lcov.info"
             self.assertIn(expected_files, output)
             self.assertIn(
-                "qlty_coverage_files="
-                "repo/coverage/python/coverage.xml,"
-                "repo/airline-gui/coverage/lcov.info,"
-                "repo/coverage/cpp/lcov.info",
+                "qlty_coverage_files=" "repo/coverage/python/coverage.xml," "repo/airline-gui/coverage/lcov.info," "repo/coverage/cpp/lcov.info",
                 output,
             )
 
@@ -416,9 +384,7 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
                 str(output_path),
             ]
             repo_root = str(ROOT)
-            without_empty = [
-                entry for entry in sys.path if entry not in (repo_root, "")
-            ]
+            without_empty = [entry for entry in sys.path if entry not in (repo_root, "")]
 
             for sys_path in (without_empty, ["", *without_empty]):
                 if "" not in sys_path:

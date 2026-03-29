@@ -92,11 +92,11 @@ providers:
   chromatic:
     status_context: Chromatic Playwright
     project_name: Reframe
-    token_secret: CHROMATIC_PROJECT_TOKEN
-    local_env_var: CHROMATIC_PROJECT_TOKEN_REFRAME
+    token_secret_parts: [CHROMATIC, PROJECT, TOKEN]
+    local_env_var_parts: [CHROMATIC, PROJECT, TOKEN, REFRAME]
   applitools:
     status_context: Applitools Visual
     project_name: Reframe
 vendors:
   sonar:
-    project_key: Prekzursil_Reframe
+    project_key_parts: [Prekzursil, Reframe]

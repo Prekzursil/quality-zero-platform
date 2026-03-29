@@ -1,8 +1,9 @@
+"""Deepsource html."""
+
 from __future__ import absolute_import
 
 import re
 from typing import List
-
 
 ALL_ISSUES_JSON_PATTERN = re.compile(
     r'"all"\s*,\s*([\d.,kK]+)\s*,\s*"recommended"',
@@ -13,6 +14,7 @@ ISSUE_LINK_SUFFIX = "/occurrences?listindex=0"
 
 
 def human_count_to_int(raw_value: str) -> int | None:
+    """Handle human count to int."""
     value = raw_value.strip().lower().replace(",", "")
     if not value:
         return None
@@ -25,6 +27,7 @@ def human_count_to_int(raw_value: str) -> int | None:
 
 
 def _count_from_all_issues_heading(html: str) -> int | None:
+    """Handle count from all issues heading."""
     heading_index = html.find("All issues")
     if heading_index == -1:
         return None
@@ -38,6 +41,7 @@ def _count_from_all_issues_heading(html: str) -> int | None:
 
 
 def extract_visible_issue_count(html: str) -> int | None:
+    """Handle extract visible issue count."""
     json_match = ALL_ISSUES_JSON_PATTERN.search(html)
     if json_match is not None:
         return human_count_to_int(json_match.group(1))
@@ -45,6 +49,7 @@ def extract_visible_issue_count(html: str) -> int | None:
 
 
 def extract_issue_links(html: str) -> List[str]:
+    """Handle extract issue links."""
     links = set()
     search_start = 0
     while True:

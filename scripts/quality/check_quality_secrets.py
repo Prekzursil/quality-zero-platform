@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Check quality secrets."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -12,11 +14,11 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
 
 from scripts.quality.common import dedupe_strings, utc_timestamp, write_report
 
-
 NONE_BULLET = "- None"
 
 
 def _parse_args() -> argparse.Namespace:
+    """Handle parse args."""
     parser = argparse.ArgumentParser(description="Validate required quality-gate secrets and variables.")
     parser.add_argument("--required-secret", action="append", default=[], help="Required secret env var name")
     parser.add_argument("--conditional-secret", action="append", default=[], help="Conditional secret env var name")
@@ -28,11 +30,13 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _append_missing_section(lines: List[str], title: str, items: List[str]) -> None:
+    """Handle append missing section."""
     lines.extend(["", title])
     lines.extend([f"- `{item}`" for item in items] or [NONE_BULLET])
 
 
 def _render_md(payload: Mapping[str, Any]) -> str:
+    """Handle render md."""
     lines = [
         "# Quality Secrets Preflight",
         "",
@@ -55,6 +59,7 @@ def _render_md(payload: Mapping[str, Any]) -> str:
 
 
 def _missing_env_names(names: List[str]) -> List[str]:
+    """Handle missing env names."""
     return [name for name in names if not str(os.environ.get(name, "")).strip()]
 
 
@@ -65,6 +70,7 @@ def _build_payload(
     required_vars: List[str],
     conditional_vars: List[str],
 ) -> Dict[str, Any]:
+    """Handle build payload."""
     missing_secrets = _missing_env_names(required_secrets)
     missing_conditional_secrets = _missing_env_names(conditional_secrets)
     missing_vars = _missing_env_names(required_vars)
@@ -84,6 +90,7 @@ def _build_payload(
 
 
 def main() -> int:
+    """Handle main."""
     args = _parse_args()
     required_secrets = dedupe_strings(args.required_secret or [])
     conditional_secrets = dedupe_strings(args.conditional_secret or [])

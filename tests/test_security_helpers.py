@@ -1,3 +1,5 @@
+"""Test security helpers."""
+
 from __future__ import absolute_import
 
 import unittest
@@ -10,6 +12,8 @@ from typing import Dict
 
 
 class _FakeHttpResponse:
+    """Fake Http Response."""
+
     def __init__(
         self,
         payload: str,
@@ -18,6 +22,7 @@ class _FakeHttpResponse:
         status: int = 200,
         reason: str = "OK",
     ) -> None:
+        """Handle init."""
         self._payload = payload.encode("utf-8")
         self._headers = dict(headers or {})
         self.status = status
@@ -25,25 +30,35 @@ class _FakeHttpResponse:
         self.closed = False
 
     def read(self) -> bytes:
+        """Handle read."""
         return self._payload
 
     @property
     def headers(self) -> Dict[str, str]:
+        """Handle headers."""
         return self._headers
 
     def close(self) -> None:
+        """Handle close."""
         self.closed = True
 
 
 class SecurityHelpersTests(unittest.TestCase):
+    """Security Helpers Tests."""
+
     def test_internal_ip_flag_helpers_cover_callable_and_forbidden_cases(self) -> None:
+        """Cover internal ip flag helpers cover callable and forbidden cases."""
+
         class _CallableFlag:
+            """Callable Flag."""
+
             is_private = staticmethod(lambda: True)
 
         self.assertTrue(_get_ip_flag(_CallableFlag(), "is_private"))
         self.assertTrue(security_helpers._is_forbidden_ip_address(security_helpers.ipaddress.ip_address("127.0.0.1")))
 
     def test_build_tls_context_enforces_verification_and_modern_tls(self) -> None:
+        """Cover build tls context enforces verification and modern tls."""
         context = security_helpers._build_tls_context()
 
         self.assertTrue(context.check_hostname)
@@ -51,6 +66,7 @@ class SecurityHelpersTests(unittest.TestCase):
         self.assertGreaterEqual(context.minimum_version, security_helpers.ssl.TLSVersion.TLSv1_2)
 
     def test_validated_tls_connection_wraps_the_connected_socket(self) -> None:
+        """Cover validated tls connection wraps the connected socket."""
         wrapped_socket = object()
         raw_socket = object()
         tls_context = MagicMock()
@@ -69,10 +85,12 @@ class SecurityHelpersTests(unittest.TestCase):
         self.assertIs(connection.sock, wrapped_socket)
 
     def test_normalize_https_url_rejects_non_https(self) -> None:
+        """Cover normalize https url rejects non https."""
         with self.assertRaises(ValueError):
             normalize_https_url("file:///tmp/example.json")
 
     def test_normalize_https_url_rejects_missing_host_credentials_and_non_public_hosts(self) -> None:
+        """Cover normalize https url rejects missing host credentials and non public hosts."""
         user = "user"
         secret = "".join(["p", "a", "s", "s"])
         with self.assertRaisesRegex(ValueError, "missing a hostname"):
@@ -87,6 +105,7 @@ class SecurityHelpersTests(unittest.TestCase):
             normalize_https_url("https://localhost/private")
 
     def test_normalize_https_url_can_strip_query_and_build_request_rejects_missing_hostname(self) -> None:
+        """Cover normalize https url can strip query and build request rejects missing hostname."""
         self.assertEqual(
             normalize_https_url(
                 "https://api.github.com/repos/Prekzursil/quality-zero-platform?foo=bar#frag",
@@ -99,12 +118,13 @@ class SecurityHelpersTests(unittest.TestCase):
             _build_request(urlparse("https:///missing-host"), headers=None, method="GET", data=None)
 
     def test_load_json_https_validates_allowlisted_host_before_open(self) -> None:
-        with patch("scripts.security_helpers._ValidatedTLSConnection") as connection_cls:
-            with self.assertRaises(ValueError):
-                load_json_https("https://evil.example.com/path", allowed_hosts={"api.github.com"})
+        """Cover load json https validates allowlisted host before open."""
+        with patch("scripts.security_helpers._ValidatedTLSConnection") as connection_cls, self.assertRaises(ValueError):
+            load_json_https("https://evil.example.com/path", allowed_hosts={"api.github.com"})
         connection_cls.assert_not_called()
 
     def test_load_json_https_uses_normalized_request_and_collects_headers(self) -> None:
+        """Cover load json https uses normalized request and collects headers."""
         response = _FakeHttpResponse('{"ok": true}', {"X-Test": "value"})
         with patch("scripts.security_helpers._ValidatedTLSConnection") as connection_cls:
             connection = connection_cls.return_value
@@ -129,6 +149,7 @@ class SecurityHelpersTests(unittest.TestCase):
         connection.close.assert_called_once()
 
     def test_load_json_https_raises_http_error_for_non_success_response(self) -> None:
+        """Cover load json https raises http error for non success response."""
         response = _FakeHttpResponse("{}", status=404, reason="Not Found")
         with patch("scripts.security_helpers._ValidatedTLSConnection") as connection_cls:
             connection = connection_cls.return_value
@@ -139,6 +160,7 @@ class SecurityHelpersTests(unittest.TestCase):
         connection.close.assert_called_once()
 
     def test_keyword_only_guards_reject_positional_and_unexpected_arguments(self) -> None:
+        """Cover keyword only guards reject positional and unexpected arguments."""
         parsed = urlparse("https://api.github.com/repos/Prekzursil/quality-zero-platform/status")
 
         with self.assertRaisesRegex(TypeError, "expects keyword arguments only"):

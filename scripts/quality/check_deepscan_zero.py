@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Check deepscan zero."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -13,13 +15,13 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
 from scripts.quality.common import utc_timestamp, write_report
 from scripts.security_helpers import load_json_https, normalize_https_url
 
-
 TOTAL_KEYS = {"total", "totalItems", "total_items", "count", "hits", "open_issues"}
 DEEPSCAN_STATUS_CONTEXT = "DeepScan"
 GITHUB_API_BASE = "https://api.github.com"
 
 
 def _parse_args() -> argparse.Namespace:
+    """Handle parse args."""
     parser = argparse.ArgumentParser(description="Assert DeepScan has zero open issues.")
     parser.add_argument("--policy-mode", default="")
     parser.add_argument("--repo", default="")
@@ -32,10 +34,12 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _event_name() -> str:
+    """Handle event name."""
     return os.environ.get("EVENT_NAME", "").strip()
 
 
 def _nested_payload_values(payload: Any) -> List[Any]:
+    """Handle nested payload values."""
     if isinstance(payload, dict):
         return list(payload.values())
     if isinstance(payload, list):
@@ -44,6 +48,7 @@ def _nested_payload_values(payload: Any) -> List[Any]:
 
 
 def extract_total_open(payload: Any) -> int | None:
+    """Handle extract total open."""
     if isinstance(payload, dict):
         for key, value in payload.items():
             if key in TOTAL_KEYS and isinstance(value, (int, float)):
@@ -56,6 +61,7 @@ def extract_total_open(payload: Any) -> int | None:
 
 
 def _request_json(url: str, token: str) -> Dict[str, Any]:
+    """Handle request json."""
     payload, _ = load_json_https(
         url,
         allowed_host_suffixes={"deepscan.io"},
@@ -71,6 +77,7 @@ def _request_json(url: str, token: str) -> Dict[str, Any]:
 
 
 def _github_status_payload(repo: str, sha: str, token: str) -> Dict[str, Any]:
+    """Handle github status payload."""
     payload, _ = load_json_https(
         f"{GITHUB_API_BASE}/repos/{repo}/commits/{sha}/status",
         allowed_hosts={"api.github.com"},
@@ -87,6 +94,7 @@ def _github_status_payload(repo: str, sha: str, token: str) -> Dict[str, Any]:
 
 
 def _render_md(payload: Mapping[str, Any]) -> str:
+    """Handle render md."""
     lines = [
         "# DeepScan Zero Gate",
         "",
@@ -102,18 +110,22 @@ def _render_md(payload: Mapping[str, Any]) -> str:
 
 
 def _policy_mode(args: argparse.Namespace) -> str:
+    """Handle policy mode."""
     return (args.policy_mode or os.environ.get("DEEPSCAN_POLICY_MODE", "")).strip() or "github_check_context"
 
 
 def _github_repo(args: argparse.Namespace) -> str:
+    """Handle github repo."""
     return (args.repo or os.environ.get("REPO_SLUG", "") or os.environ.get("GITHUB_REPOSITORY", "")).strip()
 
 
 def _github_sha(args: argparse.Namespace) -> str:
+    """Handle github sha."""
     return (args.sha or os.environ.get("TARGET_SHA", "") or os.environ.get("GITHUB_SHA", "")).strip()
 
 
 def _validate_github_check_context_inputs(github_token: str, repo: str, sha: str) -> List[str]:
+    """Handle validate github check context inputs."""
     findings: List[str] = []
     if not github_token:
         findings.append("GITHUB_TOKEN is missing for github_check_context mode.")
@@ -125,6 +137,7 @@ def _validate_github_check_context_inputs(github_token: str, repo: str, sha: str
 
 
 def _validate_open_issues_mode_inputs(token: str, open_issues_url: str) -> List[str]:
+    """Handle validate open issues mode inputs."""
     findings: List[str] = []
     if not token:
         findings.append("DEEPSCAN_API_TOKEN is missing.")
@@ -134,6 +147,7 @@ def _validate_open_issues_mode_inputs(token: str, open_issues_url: str) -> List[
 
 
 def _validate_deepscan_inputs(*args: Any, **kwargs: Any) -> List[str]:
+    """Handle validate deepscan inputs."""
     if args:
         raise TypeError("_validate_deepscan_inputs expects keyword arguments only")
     try:
@@ -153,10 +167,12 @@ def _validate_deepscan_inputs(*args: Any, **kwargs: Any) -> List[str]:
 
 
 def _normalized_open_issues_url(open_issues_url: str) -> str:
+    """Handle normalized open issues url."""
     return normalize_https_url(open_issues_url, allowed_host_suffixes={"deepscan.io"})
 
 
 def _evaluate_deepscan_open_issues(open_issues_url: str, token: str) -> Tuple[int | None, List[str]]:
+    """Handle evaluate deepscan open issues."""
     findings: List[str] = []
     payload = _request_json(open_issues_url, token)
     open_issues = extract_total_open(payload)
@@ -168,6 +184,7 @@ def _evaluate_deepscan_open_issues(open_issues_url: str, token: str) -> Tuple[in
 
 
 def _find_github_status(payload: Dict[str, Any], context: str) -> Dict[str, Any] | None:
+    """Handle find github status."""
     for item in payload.get("statuses", []) or []:
         if str(item.get("context") or "").strip() == context:
             return item
@@ -175,10 +192,12 @@ def _find_github_status(payload: Dict[str, Any], context: str) -> Dict[str, Any]
 
 
 def _status_target_url(status: Dict[str, Any] | None) -> str:
+    """Handle status target url."""
     return str((status or {}).get("target_url") or "").strip()
 
 
 def _status_findings(status: Dict[str, Any] | None, context: str) -> List[str]:
+    """Handle status findings."""
     if status is None:
         return [f"{context} GitHub status context is missing."]
 
@@ -189,6 +208,7 @@ def _status_findings(status: Dict[str, Any] | None, context: str) -> List[str]:
 
 
 def _evaluate_github_check_context(args: argparse.Namespace, token: str) -> Tuple[int | None, str, List[str]]:
+    """Handle evaluate github check context."""
     payload = _github_status_payload(_github_repo(args), _github_sha(args), token)
     context = str(getattr(args, "github_context", DEEPSCAN_STATUS_CONTEXT) or DEEPSCAN_STATUS_CONTEXT)
     status = _find_github_status(payload, context)
@@ -200,12 +220,14 @@ def _evaluate_github_check_context(args: argparse.Namespace, token: str) -> Tupl
 
 
 def _evaluate_open_issues_mode(open_issues_url: str, token: str) -> Tuple[int | None, str, List[str]]:
+    """Handle evaluate open issues mode."""
     normalized_url = _normalized_open_issues_url(open_issues_url)
     open_issues, findings = _evaluate_deepscan_open_issues(normalized_url, token)
     return open_issues, normalized_url, findings
 
 
 def _evaluate_deepscan_policy(args: argparse.Namespace, *call_args: Any, **kwargs: Any) -> Tuple[int | None, str, List[str]]:
+    """Handle evaluate deepscan policy."""
     if call_args:
         raise TypeError("_evaluate_deepscan_policy expects keyword arguments only")
     try:
@@ -223,6 +245,7 @@ def _evaluate_deepscan_policy(args: argparse.Namespace, *call_args: Any, **kwarg
 
 
 def main() -> int:
+    """Handle main."""
     args = _parse_args()
     token = (args.token or os.environ.get("DEEPSCAN_API_TOKEN", "")).strip()
     github_token = os.environ.get("GITHUB_TOKEN", "").strip() or os.environ.get("GH_TOKEN", "").strip()

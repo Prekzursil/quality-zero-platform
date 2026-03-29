@@ -1,3 +1,5 @@
+"""Control plane."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -32,13 +34,14 @@ from scripts.quality.profile_normalization import (
     normalize_required_contexts as common_normalize_required_contexts,
 )
 
-
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_INVENTORY_PATH = ROOT / "inventory" / "repos.yml"
 
 
 @dataclass(frozen=True)
 class RepoSources:
+    """Repo Sources."""
+
     repo_entry: Dict[str, Any]
     profile_id: str
     repo_profile: Dict[str, Any]
@@ -48,6 +51,8 @@ class RepoSources:
 
 @dataclass(frozen=True)
 class InventoryOverrides:
+    """Inventory Overrides."""
+
     repo_entry: Dict[str, Any]
     repo_slug: str
     profile_id: str
@@ -56,10 +61,12 @@ class InventoryOverrides:
 
 
 def repo_root() -> Path:
+    """Handle repo root."""
     return ROOT
 
 
 def _load_yaml(path: Path) -> Dict[str, Any]:
+    """Handle load yaml."""
     payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(payload, dict):
         raise ValueError(f"Expected mapping at {path}")
@@ -67,14 +74,17 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
 
 
 def _deep_merge(base: Any, overlay: Any) -> Any:
+    """Handle deep merge."""
     return common_deep_merge(base, overlay)
 
 
 def _inventory_root(inventory: Dict[str, Any]) -> Path:
+    """Handle inventory root."""
     return Path(inventory["_root"])
 
 
 def load_inventory(path: Path | str = DEFAULT_INVENTORY_PATH) -> Dict[str, Any]:
+    """Handle load inventory."""
     inventory_path = Path(path).resolve()
     payload = _load_yaml(inventory_path)
     payload.setdefault("version", 1)
@@ -87,6 +97,7 @@ def load_inventory(path: Path | str = DEFAULT_INVENTORY_PATH) -> Dict[str, Any]:
 
 
 def _load_stack(inventory: Dict[str, Any], stack_id: str, seen: Set[str] | None = None) -> Dict[str, Any]:
+    """Handle load stack."""
     if not stack_id:
         raise ValueError("stack id is required")
     trail = set(seen or set())
@@ -109,48 +120,58 @@ def _load_stack(inventory: Dict[str, Any], stack_id: str, seen: Set[str] | None 
 
 
 def _normalize_required_contexts(raw: Dict[str, Any]) -> Dict[str, List[str]]:
+    """Handle normalize required contexts."""
     return common_normalize_required_contexts(raw)
 
 
 def _merge_required_contexts(base: Dict[str, Any], overlay: Dict[str, Any]) -> Dict[str, List[str]]:
+    """Handle merge required contexts."""
     return common_merge_required_contexts(base, overlay)
 
 
 def _normalize_coverage_inputs(raw_inputs: Any) -> List[Dict[str, str]]:
+    """Handle normalize coverage inputs."""
     return common_normalize_coverage_inputs(raw_inputs)
 
 
 def _infer_coverage_inputs(coverage: Dict[str, Any]) -> List[Dict[str, str]]:
+    """Handle infer coverage inputs."""
     return common_infer_coverage_inputs(coverage)
 
 
 def _normalize_java_setup(raw_java: Any) -> Dict[str, Any]:
+    """Handle normalize java setup."""
     return common_normalize_java_setup(raw_java)
 
 
 def _normalize_coverage_setup(raw_setup: Any) -> Dict[str, Any]:
+    """Handle normalize coverage setup."""
     coverage = common_normalize_coverage({"setup": raw_setup})
     return cast(Dict[str, Any], coverage["setup"])
 
 
 def _normalize_coverage_assert_mode(raw_assert_mode: Any) -> Dict[str, str]:
+    """Handle normalize coverage assert mode."""
     return common_normalize_coverage_assert_mode(raw_assert_mode)
 
 
 def _normalize_coverage(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Handle normalize coverage."""
     return common_normalize_coverage(raw)
 
 
 def _normalize_codex_environment(raw: Dict[str, Any], *, verify_command: str) -> Dict[str, Any]:
+    """Handle normalize codex environment."""
     return common_normalize_codex_environment(raw, verify_command=verify_command)
 
 
 def _normalize_issue_policy(raw: Dict[str, Any]) -> Dict[str, str]:
+    """Handle normalize issue policy."""
     return common_normalize_issue_policy(raw)
 
 
-
 def _resolve_repo_sources(inventory: Dict[str, Any], repo_slug: str) -> RepoSources:
+    """Handle resolve repo sources."""
     repo_entry = next((item for item in inventory["repos"] if item.get("slug") == repo_slug), None)
     if repo_entry is None:
         raise KeyError(f"Repo {repo_slug} not found in inventory")
@@ -167,6 +188,7 @@ def _resolve_repo_sources(inventory: Dict[str, Any], repo_slug: str) -> RepoSour
 
 
 def _merge_repo_profile(stack_profile: Dict[str, Any], repo_profile: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
+    """Handle merge repo profile."""
     merged = _deep_merge(stack_profile, repo_profile)
     required_contexts_mode = str(repo_profile.get("required_contexts_mode", "merge")).strip() or "merge"
     if required_contexts_mode == "replace":
@@ -176,12 +198,8 @@ def _merge_repo_profile(stack_profile: Dict[str, Any], repo_profile: Dict[str, A
             stack_profile.get("required_contexts", {}),
             repo_profile.get("required_contexts", {}),
         )
-    merged["required_secrets"] = dedupe_strings(
-        [*stack_profile.get("required_secrets", []), *repo_profile.get("required_secrets", [])]
-    )
-    merged["conditional_secrets"] = dedupe_strings(
-        [*stack_profile.get("conditional_secrets", []), *repo_profile.get("conditional_secrets", [])]
-    )
+    merged["required_secrets"] = dedupe_strings([*stack_profile.get("required_secrets", []), *repo_profile.get("required_secrets", [])])
+    merged["conditional_secrets"] = dedupe_strings([*stack_profile.get("conditional_secrets", []), *repo_profile.get("conditional_secrets", [])])
     merged["required_vars"] = dedupe_strings([*stack_profile.get("required_vars", []), *repo_profile.get("required_vars", [])])
     merged["providers"] = _deep_merge(stack_profile.get("providers", {}), repo_profile.get("providers", {}))
     merged["vendors"] = _deep_merge(stack_profile.get("vendors", {}), repo_profile.get("vendors", {}))
@@ -189,6 +207,7 @@ def _merge_repo_profile(stack_profile: Dict[str, Any], repo_profile: Dict[str, A
 
 
 def _apply_inventory_overrides(merged: Dict[str, Any], overrides: InventoryOverrides | Dict[str, Any]) -> Dict[str, Any]:
+    """Handle apply inventory overrides."""
     if not isinstance(overrides, InventoryOverrides):
         overrides = InventoryOverrides(
             repo_entry=cast(Dict[str, Any], overrides["repo_entry"]),
@@ -213,13 +232,12 @@ def _apply_inventory_overrides(merged: Dict[str, Any], overrides: InventoryOverr
 
 
 def _finalize_repo_profile(merged: Dict[str, Any], repo_slug: str) -> Dict[str, Any]:
+    """Handle finalize repo profile."""
     owner, repo_name = repo_slug.split("/", 1)
     merged["owner"] = owner
     merged["repo_name"] = repo_name
     merged["verify_command"] = str(merged.get("verify_command", "bash scripts/verify")).strip()
-    merged["github_mutation_lane"] = (
-        str(merged.get("github_mutation_lane", "codex-private-runner")).strip() or "codex-private-runner"
-    )
+    merged["github_mutation_lane"] = str(merged.get("github_mutation_lane", "codex-private-runner")).strip() or "codex-private-runner"
     merged["codex_auth_lane"] = str(merged.get("codex_auth_lane", "chatgpt-account")).strip() or "chatgpt-account"
     merged["provider_ui_mode"] = str(merged.get("provider_ui_mode", "playwright-manual-login")).strip() or "playwright-manual-login"
     merged["required_secrets"] = dedupe_strings(merged.get("required_secrets", []))
@@ -246,6 +264,7 @@ def _finalize_repo_profile(merged: Dict[str, Any], repo_slug: str) -> Dict[str, 
 
 
 def load_repo_profile(inventory: Dict[str, Any], repo_slug: str) -> Dict[str, Any]:
+    """Handle load repo profile."""
     repo_sources = _resolve_repo_sources(inventory, repo_slug)
     repo_entry = repo_sources.repo_entry
     profile_id = repo_sources.profile_id
@@ -267,6 +286,7 @@ def load_repo_profile(inventory: Dict[str, Any], repo_slug: str) -> Dict[str, An
 
 
 def active_required_contexts(profile: Dict[str, Any], *, event_name: str) -> List[str]:
+    """Handle active required contexts."""
     required_contexts = profile["required_contexts"]
     if event_name == "ruleset":
         return dedupe_strings(required_contexts.get("required_now", []))
@@ -278,6 +298,7 @@ def active_required_contexts(profile: Dict[str, Any], *, event_name: str) -> Lis
 
 
 def build_ruleset_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
+    """Return build ruleset payload."""
     contexts = active_required_contexts(profile, event_name="ruleset")
     return {
         "profile_id": profile["profile_id"],
@@ -318,18 +339,22 @@ def build_ruleset_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def validate_profile(profile: Dict[str, Any]) -> List[str]:
+    """Handle validate profile."""
     return profile_contract_validation.validate_profile(profile, active_required_contexts_fn=active_required_contexts)
 
 
 def _validate_coverage_contract(profile: Dict[str, Any]) -> List[str]:
+    """Handle validate coverage contract."""
     return profile_contract_validation._validate_coverage_contract(profile)
 
 
 def _validate_vendor_urls(profile: Dict[str, Any]) -> List[str]:
+    """Handle validate vendor urls."""
     return profile_contract_validation._validate_vendor_urls(profile)
 
 
 def _parse_args() -> argparse.Namespace:
+    """Handle parse args."""
     parser = argparse.ArgumentParser(description="Resolve control-plane repo profiles and rulesets.")
     parser.add_argument("--inventory", default=str(DEFAULT_INVENTORY_PATH))
     parser.add_argument("--repo-slug", required=True)
@@ -339,6 +364,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    """Handle main."""
     args = _parse_args()
     inventory = load_inventory(args.inventory)
     profile = load_repo_profile(inventory, args.repo_slug)

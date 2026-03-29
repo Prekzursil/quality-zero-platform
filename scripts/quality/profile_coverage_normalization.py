@@ -8,7 +8,6 @@ from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
 from scripts.quality.common import dedupe_strings
 
-
 _LCOV_SRC_RE = re.compile(
     r"(?P<prefix>.+?)/coverage/(?:lcov|lcov\.info|lcov-report).*",
     re.IGNORECASE,
@@ -89,11 +88,7 @@ def normalize_coverage_inputs(raw_inputs: Any) -> List[Dict[str, str]]:
             "name": str(item.get("name", "")).strip(),
             "path": str(item.get("path", "")).strip(),
         }
-        if (
-            normalized_item["format"] in {"xml", "lcov"}
-            and normalized_item["name"]
-            and normalized_item["path"]
-        ):
+        if normalized_item["format"] in {"xml", "lcov"} and normalized_item["name"] and normalized_item["path"]:
             normalized_items.append(normalized_item)
     return normalized_items
 
@@ -145,11 +140,7 @@ def normalize_coverage_assert_mode(raw_assert_mode: Any) -> Dict[str, str]:
     if not isinstance(raw_assert_mode, dict):
         return {"default": "enforce"}
 
-    resolved = {
-        str(key): text
-        for key, value in raw_assert_mode.items()
-        if (text := str(value or "").strip())
-    }
+    resolved = {str(key): text for key, value in raw_assert_mode.items() if (text := str(value or "").strip())}
     return {"default": "enforce", **resolved}
 
 
@@ -166,11 +157,7 @@ def _normalize_branch_min_percent(raw_branch_min_percent: Any) -> float | None:
 def _resolve_required_sources(coverage: Dict[str, Any]) -> Tuple[List[str], str]:
     """Resolve required coverage sources and whether they were explicit or inferred."""
     require_sources = dedupe_strings(coverage.get("require_sources", []))
-    require_sources_mode = (
-        "explicit"
-        if require_sources
-        else str(coverage.get("require_sources_mode", "infer")).strip() or "infer"
-    )
+    require_sources_mode = "explicit" if require_sources else str(coverage.get("require_sources_mode", "infer")).strip() or "infer"
     if require_sources_mode == "infer" and not require_sources:
         require_sources = infer_required_sources(coverage)
     return require_sources, require_sources_mode
@@ -183,22 +170,15 @@ def normalize_coverage(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
     require_sources, require_sources_mode = _resolve_required_sources(coverage)
     resolved_shell = coverage.get("command_shell", coverage.get("shell", "bash"))
     coverage.pop("command_shell", None)
-    coverage["runner"] = (
-        str(coverage.get("runner", "ubuntu-latest")).strip()
-        or "ubuntu-latest"
-    )
+    coverage["runner"] = str(coverage.get("runner", "ubuntu-latest")).strip() or "ubuntu-latest"
     coverage["shell"] = str(resolved_shell).strip() or "bash"
     coverage["command"] = str(coverage.get("command", "")).strip()
     coverage["inputs"] = inputs
     coverage["require_sources"] = require_sources
     coverage["require_sources_mode"] = require_sources_mode
     coverage["min_percent"] = float(coverage.get("min_percent", 100.0))
-    coverage["branch_min_percent"] = _normalize_branch_min_percent(
-        coverage.get("branch_min_percent")
-    )
-    coverage["assert_mode"] = normalize_coverage_assert_mode(
-        coverage.get("assert_mode", {})
-    )
+    coverage["branch_min_percent"] = _normalize_branch_min_percent(coverage.get("branch_min_percent"))
+    coverage["assert_mode"] = normalize_coverage_assert_mode(coverage.get("assert_mode", {}))
     coverage["evidence_note"] = str(coverage.get("evidence_note", "")).strip()
     coverage["setup"] = normalize_coverage_setup(coverage.get("setup", {}))
     return coverage

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Run codex exec."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -14,6 +16,7 @@ _CODEX_EXECUTABLE = "codex"
 
 
 def _parse_args() -> argparse.Namespace:
+    """Handle parse args."""
     parser = argparse.ArgumentParser(description="Run `codex exec` non-interactively from a trusted runner.")
     parser.add_argument("--repo-dir", required=True)
     parser.add_argument("--prompt-file", required=True)
@@ -27,6 +30,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _validate_cli_token(value: str, *, flag_name: str) -> str:
+    """Handle validate cli token."""
     if not value:
         raise ValueError(f"{flag_name} cannot be empty")
     if any(character in value for character in ("\0", "\r", "\n")):
@@ -37,6 +41,7 @@ def _validate_cli_token(value: str, *, flag_name: str) -> str:
 
 
 def _resolved_codex_executable_path() -> str:
+    """Handle resolved codex executable path."""
     codex_executable = shutil.which(_CODEX_EXECUTABLE)
     if not codex_executable:
         raise FileNotFoundError(f"Unable to locate required executable: {_CODEX_EXECUTABLE}")
@@ -44,30 +49,36 @@ def _resolved_codex_executable_path() -> str:
 
 
 def _resolved_repo_dir(args: argparse.Namespace) -> str:
+    """Handle resolved repo dir."""
     return str(Path(args.repo_dir).resolve())
 
 
 def _resolved_output_path(args: argparse.Namespace) -> str:
+    """Handle resolved output path."""
     return str(Path(args.output_last_message).resolve())
 
 
 def _validated_sandbox(args: argparse.Namespace) -> str:
+    """Handle validated sandbox."""
     return _validate_cli_token(args.sandbox, flag_name="--sandbox")
 
 
 def _validated_profile_args(args: argparse.Namespace) -> List[str]:
+    """Handle validated profile args."""
     if not args.profile:
         return []
     return ["-p", _validate_cli_token(args.profile, flag_name="--profile")]
 
 
 def _validated_model_args(args: argparse.Namespace) -> List[str]:
+    """Handle validated model args."""
     if not args.model:
         return []
     return ["-m", _validate_cli_token(args.model, flag_name="--model")]
 
 
 def _validated_config_args(args: argparse.Namespace) -> List[str]:
+    """Handle validated config args."""
     config_args: List[str] = []
     for item in args.config:
         config_args.extend(["-c", _validate_cli_token(item, flag_name="--config")])
@@ -114,6 +125,7 @@ def _run_codex_exec(args: argparse.Namespace, prompt_text: str) -> subprocess.Co
 
 
 def main() -> int:
+    """Handle main."""
     args = _parse_args()
     prompt_text = Path(args.prompt_file).read_text(encoding="utf-8")
 

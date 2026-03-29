@@ -1,3 +1,5 @@
+"""Test rulesets."""
+
 from __future__ import absolute_import
 
 import unittest
@@ -9,12 +11,14 @@ from scripts.quality.control_plane import (
     load_repo_profile,
 )
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class RulesetPayloadTests(unittest.TestCase):
+    """Ruleset Payload Tests."""
+
     def test_pbinfo_fixture_ruleset_payload_matches_declared_contexts(self) -> None:
+        """Cover pbinfo fixture ruleset payload matches declared contexts."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/pbinfo-get-unsolved")
         payload = build_ruleset_payload(profile)
@@ -30,6 +34,7 @@ class RulesetPayloadTests(unittest.TestCase):
         self.assertEqual(profile["default_branch"], "main")
 
     def test_reframe_ruleset_payload_uses_live_required_now_not_target(self) -> None:
+        """Cover reframe ruleset payload uses live required now not target."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/Reframe")
         payload = build_ruleset_payload(profile)
@@ -48,6 +53,7 @@ class RulesetPayloadTests(unittest.TestCase):
         self.assertIn("qlty check", profile["required_contexts"]["target"])
 
     def test_env_inspector_ruleset_payload_matches_emitted_required_contexts(self) -> None:
+        """Cover env inspector ruleset payload matches emitted required contexts."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/env-inspector")
         payload = build_ruleset_payload(profile)
@@ -63,6 +69,7 @@ class RulesetPayloadTests(unittest.TestCase):
         self.assertIn("SonarCloud Code Analysis", contexts)
 
     def test_airline_ruleset_payload_requires_qlty_contexts(self) -> None:
+        """Cover airline ruleset payload requires qlty contexts."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/Airline-Reservations-System")
         payload = build_ruleset_payload(profile)
@@ -81,6 +88,7 @@ class RulesetPayloadTests(unittest.TestCase):
         self.assertIn("DeepSource: Secrets", contexts)
 
     def test_quality_zero_platform_self_ruleset_enforces_qlty_coverage_contexts(self) -> None:
+        """Cover quality zero platform self ruleset enforces qlty coverage contexts."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
         payload = build_ruleset_payload(profile)

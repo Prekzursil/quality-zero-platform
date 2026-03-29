@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Run quality zero gate."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -16,6 +18,7 @@ from scripts.quality import check_required_checks
 
 
 def _parse_args() -> argparse.Namespace:
+    """Handle parse args."""
     parser = argparse.ArgumentParser(description="Run the required-checks probe for the quality-zero gate.")
     parser.add_argument("--profile-json", required=True)
     parser.add_argument("--repo-dir", default=".")
@@ -26,6 +29,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _required_contexts(profile: Dict[str, Any]) -> List[str]:
+    """Handle required contexts."""
     contexts = profile.get("active_required_contexts")
     if isinstance(contexts, list):
         return [str(item).strip() for item in contexts if str(item).strip()]
@@ -38,6 +42,7 @@ def _required_contexts(profile: Dict[str, Any]) -> List[str]:
 
 
 def _build_argv(profile: Dict[str, Any], sha: str, *args: Any, **kwargs: Any) -> List[str]:
+    """Handle build argv."""
     if args:
         if len(args) != 3:
             raise TypeError("_build_argv expects platform_dir and output paths or keyword arguments")
@@ -77,6 +82,7 @@ def _build_argv(profile: Dict[str, Any], sha: str, *args: Any, **kwargs: Any) ->
 
 @contextmanager
 def _working_directory(path: Path):
+    """Handle working directory."""
     previous = Path.cwd()
     os.chdir(path)
     try:
@@ -86,6 +92,7 @@ def _working_directory(path: Path):
 
 
 def _run_required_checks(argv: List[str], *, repo_dir: Path) -> int:
+    """Handle run required checks."""
     previous_argv = sys.argv
     sys.argv = argv
     try:
@@ -96,9 +103,10 @@ def _run_required_checks(argv: List[str], *, repo_dir: Path) -> int:
 
 
 def main() -> int:
+    """Handle main."""
     args = _parse_args()
     profile = json.loads(Path(args.profile_json).read_text(encoding="utf-8"))
-    sha = (os.environ.get("TARGET_SHA", "").strip() or os.environ.get("GITHUB_SHA", "").strip())
+    sha = os.environ.get("TARGET_SHA", "").strip() or os.environ.get("GITHUB_SHA", "").strip()
     if not sha:
         raise SystemExit("TARGET_SHA or GITHUB_SHA is required")
     repo_dir = Path(args.repo_dir).resolve()

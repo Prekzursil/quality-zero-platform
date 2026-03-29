@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Check dependabot alerts."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -14,12 +16,12 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
 from scripts.quality.common import utc_timestamp, write_report
 from scripts.security_helpers import load_json_https
 
-
 GITHUB_API_BASE = "https://api.github.com"
 _NEXT_LINK_RE = re.compile(r'<(?P<url>[^>]+)>;\s*rel="next"')
 
 
 def _parse_args() -> argparse.Namespace:
+    """Handle parse args."""
     parser = argparse.ArgumentParser(description="Assert Dependabot alerts meet the configured threshold.")
     parser.add_argument("--repo", required=True)
     parser.add_argument("--token", default="")
@@ -31,6 +33,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _request_alerts(repo: str, token: str, *, scope: str) -> List[Dict[str, Any]]:
+    """Handle request alerts."""
     ecosystem = "" if scope == "all" else "&scope=runtime"
     headers = {
         "Accept": "application/vnd.github+json",
@@ -56,6 +59,7 @@ def _request_alerts(repo: str, token: str, *, scope: str) -> List[Dict[str, Any]
 
 
 def filter_alerts(alerts: List[Dict[str, Any]], *, policy: str) -> List[Dict[str, Any]]:
+    """Handle filter alerts."""
     order = {"critical": 3, "high": 2, "moderate": 1, "medium": 1, "low": 0}
     threshold = {"zero_critical": 3, "zero_high": 2, "zero_any": 0}[policy]
     filtered: List[Dict[str, Any]] = []
@@ -67,6 +71,7 @@ def filter_alerts(alerts: List[Dict[str, Any]], *, policy: str) -> List[Dict[str
 
 
 def _render_md(payload: Mapping[str, Any]) -> str:
+    """Handle render md."""
     lines = [
         "# Dependency Alerts Gate",
         "",
@@ -84,6 +89,7 @@ def _render_md(payload: Mapping[str, Any]) -> str:
 
 
 def main() -> int:
+    """Handle main."""
     args = _parse_args()
     token = (args.token or os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")).strip()
     findings: List[str] = []

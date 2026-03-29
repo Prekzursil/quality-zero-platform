@@ -1,3 +1,5 @@
+"""Test check deepscan zero."""
+
 from __future__ import absolute_import
 
 import os
@@ -11,17 +13,22 @@ from tests.script_entrypoint_support import run_script_entrypoint_failure
 
 
 def _placeholder_token(label: str) -> str:
+    """Handle placeholder token."""
     return f"{label}-placeholder"
 
 
 class DeepScanZeroTests(unittest.TestCase):
+    """Deep Scan Zero Tests."""
+
     def test_policy_mode_defaults_to_github_check_context(self) -> None:
+        """Cover policy mode defaults to github check context."""
         args = Namespace(policy_mode="", repo="", sha="", github_context="DeepScan")
 
         with patch.dict("os.environ", {}, clear=True):
             self.assertEqual(check_deepscan_zero._policy_mode(args), "github_check_context")
 
     def test_github_check_context_mode_passes_when_deepscan_status_is_green(self) -> None:
+        """Cover github check context mode passes when deepscan status is green."""
         args = Namespace(repo="Prekzursil/quality-zero-platform", sha="abc123")
         api_token = _placeholder_token("api")
 
@@ -37,6 +44,7 @@ class DeepScanZeroTests(unittest.TestCase):
         self.assertEqual(findings, [])
 
     def test_github_check_context_mode_fails_when_deepscan_status_is_missing(self) -> None:
+        """Cover github check context mode fails when deepscan status is missing."""
         args = Namespace(repo="Prekzursil/quality-zero-platform", sha="abc123")
         api_token = _placeholder_token("api")
 
@@ -52,6 +60,7 @@ class DeepScanZeroTests(unittest.TestCase):
         self.assertIn("DeepScan GitHub status context is missing.", findings)
 
     def test_github_check_context_mode_allows_missing_status_on_push_main(self) -> None:
+        """Cover github check context mode allows missing status on push main."""
         args = Namespace(repo="Prekzursil/quality-zero-platform", sha="abc123")
         api_token = _placeholder_token("api")
 
@@ -67,6 +76,7 @@ class DeepScanZeroTests(unittest.TestCase):
         self.assertEqual(findings, [])
 
     def test_validate_deepscan_inputs_accepts_github_check_context_mode(self) -> None:
+        """Cover validate deepscan inputs accepts github check context mode."""
         api_token = _placeholder_token("api")
         findings = check_deepscan_zero._validate_deepscan_inputs(
             token=api_token,
@@ -80,6 +90,7 @@ class DeepScanZeroTests(unittest.TestCase):
         self.assertEqual(findings, [])
 
     def test_extract_total_open_request_json_and_repo_sha_helpers_cover_edge_cases(self) -> None:
+        """Cover extract total open request json and repo sha helpers cover edge cases."""
         api_token = _placeholder_token("api")
         self.assertEqual(check_deepscan_zero.extract_total_open({"nested": {"total": 2}}), 2)
         self.assertEqual(check_deepscan_zero.extract_total_open([{"open_issues": 1}]), 1)
@@ -109,6 +120,7 @@ class DeepScanZeroTests(unittest.TestCase):
             self.assertEqual(check_deepscan_zero._github_sha(args), "abc123")
 
     def test_validate_helpers_and_open_issue_mode_cover_missing_input_paths(self) -> None:
+        """Cover validate helpers and open issue mode cover missing input paths."""
         self.assertEqual(
             check_deepscan_zero._validate_github_check_context_inputs("", "", ""),
             [
@@ -143,6 +155,7 @@ class DeepScanZeroTests(unittest.TestCase):
         self.assertEqual(findings, ["DeepScan response did not include a parseable total issue count."])
 
     def test_keyword_only_guards_reject_positional_and_unexpected_arguments(self) -> None:
+        """Cover keyword only guards reject positional and unexpected arguments."""
         with self.assertRaisesRegex(TypeError, "expects keyword arguments only"):
             check_deepscan_zero._validate_deepscan_inputs("unexpected")
 
@@ -172,6 +185,7 @@ class DeepScanZeroTests(unittest.TestCase):
             )
 
     def test_status_helpers_and_policy_dispatch_cover_failure_branches(self) -> None:
+        """Cover status helpers and policy dispatch cover failure branches."""
         payload = {"statuses": [{"context": "DeepScan", "state": "failure", "target_url": "https://deepscan.io"}]}
         status = check_deepscan_zero._find_github_status(payload, "DeepScan")
         self.assertEqual(check_deepscan_zero._status_target_url(status), "https://deepscan.io")
@@ -204,6 +218,7 @@ class DeepScanZeroTests(unittest.TestCase):
         self.assertEqual(result, (0, "https://deepscan.io/project/issues", []))
 
     def test_main_handles_missing_inputs_success_and_runtime_exceptions(self) -> None:
+        """Cover main handles missing inputs success and runtime exceptions."""
         args = Namespace(
             policy_mode="open_issues_url",
             repo="",
@@ -226,9 +241,11 @@ class DeepScanZeroTests(unittest.TestCase):
             "os.environ",
             {"DEEPSCAN_OPEN_ISSUES_URL": "https://deepscan.io/project/issues"},
             clear=False,
-        ), patch.object(check_deepscan_zero, "_parse_args", return_value=success_args), patch.object(
-            check_deepscan_zero, "_evaluate_deepscan_policy", return_value=(0, "https://deepscan.io/project/issues", [])
-        ), patch.object(check_deepscan_zero, "write_report", return_value=0) as write_report_mock:
+        ), patch.object(
+            check_deepscan_zero, "_parse_args", return_value=success_args
+        ), patch.object(check_deepscan_zero, "_evaluate_deepscan_policy", return_value=(0, "https://deepscan.io/project/issues", [])), patch.object(
+            check_deepscan_zero, "write_report", return_value=0
+        ) as write_report_mock:
             self.assertEqual(check_deepscan_zero.main(), 0)
         self.assertEqual(write_report_mock.call_args.args[0]["status"], "pass")
 
@@ -240,7 +257,9 @@ class DeepScanZeroTests(unittest.TestCase):
             check_deepscan_zero,
             "_evaluate_deepscan_policy",
             side_effect=RuntimeError("provider timeout"),
-        ), patch.object(check_deepscan_zero, "write_report", return_value=0) as write_report_mock:
+        ), patch.object(
+            check_deepscan_zero, "write_report", return_value=0
+        ) as write_report_mock:
             self.assertEqual(check_deepscan_zero.main(), 1)
         self.assertEqual(
             write_report_mock.call_args.args[0]["findings"],
@@ -251,12 +270,15 @@ class DeepScanZeroTests(unittest.TestCase):
             "os.environ",
             {"DEEPSCAN_OPEN_ISSUES_URL": "https://deepscan.io/project/issues"},
             clear=False,
-        ), patch.object(check_deepscan_zero, "_parse_args", return_value=success_args), patch.object(
-            check_deepscan_zero, "_evaluate_deepscan_policy", return_value=(0, "https://deepscan.io/project/issues", [])
-        ), patch.object(check_deepscan_zero, "write_report", return_value=9):
+        ), patch.object(
+            check_deepscan_zero, "_parse_args", return_value=success_args
+        ), patch.object(check_deepscan_zero, "_evaluate_deepscan_policy", return_value=(0, "https://deepscan.io/project/issues", [])), patch.object(
+            check_deepscan_zero, "write_report", return_value=9
+        ):
             self.assertEqual(check_deepscan_zero.main(), 9)
 
     def test_parse_args_render_markdown_and_script_entrypoint(self) -> None:
+        """Cover parse args render markdown and script entrypoint."""
         with patch.object(sys, "argv", ["check_deepscan_zero.py"]):
             args = check_deepscan_zero._parse_args()
         self.assertEqual(args.github_context, "DeepScan")

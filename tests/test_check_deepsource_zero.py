@@ -1,3 +1,5 @@
+"""Test check deepsource zero."""
+
 from __future__ import absolute_import
 
 import os
@@ -11,7 +13,10 @@ from tests.script_entrypoint_support import run_script_entrypoint_failure
 
 
 class DeepSourceVisibleZeroTests(unittest.TestCase):
+    """Deep Source Visible Zero Tests."""
+
     def test_extractors_cover_sidebar_counts_issue_links_and_status_filters(self) -> None:
+        """Cover extractors cover sidebar counts issue links and status filters."""
         html = """
         <span>All issues</span><div>1.9k</div>
         <a href="/gh/Prekzursil/event-link/issue/JS-0125/occurrences?listindex=0">one</a>
@@ -24,32 +29,19 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
         )
         self.assertEqual(
             check_deepsource_zero.extract_issue_links(
-                '<a href="/gh/Prekzursil/event-link/dashboard">ignore</a>'
-                '<a href="/gh/Prekzursil/event-link/issue/JS-0125/'
-                'occurrences?listindex=0">keep</a>'
+                '<a href="/gh/Prekzursil/event-link/dashboard">ignore</a>' '<a href="/gh/Prekzursil/event-link/issue/JS-0125/' 'occurrences?listindex=0">keep</a>'
             ),
             ["/gh/Prekzursil/event-link/issue/JS-0125/occurrences?listindex=0"],
         )
         self.assertEqual(
-            check_deepsource_zero.extract_issue_links(
-                '<a href="/gh/Prekzursil/event-link/issue/JS-0125/'
-                "occurrences?listindex=0>broken</a>"
-            ),
+            check_deepsource_zero.extract_issue_links('<a href="/gh/Prekzursil/event-link/issue/JS-0125/' "occurrences?listindex=0>broken</a>"),
             [],
         )
         self.assertEqual(
-            check_deepsource_zero.extract_visible_issue_count(
-                '<span class="flex-1">All issues</span>'
-                '<div class="rounded-3px">854</div>'
-            ),
+            check_deepsource_zero.extract_visible_issue_count('<span class="flex-1">All issues</span>' '<div class="rounded-3px">854</div>'),
             854,
         )
-        self.assertIsNone(
-            check_deepsource_zero.extract_visible_issue_count(
-                '<span class="flex-1">All issues</span>'
-                '<div class="rounded-3px">bogus</div>'
-            )
-        )
+        self.assertIsNone(check_deepsource_zero.extract_visible_issue_count('<span class="flex-1">All issues</span>' '<div class="rounded-3px">bogus</div>'))
         self.assertEqual(
             check_deepsource_zero.extract_visible_issue_count('"all",854,"recommended"'),
             854,
@@ -76,6 +68,7 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
         )
 
     def test_repo_sha_and_issue_url_resolution_follow_env_and_defaults(self) -> None:
+        """Cover repo sha and issue url resolution follow env and defaults."""
         args = Namespace(repo="", sha="", issues_url="")
         with patch.dict(
             "os.environ",
@@ -89,13 +82,11 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
             self.assertEqual(check_deepsource_zero._github_sha(args), "abc123")
             self.assertEqual(
                 check_deepsource_zero._issues_url(args),
-                (
-                    "https://app.deepsource.com/gh/Prekzursil/"
-                    "quality-zero-platform/issues?category=all&page=1"
-                ),
+                ("https://app.deepsource.com/gh/Prekzursil/" "quality-zero-platform/issues?category=all&page=1"),
             )
 
     def test_validate_inputs_and_status_findings_cover_missing_and_failure_paths(self) -> None:
+        """Cover validate inputs and status findings cover missing and failure paths."""
         self.assertEqual(
             check_deepsource_zero._validate_inputs("", "", "", ""),
             [
@@ -132,19 +123,19 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
         )
 
     def test_github_status_payload_and_request_html_guard_payload_shape(self) -> None:
+        """Cover github status payload and request html guard payload shape."""
         with patch(
             "scripts.quality.check_deepsource_zero.load_json_https",
             return_value=(["invalid"], {}),
+        ), self.assertRaisesRegex(
+            RuntimeError,
+            "Unexpected GitHub status response payload",
         ):
-            with self.assertRaisesRegex(
-                RuntimeError,
-                "Unexpected GitHub status response payload",
-            ):
-                check_deepsource_zero._github_status_payload(
-                    "Prekzursil/quality-zero-platform",
-                    "abc123",
-                    "token",
-                )
+            check_deepsource_zero._github_status_payload(
+                "Prekzursil/quality-zero-platform",
+                "abc123",
+                "token",
+            )
         with patch(
             "scripts.quality.check_deepsource_zero.load_json_https",
             return_value=({"statuses": []}, {}),
@@ -162,13 +153,12 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
             return_value=(b"<html>ok</html>", {}),
         ):
             self.assertEqual(
-                check_deepsource_zero._request_html(
-                    "https://app.deepsource.com/gh/Prekzursil/event-link/issues"
-                ),
+                check_deepsource_zero._request_html("https://app.deepsource.com/gh/Prekzursil/event-link/issues"),
                 "<html>ok</html>",
             )
 
     def test_wait_for_status_contexts_polls_until_non_pending_contexts_arrive(self) -> None:
+        """Cover wait for status contexts polls until non pending contexts arrive."""
         payloads = [
             {"statuses": [{"context": "DeepSource: Python", "state": "pending"}]},
             {"statuses": [{"context": "DeepSource: Python", "state": "success"}]},
@@ -193,12 +183,11 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
         sleep_mock.assert_called_once()
 
     def test_wait_for_status_contexts_times_out_and_preserves_pending_findings(self) -> None:
+        """Cover wait for status contexts times out and preserves pending findings."""
         with patch.object(
             check_deepsource_zero,
             "_github_status_payload",
-            return_value={
-                "statuses": [{"context": "DeepSource: Python", "state": "pending"}]
-            },
+            return_value={"statuses": [{"context": "DeepSource: Python", "state": "pending"}]},
         ), patch(
             "scripts.quality.check_deepsource_zero.time.time",
             side_effect=[0, 0, 2],
@@ -221,26 +210,23 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
         sleep_mock.assert_called_once()
 
     def test_evaluate_visible_issues_handles_zero_nonzero_and_unparseable_pages(self) -> None:
+        """Cover evaluate visible issues handles zero nonzero and unparseable pages."""
         with patch.object(
             check_deepsource_zero,
             "_request_html",
-            return_value='<span>All issues</span><div>0</div>',
+            return_value="<span>All issues</span><div>0</div>",
         ):
             self.assertEqual(
-                check_deepsource_zero._evaluate_visible_issues(
-                    "https://app.deepsource.com/gh/Prekzursil/event-link/issues"
-                ),
+                check_deepsource_zero._evaluate_visible_issues("https://app.deepsource.com/gh/Prekzursil/event-link/issues"),
                 (0, []),
             )
 
         with patch.object(
             check_deepsource_zero,
             "_request_html",
-            return_value='<span>All issues</span><div>854</div>',
+            return_value="<span>All issues</span><div>854</div>",
         ):
-            open_issues, findings = check_deepsource_zero._evaluate_visible_issues(
-                "https://app.deepsource.com/gh/Prekzursil/quality-zero-platform/issues"
-            )
+            open_issues, findings = check_deepsource_zero._evaluate_visible_issues("https://app.deepsource.com/gh/Prekzursil/quality-zero-platform/issues")
         self.assertEqual(open_issues, 854)
         self.assertEqual(
             findings,
@@ -250,14 +236,9 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
         with patch.object(
             check_deepsource_zero,
             "_request_html",
-            return_value=(
-                '<a href="/gh/Prekzursil/event-link/issue/PYL-W0108/'
-                'occurrences?listindex=0">x</a>'
-            ),
+            return_value=('<a href="/gh/Prekzursil/event-link/issue/PYL-W0108/' 'occurrences?listindex=0">x</a>'),
         ):
-            open_issues, findings = check_deepsource_zero._evaluate_visible_issues(
-                "https://app.deepsource.com/gh/Prekzursil/event-link/issues"
-            )
+            open_issues, findings = check_deepsource_zero._evaluate_visible_issues("https://app.deepsource.com/gh/Prekzursil/event-link/issues")
         self.assertEqual(open_issues, 1)
         self.assertEqual(
             findings,
@@ -267,32 +248,21 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
         with patch.object(
             check_deepsource_zero,
             "_request_html",
-            return_value=(
-                '<span>All issues</span><div>0</div>'
-                '<a href="/gh/Prekzursil/event-link/issue/PYL-W0108/'
-                'occurrences?listindex=0">x</a>'
-            ),
+            return_value=("<span>All issues</span><div>0</div>" '<a href="/gh/Prekzursil/event-link/issue/PYL-W0108/' 'occurrences?listindex=0">x</a>'),
         ):
-            open_issues, findings = check_deepsource_zero._evaluate_visible_issues(
-                "https://app.deepsource.com/gh/Prekzursil/event-link/issues"
-            )
+            open_issues, findings = check_deepsource_zero._evaluate_visible_issues("https://app.deepsource.com/gh/Prekzursil/event-link/issues")
         self.assertEqual(open_issues, 0)
         self.assertEqual(
             findings,
-            [
-                "DeepSource returned issue cards even though the total issue "
-                "count resolved to 0."
-            ],
+            ["DeepSource returned issue cards even though the total issue " "count resolved to 0."],
         )
 
     def test_main_handles_success_missing_inputs_and_provider_errors(self) -> None:
+        """Cover main handles success missing inputs and provider errors."""
         args = Namespace(
             repo="Prekzursil/event-link",
             sha="abc123",
-            issues_url=(
-                "https://app.deepsource.com/gh/Prekzursil/"
-                "event-link/issues?category=all&page=1"
-            ),
+            issues_url=("https://app.deepsource.com/gh/Prekzursil/" "event-link/issues?category=all&page=1"),
             status_prefix="DeepSource",
             timeout_seconds=1,
             poll_seconds=0,
@@ -362,11 +332,7 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
             check_deepsource_zero,
             "_wait_for_status_contexts",
             return_value=([{"context": "DeepSource: Python", "state": "success"}], []),
-        ), patch.object(
-            check_deepsource_zero,
-            "_evaluate_visible_issues",
-            return_value=(0, []),
-        ), patch.object(check_deepsource_zero, "write_report", return_value=7):
+        ), patch.object(check_deepsource_zero, "_evaluate_visible_issues", return_value=(0, []),), patch.object(check_deepsource_zero, "write_report", return_value=7):
             self.assertEqual(check_deepsource_zero.main(), 7)
 
         with patch.dict("os.environ", {"GITHUB_TOKEN": "token"}, clear=False), patch.object(
@@ -389,6 +355,7 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
         )
 
     def test_parse_args_render_markdown_and_script_entrypoint(self) -> None:
+        """Cover parse args render markdown and script entrypoint."""
         with patch.object(sys, "argv", ["check_deepsource_zero.py"]):
             args = check_deepsource_zero._parse_args()
         self.assertEqual(args.status_prefix, "DeepSource")
@@ -417,16 +384,8 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
             ),
             ["https://example.test/a", "https://example.test/b"],
         )
-        self.assertTrue(
-            check_deepsource_zero._statuses_are_ready(
-                [{"context": "DeepSource: Python", "state": "success"}]
-            )
-        )
-        self.assertFalse(
-            check_deepsource_zero._statuses_are_ready(
-                [{"context": "DeepSource: Python", "state": "pending"}]
-            )
-        )
+        self.assertTrue(check_deepsource_zero._statuses_are_ready([{"context": "DeepSource: Python", "state": "success"}]))
+        self.assertFalse(check_deepsource_zero._statuses_are_ready([{"context": "DeepSource: Python", "state": "pending"}]))
 
         self.assertEqual(
             run_script_entrypoint_failure("scripts/quality/check_deepsource_zero.py"),

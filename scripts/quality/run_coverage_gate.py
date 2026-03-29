@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Run coverage gate."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -27,6 +29,7 @@ from scripts.security_helpers import load_bytes_https, normalize_https_url
 
 
 def _parse_args() -> argparse.Namespace:
+    """Handle parse args."""
     parser = argparse.ArgumentParser(description="Run repo-specific coverage collection and assert the configured gate.")
     parser.add_argument("--profile-json", required=True)
     parser.add_argument("--event-name", required=True)
@@ -36,6 +39,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _coverage_mode(coverage: Dict[str, Any], event_name: str) -> str:
+    """Handle coverage mode."""
     assert_mode = cast(Dict[str, Any], coverage.get("assert_mode", {}))
     if event_name in assert_mode:
         return str(assert_mode[event_name])
@@ -43,6 +47,7 @@ def _coverage_mode(coverage: Dict[str, Any], event_name: str) -> str:
 
 
 def _run_shell(command: str, *, shell_name: str, cwd: Path) -> None:
+    """Handle run shell."""
     if not command.strip():
         return
     # Safe-by-construction: the interpreter argv is static, shell=False prevents interpolation,
@@ -93,10 +98,12 @@ def _run_shell(command: str, *, shell_name: str, cwd: Path) -> None:
 
 
 def _path_exists(raw_path: str) -> bool:
+    """Handle path exists."""
     return Path(raw_path).exists()
 
 
 def _build_assert_coverage_argv(coverage: Dict[str, Any], platform_dir: Path) -> List[str]:
+    """Handle build assert coverage argv."""
     cmd = [str(platform_dir / "scripts" / "quality" / "assert_coverage_100.py")]
     for item in cast(List[Dict[str, Any]], coverage.get("inputs", [])):
         flag = "--xml" if item.get("format") == "xml" else "--lcov"
@@ -112,6 +119,7 @@ def _build_assert_coverage_argv(coverage: Dict[str, Any], platform_dir: Path) ->
 
 @contextmanager
 def _working_directory(path: Path):
+    """Handle working directory."""
     previous = Path.cwd()
     os.chdir(path)
     try:
@@ -121,6 +129,7 @@ def _working_directory(path: Path):
 
 
 def _run_assert_coverage_100(coverage: Dict[str, Any], *, repo_dir: Path, platform_dir: Path) -> int:
+    """Handle run assert coverage 100."""
     argv = _build_assert_coverage_argv(coverage, platform_dir)
     previous_argv = sys.argv
     sys.argv = argv
@@ -132,6 +141,7 @@ def _run_assert_coverage_100(coverage: Dict[str, Any], *, repo_dir: Path, platfo
 
 
 def _render_evidence_md(payload: dict) -> str:
+    """Handle render evidence md."""
     lines = [
         "# Coverage 100 Gate",
         "",
@@ -147,6 +157,7 @@ def _render_evidence_md(payload: dict) -> str:
 
 
 def _write_evidence_only_report(note: str) -> int:
+    """Handle write evidence only report."""
     payload = {
         "status": "pass",
         "mode": "evidence_only",
@@ -164,6 +175,7 @@ def _write_evidence_only_report(note: str) -> int:
 
 
 def _combined_coverage_percent(payload: Dict[str, Any]) -> float:
+    """Handle combined coverage percent."""
     components = payload.get("components", [])
     if not isinstance(components, list):
         return 100.0
@@ -173,6 +185,7 @@ def _combined_coverage_percent(payload: Dict[str, Any]) -> float:
 
 
 def _collect_current_coverage_payload(coverage: Dict[str, Any], *, repo_dir: Path, platform_dir: Path) -> Dict[str, Any]:
+    """Handle collect current coverage payload."""
     result = _run_assert_coverage_100(coverage, repo_dir=repo_dir, platform_dir=platform_dir)
     if result not in {0, 1}:
         raise RuntimeError(f"coverage assertion returned unexpected exit code {result}")
@@ -181,6 +194,7 @@ def _collect_current_coverage_payload(coverage: Dict[str, Any], *, repo_dir: Pat
 
 
 def _download_bytes(url: str, token: str) -> bytes:
+    """Handle download bytes."""
     payload, _ = load_bytes_https(
         url,
         allowed_hosts={"api.github.com"},
@@ -196,6 +210,7 @@ def _download_bytes(url: str, token: str) -> bytes:
 
 
 def _github_api_token() -> str:
+    """Handle github api token."""
     token = (os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")).strip()
     if not token:
         raise RuntimeError("GITHUB_TOKEN or GH_TOKEN is required for non_regression coverage mode.")
@@ -203,28 +218,24 @@ def _github_api_token() -> str:
 
 
 def _find_successful_run_id(workflow_runs: List[Dict[str, Any]], workflow_name: str) -> int | None:
+    """Handle find successful run id."""
     return next(
-        (
-            int(item["id"])
-            for item in workflow_runs
-            if item.get("name") == workflow_name and item.get("conclusion") == "success"
-        ),
+        (int(item["id"]) for item in workflow_runs if item.get("name") == workflow_name and item.get("conclusion") == "success"),
         None,
     )
 
 
 def _find_artifact_by_name(artifacts: List[Dict[str, Any]], name: str) -> Dict[str, Any] | None:
+    """Handle find artifact by name."""
     return next((item for item in artifacts if item.get("name") == name), None)
 
 
 def _load_baseline_coverage_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
+    """Handle load baseline coverage payload."""
     token = _github_api_token()
     repo_slug = str(profile["slug"])
     default_branch = str(profile["default_branch"])
-    workflow_runs_url = (
-        f"https://api.github.com/repos/{repo_slug}/actions/runs"
-        f"?branch={default_branch}&status=completed&per_page=50"
-    )
+    workflow_runs_url = f"https://api.github.com/repos/{repo_slug}/actions/runs" f"?branch={default_branch}&status=completed&per_page=50"
     runs_payload = json.loads(_download_bytes(workflow_runs_url, token).decode("utf-8"))
     workflow_runs = runs_payload.get("workflow_runs", []) if isinstance(runs_payload, dict) else []
     run_id = _find_successful_run_id(workflow_runs, "Quality Zero Platform")
@@ -243,6 +254,7 @@ def _load_baseline_coverage_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _render_non_regression_md(payload: dict) -> str:
+    """Handle render non regression md."""
     lines = [
         "# Coverage 100 Gate",
         "",
@@ -259,15 +271,14 @@ def _render_non_regression_md(payload: dict) -> str:
 
 
 def _write_non_regression_report(current: Dict[str, Any], baseline: Dict[str, Any]) -> int:
+    """Handle write non regression report."""
     current_percent = _combined_coverage_percent(current)
     baseline_percent = _combined_coverage_percent(baseline)
     findings = []
     status = "pass"
     if current_percent < baseline_percent:
         status = "fail"
-        findings.append(
-            f"combined coverage regressed from {baseline_percent:.2f}% to {current_percent:.2f}%"
-        )
+        findings.append(f"combined coverage regressed from {baseline_percent:.2f}% to {current_percent:.2f}%")
     payload = {
         "status": status,
         "mode": "non_regression",
@@ -290,13 +301,18 @@ def _write_non_regression_report(current: Dict[str, Any], baseline: Dict[str, An
 
 
 def main() -> int:
+    """Handle main."""
     args = _parse_args()
     profile = json.loads(Path(args.profile_json).read_text(encoding="utf-8"))
     repo_dir = Path(args.repo_dir).resolve()
     platform_dir = Path(args.platform_dir).resolve() if args.platform_dir else Path(__file__).resolve().parents[2]
     coverage = cast(Dict[str, Any], profile.get("coverage", {}))
 
-    _run_shell(str(coverage.get("command", "")), shell_name=str(coverage.get("shell", "bash")), cwd=repo_dir)
+    _run_shell(
+        str(coverage.get("command", "")),
+        shell_name=str(coverage.get("command_shell", coverage.get("shell", "bash"))),
+        cwd=repo_dir,
+    )
 
     mode = _coverage_mode(coverage, args.event_name)
     if mode == "evidence_only":

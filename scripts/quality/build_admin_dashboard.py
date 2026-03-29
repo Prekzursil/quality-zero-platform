@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Build admin dashboard."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -16,11 +18,11 @@ from scripts.quality.common import utc_timestamp
 from scripts.quality.control_plane import load_inventory, load_repo_profile
 from scripts.security_helpers import load_json_https
 
-
 GITHUB_API_BASE = "https://api.github.com"
 
 
 def parse_args() -> argparse.Namespace:
+    """Handle parse args."""
     parser = argparse.ArgumentParser(description="Build the GitHub Pages admin dashboard payload.")
     parser.add_argument("--inventory", default="")
     parser.add_argument("--output-dir", required=True)
@@ -34,6 +36,7 @@ def build_dashboard_payload(
     profiles: Mapping[str, Dict[str, Any]],
     live: Mapping[str, Dict[str, Any]],
 ) -> Dict[str, Any]:
+    """Return build dashboard payload."""
     repos: List[Dict[str, Any]] = []
     for repo_entry in inventory.get("repos", []):
         slug = repo_entry["slug"]
@@ -46,9 +49,7 @@ def build_dashboard_payload(
                 "rollout": repo_entry.get("rollout", ""),
                 "issue_policy_mode": profile.get("issue_policy", {}).get("mode", ""),
                 "issue_policy_baseline_ref": profile.get("issue_policy", {}).get("baseline_ref", ""),
-                "enabled_scanners": sorted(
-                    name for name, enabled in profile.get("enabled_scanners", {}).items() if enabled
-                ),
+                "enabled_scanners": sorted(name for name, enabled in profile.get("enabled_scanners", {}).items() if enabled),
                 "coverage_min_percent": profile.get("coverage", {}).get("min_percent"),
                 "branch_min_percent": profile.get("coverage", {}).get("branch_min_percent"),
                 "deps_policy": profile.get("deps", {}).get("policy", ""),
@@ -65,11 +66,13 @@ def build_dashboard_payload(
 
 
 def _baseline_text(item: Mapping[str, Any]) -> str:
+    """Handle baseline text."""
     baseline_ref = str(item.get("issue_policy_baseline_ref", "") or "").strip()
     return f" ({baseline_ref})" if baseline_ref else ""
 
 
 def _render_repo_row(item: Mapping[str, Any]) -> str:
+    """Handle render repo row."""
     return "\n".join(
         [
             "<tr>",
@@ -89,6 +92,7 @@ def _render_repo_row(item: Mapping[str, Any]) -> str:
 
 
 def _render_dashboard_page(payload: Mapping[str, Any], rows: str) -> str:
+    """Handle render dashboard page."""
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -130,11 +134,13 @@ def _render_dashboard_page(payload: Mapping[str, Any], rows: str) -> str:
 
 
 def render_dashboard_html(payload: Mapping[str, Any]) -> str:
+    """Handle render dashboard html."""
     rows = "\n".join(_render_repo_row(item) for item in payload.get("repos", []))
     return _render_dashboard_page(payload, rows)
 
 
 def write_dashboard(output_dir: Path, payload: Mapping[str, Any], *, assets_dir: Path | None = None) -> None:
+    """Handle write dashboard."""
     output_dir.mkdir(parents=True, exist_ok=True)
     data_dir = output_dir / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -147,6 +153,7 @@ def write_dashboard(output_dir: Path, payload: Mapping[str, Any], *, assets_dir:
 
 
 def _github_payload(url: str, token: str) -> Any:
+    """Handle github payload."""
     payload, _ = load_json_https(
         url,
         allowed_hosts={"api.github.com"},
@@ -161,16 +168,19 @@ def _github_payload(url: str, token: str) -> Any:
 
 
 def _select_runs(workflow_runs: List[Mapping[str, Any]], *, filter_fn=None) -> List[Mapping[str, Any]]:
+    """Handle select runs."""
     if filter_fn is None:
         return workflow_runs
     return [item for item in workflow_runs if filter_fn(item)]
 
 
 def _run_conclusions(workflow_runs: List[Mapping[str, Any]]) -> Set[str]:
+    """Handle run conclusions."""
     return {str(item.get("conclusion") or "") for item in workflow_runs if item.get("conclusion")}
 
 
 def _compute_health(workflow_runs: List[Mapping[str, Any]], *, filter_fn=None) -> str:
+    """Handle compute health."""
     runs = _select_runs(workflow_runs, filter_fn=filter_fn)
     if not runs:
         return "unknown"
@@ -179,6 +189,7 @@ def _compute_health(workflow_runs: List[Mapping[str, Any]], *, filter_fn=None) -
 
 
 def _live_health(token: str, repo_slug: str, default_branch: str) -> Dict[str, Any]:
+    """Handle live health."""
     runs = _github_payload(
         f"{GITHUB_API_BASE}/repos/{repo_slug}/actions/runs?branch={default_branch}&per_page=20",
         token,
@@ -196,12 +207,10 @@ def _live_health(token: str, repo_slug: str, default_branch: str) -> Dict[str, A
 
 
 def main() -> int:
+    """Handle main."""
     args = parse_args()
     inventory = load_inventory(args.inventory) if args.inventory else load_inventory()
-    profiles = {
-        repo_entry["slug"]: load_repo_profile(inventory, repo_entry["slug"])
-        for repo_entry in inventory["repos"]
-    }
+    profiles = {repo_entry["slug"]: load_repo_profile(inventory, repo_entry["slug"]) for repo_entry in inventory["repos"]}
     token = (os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")).strip()
     live = {}
     if token:

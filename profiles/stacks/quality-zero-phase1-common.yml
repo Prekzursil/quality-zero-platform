@@ -69,7 +69,7 @@ required_contexts:
     - DeepScan
 coverage:
   runner: ubuntu-latest
-  shell: bash
+  command_shell: bash
   setup:
     python: "3.12"
     node: "20"

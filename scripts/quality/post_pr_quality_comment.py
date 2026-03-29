@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Post pr quality comment."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -14,12 +16,12 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
 
 from scripts.security_helpers import load_json_https
 
-
 MARKER = "<!-- quality-zero-rollup -->"
 GITHUB_API_BASE = "https://api.github.com"
 
 
 def parse_args() -> argparse.Namespace:
+    """Handle parse args."""
     parser = argparse.ArgumentParser(description="Create or update the sticky quality rollup PR comment.")
     parser.add_argument("--repo", required=True)
     parser.add_argument("--pull-request", required=True)
@@ -28,10 +30,12 @@ def parse_args() -> argparse.Namespace:
 
 
 def render_comment_body(markdown: str) -> str:
+    """Handle render comment body."""
     return f"{MARKER}\n\n{markdown.strip()}\n"
 
 
 def _github_request(url: str, token: str, *, method: str = "GET", data: Dict[str, Any] | None = None) -> Any:
+    """Handle github request."""
     payload, _ = load_json_https(
         url,
         allowed_hosts={"api.github.com"},
@@ -49,6 +53,7 @@ def _github_request(url: str, token: str, *, method: str = "GET", data: Dict[str
 
 
 def upsert_comment(*, repo: str, pull_request: str, body: str, token: str) -> int:
+    """Handle upsert comment."""
     issue_comments_url = f"{GITHUB_API_BASE}/repos/{repo}/issues/{pull_request}/comments"
     comments = _github_request(issue_comments_url, token)
     if isinstance(comments, list):
@@ -68,6 +73,7 @@ def upsert_comment(*, repo: str, pull_request: str, body: str, token: str) -> in
 
 
 def main() -> int:
+    """Handle main."""
     args = parse_args()
     token = (os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")).strip()
     if not token:

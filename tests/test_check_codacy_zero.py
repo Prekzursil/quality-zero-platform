@@ -1,3 +1,5 @@
+"""Test check codacy zero."""
+
 from __future__ import absolute_import
 
 import os
@@ -33,6 +35,8 @@ from scripts.quality.check_codacy_zero import (
 
 
 class CodacyZeroTests(unittest.TestCase):
+    """Codacy Zero Tests."""
+
     @staticmethod
     def _base_query(
         *,
@@ -40,6 +44,7 @@ class CodacyZeroTests(unittest.TestCase):
         pull_request: str = "",
         sha: str = "",
     ) -> CodacyQuery:
+        """Handle base query."""
         return CodacyQuery(
             provider,
             "Prekzursil",
@@ -56,6 +61,7 @@ class CodacyZeroTests(unittest.TestCase):
         pending_fn=check_codacy_zero._analysis_pending_message,
         sleep_seconds: float = 0.0,
     ) -> CodacyRetryConfig:
+        """Handle retry config."""
         return CodacyRetryConfig(
             provider_candidates=provider_candidates,
             attempts=attempts,
@@ -64,6 +70,7 @@ class CodacyZeroTests(unittest.TestCase):
         )
 
     def test_build_urls_and_request_mode(self) -> None:
+        """Cover build urls and request mode."""
         self.assertEqual(_request_mode(self._base_query()), ("POST", {}))
         self.assertEqual(
             _request_mode(self._base_query(sha="abc123")),
@@ -88,12 +95,14 @@ class CodacyZeroTests(unittest.TestCase):
         )
 
     def test_extract_total_open_nested(self) -> None:
+        """Cover extract total open nested."""
         self.assertEqual(extract_total_open({"issuesCount": 4}), 4)
         self.assertEqual(extract_total_open({"paging": {"total": 3}}), 3)
         self.assertEqual(extract_total_open([{"details": {"open_issues": 2}}]), 2)
         self.assertIsNone(extract_total_open({"items": [{"details": "no-count"}]}))
 
     def test_request_json_rejects_non_dict_payloads(self) -> None:
+        """Cover request json rejects non dict payloads."""
         with patch("scripts.quality.check_codacy_zero.load_json_https", return_value=(["invalid"], {})):
             with self.assertRaisesRegex(RuntimeError, "Unexpected Codacy API response payload"):
                 check_codacy_zero._request_json("https://api.codacy.com/test", "token")
@@ -102,6 +111,7 @@ class CodacyZeroTests(unittest.TestCase):
             self.assertEqual(check_codacy_zero._request_json("https://api.codacy.com/test", "token"), {"total": 0})
 
     def test_public_repository_issue_query_paths(self) -> None:
+        """Cover public repository issue query paths."""
         with patch("scripts.quality.check_codacy_zero.load_json_https", return_value=({"issuesCount": 0}, {})):
             self.assertEqual(
                 check_codacy_zero._query_codacy_public_repository_issues("gh", "Prekzursil", "quality-zero-platform"),
@@ -122,6 +132,7 @@ class CodacyZeroTests(unittest.TestCase):
             )
 
     def test_provider_query_paths(self) -> None:
+        """Cover provider query paths."""
         with patch("scripts.quality.check_codacy_zero._request_json", return_value={"items": []}):
             self.assertEqual(
                 _query_codacy_provider(self._base_query(), "token"),
@@ -136,6 +147,7 @@ class CodacyZeroTests(unittest.TestCase):
         captured: List[Tuple[str, str, object | None]] = []
 
         def capture_request(url: str, token: str, *, method: str = "GET", data=None):
+            """Handle capture request."""
             captured.append((url, method, data))
             return {"total": 0}
 
@@ -149,8 +161,7 @@ class CodacyZeroTests(unittest.TestCase):
             captured,
             [
                 (
-                    "https://api.codacy.com/api/v3/analysis/organizations/gh/Prekzursil/"
-                    "repositories/quality-zero-platform/issues/search?limit=1",
+                    "https://api.codacy.com/api/v3/analysis/organizations/gh/Prekzursil/" "repositories/quality-zero-platform/issues/search?limit=1",
                     "POST",
                     {"commitUuid": "abc123"},
                 )
@@ -158,6 +169,7 @@ class CodacyZeroTests(unittest.TestCase):
         )
 
     def test_build_retry_config_for_scoped_and_unscoped_queries(self) -> None:
+        """Cover build retry config for scoped and unscoped queries."""
         unscoped = _build_retry_config(self._base_query(), ["gh"])
         self.assertEqual(unscoped.attempts, 1)
         self.assertEqual(unscoped.provider_candidates, ("gh",))
@@ -170,6 +182,7 @@ class CodacyZeroTests(unittest.TestCase):
         self.assertEqual(scoped.sleep_seconds, 0.0)
 
     def test_request_analysis_status_validates_payload_shape(self) -> None:
+        """Cover request analysis status validates payload shape."""
         with patch("scripts.quality.check_codacy_zero.load_json_https", return_value=("bad", {})):
             with self.assertRaisesRegex(RuntimeError, "Unexpected Codacy analysis status payload"):
                 check_codacy_zero._request_analysis_status("https://app.codacy.com/api/v3/test", "token")
@@ -180,6 +193,7 @@ class CodacyZeroTests(unittest.TestCase):
             )
 
     def test_analysis_pending_message_tracks_pull_request_state(self) -> None:
+        """Cover analysis pending message tracks pull request state."""
         pr_query = CodacyQuery("gh", "Prekzursil", "quality-zero-platform", pull_request="5", sha="targetsha")
         with patch.object(check_codacy_zero, "_request_analysis_status", return_value={"isAnalysing": True}):
             self.assertEqual(
@@ -208,6 +222,7 @@ class CodacyZeroTests(unittest.TestCase):
             self.assertIsNone(check_codacy_zero._analysis_pending_message(pr_query, "token"))
 
     def test_analysis_pending_message_tracks_repository_state(self) -> None:
+        """Cover analysis pending message tracks repository state."""
         repo_query = CodacyQuery("gh", "Prekzursil", "quality-zero-platform", sha="targetsha")
         with patch.object(check_codacy_zero, "_request_analysis_status", return_value={"data": {}}):
             self.assertEqual(
@@ -240,12 +255,15 @@ class CodacyZeroTests(unittest.TestCase):
             self.assertIsNone(check_codacy_zero._analysis_pending_message(repo_query, "token"))
 
     def test_open_issue_query_paths(self) -> None:
+        """Cover open issue query paths."""
         responses = [Exception("sentinel"), {"total": 0}]
 
         def fake_request(url: str, token: str, *, method: str = "GET", data=None):
+            """Handle fake request."""
             current = responses.pop(0)
             if isinstance(current, Exception):
                 from urllib.error import HTTPError
+
                 raise HTTPError(url, 404, "Not Found", hdrs=Message(), fp=None)
             return current
 
@@ -255,6 +273,7 @@ class CodacyZeroTests(unittest.TestCase):
         captured: List[Tuple[str, str, object | None]] = []
 
         def capture_request(url: str, token: str, *, method: str = "GET", data=None):
+            """Handle capture request."""
             captured.append((url, method, data))
             return {"total": 0}
 
@@ -267,8 +286,7 @@ class CodacyZeroTests(unittest.TestCase):
             captured,
             [
                 (
-                    "https://app.codacy.com/api/v3/analysis/organizations/gh/Prekzursil/"
-                    "repositories/quality-zero-platform/pull-requests/5/issues?status=new&limit=1",
+                    "https://app.codacy.com/api/v3/analysis/organizations/gh/Prekzursil/" "repositories/quality-zero-platform/pull-requests/5/issues?status=new&limit=1",
                     "GET",
                     None,
                 )
@@ -276,13 +294,17 @@ class CodacyZeroTests(unittest.TestCase):
         )
 
     def test_open_issue_http_error_and_not_found_paths(self) -> None:
+        """Cover open issue http error and not found paths."""
         from urllib.error import HTTPError
 
         error = HTTPError("https://api.codacy.com", 401, "Unauthorized", hdrs=Message(), fp=None)
-        with patch("scripts.quality.check_codacy_zero._query_codacy_provider", side_effect=error), patch(
-            "scripts.quality.check_codacy_zero._query_codacy_public_repository_issues",
-            return_value=(0, []),
-        ) as fallback_mock:
+        with (
+            patch("scripts.quality.check_codacy_zero._query_codacy_provider", side_effect=error),
+            patch(
+                "scripts.quality.check_codacy_zero._query_codacy_public_repository_issues",
+                return_value=(0, []),
+            ) as fallback_mock,
+        ):
             self.assertEqual(
                 _query_codacy_open_issues(self._base_query(), "token", ["gh"]),
                 (0, [], None),
@@ -308,6 +330,7 @@ class CodacyZeroTests(unittest.TestCase):
         self.assertIsInstance(exc, RuntimeError)
 
         def fake_provider(*_args, **_kwargs):
+            """Handle fake provider."""
             raise HTTPError("https://api.codacy.com", 404, "Not Found", hdrs=Message(), fp=None)
 
         with patch(
@@ -324,6 +347,7 @@ class CodacyZeroTests(unittest.TestCase):
         self.assertIsNotNone(exc)
 
     def test_fallback_and_http_error_helpers_cover_remaining_branches(self) -> None:
+        """Cover fallback and http error helpers cover remaining branches."""
         from urllib.error import HTTPError
 
         self.assertIsNone(check_codacy_zero._fallback_public_issues(self._base_query(pull_request="5")))
@@ -349,6 +373,7 @@ class CodacyZeroTests(unittest.TestCase):
         self.assertFalse(should_return)
 
     def test_direct_wrapper_helpers_delegate_to_support_functions(self) -> None:
+        """Cover direct wrapper helpers delegate to support functions."""
         error = HTTPError("https://api.codacy.com", 401, "Unauthorized", hdrs=Message(), fp=None)
 
         with patch(
@@ -381,6 +406,7 @@ class CodacyZeroTests(unittest.TestCase):
         )
 
     def test_query_candidate_and_helpers(self) -> None:
+        """Cover query candidate and helpers."""
         query = self._base_query()
         with patch(
             "scripts.quality.check_codacy_zero._query_codacy_provider",
@@ -414,12 +440,14 @@ class CodacyZeroTests(unittest.TestCase):
         self.assertIsInstance(exc, RuntimeError)
 
     def test_not_found_findings_without_exception(self) -> None:
+        """Cover not found findings without exception."""
         open_issues, findings, exc = check_codacy_zero._not_found_findings(["gh"], None)
         self.assertIsNone(open_issues)
         self.assertEqual(findings, ["Codacy API endpoint was not found for providers: gh."])
         self.assertIsNone(exc)
 
     def test_main_status_paths(self) -> None:
+        """Cover main status paths."""
         empty_value = str()
         args = Namespace(
             provider="gh",
@@ -438,9 +466,7 @@ class CodacyZeroTests(unittest.TestCase):
             self.assertEqual(check_codacy_zero.main(), 1)
         self.assertEqual(write_report_mock.call_args.args[0]["findings"], ["CODACY_API_TOKEN is missing."])
 
-        success_args = Namespace(
-            **{**args.__dict__, "token": "explicit-token", "pull_request": "5"}
-        )
+        success_args = Namespace(**{**args.__dict__, "token": "explicit-token", "pull_request": "5"})
         with (
             patch.object(check_codacy_zero, "_parse_args", return_value=success_args),
             patch.object(check_codacy_zero, "_query_codacy_open_issues", return_value=(0, [], None)),
@@ -449,9 +475,11 @@ class CodacyZeroTests(unittest.TestCase):
             self.assertEqual(check_codacy_zero.main(), 0)
         self.assertEqual(write_report_mock.call_args.args[0]["status"], "pass")
 
-        with patch.object(check_codacy_zero, "_parse_args", return_value=success_args), patch.object(
-            check_codacy_zero, "_query_codacy_open_issues", return_value=(0, [], None)
-        ), patch.object(check_codacy_zero, "write_report", return_value=7):
+        with (
+            patch.object(check_codacy_zero, "_parse_args", return_value=success_args),
+            patch.object(check_codacy_zero, "_query_codacy_open_issues", return_value=(0, [], None)),
+            patch.object(check_codacy_zero, "write_report", return_value=7),
+        ):
             self.assertEqual(check_codacy_zero.main(), 7)
 
         audit_args = Namespace(**{**success_args.__dict__, "policy_mode": "audit"})
@@ -467,17 +495,21 @@ class CodacyZeroTests(unittest.TestCase):
             self.assertEqual(check_codacy_zero.main(), 0)
 
     def test_load_codacy_findings_with_retry_retries_pull_request_404s(self) -> None:
+        """Cover load codacy findings with retry retries pull request 404s."""
         calls: List[int] = []
 
         def fake_query(*_args, **_kwargs):
+            """Handle fake query."""
             calls.append(len(calls))
             if len(calls) == 1:
                 return None, [], HTTPError("https://api.codacy.com", 404, "Not Found", hdrs=Message(), fp=None)
             return 0, [], None
 
-        with patch.object(check_codacy_zero, "SCOPED_ANALYSIS_RETRY_ATTEMPTS", 2), patch.object(
-            check_codacy_zero.time, "sleep", return_value=None
-        ), patch.object(check_codacy_zero, "_query_codacy_open_issues", side_effect=fake_query):
+        with (
+            patch.object(check_codacy_zero, "SCOPED_ANALYSIS_RETRY_ATTEMPTS", 2),
+            patch.object(check_codacy_zero.time, "sleep", return_value=None),
+            patch.object(check_codacy_zero, "_query_codacy_open_issues", side_effect=fake_query),
+        ):
             open_issues, findings = load_codacy_findings_with_retry(
                 self._base_query(pull_request="49"),
                 "token",
@@ -488,6 +520,7 @@ class CodacyZeroTests(unittest.TestCase):
         self.assertEqual(len(calls), 2)
 
     def test_load_codacy_findings_with_retry_builds_default_config(self) -> None:
+        """Cover load codacy findings with retry builds default config."""
         with patch.object(
             check_codacy_zero,
             "_query_codacy_open_issues",
@@ -501,14 +534,17 @@ class CodacyZeroTests(unittest.TestCase):
         self.assertEqual((open_issues, findings), (0, []))
 
     def test_load_codacy_findings_with_retry_returns_last_findings_after_retry_budget(self) -> None:
+        """Cover load codacy findings with retry returns last findings after retry budget."""
         not_found = HTTPError("https://api.codacy.com", 404, "Not Found", hdrs=Message(), fp=None)
-        with patch.object(check_codacy_zero, "SCOPED_ANALYSIS_RETRY_ATTEMPTS", 2), patch.object(
-            check_codacy_zero.time, "sleep", return_value=None
-        ), patch.object(
-            check_codacy_zero,
-            "_query_codacy_open_issues",
-            return_value=(None, ["Codacy API endpoint was not found for providers: gh, github."], not_found),
-        ) as query_mock:
+        with (
+            patch.object(check_codacy_zero, "SCOPED_ANALYSIS_RETRY_ATTEMPTS", 2),
+            patch.object(check_codacy_zero.time, "sleep", return_value=None),
+            patch.object(
+                check_codacy_zero,
+                "_query_codacy_open_issues",
+                return_value=(None, ["Codacy API endpoint was not found for providers: gh, github."], not_found),
+            ) as query_mock,
+        ):
             open_issues, findings = load_codacy_findings_with_retry(
                 self._base_query(pull_request="49"),
                 "token",
@@ -520,6 +556,7 @@ class CodacyZeroTests(unittest.TestCase):
         self.assertEqual(query_mock.call_count, 2)
 
     def test_load_codacy_findings_with_retry_waits_for_target_sha(self) -> None:
+        """Cover load codacy findings with retry waits for target sha."""
         attempts: List[int] = []
         base_query = CodacyQuery("gh", "Prekzursil", "quality-zero-platform", sha="targetsha")
         pending_responses = [
@@ -528,6 +565,7 @@ class CodacyZeroTests(unittest.TestCase):
         ]
 
         def fake_query(*_args, **_kwargs):
+            """Handle fake query."""
             attempts.append(len(attempts) + 1)
             return 0, [], None
 
@@ -546,6 +584,7 @@ class CodacyZeroTests(unittest.TestCase):
         self.assertEqual(attempts, [1, 2])
 
     def test_load_codacy_findings_with_retry_reports_pending_analysis_after_budget(self) -> None:
+        """Cover load codacy findings with retry reports pending analysis after budget."""
         base_query = CodacyQuery("gh", "Prekzursil", "quality-zero-platform", sha="targetsha")
 
         with patch.object(
@@ -566,6 +605,7 @@ class CodacyZeroTests(unittest.TestCase):
         self.assertEqual(findings, ["Codacy repository analysis is not available yet."])
 
     def test_load_codacy_findings_with_retry_does_not_retry_without_pull_request(self) -> None:
+        """Cover load codacy findings with retry does not retry without pull request."""
         with patch.object(
             check_codacy_zero,
             "_query_codacy_open_issues",
@@ -581,11 +621,15 @@ class CodacyZeroTests(unittest.TestCase):
         query_mock.assert_called_once()
 
     def test_load_codacy_findings_with_retry_returns_immediately_for_pull_request_success(self) -> None:
-        with patch.object(
-            check_codacy_zero,
-            "_query_codacy_open_issues",
-            return_value=(0, [], None),
-        ) as query_mock, patch.object(check_codacy_zero.time, "sleep", return_value=None) as sleep_mock:
+        """Cover load codacy findings with retry returns immediately for pull request success."""
+        with (
+            patch.object(
+                check_codacy_zero,
+                "_query_codacy_open_issues",
+                return_value=(0, [], None),
+            ) as query_mock,
+            patch.object(check_codacy_zero.time, "sleep", return_value=None) as sleep_mock,
+        ):
             open_issues, findings = load_codacy_findings_with_retry(
                 self._base_query(pull_request="49"),
                 "token",
@@ -597,6 +641,7 @@ class CodacyZeroTests(unittest.TestCase):
         sleep_mock.assert_not_called()
 
     def test_load_codacy_findings_with_retry_reports_pending_status_failures(self) -> None:
+        """Cover load codacy findings with retry reports pending status failures."""
         with patch.object(
             check_codacy_zero,
             "_query_codacy_open_issues",
@@ -615,6 +660,7 @@ class CodacyZeroTests(unittest.TestCase):
         self.assertEqual(findings, ["Codacy analysis status request failed: status broke"])
 
     def test_payload_and_report_helpers(self) -> None:
+        """Cover payload and report helpers."""
         payload = _build_payload(
             Namespace(provider="gh", owner="Prekzursil", repo="quality-zero-platform"),
             CodacyStatusResult(status="pass", findings=["done"], open_issues=0, pull_request=""),
@@ -631,6 +677,7 @@ class CodacyZeroTests(unittest.TestCase):
         self.assertEqual(write_report_mock.call_args.kwargs["render_md"], check_codacy_zero._render_md)
 
     def test_parse_args_and_script_entrypoint(self) -> None:
+        """Cover parse args and script entrypoint."""
         with patch.object(sys, "argv", ["check_codacy_zero.py", "--owner", "Prekzursil", "--repo", "quality-zero-platform"]):
             args = check_codacy_zero._parse_args()
         self.assertEqual(args.provider, "gh")

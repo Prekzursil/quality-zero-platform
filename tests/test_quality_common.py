@@ -59,7 +59,9 @@ class QualityCommonTests(unittest.TestCase):
                 "runner": " ",
                 "shell": "",
                 "command": "  qlty check  ",
-                "inputs": [{"format": "xml", "name": "coverage", "path": "coverage.xml"}],
+                "inputs": [
+                    {"format": "xml", "name": "coverage", "path": "coverage.xml"}
+                ],
                 "require_sources": [" source-a ", "source-a", "source-b"],
                 "min_percent": "98.5",
                 "assert_mode": {"default": "", "python": " warn "},
@@ -89,12 +91,18 @@ class QualityCommonTests(unittest.TestCase):
                 ),
                 "inputs": [
                     {"format": "xml", "name": "coverage", "path": "coverage.xml"},
-                    {"format": "lcov", "name": "frontend", "path": "airline-gui/coverage/lcov.info"},
+                    {
+                        "format": "lcov",
+                        "name": "frontend",
+                        "path": "airline-gui/coverage/lcov.info",
+                    },
                 ],
             }
         )
 
-    def test_resolve_report_spec_supports_report_spec_and_validates_legacy_kwargs(self) -> None:
+    def test_resolve_report_spec_supports_report_spec_and_validates_legacy_kwargs(
+        self,
+    ) -> None:
         """Cover resolve report spec supports report spec and validates legacy kwargs."""
         report_spec = ReportSpec(
             out_json="reports/out.json",
@@ -118,7 +126,9 @@ class QualityCommonTests(unittest.TestCase):
         ):
             _resolve_report_spec("legacy-positional-arg")
 
-        with self.assertRaisesRegex(TypeError, "Missing required report parameter: render_md"):
+        with self.assertRaisesRegex(
+            TypeError, "Missing required report parameter: render_md"
+        ):
             _resolve_report_spec(
                 out_json="reports/out.json",
                 out_md="reports/out.md",
@@ -126,7 +136,9 @@ class QualityCommonTests(unittest.TestCase):
                 default_md="fallback.md",
             )
 
-        with self.assertRaisesRegex(TypeError, "Unexpected write_report parameters: extra"):
+        with self.assertRaisesRegex(
+            TypeError, "Unexpected write_report parameters: extra"
+        ):
             _resolve_report_spec(
                 out_json="reports/out.json",
                 out_md="reports/out.md",
@@ -143,7 +155,9 @@ class QualityCommonTests(unittest.TestCase):
         self.assertIsNotNone(parsed.tzinfo)
         self.assertEqual(parsed.tzinfo, timezone.utc)
 
-    def test_dedupe_strings_trims_skips_empty_and_preserves_first_seen_order(self) -> None:
+    def test_dedupe_strings_trims_skips_empty_and_preserves_first_seen_order(
+        self,
+    ) -> None:
         """Cover dedupe strings trims skips empty and preserves first seen order."""
         values: List[Any] = ["  alpha ", "", "beta", "alpha", None, " beta ", "gamma"]
         self.assertEqual(
@@ -164,7 +178,10 @@ class QualityCommonTests(unittest.TestCase):
                 self.assertEqual(nested_path.name, "report.md")
                 self.assertTrue(nested_path.as_posix().endswith("/nested/report.md"))
                 absolute_candidate = str((root / "absolute-outside.json").resolve())
-                self.assertEqual(safe_output_path(absolute_candidate, "reports/out.json"), Path(absolute_candidate))
+                self.assertEqual(
+                    safe_output_path(absolute_candidate, "reports/out.json"),
+                    Path(absolute_candidate),
+                )
                 with self.assertRaisesRegex(ValueError, "escapes workspace root"):
                     safe_output_path("../outside.json", "reports/out.json")
 
@@ -186,7 +203,9 @@ class QualityCommonTests(unittest.TestCase):
                 )
 
             self.assertEqual(result, 0)
-            json_payload = json.loads((root / "reports" / "result.json").read_text(encoding="utf-8"))
+            json_payload = json.loads(
+                (root / "reports" / "result.json").read_text(encoding="utf-8")
+            )
             self.assertEqual(json_payload, payload)
             self.assertEqual(
                 (root / "reports" / "result.md").read_text(encoding="utf-8"),
@@ -282,7 +301,9 @@ class QualityCommonTests(unittest.TestCase):
         self.assertEqual(
             infer_coverage_inputs(
                 {
-                    "inputs": [{"format": "lcov", "name": "existing", "path": "cov.info"}],
+                    "inputs": [
+                        {"format": "lcov", "name": "existing", "path": "cov.info"}
+                    ],
                     "artifact_path": "coverage.xml",
                 }
             ),
@@ -299,8 +320,12 @@ class QualityCommonTests(unittest.TestCase):
 
     def test_normalize_setup_helpers_cover_string_inputs(self) -> None:
         """Cover normalize setup helpers cover string inputs."""
-        self.assertEqual(normalize_java_setup("21"), {"distribution": "temurin", "version": "21"})
-        self.assertEqual(normalize_java_setup(None), {"distribution": "", "version": ""})
+        self.assertEqual(
+            normalize_java_setup("21"), {"distribution": "temurin", "version": "21"}
+        )
+        self.assertEqual(
+            normalize_java_setup(None), {"distribution": "", "version": ""}
+        )
         self.assertEqual(
             normalize_coverage_setup(
                 {
@@ -324,10 +349,14 @@ class QualityCommonTests(unittest.TestCase):
             },
         )
         self.assertEqual(normalize_coverage_setup(None), normalize_coverage_setup({}))
-        self.assertEqual(normalize_coverage_assert_mode("strict"), {"default": "strict"})
+        self.assertEqual(
+            normalize_coverage_assert_mode("strict"), {"default": "strict"}
+        )
         self.assertEqual(normalize_coverage_assert_mode(None), {"default": "enforce"})
         self.assertEqual(
-            normalize_coverage_assert_mode({"default": "", "python": " warn ", "javascript": " "}),
+            normalize_coverage_assert_mode(
+                {"default": "", "python": " warn ", "javascript": " "}
+            ),
             {"default": "enforce", "python": "warn"},
         )
         self.assertEqual(
@@ -343,7 +372,9 @@ class QualityCommonTests(unittest.TestCase):
                 "runner": "ubuntu-latest",
                 "shell": "bash",
                 "command": "qlty check",
-                "inputs": [{"format": "xml", "name": "coverage", "path": "coverage.xml"}],
+                "inputs": [
+                    {"format": "xml", "name": "coverage", "path": "coverage.xml"}
+                ],
                 "require_sources": ["source-a", "source-b"],
                 "require_sources_mode": "explicit",
                 "min_percent": 98.5,
@@ -362,7 +393,9 @@ class QualityCommonTests(unittest.TestCase):
             },
         )
 
-    def test_normalize_coverage_helper_infers_required_sources_from_command(self) -> None:
+    def test_normalize_coverage_helper_infers_required_sources_from_command(
+        self,
+    ) -> None:
         """Cover normalize coverage helper infers required sources from command."""
         inferred = self._inferred_coverage()
         self.assertEqual(
@@ -377,12 +410,20 @@ class QualityCommonTests(unittest.TestCase):
         )
         self.assertEqual(inferred["require_sources_mode"], "infer")
         self.assertIsNone(inferred["branch_min_percent"])
-        self.assertIsNone(normalize_coverage({"branch_min_percent": "bogus"})["branch_min_percent"])
+        self.assertIsNone(
+            normalize_coverage({"branch_min_percent": "bogus"})["branch_min_percent"]
+        )
 
-    def test_profile_coverage_normalization_helpers_cover_empty_and_multi_filter_paths(self) -> None:
+    def test_profile_coverage_normalization_helpers_cover_empty_and_multi_filter_paths(
+        self,
+    ) -> None:
         """Cover profile coverage normalization helpers cover empty and multi filter paths."""
-        with patch.object(profile_coverage_normalization, "_normalize_source_hint", return_value=""):
-            self.assertEqual(profile_coverage_normalization._extract_cov_hints("--cov=scripts"), [])
+        with patch.object(
+            profile_coverage_normalization, "_normalize_source_hint", return_value=""
+        ):
+            self.assertEqual(
+                profile_coverage_normalization._extract_cov_hints("--cov=scripts"), []
+            )
 
         fake_match = type(
             "FakeMatch",
@@ -392,13 +433,26 @@ class QualityCommonTests(unittest.TestCase):
         with patch.object(
             profile_coverage_normalization,
             "_GCOVR_FILTER_RE",
-            type("FakeRegex", (), {"finditer": staticmethod(lambda _command: [fake_match(), fake_match()])})(),
+            type(
+                "FakeRegex",
+                (),
+                {
+                    "finditer": staticmethod(
+                        lambda _command: [fake_match(), fake_match()]
+                    )
+                },
+            )(),
         ), patch.object(
             profile_coverage_normalization,
             "_normalize_source_hint",
             side_effect=["alpha/", ""],
         ):
-            self.assertEqual(profile_coverage_normalization._extract_gcovr_hints("gcovr --filter placeholder"), ["alpha/"])
+            self.assertEqual(
+                profile_coverage_normalization._extract_gcovr_hints(
+                    "gcovr --filter placeholder"
+                ),
+                ["alpha/"],
+            )
 
     def test_normalize_codex_environment_helper_covers_string_inputs(self) -> None:
         """Cover normalize codex environment helper covers string inputs."""
@@ -435,7 +489,13 @@ class QualityCommonTests(unittest.TestCase):
             },
         )
         self.assertEqual(
-            normalize_issue_policy({"mode": "audit", "pr_behavior": "introduced_only", "main_behavior": "absolute"}),
+            normalize_issue_policy(
+                {
+                    "mode": "audit",
+                    "pr_behavior": "introduced_only",
+                    "main_behavior": "absolute",
+                }
+            ),
             {
                 "mode": "audit",
                 "pr_behavior": "introduced_only",
@@ -470,7 +530,12 @@ class QualityCommonTests(unittest.TestCase):
                     "auth_file": " ~/.codex/auth.json ",
                     "network_profile": " restricted ",
                     "methods": " changed ",
-                    "runner_labels": [" self-hosted ", "self-hosted", "codex-trusted", ""],
+                    "runner_labels": [
+                        " self-hosted ",
+                        "self-hosted",
+                        "codex-trusted",
+                        "",
+                    ],
                 },
                 verify_command="bash scripts/verify",
             ),
@@ -496,6 +561,9 @@ class QualityCommonTests(unittest.TestCase):
             {"nested": {"left": 1, "right": 2}, "plain": 1, "extra": 3},
         )
         self.assertEqual(
-            _deep_merge({"left": {"keep": 1}, "shared": 1}, {"left": {"add": 2}, "shared": 3, "extra": 4}),
+            _deep_merge(
+                {"left": {"keep": 1}, "shared": 1},
+                {"left": {"add": 2}, "shared": 3, "extra": 4},
+            ),
             {"left": {"keep": 1, "add": 2}, "shared": 3, "extra": 4},
         )

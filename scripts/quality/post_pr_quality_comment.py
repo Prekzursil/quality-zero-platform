@@ -22,7 +22,9 @@ GITHUB_API_BASE = "https://api.github.com"
 
 def parse_args() -> argparse.Namespace:
     """Handle parse args."""
-    parser = argparse.ArgumentParser(description="Create or update the sticky quality rollup PR comment.")
+    parser = argparse.ArgumentParser(
+        description="Create or update the sticky quality rollup PR comment."
+    )
     parser.add_argument("--repo", required=True)
     parser.add_argument("--pull-request", required=True)
     parser.add_argument("--markdown-file", required=True)
@@ -34,7 +36,9 @@ def render_comment_body(markdown: str) -> str:
     return f"{MARKER}\n\n{markdown.strip()}\n"
 
 
-def _github_request(url: str, token: str, *, method: str = "GET", data: Dict[str, Any] | None = None) -> Any:
+def _github_request(
+    url: str, token: str, *, method: str = "GET", data: Dict[str, Any] | None = None
+) -> Any:
     """Handle github request."""
     payload, _ = load_json_https(
         url,
@@ -54,7 +58,9 @@ def _github_request(url: str, token: str, *, method: str = "GET", data: Dict[str
 
 def upsert_comment(*, repo: str, pull_request: str, body: str, token: str) -> int:
     """Handle upsert comment."""
-    issue_comments_url = f"{GITHUB_API_BASE}/repos/{repo}/issues/{pull_request}/comments"
+    issue_comments_url = (
+        f"{GITHUB_API_BASE}/repos/{repo}/issues/{pull_request}/comments"
+    )
     comments = _github_request(issue_comments_url, token)
     if isinstance(comments, list):
         for comment in comments:
@@ -68,19 +74,28 @@ def upsert_comment(*, repo: str, pull_request: str, body: str, token: str) -> in
                 )
                 return comment_id
 
-    created = _github_request(issue_comments_url, token, method="POST", data={"body": body})
+    created = _github_request(
+        issue_comments_url, token, method="POST", data={"body": body}
+    )
     return int(created["id"])
 
 
 def main() -> int:
     """Handle main."""
     args = parse_args()
-    token = (os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")).strip()
+    token = (
+        os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")
+    ).strip()
     if not token:
         raise SystemExit("GITHUB_TOKEN or GH_TOKEN is required")
     markdown = Path(args.markdown_file).read_text(encoding="utf-8")
     try:
-        upsert_comment(repo=args.repo, pull_request=args.pull_request, body=render_comment_body(markdown), token=token)
+        upsert_comment(
+            repo=args.repo,
+            pull_request=args.pull_request,
+            body=render_comment_body(markdown),
+            token=token,
+        )
     except (HTTPError, OSError, RuntimeError, ValueError) as exc:
         raise SystemExit(f"Unable to post PR comment: {exc}") from exc
     return 0

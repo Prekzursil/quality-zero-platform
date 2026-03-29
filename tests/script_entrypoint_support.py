@@ -24,7 +24,9 @@ def run_script_entrypoint_failure(script_relative_path: str) -> int:
         sys,
         "argv",
         [str(script_path)],
-    ), patch.object(sys, "path", trimmed_sys_path[:]):
+    ), patch.object(
+        sys, "path", trimmed_sys_path[:]
+    ):
         cwd = Path(tmp)
         previous = Path.cwd()
         os.chdir(cwd)

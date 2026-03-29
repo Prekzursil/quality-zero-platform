@@ -101,7 +101,9 @@ class AdminDashboardTests(unittest.TestCase):
             (assets_dir / "app.js").write_text("console.log('ok')\n", encoding="utf-8")
 
             output_dir = root / "site"
-            build_admin_dashboard.write_dashboard(output_dir, payload, assets_dir=assets_dir)
+            build_admin_dashboard.write_dashboard(
+                output_dir, payload, assets_dir=assets_dir
+            )
 
             self.assertTrue((output_dir / "index.html").is_file())
             self.assertTrue((output_dir / "styles.css").is_file())

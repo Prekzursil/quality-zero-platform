@@ -26,7 +26,9 @@ _ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 def _parse_args() -> argparse.Namespace:
     """Handle parse args."""
-    parser = argparse.ArgumentParser(description="Run QLTY in fail-on-any-issue mode and emit a summary report.")
+    parser = argparse.ArgumentParser(
+        description="Run QLTY in fail-on-any-issue mode and emit a summary report."
+    )
     parser.add_argument("--repo-dir", default=".")
     parser.add_argument("--out-json", default=DEFAULT_JSON)
     parser.add_argument("--out-md", default=DEFAULT_MD)
@@ -60,7 +62,9 @@ def _resolved_qlty_executable_path() -> str:
     """Handle resolved qlty executable path."""
     qlty_executable = shutil.which(_QLTY_EXECUTABLE)
     if not qlty_executable:
-        raise FileNotFoundError(f"Unable to locate required executable: {_QLTY_EXECUTABLE}")
+        raise FileNotFoundError(
+            f"Unable to locate required executable: {_QLTY_EXECUTABLE}"
+        )
     return qlty_executable
 
 
@@ -165,11 +169,15 @@ def _run_qlty_smells(repo_dir: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
-def _build_check_entry(name: str, argv: List[str], result: subprocess.CompletedProcess[str]) -> Dict[str, Any]:
+def _build_check_entry(
+    name: str, argv: List[str], result: subprocess.CompletedProcess[str]
+) -> Dict[str, Any]:
     """Handle build check entry."""
     output_tail = _combine_output(result.stdout or "", result.stderr or "")
     status = "pass"
-    if int(result.returncode) != 0 or (name == "smells" and _smells_output_indicates_findings(output_tail)):
+    if int(result.returncode) != 0 or (
+        name == "smells" and _smells_output_indicates_findings(output_tail)
+    ):
         status = "fail"
     return {
         "name": name,
@@ -180,10 +188,14 @@ def _build_check_entry(name: str, argv: List[str], result: subprocess.CompletedP
     }
 
 
-def _build_payload(checks: Iterable[Mapping[str, Any]], *, status: str, return_code: int) -> Dict[str, Any]:
+def _build_payload(
+    checks: Iterable[Mapping[str, Any]], *, status: str, return_code: int
+) -> Dict[str, Any]:
     """Handle build payload."""
     check_list = [dict(check) for check in checks]
-    output_chunks = [str(check.get("output_tail") or "").strip() for check in check_list]
+    output_chunks = [
+        str(check.get("output_tail") or "").strip() for check in check_list
+    ]
     output_tail = "\n".join(chunk for chunk in output_chunks if chunk)
     return {
         "status": status,

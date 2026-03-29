@@ -83,6 +83,8 @@ def validate_profile_shape(profile: Mapping[str, Any], *, slug: str) -> List[str
         if not isinstance(section, dict):
             continue
         extra = sorted(set(section) - allowed_keys)
-        findings.extend(f"{slug}: unexpected {section_name} key `{key}`" for key in extra)
+        findings.extend(
+            f"{slug}: unexpected {section_name} key `{key}`" for key in extra
+        )
 
     return findings

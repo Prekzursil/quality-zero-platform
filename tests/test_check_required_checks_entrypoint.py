@@ -139,7 +139,9 @@ class RequiredChecksEntrypointTests(unittest.TestCase):
     def test_script_entrypoint_raises_system_exit_from_main(self) -> None:
         """Propagate the CLI validation error through the script entrypoint."""
         repo_root = Path(__file__).resolve().parents[1]
-        without_empty = [entry for entry in sys.path if entry != str(repo_root) and entry != ""]
+        without_empty = [
+            entry for entry in sys.path if entry != str(repo_root) and entry != ""
+        ]
 
         for sys_path in (without_empty, ["", *without_empty]):
             if "" not in sys_path:

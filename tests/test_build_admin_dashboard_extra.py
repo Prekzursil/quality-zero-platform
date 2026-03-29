@@ -32,7 +32,9 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
         self.assertEqual(build_admin_dashboard._baseline_text(item), " (main)")
         row = build_admin_dashboard._render_repo_row(item)
         self.assertIn("<td>Prekzursil/example</td>", row)
-        page = build_admin_dashboard._render_dashboard_page({"generated_at": "now", "repo_count": 1}, row)
+        page = build_admin_dashboard._render_dashboard_page(
+            {"generated_at": "now", "repo_count": 1}, row
+        )
         self.assertIn("Governed repos: 1", page)
 
         runs = [
@@ -49,7 +51,9 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
             ),
             1,
         )
-        self.assertEqual(build_admin_dashboard._run_conclusions(runs), {"success", "failure"})
+        self.assertEqual(
+            build_admin_dashboard._run_conclusions(runs), {"success", "failure"}
+        )
         self.assertEqual(build_admin_dashboard._compute_health([]), "unknown")
         self.assertEqual(build_admin_dashboard._compute_health(runs), "partial")
         self.assertEqual(
@@ -65,21 +69,35 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
         with patch.object(
             build_admin_dashboard,
             "load_json_https",
-            return_value=({"workflow_runs": [{"event": "pull_request", "conclusion": "success"}]}, {}),
+            return_value=(
+                {"workflow_runs": [{"event": "pull_request", "conclusion": "success"}]},
+                {},
+            ),
         ) as load_json_mock:
-            payload = build_admin_dashboard._github_payload("https://api.github.com/repos/example", "token")
+            payload = build_admin_dashboard._github_payload(
+                "https://api.github.com/repos/example", "token"
+            )
         self.assertEqual(payload["workflow_runs"][0]["event"], "pull_request")
-        self.assertEqual(load_json_mock.call_args.kwargs["allowed_hosts"], {"api.github.com"})
+        self.assertEqual(
+            load_json_mock.call_args.kwargs["allowed_hosts"], {"api.github.com"}
+        )
 
         with patch.object(
             build_admin_dashboard,
             "_github_payload",
             side_effect=[
-                {"workflow_runs": [{"event": "push", "conclusion": "success"}, {"event": "pull_request", "conclusion": "success"}]},
+                {
+                    "workflow_runs": [
+                        {"event": "push", "conclusion": "success"},
+                        {"event": "pull_request", "conclusion": "success"},
+                    ]
+                },
                 [{"id": 1}],
             ],
         ):
-            live = build_admin_dashboard._live_health("token", "Prekzursil/example", "main")
+            live = build_admin_dashboard._live_health(
+                "token", "Prekzursil/example", "main"
+            )
         self.assertEqual(live["default_branch_health"], "success")
         self.assertEqual(live["open_pr_health"], "success")
         self.assertTrue(live["ruleset_present"])
@@ -106,9 +124,15 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
             args = Namespace(inventory="", output_dir=str(output_dir), assets_dir="")
             with (
                 patch.object(build_admin_dashboard, "parse_args", return_value=args),
-                patch.object(build_admin_dashboard, "load_inventory", return_value=inventory),
-                patch.object(build_admin_dashboard, "load_repo_profile", return_value=profile),
-                patch.object(build_admin_dashboard, "write_dashboard") as write_dashboard_mock,
+                patch.object(
+                    build_admin_dashboard, "load_inventory", return_value=inventory
+                ),
+                patch.object(
+                    build_admin_dashboard, "load_repo_profile", return_value=profile
+                ),
+                patch.object(
+                    build_admin_dashboard, "write_dashboard"
+                ) as write_dashboard_mock,
                 patch.dict("os.environ", {"GITHUB_TOKEN": "token"}, clear=False),
                 patch.object(
                     build_admin_dashboard,
@@ -131,7 +155,15 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
 
     def test_main_prefers_explicit_assets_dir_and_fallbacks_without_token(self) -> None:
         """Cover main prefers explicit assets dir and fallbacks without token."""
-        inventory = {"repos": [{"slug": "Prekzursil/example", "profile": "example", "default_branch": "main"}]}
+        inventory = {
+            "repos": [
+                {
+                    "slug": "Prekzursil/example",
+                    "profile": "example",
+                    "default_branch": "main",
+                }
+            ]
+        }
         profile = {
             "enabled_scanners": {"coverage": True},
             "issue_policy": {"mode": "ratchet", "baseline_ref": "main"},
@@ -143,14 +175,24 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
             assets_dir = root / "assets"
             assets_dir.mkdir()
             output_dir = root / "site"
-            args = Namespace(inventory="", output_dir=str(output_dir), assets_dir=str(assets_dir))
+            args = Namespace(
+                inventory="", output_dir=str(output_dir), assets_dir=str(assets_dir)
+            )
             with (
                 patch.object(build_admin_dashboard, "parse_args", return_value=args),
-                patch.object(build_admin_dashboard, "load_inventory", return_value=inventory),
-                patch.object(build_admin_dashboard, "load_repo_profile", return_value=profile),
-                patch.object(build_admin_dashboard, "write_dashboard") as write_dashboard_mock,
+                patch.object(
+                    build_admin_dashboard, "load_inventory", return_value=inventory
+                ),
+                patch.object(
+                    build_admin_dashboard, "load_repo_profile", return_value=profile
+                ),
+                patch.object(
+                    build_admin_dashboard, "write_dashboard"
+                ) as write_dashboard_mock,
                 patch.dict("os.environ", {}, clear=True),
             ):
                 self.assertEqual(build_admin_dashboard.main(), 0)
 
-        self.assertEqual(write_dashboard_mock.call_args.kwargs["assets_dir"], assets_dir.resolve())
+        self.assertEqual(
+            write_dashboard_mock.call_args.kwargs["assets_dir"], assets_dir.resolve()
+        )

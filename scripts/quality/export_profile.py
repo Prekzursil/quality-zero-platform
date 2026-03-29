@@ -12,12 +12,18 @@ from typing import Any, Dict, List
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.quality.control_plane import active_required_contexts, load_inventory, load_repo_profile
+from scripts.quality.control_plane import (
+    active_required_contexts,
+    load_inventory,
+    load_repo_profile,
+)
 
 
 def _parse_args() -> argparse.Namespace:
     """Handle parse args."""
-    parser = argparse.ArgumentParser(description="Export a resolved control-plane profile for workflows.")
+    parser = argparse.ArgumentParser(
+        description="Export a resolved control-plane profile for workflows."
+    )
     parser.add_argument("--inventory", default="")
     parser.add_argument("--repo-slug", required=True)
     parser.add_argument("--event-name", default="pull_request")
@@ -29,7 +35,10 @@ def _parse_args() -> argparse.Namespace:
 
 def _coverage_input_files(coverage: Dict[str, Any]) -> str:
     """Handle coverage input files."""
-    return ",".join(str(PurePosixPath("repo") / PurePosixPath(str(item["path"]).replace("\\", "/"))) for item in coverage.get("inputs", []))
+    return ",".join(
+        str(PurePosixPath("repo") / PurePosixPath(str(item["path"]).replace("\\", "/")))
+        for item in coverage.get("inputs", [])
+    )
 
 
 def _json_output(key: str, value: object) -> str:
@@ -55,14 +64,23 @@ def _profile_output_lines(profile: Dict[str, Any], event_name: str) -> List[str]
         f"codex_auth_lane={profile['codex_auth_lane']}",
         f"provider_ui_mode={profile['provider_ui_mode']}",
         _json_output("required_contexts_json", contexts),
-        _json_output("required_contexts_required_now_json", profile["required_contexts"]["required_now"]),
-        _json_output("required_contexts_target_json", profile["required_contexts"]["target"]),
+        _json_output(
+            "required_contexts_required_now_json",
+            profile["required_contexts"]["required_now"],
+        ),
+        _json_output(
+            "required_contexts_target_json", profile["required_contexts"]["target"]
+        ),
         _json_output("required_secrets_json", profile["required_secrets"]),
-        _json_output("conditional_secrets_json", profile.get("conditional_secrets", [])),
+        _json_output(
+            "conditional_secrets_json", profile.get("conditional_secrets", [])
+        ),
         _json_output("required_vars_json", profile["required_vars"]),
         _json_output("codex_environment_json", codex_environment),
         f"codex_auth_file={codex_environment.get('auth_file', '')}",
-        _json_output("codex_runner_labels_json", codex_environment.get("runner_labels", [])),
+        _json_output(
+            "codex_runner_labels_json", codex_environment.get("runner_labels", [])
+        ),
         _json_output("coverage_json", coverage),
         _json_output("issue_policy_json", issue_policy),
         f"coverage_runner={coverage.get('runner', 'ubuntu-latest')}",
@@ -112,13 +130,18 @@ def main() -> int:
     profile = load_repo_profile(inventory, args.repo_slug)
     export_payload = dict(profile)
     export_payload["event_name"] = args.event_name
-    export_payload["active_required_contexts"] = active_required_contexts(profile, event_name=args.event_name)
+    export_payload["active_required_contexts"] = active_required_contexts(
+        profile, event_name=args.event_name
+    )
 
     output_target = args.out_json or args.output
     if output_target:
         output_path = Path(output_target)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(export_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        output_path.write_text(
+            json.dumps(export_payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
     else:
         print(json.dumps(export_payload, indent=2, sort_keys=True))
 

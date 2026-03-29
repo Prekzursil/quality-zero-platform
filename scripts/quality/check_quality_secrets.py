@@ -19,11 +19,33 @@ NONE_BULLET = "- None"
 
 def _parse_args() -> argparse.Namespace:
     """Handle parse args."""
-    parser = argparse.ArgumentParser(description="Validate required quality-gate secrets and variables.")
-    parser.add_argument("--required-secret", action="append", default=[], help="Required secret env var name")
-    parser.add_argument("--conditional-secret", action="append", default=[], help="Conditional secret env var name")
-    parser.add_argument("--required-var", action="append", default=[], help="Required variable env var name")
-    parser.add_argument("--conditional-var", action="append", default=[], help="Conditional variable env var name")
+    parser = argparse.ArgumentParser(
+        description="Validate required quality-gate secrets and variables."
+    )
+    parser.add_argument(
+        "--required-secret",
+        action="append",
+        default=[],
+        help="Required secret env var name",
+    )
+    parser.add_argument(
+        "--conditional-secret",
+        action="append",
+        default=[],
+        help="Conditional secret env var name",
+    )
+    parser.add_argument(
+        "--required-var",
+        action="append",
+        default=[],
+        help="Required variable env var name",
+    )
+    parser.add_argument(
+        "--conditional-var",
+        action="append",
+        default=[],
+        help="Conditional variable env var name",
+    )
     parser.add_argument("--out-json", default="quality-secrets/secrets.json")
     parser.add_argument("--out-md", default="quality-secrets/secrets.md")
     return parser.parse_args()
@@ -43,13 +65,17 @@ def _render_md(payload: Mapping[str, Any]) -> str:
         f"- Status: `{payload['status']}`",
         f"- Timestamp (UTC): `{payload['timestamp_utc']}`",
     ]
-    _append_missing_section(lines, "## Missing secrets", payload.get("missing_secrets", []))
+    _append_missing_section(
+        lines, "## Missing secrets", payload.get("missing_secrets", [])
+    )
     _append_missing_section(
         lines,
         "## Missing conditional secrets",
         payload.get("missing_conditional_secrets", []),
     )
-    _append_missing_section(lines, "## Missing variables", payload.get("missing_vars", []))
+    _append_missing_section(
+        lines, "## Missing variables", payload.get("missing_vars", [])
+    )
     _append_missing_section(
         lines,
         "## Missing conditional variables",

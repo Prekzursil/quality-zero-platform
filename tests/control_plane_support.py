@@ -67,18 +67,27 @@ class ControlPlaneAssertions(_AssertionProtocol):
         """Load repo profiles that have custom multi-language or platform overlays."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         return {
-            "devextreme": load_repo_profile(inventory, "Prekzursil/DevExtreme-Filter-Go-Language"),
+            "devextreme": load_repo_profile(
+                inventory, "Prekzursil/DevExtreme-Filter-Go-Language"
+            ),
             "reframe": load_repo_profile(inventory, "Prekzursil/Reframe"),
             "momentstudio": load_repo_profile(inventory, "Prekzursil/momentstudio"),
             "env_inspector": load_repo_profile(inventory, "Prekzursil/env-inspector"),
-            "airline": load_repo_profile(inventory, "Prekzursil/Airline-Reservations-System"),
+            "airline": load_repo_profile(
+                inventory, "Prekzursil/Airline-Reservations-System"
+            ),
             "swfoc": load_repo_profile(inventory, "Prekzursil/SWFOC-Mod-Menu"),
-            "quality_zero_platform": load_repo_profile(inventory, "Prekzursil/quality-zero-platform"),
+            "quality_zero_platform": load_repo_profile(
+                inventory, "Prekzursil/quality-zero-platform"
+            ),
         }
 
     def _assert_airline_existing_behaviors(self, profile: dict) -> None:
         """Pin the Airline profile's multi-language coverage contract and thresholds."""
-        airline_inputs = {(item["format"], item["name"], item["path"]) for item in profile["coverage"]["inputs"]}
+        airline_inputs = {
+            (item["format"], item["name"], item["path"])
+            for item in profile["coverage"]["inputs"]
+        }
         self.assertEqual(
             airline_inputs,
             {

@@ -24,7 +24,11 @@ class RenderCodexPromptTests(unittest.TestCase):
         with patch.object(
             sys,
             "argv",
-            ["render_codex_prompt.py", "--repo-slug", "Prekzursil/quality-zero-platform"],
+            [
+                "render_codex_prompt.py",
+                "--repo-slug",
+                "Prekzursil/quality-zero-platform",
+            ],
         ):
             args = _parse_args()
 
@@ -76,7 +80,9 @@ class RenderCodexPromptTests(unittest.TestCase):
         self.assertIn("- artifact-b", prompt)
         self.assertTrue(prompt.endswith("\n"))
 
-    def test_render_prompt_rejects_non_mapping_profiles_and_unexpected_kwargs(self) -> None:
+    def test_render_prompt_rejects_non_mapping_profiles_and_unexpected_kwargs(
+        self,
+    ) -> None:
         """Cover render prompt rejects non mapping profiles and unexpected kwargs."""
         with self.assertRaises(TypeError):
             _render_prompt(
@@ -88,7 +94,12 @@ class RenderCodexPromptTests(unittest.TestCase):
 
         with self.assertRaises(TypeError):
             _render_prompt(
-                {"slug": "x", "verify_command": "y", "default_branch": "main", "preserve_public_check_names": True},
+                {
+                    "slug": "x",
+                    "verify_command": "y",
+                    "default_branch": "main",
+                    "preserve_public_check_names": True,
+                },
                 lane="remediation",
                 event_name="pull_request",
                 failure_context="",
@@ -106,7 +117,12 @@ class RenderCodexPromptTests(unittest.TestCase):
 
         with self.assertRaises(TypeError):
             _render_prompt(
-                {"slug": "x", "verify_command": "y", "default_branch": "main", "preserve_public_check_names": True},
+                {
+                    "slug": "x",
+                    "verify_command": "y",
+                    "default_branch": "main",
+                    "preserve_public_check_names": True,
+                },
                 lane="remediation",
                 event_name="pull_request",
                 failure_context="",
@@ -132,9 +148,17 @@ class RenderCodexPromptTests(unittest.TestCase):
         )()
 
         stdout = io.StringIO()
-        with patch.object(render_codex_prompt, "_parse_args", return_value=args), patch.object(render_codex_prompt, "load_inventory", return_value={"repos": []}), patch.object(
-            render_codex_prompt, "load_repo_profile", return_value={"slug": "Prekzursil/quality-zero-platform"}
-        ), patch.object(render_codex_prompt, "_render_prompt", return_value=prompt_text), patch(
+        with patch.object(
+            render_codex_prompt, "_parse_args", return_value=args
+        ), patch.object(
+            render_codex_prompt, "load_inventory", return_value={"repos": []}
+        ), patch.object(
+            render_codex_prompt,
+            "load_repo_profile",
+            return_value={"slug": "Prekzursil/quality-zero-platform"},
+        ), patch.object(
+            render_codex_prompt, "_render_prompt", return_value=prompt_text
+        ), patch(
             "sys.stdout",
             stdout,
         ):
@@ -145,9 +169,17 @@ class RenderCodexPromptTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "prompt.md"
             args.output = str(output_path)
-            with patch.object(render_codex_prompt, "_parse_args", return_value=args), patch.object(render_codex_prompt, "load_inventory", return_value={"repos": []}), patch.object(
-                render_codex_prompt, "load_repo_profile", return_value={"slug": "Prekzursil/quality-zero-platform"}
-            ), patch.object(render_codex_prompt, "_render_prompt", return_value=prompt_text):
+            with patch.object(
+                render_codex_prompt, "_parse_args", return_value=args
+            ), patch.object(
+                render_codex_prompt, "load_inventory", return_value={"repos": []}
+            ), patch.object(
+                render_codex_prompt,
+                "load_repo_profile",
+                return_value={"slug": "Prekzursil/quality-zero-platform"},
+            ), patch.object(
+                render_codex_prompt, "_render_prompt", return_value=prompt_text
+            ):
                 self.assertEqual(render_codex_prompt.main(), 0)
             self.assertEqual(output_path.read_text(encoding="utf-8"), prompt_text)
 

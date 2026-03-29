@@ -85,7 +85,9 @@ class ControlPlaneAdminExtraTests(unittest.TestCase):
                     context_name="Coverage 100 Gate",
                     present="true",
                 ),
-            ), patch.object(control_plane_admin, "set_required_context") as set_required_context_mock:
+            ), patch.object(
+                control_plane_admin, "set_required_context"
+            ) as set_required_context_mock:
                 self.assertEqual(control_plane_admin.main(), 0)
             mutation = set_required_context_mock.call_args.kwargs["mutation"]
             self.assertTrue(mutation.present)
@@ -100,6 +102,10 @@ class ControlPlaneAdminExtraTests(unittest.TestCase):
                     event_name="default",
                     mode="enforce",
                 ),
-            ), patch.object(control_plane_admin, "set_coverage_mode") as set_coverage_mock:
+            ), patch.object(
+                control_plane_admin, "set_coverage_mode"
+            ) as set_coverage_mock:
                 self.assertEqual(control_plane_admin.main(), 0)
-            self.assertEqual(set_coverage_mock.call_args.kwargs["event_name"], "default")
+            self.assertEqual(
+                set_coverage_mock.call_args.kwargs["event_name"], "default"
+            )

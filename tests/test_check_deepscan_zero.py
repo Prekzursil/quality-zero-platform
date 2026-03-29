@@ -9,7 +9,10 @@ from argparse import Namespace
 from unittest.mock import patch
 
 from scripts.quality import check_deepscan_zero
-from tests.script_entrypoint_support import run_script_entrypoint_failure
+from tests.script_entrypoint_support import (
+    assert_main_reports_provider_failure,
+    run_script_entrypoint_failure,
+)
 
 
 def _placeholder_token(label: str) -> str:
@@ -151,7 +154,7 @@ class DeepScanZeroTests(unittest.TestCase):
                 {"total": 0},
             )
         with patch(
-            "scripts.quality.check_deepscan_zero.load_json_https",
+            "scripts.quality.common.load_json_https",
             return_value=(["invalid"], {}),
         ):
             with self.assertRaisesRegex(
@@ -161,7 +164,7 @@ class DeepScanZeroTests(unittest.TestCase):
                     "Prekzursil/quality-zero-platform", "abc123", api_token
                 )
         with patch(
-            "scripts.quality.check_deepscan_zero.load_json_https",
+            "scripts.quality.common.load_json_https",
             return_value=({"statuses": []}, {}),
         ):
             self.assertEqual(
@@ -369,23 +372,18 @@ class DeepScanZeroTests(unittest.TestCase):
             self.assertEqual(check_deepscan_zero.main(), 0)
         self.assertEqual(write_report_mock.call_args.args[0]["status"], "pass")
 
-        with patch.dict(
-            "os.environ",
-            {"DEEPSCAN_OPEN_ISSUES_URL": "https://deepscan.io/project/issues"},
-            clear=False,
-        ), patch.object(
-            check_deepscan_zero, "_parse_args", return_value=success_args
-        ), patch.object(
+        assert_main_reports_provider_failure(
+            self,
             check_deepscan_zero,
-            "_evaluate_deepscan_policy",
-            side_effect=RuntimeError("provider timeout"),
-        ), patch.object(
-            check_deepscan_zero, "write_report", return_value=0
-        ) as write_report_mock:
-            self.assertEqual(check_deepscan_zero.main(), 1)
-        self.assertEqual(
-            write_report_mock.call_args.args[0]["findings"],
-            ["DeepScan API request failed: provider timeout"],
+            {
+                "env": {
+                    "DEEPSCAN_OPEN_ISSUES_URL": "https://deepscan.io/project/issues"
+                },
+                "args": success_args,
+                "operation_name": "_evaluate_deepscan_policy",
+                "failure_message": "provider timeout",
+                "expected_finding": "DeepScan API request failed: provider timeout",
+            },
         )
 
         with patch.dict(

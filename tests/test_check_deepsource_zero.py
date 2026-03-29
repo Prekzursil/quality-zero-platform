@@ -9,7 +9,10 @@ from argparse import Namespace
 from unittest.mock import patch
 
 from scripts.quality import check_deepsource_zero
-from tests.script_entrypoint_support import run_script_entrypoint_failure
+from tests.script_entrypoint_support import (
+    assert_main_reports_provider_failure,
+    run_script_entrypoint_failure,
+)
 
 
 class DeepSourceVisibleZeroTests(unittest.TestCase):
@@ -147,7 +150,7 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
     def test_github_status_payload_and_request_html_guard_payload_shape(self) -> None:
         """Cover github status payload and request html guard payload shape."""
         with patch(
-            "scripts.quality.check_deepsource_zero.load_json_https",
+            "scripts.quality.common.load_json_https",
             return_value=(["invalid"], {}),
         ), self.assertRaisesRegex(
             RuntimeError,
@@ -159,7 +162,7 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
                 "token",
             )
         with patch(
-            "scripts.quality.check_deepsource_zero.load_json_https",
+            "scripts.quality.common.load_json_https",
             return_value=({"statuses": []}, {}),
         ):
             self.assertEqual(
@@ -402,25 +405,16 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
         ):
             self.assertEqual(check_deepsource_zero.main(), 7)
 
-        with patch.dict(
-            "os.environ", {"GITHUB_TOKEN": "token"}, clear=False
-        ), patch.object(
+        assert_main_reports_provider_failure(
+            self,
             check_deepsource_zero,
-            "_parse_args",
-            return_value=args,
-        ), patch.object(
-            check_deepsource_zero,
-            "_wait_for_status_contexts",
-            side_effect=RuntimeError("provider timeout"),
-        ), patch.object(
-            check_deepsource_zero,
-            "write_report",
-            return_value=0,
-        ) as write_report_mock:
-            self.assertEqual(check_deepsource_zero.main(), 1)
-        self.assertEqual(
-            write_report_mock.call_args.args[0]["findings"],
-            ["DeepSource request failed: provider timeout"],
+            {
+                "env": {"GITHUB_TOKEN": "token"},
+                "args": args,
+                "operation_name": "_wait_for_status_contexts",
+                "failure_message": "provider timeout",
+                "expected_finding": "DeepSource request failed: provider timeout",
+            },
         )
 
     def test_parse_args_render_markdown_and_script_entrypoint(self) -> None:

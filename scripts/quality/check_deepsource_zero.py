@@ -14,7 +14,11 @@ from typing import Any, Dict, List, Mapping, Sequence, Tuple
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.quality.common import utc_timestamp, write_report
+from scripts.quality.common import (
+    github_commit_status_payload,
+    utc_timestamp,
+    write_report,
+)
 from scripts.quality.deepsource_html import (
     extract_issue_links,
     extract_visible_issue_count,
@@ -29,7 +33,6 @@ from scripts.security_helpers import (
 DEEPSOURCE_STATUS_PREFIX = "DeepSource"
 DEFAULT_TIMEOUT_SECONDS = 900
 DEFAULT_POLL_SECONDS = 20
-GITHUB_API_BASE = "https://api.github.com"
 
 
 @dataclass(frozen=True)
@@ -92,19 +95,7 @@ def _issues_url(args: argparse.Namespace) -> str:
 
 def _github_status_payload(repo: str, sha: str, token: str) -> Dict[str, Any]:
     """Fetch the GitHub status payload for a commit."""
-    payload, _ = load_json_https(
-        f"{GITHUB_API_BASE}/repos/{repo}/commits/{sha}/status",
-        allowed_hosts={"api.github.com"},
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {token}",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "quality-zero-platform",
-        },
-    )
-    if not isinstance(payload, dict):
-        raise RuntimeError("Unexpected GitHub status response payload")
-    return payload
+    return github_commit_status_payload(repo, sha, token)
 
 
 def _request_html(url: str) -> str:

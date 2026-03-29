@@ -252,10 +252,7 @@ function applyValueArgument(args, tokens, token) {
   if (applyPathValueArgument(args, tokens, token)) {
     return true;
   }
-  if (applyNumericValueArgument(args, tokens, token)) {
-    return true;
-  }
-  return false;
+  return applyNumericValueArgument(args, tokens, token);
 }
 
 /**

@@ -262,7 +262,11 @@ def build_pull_request_analysis_url(
 
 def _request_mode(query: CodacyQuery) -> Tuple[str, Dict[str, Any] | None]:
     """Return the Codacy HTTP method and request body for the selected scope."""
-    return [("POST", {}), ("GET", None)][bool(query.pull_request)]
+    if query.pull_request:
+        return "GET", None
+    if query.sha:
+        return "POST", {"commitUuid": query.sha}
+    return "POST", {}
 
 
 def _query_codacy_public_repository_issues(

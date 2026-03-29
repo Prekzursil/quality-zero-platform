@@ -34,8 +34,19 @@ from scripts.quality.check_codacy_zero import (
 
 class CodacyZeroTests(unittest.TestCase):
     @staticmethod
-    def _base_query(*, provider: str = "gh", pull_request: str = "") -> CodacyQuery:
-        return CodacyQuery(provider, "Prekzursil", "quality-zero-platform", pull_request=pull_request)
+    def _base_query(
+        *,
+        provider: str = "gh",
+        pull_request: str = "",
+        sha: str = "",
+    ) -> CodacyQuery:
+        return CodacyQuery(
+            provider,
+            "Prekzursil",
+            "quality-zero-platform",
+            pull_request=pull_request,
+            sha=sha,
+        )
 
     @staticmethod
     def _retry_config(
@@ -54,6 +65,10 @@ class CodacyZeroTests(unittest.TestCase):
 
     def test_build_urls_and_request_mode(self) -> None:
         self.assertEqual(_request_mode(self._base_query()), ("POST", {}))
+        self.assertEqual(
+            _request_mode(self._base_query(sha="abc123")),
+            ("POST", {"commitUuid": "abc123"}),
+        )
         self.assertEqual(_request_mode(self._base_query(pull_request="5")), ("GET", None))
         self.assertEqual(
             build_issues_url("gh", "Prekzursil", "quality-zero-platform", pull_request=""),
@@ -117,6 +132,30 @@ class CodacyZeroTests(unittest.TestCase):
                 _query_codacy_provider(self._base_query(), "token"),
                 (2, ["Codacy reports 2 open issues (expected 0)."]),
             )
+
+        captured: List[Tuple[str, str, object | None]] = []
+
+        def capture_request(url: str, token: str, *, method: str = "GET", data=None):
+            captured.append((url, method, data))
+            return {"total": 0}
+
+        with patch("scripts.quality.check_codacy_zero._request_json", side_effect=capture_request):
+            self.assertEqual(
+                _query_codacy_provider(self._base_query(sha="abc123"), "token"),
+                (0, []),
+            )
+
+        self.assertEqual(
+            captured,
+            [
+                (
+                    "https://api.codacy.com/api/v3/analysis/organizations/gh/Prekzursil/"
+                    "repositories/quality-zero-platform/issues/search?limit=1",
+                    "POST",
+                    {"commitUuid": "abc123"},
+                )
+            ],
+        )
 
     def test_build_retry_config_for_scoped_and_unscoped_queries(self) -> None:
         unscoped = _build_retry_config(self._base_query(), ["gh"])

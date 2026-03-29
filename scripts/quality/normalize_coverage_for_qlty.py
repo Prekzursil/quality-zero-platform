@@ -60,9 +60,13 @@ def _xml_source_elements(root: ElementTree.Element) -> List[ElementTree.Element]
     ]
 
 
-def _copy_report(path: Path, out_dir: Path, *, report_id: int, suffix: str = "") -> Path:
-    out_path = out_dir / f"report-{report_id}{suffix}{path.suffix}"
+def _output_path(out_dir: Path, *, report_id: int, extension: str) -> Path:
+    out_path = out_dir / f"report-{report_id}{extension}"
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    return out_path
+
+
+def _copy_report(path: Path, out_path: Path) -> Path:
     shutil.copy2(path, out_path)
     return out_path
 
@@ -87,7 +91,7 @@ def normalize_xml_report(path: Path, repo_dir: Path, out_dir: Path, *, report_id
     for node in source_nodes:
         node.text = repo_root_text
 
-    out_path = _copy_report(path, out_dir, report_id=report_id, suffix="")
+    out_path = _output_path(out_dir, report_id=report_id, extension=".xml")
     tree.write(out_path, encoding="utf-8", xml_declaration=True)
     return {
         "input": path.as_posix(),
@@ -109,7 +113,7 @@ def normalize_lcov_report(path: Path, out_dir: Path, *, report_id: int) -> Dict[
                 rewritten += 1
         lines.append(raw_line)
 
-    out_path = _copy_report(path, out_dir, report_id=report_id, suffix="")
+    out_path = _output_path(out_dir, report_id=report_id, extension=".info")
     out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return {
         "input": path.as_posix(),
@@ -130,7 +134,7 @@ def normalize_reports(inputs: Iterable[str], *, repo_dir: Path, out_dir: Path) -
             elif _is_lcov_report(path):
                 normalized.append(normalize_lcov_report(path, out_dir, report_id=index))
             else:
-                copied = _copy_report(path, out_dir, report_id=index, suffix="-qlty")
+                copied = _copy_report(path, _output_path(out_dir, report_id=index, extension=".artifact"))
                 normalized.append(
                     {
                         "input": path.as_posix(),

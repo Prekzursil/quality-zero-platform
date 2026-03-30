@@ -59,6 +59,8 @@ on:
         required: false
       SENTRY_AUTH_TOKEN:
         required: false
+      DEEPSOURCE_DSN:
+        required: false
       DEEPSCAN_API_TOKEN:
         required: false
 
@@ -484,6 +486,31 @@ jobs:
           ]
           subprocess.run(command, executable=qlty_executable, check=True)
           PY
+      - name: Publish Codacy coverage
+        if: matrix.lane == 'coverage' && steps.profile.outputs.codacy_enabled == 'true' && steps.profile.outputs.coverage_input_files != ''
+        uses: codacy/codacy-coverage-reporter-action@89d6c85cfafaec52c72b6c5e8b2878d33104c699
+        with:
+          project-token: ${{ secrets.CODACY_API_TOKEN }}
+          coverage-reports: ${{ steps.profile.outputs.coverage_input_files }}
+
+      - name: Publish DeepSource coverage
+        if: matrix.lane == 'coverage' && steps.profile.outputs.deepsource_enabled == 'true' && steps.profile.outputs.coverage_input_files != ''
+        working-directory: repo
+        env:
+          DEEPSOURCE_DSN: ${{ secrets.DEEPSOURCE_DSN }}
+        run: |
+          curl -sSL https://deepsource.io/cli | sh
+          IFS=',' read -ra FILES <<< "${{ steps.profile.outputs.coverage_input_files }}"
+          for f in "${FILES[@]}"; do
+            f=$(echo "$f" | xargs)
+            [ -z "$f" ] && continue
+            if echo "$f" | grep -qE '\.xml$'; then
+              ./bin/deepsource report --analyzer test-coverage --key python --value-file "$f" || true
+            elif echo "$f" | grep -qE 'lcov'; then
+              ./bin/deepsource report --analyzer test-coverage --key javascript --value-file "$f" || true
+            fi
+          done
+
       - name: Upload lane artifacts
         if: always()
         uses: actions/upload-artifact@v4

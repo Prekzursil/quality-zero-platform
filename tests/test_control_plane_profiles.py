@@ -36,9 +36,7 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
         for name in (
             "Python API & worker checks",
             "Web build",
-            "Analyze (python)",
-            "Analyze (typescript)",
-            "CodeQL",
+            "codeql / CodeQL",
             "CodeRabbit",
         ):
             self.assertIn(name, pr_contexts)
@@ -131,9 +129,11 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
         pr_contexts = active_required_contexts(profile, event_name="pull_request")
         target_contexts = profile["required_contexts"]["target"]
 
-        self.assertIn("Codecov Analytics", push_contexts)
-        self.assertIn("Codecov Analytics", pr_contexts)
-        self.assertIn("Codecov Analytics", target_contexts)
+        self.assertIn("shared-codecov-analytics / Codecov Analytics", push_contexts)
+        self.assertIn("shared-codecov-analytics / Codecov Analytics", pr_contexts)
+        self.assertIn(
+            "shared-codecov-analytics / Codecov Analytics", target_contexts
+        )
 
     def test_env_inspector_overlay_aligns_push_required_contexts_to_emitted_surface(
         self,
@@ -149,14 +149,15 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
         self.assertEqual(
             push_contexts,
             [
-                "Coverage 100 Gate",
-                "Codecov Analytics",
-                "QLTY Zero",
-                "Sonar Zero",
-                "Codacy Zero",
-                "Semgrep Zero",
-                "Sentry Zero",
-                "DeepScan Zero",
+                "shared-scanner-matrix / Coverage 100 Gate",
+                "shared-codecov-analytics / Codecov Analytics",
+                "codeql / CodeQL",
+                "shared-scanner-matrix / QLTY Zero",
+                "shared-scanner-matrix / Sonar Zero",
+                "shared-scanner-matrix / Codacy Zero",
+                "shared-scanner-matrix / Semgrep Zero",
+                "shared-scanner-matrix / Sentry Zero",
+                "shared-scanner-matrix / DeepScan Zero",
             ],
         )
         self._assert_context_subset(
@@ -171,8 +172,10 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
                 "qlty coverage diff",
             },
         )
-        self.assertIn("Codecov Analytics", target_contexts)
-        self.assertIn("QLTY Zero", target_contexts)
+        self.assertIn(
+            "shared-codecov-analytics / Codecov Analytics", target_contexts
+        )
+        self.assertIn("shared-scanner-matrix / QLTY Zero", target_contexts)
         self.assertIn("qlty coverage", target_contexts)
         self.assertIn("qlty coverage diff", target_contexts)
         for unexpected in ("qlty coverage", "qlty coverage diff"):
@@ -189,8 +192,14 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
         self.assertEqual(profile["coverage"]["min_percent"], 100.0)
         self.assertEqual(profile["coverage"]["branch_min_percent"], 100.0)
         self.assertEqual(profile["coverage"]["command"].strip(), "bash scripts/verify")
-        self.assertIn("DeepSource Visible Zero", profile["required_contexts"]["always"])
-        self.assertIn("DeepSource Visible Zero", profile["required_contexts"]["target"])
+        self.assertIn(
+            "shared-scanner-matrix / DeepSource Visible Zero",
+            profile["required_contexts"]["always"],
+        )
+        self.assertIn(
+            "shared-scanner-matrix / DeepSource Visible Zero",
+            profile["required_contexts"]["target"],
+        )
         self.assertEqual(
             profile["coverage"]["inputs"],
             [
@@ -361,11 +370,11 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
             output = output_path.read_text(encoding="utf-8")
             self.assertIn("codecov_enabled=true", output)
             self.assertIn(
-                "coverage_input_files=repo/coverage/platform-coverage.xml",
+                "coverage_input_files=coverage/platform-coverage.xml",
                 output,
             )
             self.assertIn(
-                "qlty_coverage_files=repo/coverage/platform-coverage.xml",
+                "qlty_coverage_files=coverage/platform-coverage.xml",
                 output,
             )
 
@@ -393,16 +402,16 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
             output = output_path.read_text(encoding="utf-8")
             expected_files = (
                 "coverage_input_files="
-                "repo/coverage/python/coverage.xml,"
-                "repo/airline-gui/coverage/lcov.info,"
-                "repo/coverage/cpp/lcov.info"
+                "coverage/python/coverage.xml,"
+                "airline-gui/coverage/lcov.info,"
+                "coverage/cpp/lcov.info"
             )
             self.assertIn(expected_files, output)
             self.assertIn(
                 "qlty_coverage_files="
-                "repo/coverage/python/coverage.xml,"
-                "repo/airline-gui/coverage/lcov.info,"
-                "repo/coverage/cpp/lcov.info",
+                "coverage/python/coverage.xml,"
+                "airline-gui/coverage/lcov.info,"
+                "coverage/cpp/lcov.info",
                 output,
             )
 

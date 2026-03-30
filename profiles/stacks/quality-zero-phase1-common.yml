@@ -38,14 +38,15 @@ issue_policy:
   baseline_ref: ""
 required_contexts:
   always:
-    - Coverage 100 Gate
-    - Codecov Analytics
-    - QLTY Zero
-    - Sonar Zero
-    - Codacy Zero
-    - Semgrep Zero
-    - Sentry Zero
-    - DeepScan Zero
+    - shared-scanner-matrix / Coverage 100 Gate
+    - shared-codecov-analytics / Codecov Analytics
+    - codeql / CodeQL
+    - shared-scanner-matrix / QLTY Zero
+    - shared-scanner-matrix / Sonar Zero
+    - shared-scanner-matrix / Codacy Zero
+    - shared-scanner-matrix / Semgrep Zero
+    - shared-scanner-matrix / Sentry Zero
+    - shared-scanner-matrix / DeepScan Zero
     - SonarCloud Code Analysis
   pull_request_only:
     - Codacy Static Code Analysis
@@ -54,17 +55,18 @@ required_contexts:
     - qlty coverage
     - qlty coverage diff
   target:
-    - Coverage 100 Gate
-    - Codecov Analytics
-    - QLTY Zero
+    - shared-scanner-matrix / Coverage 100 Gate
+    - shared-codecov-analytics / Codecov Analytics
+    - codeql / CodeQL
+    - shared-scanner-matrix / QLTY Zero
     - qlty check
     - qlty coverage
     - qlty coverage diff
-    - Sonar Zero
-    - Codacy Zero
-    - Semgrep Zero
-    - Sentry Zero
-    - DeepScan Zero
+    - shared-scanner-matrix / Sonar Zero
+    - shared-scanner-matrix / Codacy Zero
+    - shared-scanner-matrix / Semgrep Zero
+    - shared-scanner-matrix / Sentry Zero
+    - shared-scanner-matrix / DeepScan Zero
     - SonarCloud Code Analysis
     - Codacy Static Code Analysis
     - DeepScan
@@ -107,3 +109,15 @@ vendors:
 trigger:
   mode: standard
   pr_head_sha: false
+codeql:
+  enabled: true
+  runner: ubuntu-latest
+  build_mode: none
+dependabot:
+  enabled: true
+  open_pull_requests_limit: 10
+  schedule_interval: weekly
+  labels:
+    - dependencies
+    - type:chore
+    - area:ci

@@ -41,48 +41,44 @@ coverage:
       path: apps/desktop/coverage/lcov.info
 required_contexts:
   always:
-    - Coverage 100 Gate
-    - Codecov Analytics
-    - Sonar Zero
-    - Codacy Zero
-    - Semgrep Zero
-    - Sentry Zero
-    - DeepScan Zero
+    - shared-scanner-matrix / Coverage 100 Gate
+    - shared-codecov-analytics / Codecov Analytics
+    - codeql / CodeQL
+    - shared-scanner-matrix / Sonar Zero
+    - shared-scanner-matrix / Codacy Zero
+    - shared-scanner-matrix / Semgrep Zero
+    - shared-scanner-matrix / Sentry Zero
+    - shared-scanner-matrix / DeepScan Zero
     - SonarCloud Code Analysis
     - Python API & worker checks
     - Web build
-    - Analyze (python)
-    - Analyze (typescript)
     - Chromatic Playwright
     - Applitools Visual
   pull_request_only:
     - DeepScan
-    - CodeQL
     - CodeRabbit
     - Codacy Static Code Analysis
     - qlty check
     - qlty coverage
     - qlty coverage diff
   target:
-    - Coverage 100 Gate
-    - Codecov Analytics
+    - shared-scanner-matrix / Coverage 100 Gate
+    - shared-codecov-analytics / Codecov Analytics
     - qlty check
     - qlty coverage
     - qlty coverage diff
-    - Sonar Zero
-    - Codacy Zero
-    - Semgrep Zero
-    - Sentry Zero
-    - DeepScan Zero
+    - shared-scanner-matrix / Sonar Zero
+    - shared-scanner-matrix / Codacy Zero
+    - shared-scanner-matrix / Semgrep Zero
+    - shared-scanner-matrix / Sentry Zero
+    - shared-scanner-matrix / DeepScan Zero
     - SonarCloud Code Analysis
     - DeepScan
     - Python API & worker checks
     - Web build
-    - Analyze (python)
-    - Analyze (typescript)
     - Chromatic Playwright
     - Applitools Visual
-    - CodeQL
+    - codeql / CodeQL
     - CodeRabbit
     - Codacy Static Code Analysis
 visual_pair_required: true
@@ -100,3 +96,22 @@ providers:
 vendors:
   sonar:
     project_key_parts: [Prekzursil, Reframe]
+codeql:
+  languages:
+    - actions
+    - javascript-typescript
+    - python
+dependabot:
+  updates:
+    - ecosystem: pip
+      directory: /apps/api
+    - ecosystem: pip
+      directory: /services/worker
+    - ecosystem: pip
+      directory: /packages/media-core
+    - ecosystem: npm
+      directory: /apps/web
+    - ecosystem: npm
+      directory: /apps/desktop
+    - ecosystem: cargo
+      directory: /apps/desktop/src-tauri

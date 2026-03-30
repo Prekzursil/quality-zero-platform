@@ -169,3 +169,45 @@ def normalize_codex_environment(
             payload.get("runner_labels", ["self-hosted", "codex-trusted"])
         ),
     }
+
+
+def normalize_codeql(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
+    """Normalize CodeQL workflow settings."""
+    payload = deepcopy(raw or {}) if isinstance(raw, dict) else {}
+    return {
+        "enabled": bool(payload.get("enabled", True)),
+        "languages": dedupe_strings(payload.get("languages", [])),
+        "runner": str(payload.get("runner", "ubuntu-latest")).strip()
+        or "ubuntu-latest",
+        "build_mode": str(payload.get("build_mode", "none")).strip() or "none",
+        "setup": normalize_coverage_setup(payload.get("setup", {})),
+    }
+
+
+def normalize_dependabot(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
+    """Normalize Dependabot update settings."""
+    payload = deepcopy(raw or {}) if isinstance(raw, dict) else {}
+    updates = []
+    for item in payload.get("updates", []):
+        if not isinstance(item, dict):
+            continue
+        ecosystem = str(item.get("ecosystem", "")).strip()
+        directory = str(item.get("directory", "")).strip()
+        if not ecosystem or not directory:
+            continue
+        updates.append(
+            {
+                "ecosystem": ecosystem,
+                "directory": directory,
+            }
+        )
+    return {
+        "enabled": bool(payload.get("enabled", True)),
+        "updates": updates,
+        "open_pull_requests_limit": int(payload.get("open_pull_requests_limit", 10)),
+        "schedule_interval": str(payload.get("schedule_interval", "weekly")).strip()
+        or "weekly",
+        "labels": dedupe_strings(
+            payload.get("labels", ["dependencies", "type:chore", "area:ci"])
+        ),
+    }

@@ -33,6 +33,7 @@ class WorkflowContractTests(unittest.TestCase):
             ROOT / ".github" / "workflows" / "quality-zero-platform.yml",
             ROOT / ".github" / "workflows" / "quality-zero-gate.yml",
             ROOT / ".github" / "workflows" / "codecov-analytics.yml",
+            ROOT / ".github" / "workflows" / "codeql.yml",
             ROOT / ".github" / "workflows" / "quality-zero-remediation.yml",
             ROOT / ".github" / "workflows" / "quality-zero-backlog.yml",
         ]
@@ -42,6 +43,10 @@ class WorkflowContractTests(unittest.TestCase):
             self.assertNotIn("secrets: inherit", text, path.name)
             if path.name in {"quality-zero-platform.yml", "quality-zero-gate.yml"}:
                 self.assertIn("platform_repository: ${{ github.repository }}", text, path.name)
+            if path.name == "codeql.yml":
+                self.assertIn("uses: ./.github/workflows/reusable-codeql.yml", text, path.name)
+                self.assertIn("merge_group:", text, path.name)
+                self.assertIn("security-events: write", text, path.name)
 
     def test_repo_template_parity_wrappers_pin_controller_release_and_do_not_inherit_all_secrets(self) -> None:
         """Keep repo templates pinned to the controller release with explicit secrets only."""
@@ -49,13 +54,14 @@ class WorkflowContractTests(unittest.TestCase):
             ROOT / "templates" / "repo" / ".github" / "workflows" / "quality-zero-platform.yml",
             ROOT / "templates" / "repo" / ".github" / "workflows" / "quality-zero-gate.yml",
             ROOT / "templates" / "repo" / ".github" / "workflows" / "codecov-analytics.yml",
+            ROOT / "templates" / "repo" / ".github" / "workflows" / "codeql.yml",
         ]
 
         for path in workflow_paths:
             text = path.read_text(encoding="utf-8")
             self.assertNotIn("secrets: inherit", text, path.name)
             self.assertIn(
-                "@e5fc085d61e0a984eb957b1d8b88d7a386318391", text, path.name
+                "@d7a94db4ab57df42940832cf67b730c673af7da6", text, path.name
             )
             self.assertIn("platform_repository: Prekzursil/quality-zero-platform", text, path.name)
             self.assertIn("platform_ref: main", text, path.name)
@@ -80,6 +86,12 @@ class WorkflowContractTests(unittest.TestCase):
                 "permissions:",
                 "  contents: read",
                 "  id-token: write",
+            ],
+            "codeql.yml": [
+                "permissions:",
+                "  actions: read",
+                "  contents: read",
+                "  security-events: write",
             ],
         }
 
@@ -132,6 +144,7 @@ class WorkflowContractTests(unittest.TestCase):
             "quality-zero-platform.yml": "platform_ref: ${{ github.event.pull_request.head.sha || github.sha }}",
             "quality-zero-gate.yml": "platform_ref: ${{ github.event.pull_request.head.sha || github.sha }}",
             "codecov-analytics.yml": "platform_ref: ${{ github.event.pull_request.head.sha || github.sha }}",
+            "codeql.yml": "platform_ref: ${{ github.event.pull_request.head.sha || github.sha }}",
             "quality-zero-remediation.yml": "platform_ref: ${{ github.event.workflow_run.head_sha || github.sha }}",
             "quality-zero-backlog.yml": "platform_ref: ${{ github.sha }}",
         }
@@ -146,9 +159,11 @@ class WorkflowContractTests(unittest.TestCase):
             ROOT / ".github" / "workflows" / "quality-zero-platform.yml",
             ROOT / ".github" / "workflows" / "quality-zero-gate.yml",
             ROOT / ".github" / "workflows" / "codecov-analytics.yml",
+            ROOT / ".github" / "workflows" / "codeql.yml",
             ROOT / "templates" / "repo" / ".github" / "workflows" / "quality-zero-platform.yml",
             ROOT / "templates" / "repo" / ".github" / "workflows" / "quality-zero-gate.yml",
             ROOT / "templates" / "repo" / ".github" / "workflows" / "codecov-analytics.yml",
+            ROOT / "templates" / "repo" / ".github" / "workflows" / "codeql.yml",
         ]
 
         for path in workflow_paths:

@@ -25,7 +25,9 @@ from scripts.quality.control_plane_vendors import (
 )
 from scripts.quality import profile_contract_validation
 from scripts.quality.profile_normalization import (
+    normalize_codeql as common_normalize_codeql,
     normalize_deps as common_normalize_deps,
+    normalize_dependabot as common_normalize_dependabot,
     infer_coverage_inputs as common_infer_coverage_inputs,
     merge_required_contexts as common_merge_required_contexts,
     normalize_codex_environment as common_normalize_codex_environment,
@@ -328,6 +330,8 @@ def _finalize_normalized_profile_sections(merged: Dict[str, Any]) -> None:
     )
     merged["deps"] = common_normalize_deps(merged.get("deps", {}))
     merged["enabled_scanners"]["deps"] = bool(merged["deps"]["enabled"])
+    merged["codeql"] = common_normalize_codeql(merged.get("codeql", {}))
+    merged["dependabot"] = common_normalize_dependabot(merged.get("dependabot", {}))
     merged["coverage"] = common_normalize_coverage(merged.get("coverage", {}))
     merged["codex_environment"] = common_normalize_codex_environment(
         merged.get("codex_environment", {}),
@@ -411,7 +415,7 @@ def build_ruleset_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
                     "strict_required_status_checks_policy": True,
                     "do_not_enforce_on_create": False,
                     "required_status_checks": [
-                        {"context": name, "integration_id": None}
+                        {"context": name}
                         for name in contexts
                     ],
                 },

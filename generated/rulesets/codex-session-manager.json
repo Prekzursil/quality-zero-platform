@@ -28,60 +28,46 @@
         "do_not_enforce_on_create": false,
         "required_status_checks": [
           {
-            "context": "build-test",
-            "integration_id": null
+            "context": "build-test"
           },
           {
-            "context": "analyze",
-            "integration_id": null
+            "context": "scan"
           },
           {
-            "context": "scan",
-            "integration_id": null
+            "context": "codeql / CodeQL"
           },
           {
-            "context": "dependency-review",
-            "integration_id": null
+            "context": "dependency-review"
           },
           {
-            "context": "shared-codecov-analytics / Codecov Analytics",
-            "integration_id": null
+            "context": "shared-codecov-analytics / Codecov Analytics"
           },
           {
-            "context": "shared-scanner-matrix / Coverage 100 Gate",
-            "integration_id": null
+            "context": "shared-scanner-matrix / Coverage 100 Gate"
           },
           {
-            "context": "shared-scanner-matrix / QLTY Zero",
-            "integration_id": null
+            "context": "shared-scanner-matrix / QLTY Zero"
           },
           {
-            "context": "shared-scanner-matrix / Sonar Zero",
-            "integration_id": null
+            "context": "shared-scanner-matrix / Sonar Zero"
           },
           {
-            "context": "shared-scanner-matrix / Codacy Zero",
-            "integration_id": null
+            "context": "shared-scanner-matrix / Codacy Zero"
           },
           {
-            "context": "shared-scanner-matrix / Semgrep Zero",
-            "integration_id": null
+            "context": "shared-scanner-matrix / Semgrep Zero"
           },
           {
-            "context": "shared-scanner-matrix / Sentry Zero",
-            "integration_id": null
+            "context": "shared-scanner-matrix / Sentry Zero"
           },
           {
-            "context": "shared-scanner-matrix / DeepScan Zero",
-            "integration_id": null
+            "context": "shared-scanner-matrix / DeepScan Zero"
           },
           {
-            "context": "aggregate-gate / Quality Zero Gate",
-            "integration_id": null
+            "context": "aggregate-gate / Quality Zero Gate"
           },
           {
-            "context": "shared-scanner-matrix / Quality Rollup",
-            "integration_id": null
+            "context": "shared-scanner-matrix / Quality Rollup"
           }
         ],
         "strict_required_status_checks_policy": true

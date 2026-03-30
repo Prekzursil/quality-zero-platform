@@ -3,9 +3,9 @@ stack: fullstack-web
 verify_command: bash scripts/verify
 required_contexts:
   always:
-    - DeepSource Visible Zero
+    - shared-scanner-matrix / DeepSource Visible Zero
   target:
-    - DeepSource Visible Zero
+    - shared-scanner-matrix / DeepSource Visible Zero
 enabled_scanners:
   deepsource_visible: true
 coverage:
@@ -21,3 +21,14 @@ coverage:
 vendors:
   sonar:
     project_key: Prekzursil_event-link
+codeql:
+  languages:
+    - actions
+    - javascript-typescript
+    - python
+dependabot:
+  updates:
+    - ecosystem: pip
+      directory: /backend
+    - ecosystem: npm
+      directory: /ui

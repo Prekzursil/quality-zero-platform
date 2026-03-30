@@ -28,68 +28,55 @@
         "do_not_enforce_on_create": false,
         "required_status_checks": [
           {
-            "context": "Coverage 100 Gate",
-            "integration_id": null
+            "context": "shared-scanner-matrix / Coverage 100 Gate"
           },
           {
-            "context": "Codecov Analytics",
-            "integration_id": null
+            "context": "shared-codecov-analytics / Codecov Analytics"
           },
           {
-            "context": "QLTY Zero",
-            "integration_id": null
+            "context": "codeql / CodeQL"
           },
           {
-            "context": "qlty check",
-            "integration_id": null
+            "context": "shared-scanner-matrix / QLTY Zero"
           },
           {
-            "context": "qlty coverage",
-            "integration_id": null
+            "context": "qlty check"
           },
           {
-            "context": "qlty coverage diff",
-            "integration_id": null
+            "context": "qlty coverage"
           },
           {
-            "context": "Sonar Zero",
-            "integration_id": null
+            "context": "qlty coverage diff"
           },
           {
-            "context": "Codacy Zero",
-            "integration_id": null
+            "context": "shared-scanner-matrix / Sonar Zero"
           },
           {
-            "context": "Semgrep Zero",
-            "integration_id": null
+            "context": "shared-scanner-matrix / Codacy Zero"
           },
           {
-            "context": "Sentry Zero",
-            "integration_id": null
+            "context": "shared-scanner-matrix / Semgrep Zero"
           },
           {
-            "context": "DeepScan Zero",
-            "integration_id": null
+            "context": "shared-scanner-matrix / Sentry Zero"
           },
           {
-            "context": "SonarCloud Code Analysis",
-            "integration_id": null
+            "context": "shared-scanner-matrix / DeepScan Zero"
           },
           {
-            "context": "Codacy Static Code Analysis",
-            "integration_id": null
+            "context": "SonarCloud Code Analysis"
           },
           {
-            "context": "DeepScan",
-            "integration_id": null
+            "context": "Codacy Static Code Analysis"
           },
           {
-            "context": "Chromatic Playwright",
-            "integration_id": null
+            "context": "DeepScan"
           },
           {
-            "context": "Applitools Visual",
-            "integration_id": null
+            "context": "Chromatic Playwright"
+          },
+          {
+            "context": "Applitools Visual"
           }
         ],
         "strict_required_status_checks_policy": true

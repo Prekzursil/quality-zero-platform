@@ -9,22 +9,22 @@ issue_policy:
 required_contexts:
   always:
     - build-test
-    - analyze
     - scan
-    - Codecov Analytics
-    - Coverage 100 Gate
-    - QLTY Zero
-    - Sonar Zero
-    - Codacy Zero
-    - Semgrep Zero
-    - Sentry Zero
-    - DeepScan Zero
+    - codeql / CodeQL
+    - shared-codecov-analytics / Codecov Analytics
+    - shared-scanner-matrix / Coverage 100 Gate
+    - shared-scanner-matrix / QLTY Zero
+    - shared-scanner-matrix / Sonar Zero
+    - shared-scanner-matrix / Codacy Zero
+    - shared-scanner-matrix / Semgrep Zero
+    - shared-scanner-matrix / Sentry Zero
+    - shared-scanner-matrix / DeepScan Zero
   pull_request_only:
     - dependency-review
   required_now:
     - build-test
-    - analyze
     - scan
+    - codeql / CodeQL
     - dependency-review
     - shared-codecov-analytics / Codecov Analytics
     - shared-scanner-matrix / Coverage 100 Gate
@@ -38,8 +38,8 @@ required_contexts:
     - shared-scanner-matrix / Quality Rollup
   target:
     - build-test
-    - analyze
     - scan
+    - codeql / CodeQL
     - dependency-review
     - shared-codecov-analytics / Codecov Analytics
     - shared-scanner-matrix / Coverage 100 Gate
@@ -75,3 +75,12 @@ coverage:
 vendors:
   sonar:
     project_key: Prekzursil_codex-session-manager
+codeql:
+  runner: windows-latest
+  languages:
+    - actions
+    - csharp
+dependabot:
+  updates:
+    - ecosystem: nuget
+      directory: /

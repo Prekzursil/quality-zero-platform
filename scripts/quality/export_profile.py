@@ -36,7 +36,7 @@ def _parse_args() -> argparse.Namespace:
 def _coverage_input_files(coverage: Dict[str, Any]) -> str:
     """Handle coverage input files."""
     return ",".join(
-        str(PurePosixPath("repo") / PurePosixPath(str(item["path"]).replace("\\", "/")))
+        str(PurePosixPath(str(item["path"]).replace("\\", "/")))
         for item in coverage.get("inputs", [])
     )
 

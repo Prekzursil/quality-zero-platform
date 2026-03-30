@@ -50,20 +50,21 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
         self.assertEqual(
             active_required_contexts(profile, event_name="push"),
             [
-                "Coverage 100 Gate",
-                "Codecov Analytics",
-                "QLTY Zero",
-                "Sonar Zero",
-                "Codacy Zero",
-                "Semgrep Zero",
-                "Sentry Zero",
-                "DeepScan Zero",
+                "shared-scanner-matrix / Coverage 100 Gate",
+                "shared-codecov-analytics / Codecov Analytics",
+                "codeql / CodeQL",
+                "shared-scanner-matrix / QLTY Zero",
+                "shared-scanner-matrix / Sonar Zero",
+                "shared-scanner-matrix / Codacy Zero",
+                "shared-scanner-matrix / Semgrep Zero",
+                "shared-scanner-matrix / Sentry Zero",
+                "shared-scanner-matrix / DeepScan Zero",
                 "SonarCloud Code Analysis",
                 "Chromatic Playwright",
                 "Applitools Visual",
             ],
         )
-        self.assertIn("QLTY Zero", pr_contexts)
+        self.assertIn("shared-scanner-matrix / QLTY Zero", pr_contexts)
         self.assertTrue(
             {"qlty check", "qlty coverage", "qlty coverage diff"}.issubset(
                 pr_contexts
@@ -71,7 +72,7 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
         )
         self.assertTrue(
             {
-                "QLTY Zero",
+                "shared-scanner-matrix / QLTY Zero",
                 "qlty check",
                 "qlty coverage",
                 "qlty coverage diff",
@@ -140,11 +141,11 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
         self.assertNotIn("qlty check", push_contexts)
         self.assertNotIn("qlty coverage", push_contexts)
         self.assertNotIn("qlty coverage diff", push_contexts)
-        self.assertIn("QLTY Zero", push_contexts)
-        self.assertIn("DeepScan Zero", pr_contexts)
+        self.assertIn("shared-scanner-matrix / QLTY Zero", push_contexts)
+        self.assertIn("shared-scanner-matrix / DeepScan Zero", pr_contexts)
         self.assertIn("DeepScan", pr_contexts)
         self.assertIn("Codacy Static Code Analysis", pr_contexts)
-        self.assertIn("QLTY Zero", pr_contexts)
+        self.assertIn("shared-scanner-matrix / QLTY Zero", pr_contexts)
         self.assertIn("qlty check", pr_contexts)
         self.assertIn("qlty coverage", pr_contexts)
         self.assertIn("qlty coverage diff", pr_contexts)
@@ -181,11 +182,17 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
             item["context"]
             for item in payload["rules"][1]["parameters"]["required_status_checks"]
         ]
+        self.assertTrue(
+            all(
+                item == {"context": item["context"]}
+                for item in payload["rules"][1]["parameters"]["required_status_checks"]
+            )
+        )
 
         self._assert_quality_zero_platform_contexts(
-            "Codecov Analytics",
-            "QLTY Zero",
-            "DeepSource Visible Zero",
+            "shared-codecov-analytics / Codecov Analytics",
+            "shared-scanner-matrix / QLTY Zero",
+            "shared-scanner-matrix / DeepSource Visible Zero",
             push_contexts=push_contexts,
             ruleset_contexts=ruleset_contexts,
             target_contexts=profile["required_contexts"]["target"],
@@ -212,15 +219,23 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
         pr_contexts = active_required_contexts(profile, event_name="pull_request")
         target_contexts = set(profile["required_contexts"]["target"])
 
-        self.assertIn("Codecov Analytics", push_contexts)
-        self.assertIn("Codecov Analytics", pr_contexts)
-        self.assertIn("Codecov Analytics", target_contexts)
-        self.assertIn("QLTY Zero", push_contexts)
-        self.assertIn("QLTY Zero", pr_contexts)
-        self.assertIn("QLTY Zero", target_contexts)
-        self.assertIn("DeepSource Visible Zero", push_contexts)
-        self.assertIn("DeepSource Visible Zero", pr_contexts)
-        self.assertIn("DeepSource Visible Zero", target_contexts)
+        self.assertIn("shared-codecov-analytics / Codecov Analytics", push_contexts)
+        self.assertIn("shared-codecov-analytics / Codecov Analytics", pr_contexts)
+        self.assertIn(
+            "shared-codecov-analytics / Codecov Analytics", target_contexts
+        )
+        self.assertIn("shared-scanner-matrix / QLTY Zero", push_contexts)
+        self.assertIn("shared-scanner-matrix / QLTY Zero", pr_contexts)
+        self.assertIn("shared-scanner-matrix / QLTY Zero", target_contexts)
+        self.assertIn(
+            "shared-scanner-matrix / DeepSource Visible Zero", push_contexts
+        )
+        self.assertIn(
+            "shared-scanner-matrix / DeepSource Visible Zero", pr_contexts
+        )
+        self.assertIn(
+            "shared-scanner-matrix / DeepSource Visible Zero", target_contexts
+        )
         self.assertNotIn("Codacy Static Code Analysis", target_contexts)
         self.assertNotIn("DeepScan", target_contexts)
 

@@ -28,44 +28,37 @@
         "do_not_enforce_on_create": false,
         "required_status_checks": [
           {
-            "context": "Coverage 100 Gate",
-            "integration_id": null
+            "context": "shared-scanner-matrix / Coverage 100 Gate"
           },
           {
-            "context": "Codecov Analytics",
-            "integration_id": null
+            "context": "shared-codecov-analytics / Codecov Analytics"
           },
           {
-            "context": "QLTY Zero",
-            "integration_id": null
+            "context": "codeql / CodeQL"
           },
           {
-            "context": "Sonar Zero",
-            "integration_id": null
+            "context": "shared-scanner-matrix / QLTY Zero"
           },
           {
-            "context": "Codacy Zero",
-            "integration_id": null
+            "context": "shared-scanner-matrix / Sonar Zero"
           },
           {
-            "context": "Semgrep Zero",
-            "integration_id": null
+            "context": "shared-scanner-matrix / Codacy Zero"
           },
           {
-            "context": "Sentry Zero",
-            "integration_id": null
+            "context": "shared-scanner-matrix / Semgrep Zero"
           },
           {
-            "context": "DeepScan Zero",
-            "integration_id": null
+            "context": "shared-scanner-matrix / Sentry Zero"
           },
           {
-            "context": "DeepSource Visible Zero",
-            "integration_id": null
+            "context": "shared-scanner-matrix / DeepScan Zero"
           },
           {
-            "context": "SonarCloud Code Analysis",
-            "integration_id": null
+            "context": "shared-scanner-matrix / DeepSource Visible Zero"
+          },
+          {
+            "context": "SonarCloud Code Analysis"
           }
         ],
         "strict_required_status_checks_policy": true

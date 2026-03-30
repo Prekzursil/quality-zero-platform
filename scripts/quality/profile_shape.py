@@ -26,6 +26,8 @@ TOP_LEVEL_KEYS: Set[str] = {
     "preserve_public_check_names",
     "vendors",
     "providers",
+    "codeql",
+    "dependabot",
     "trigger",
     "visual_pair_required",
     "visual_lane",
@@ -69,6 +71,14 @@ NESTED_KEYS: Dict[str, Set[str]] = {
     },
     "trigger": {"mode", "pr_head_sha"},
     "visual_lane": {"kind"},
+    "codeql": {"enabled", "languages", "runner", "build_mode", "setup"},
+    "dependabot": {
+        "enabled",
+        "updates",
+        "open_pull_requests_limit",
+        "schedule_interval",
+        "labels",
+    },
 }
 
 

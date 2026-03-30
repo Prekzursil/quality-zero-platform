@@ -28,16 +28,16 @@ class ControlPlaneAssertions(_AssertionProtocol):
 
     @staticmethod
     def _zero_gate_provider_contexts() -> Set[str]:
-        """Return the direct provider-owned zero-gate status contexts."""
+        """Return the emitted reusable-workflow zero-gate status contexts."""
         return {
-            "Codecov Analytics",
-            "Coverage 100 Gate",
-            "QLTY Zero",
-            "Sonar Zero",
-            "Codacy Zero",
-            "Semgrep Zero",
-            "Sentry Zero",
-            "DeepScan Zero",
+            "shared-codecov-analytics / Codecov Analytics",
+            "shared-scanner-matrix / Coverage 100 Gate",
+            "shared-scanner-matrix / QLTY Zero",
+            "shared-scanner-matrix / Sonar Zero",
+            "shared-scanner-matrix / Codacy Zero",
+            "shared-scanner-matrix / Semgrep Zero",
+            "shared-scanner-matrix / Sentry Zero",
+            "shared-scanner-matrix / DeepScan Zero",
         }
 
     @staticmethod

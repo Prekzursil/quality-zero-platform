@@ -23,7 +23,7 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
     @staticmethod
     def _repo_required_contexts() -> Set[str]:
         """Return repo-specific contexts shared by push, PR, and ruleset checks."""
-        return {"build-test", "analyze", "scan"}
+        return {"build-test", "scan"}
 
     @staticmethod
     def _pr_only_contexts() -> Set[str]:
@@ -63,10 +63,15 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
     ) -> None:
         """Assert the event-specific context contract for the repo."""
         repo_required = self._repo_required_contexts()
-        pr_required = self._shared_zero_gate_contexts() | repo_required | self._pr_only_contexts()
+        pr_required = (
+            self._shared_zero_gate_contexts()
+            | {"codeql / CodeQL"}
+            | repo_required
+            | self._pr_only_contexts()
+        )
         self._assert_context_subset(
             push_contexts,
-            self._zero_gate_provider_contexts() | repo_required,
+            self._zero_gate_provider_contexts() | {"codeql / CodeQL"} | repo_required,
         )
         self._assert_context_subset(pr_contexts, pr_required)
         self._assert_context_subset(ruleset_contexts, pr_required)

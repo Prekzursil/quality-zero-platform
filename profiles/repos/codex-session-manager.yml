@@ -3,9 +3,11 @@ stack: dotnet-wpf
 verify_command: bash scripts/verify
 required_contexts_mode: replace
 issue_policy:
-  mode: zero
-  pr_behavior: absolute
+  mode: ratchet
+  pr_behavior: introduced_only
   main_behavior: absolute
+enabled_scanners:
+  deepsource_visible: true
 required_contexts:
   always:
     - build-test
@@ -19,6 +21,7 @@ required_contexts:
     - shared-scanner-matrix / Semgrep Zero
     - shared-scanner-matrix / Sentry Zero
     - shared-scanner-matrix / DeepScan Zero
+    - shared-scanner-matrix / DeepSource Visible Zero
   pull_request_only:
     - dependency-review
   required_now:

@@ -138,6 +138,8 @@ def _coverage_output_lines(
         f"coverage_needs_rust={str(bool(setup.get('rust', False))).lower()}",
         _json_output("coverage_system_packages_json", setup.get("system_packages", [])),
         f"codecov_enabled={codecov_enabled}",
+        f"codacy_enabled={str(bool(enabled_scanners.get('codacy', False))).lower()}",
+        f"deepsource_enabled={str(bool(enabled_scanners.get('deepsource_visible', False))).lower()}",
         f"coverage_input_files={coverage_input_files}",
         f"qlty_enabled={qlty_enabled}",
         f"qlty_coverage_files={coverage_input_files}",

@@ -55,7 +55,7 @@ class WorkflowContractTests(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             self.assertNotIn("secrets: inherit", text, path.name)
             self.assertIn(
-                "@e5fc085d61e0a984eb957b1d8b88d7a386318391", text, path.name
+                "@0e7482ede8d157d5183d41dfe2b575560fbea222", text, path.name
             )
             self.assertIn("platform_repository: Prekzursil/quality-zero-platform", text, path.name)
             self.assertIn("platform_ref: main", text, path.name)

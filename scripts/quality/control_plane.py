@@ -411,7 +411,7 @@ def build_ruleset_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
                     "strict_required_status_checks_policy": True,
                     "do_not_enforce_on_create": False,
                     "required_status_checks": [
-                        {"context": name, "integration_id": None}
+                        {"context": name}
                         for name in contexts
                     ],
                 },

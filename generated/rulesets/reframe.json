@@ -28,88 +28,67 @@
         "do_not_enforce_on_create": false,
         "required_status_checks": [
           {
-            "context": "Coverage 100 Gate",
-            "integration_id": null
+            "context": "Coverage 100 Gate"
           },
           {
-            "context": "Codecov Analytics",
-            "integration_id": null
+            "context": "Codecov Analytics"
           },
           {
-            "context": "qlty check",
-            "integration_id": null
+            "context": "qlty check"
           },
           {
-            "context": "qlty coverage",
-            "integration_id": null
+            "context": "qlty coverage"
           },
           {
-            "context": "qlty coverage diff",
-            "integration_id": null
+            "context": "qlty coverage diff"
           },
           {
-            "context": "Sonar Zero",
-            "integration_id": null
+            "context": "Sonar Zero"
           },
           {
-            "context": "Codacy Zero",
-            "integration_id": null
+            "context": "Codacy Zero"
           },
           {
-            "context": "Semgrep Zero",
-            "integration_id": null
+            "context": "Semgrep Zero"
           },
           {
-            "context": "Sentry Zero",
-            "integration_id": null
+            "context": "Sentry Zero"
           },
           {
-            "context": "DeepScan Zero",
-            "integration_id": null
+            "context": "DeepScan Zero"
           },
           {
-            "context": "SonarCloud Code Analysis",
-            "integration_id": null
+            "context": "SonarCloud Code Analysis"
           },
           {
-            "context": "DeepScan",
-            "integration_id": null
+            "context": "DeepScan"
           },
           {
-            "context": "Python API & worker checks",
-            "integration_id": null
+            "context": "Python API & worker checks"
           },
           {
-            "context": "Web build",
-            "integration_id": null
+            "context": "Web build"
           },
           {
-            "context": "Analyze (python)",
-            "integration_id": null
+            "context": "Analyze (python)"
           },
           {
-            "context": "Analyze (typescript)",
-            "integration_id": null
+            "context": "Analyze (typescript)"
           },
           {
-            "context": "Chromatic Playwright",
-            "integration_id": null
+            "context": "Chromatic Playwright"
           },
           {
-            "context": "Applitools Visual",
-            "integration_id": null
+            "context": "Applitools Visual"
           },
           {
-            "context": "CodeQL",
-            "integration_id": null
+            "context": "CodeQL"
           },
           {
-            "context": "CodeRabbit",
-            "integration_id": null
+            "context": "CodeRabbit"
           },
           {
-            "context": "Codacy Static Code Analysis",
-            "integration_id": null
+            "context": "Codacy Static Code Analysis"
           }
         ],
         "strict_required_status_checks_policy": true

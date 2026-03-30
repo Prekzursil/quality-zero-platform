@@ -26,6 +26,7 @@ class RulesetPayloadTests(unittest.TestCase):
         contexts = [entry["context"] for entry in required]
 
         self.assertEqual(payload["name"], "quality-zero-platform / pbinfo-get-unsolved")
+        self.assertTrue(all(entry == {"context": entry["context"]} for entry in required))
         self.assertIn("Coverage 100 Gate", contexts)
         self.assertIn("DeepScan", contexts)
         self.assertEqual(

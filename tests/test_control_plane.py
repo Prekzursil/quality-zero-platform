@@ -181,6 +181,12 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
             item["context"]
             for item in payload["rules"][1]["parameters"]["required_status_checks"]
         ]
+        self.assertTrue(
+            all(
+                item == {"context": item["context"]}
+                for item in payload["rules"][1]["parameters"]["required_status_checks"]
+            )
+        )
 
         self._assert_quality_zero_platform_contexts(
             "Codecov Analytics",

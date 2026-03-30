@@ -58,6 +58,7 @@ class SecurityBaselineProfileTests(unittest.TestCase):
     def test_render_codeql_wrapper_pins_requested_controller_sha(self) -> None:
         """Repo CodeQL wrappers must use immutable controller refs."""
         rendered = render_codeql_wrapper(
+            repo_slug="Prekzursil/WebCoder",
             platform_release_sha="0123456789abcdef0123456789abcdef01234567"
         )
         self.assertIn(
@@ -66,6 +67,19 @@ class SecurityBaselineProfileTests(unittest.TestCase):
         )
         self.assertIn("merge_group:", rendered)
         self.assertIn('cron: "23 3 * * 1"', rendered)
+
+    def test_render_codeql_wrapper_uses_local_reusable_for_controller_repo(self) -> None:
+        """The controller repo should use its local reusable workflow and current ref."""
+        rendered = render_codeql_wrapper(
+            repo_slug="Prekzursil/quality-zero-platform",
+            platform_release_sha="0123456789abcdef0123456789abcdef01234567",
+        )
+        self.assertIn("uses: ./.github/workflows/reusable-codeql.yml", rendered)
+        self.assertIn("platform_repository: ${{ github.repository }}", rendered)
+        self.assertIn(
+            "platform_ref: ${{ github.event.pull_request.head.sha || github.sha }}",
+            rendered,
+        )
 
     def test_render_security_policy_uses_repo_advisory_url(self) -> None:
         """SECURITY.md should point at the repo's private advisory entrypoint."""

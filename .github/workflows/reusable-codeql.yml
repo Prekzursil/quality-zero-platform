@@ -52,10 +52,11 @@ jobs:
       - name: Export resolved profile
         env:
           REPO_SLUG: ${{ inputs.repo_slug }}
+          EVENT_NAME: ${{ inputs.event_name }}
         run: |
           python platform/scripts/quality/export_profile.py \
             --repo-slug "$REPO_SLUG" \
-            --event-name "${{ inputs.event_name }}" \
+            --event-name "$EVENT_NAME" \
             --out-json "$RUNNER_TEMP/profile.json"
       - name: Plan CodeQL execution
         id: plan

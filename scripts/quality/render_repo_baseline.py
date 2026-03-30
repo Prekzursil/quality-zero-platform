@@ -47,8 +47,24 @@ def _sanitize_group_name(ecosystem: str, directory: str) -> str:
     return sanitized or f"{ecosystem}-patch-minor"
 
 
-def render_codeql_wrapper(*, platform_release_sha: str) -> str:
+def render_codeql_wrapper(*, repo_slug: str, platform_release_sha: str) -> str:
     """Return the governed repo CodeQL wrapper workflow."""
+    is_self_repo = repo_slug == "Prekzursil/quality-zero-platform"
+    uses_line = (
+        "    uses: ./.github/workflows/reusable-codeql.yml"
+        if is_self_repo
+        else f"    uses: Prekzursil/quality-zero-platform/.github/workflows/reusable-codeql.yml@{platform_release_sha}"
+    )
+    platform_repository = (
+        "      platform_repository: ${{ github.repository }}"
+        if is_self_repo
+        else "      platform_repository: Prekzursil/quality-zero-platform"
+    )
+    platform_ref = (
+        "      platform_ref: ${{ github.event.pull_request.head.sha || github.sha }}"
+        if is_self_repo
+        else "      platform_ref: main"
+    )
     return "\n".join(
         [
             "name: CodeQL",
@@ -75,13 +91,13 @@ def render_codeql_wrapper(*, platform_release_sha: str) -> str:
             "      actions: read",
             "      contents: read",
             "      security-events: write",
-            f"    uses: Prekzursil/quality-zero-platform/.github/workflows/reusable-codeql.yml@{platform_release_sha}",
+            uses_line,
             "    with:",
             "      repo_slug: ${{ github.repository }}",
             "      event_name: ${{ github.event_name }}",
             "      sha: ${{ github.event.pull_request.head.sha || github.sha }}",
-            "      platform_repository: Prekzursil/quality-zero-platform",
-            "      platform_ref: main",
+            platform_repository,
+            platform_ref,
             "",
         ]
     )
@@ -209,7 +225,7 @@ def render_repo_baseline(
     _remove_legacy_zero_workflows(repo_root)
     _write_text(
         repo_root / ".github" / "workflows" / "codeql.yml",
-        render_codeql_wrapper(platform_release_sha=platform_release_sha),
+        render_codeql_wrapper(repo_slug=profile["slug"], platform_release_sha=platform_release_sha),
     )
     _write_text(
         repo_root / ".github" / "dependabot.yml",

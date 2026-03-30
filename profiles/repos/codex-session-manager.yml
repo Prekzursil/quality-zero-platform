@@ -9,7 +9,6 @@ issue_policy:
 required_contexts:
   always:
     - build-test
-    - analyze
     - scan
     - codeql / CodeQL
     - shared-codecov-analytics / Codecov Analytics
@@ -24,7 +23,6 @@ required_contexts:
     - dependency-review
   required_now:
     - build-test
-    - analyze
     - scan
     - codeql / CodeQL
     - dependency-review
@@ -40,7 +38,6 @@ required_contexts:
     - shared-scanner-matrix / Quality Rollup
   target:
     - build-test
-    - analyze
     - scan
     - codeql / CodeQL
     - dependency-review

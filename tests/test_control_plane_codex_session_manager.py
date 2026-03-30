@@ -23,7 +23,7 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
     @staticmethod
     def _repo_required_contexts() -> Set[str]:
         """Return repo-specific contexts shared by push, PR, and ruleset checks."""
-        return {"build-test", "analyze", "scan"}
+        return {"build-test", "scan"}
 
     @staticmethod
     def _pr_only_contexts() -> Set[str]:

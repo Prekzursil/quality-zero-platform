@@ -31,9 +31,6 @@
             "context": "build-test"
           },
           {
-            "context": "analyze"
-          },
-          {
             "context": "scan"
           },
           {

@@ -11,6 +11,7 @@ required_contexts:
     - build-test
     - analyze
     - scan
+    - CodeQL
     - Codecov Analytics
     - Coverage 100 Gate
     - QLTY Zero
@@ -25,6 +26,7 @@ required_contexts:
     - build-test
     - analyze
     - scan
+    - CodeQL
     - dependency-review
     - shared-codecov-analytics / Codecov Analytics
     - shared-scanner-matrix / Coverage 100 Gate
@@ -40,6 +42,7 @@ required_contexts:
     - build-test
     - analyze
     - scan
+    - CodeQL
     - dependency-review
     - shared-codecov-analytics / Codecov Analytics
     - shared-scanner-matrix / Coverage 100 Gate
@@ -75,3 +78,12 @@ coverage:
 vendors:
   sonar:
     project_key: Prekzursil_codex-session-manager
+codeql:
+  runner: windows-latest
+  languages:
+    - actions
+    - csharp
+dependabot:
+  updates:
+    - ecosystem: nuget
+      directory: /

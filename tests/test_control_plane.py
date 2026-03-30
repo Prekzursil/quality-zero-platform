@@ -52,6 +52,7 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
             [
                 "Coverage 100 Gate",
                 "Codecov Analytics",
+                "CodeQL",
                 "QLTY Zero",
                 "Sonar Zero",
                 "Codacy Zero",

@@ -1,0 +1,126 @@
+name: Reusable CodeQL
+
+permissions: {}
+
+on:
+  workflow_call:
+    inputs:
+      repo_slug:
+        type: string
+        required: true
+      event_name:
+        type: string
+        required: false
+        default: pull_request
+      sha:
+        type: string
+        required: false
+        default: ""
+      platform_repository:
+        type: string
+        required: false
+        default: Prekzursil/quality-zero-platform
+      platform_ref:
+        type: string
+        required: false
+        default: main
+
+jobs:
+  resolve-profile:
+    name: Resolve CodeQL Profile
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.plan.outputs.codeql_enabled }}
+      runner: ${{ steps.plan.outputs.codeql_runner }}
+      languages_csv: ${{ steps.plan.outputs.codeql_languages_csv }}
+      build_mode: ${{ steps.plan.outputs.codeql_build_mode }}
+      go_version: ${{ steps.plan.outputs.codeql_go_version }}
+      java_distribution: ${{ steps.plan.outputs.codeql_java_distribution }}
+      java_version: ${{ steps.plan.outputs.codeql_java_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.platform_repository }}
+          ref: ${{ inputs.platform_ref }}
+          path: platform
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install platform dependencies
+        run: python -m pip install -r platform/requirements-dev.txt
+      - name: Export resolved profile
+        env:
+          REPO_SLUG: ${{ inputs.repo_slug }}
+        run: |
+          python platform/scripts/quality/export_profile.py \
+            --repo-slug "$REPO_SLUG" \
+            --event-name "${{ inputs.event_name }}" \
+            --out-json "$RUNNER_TEMP/profile.json"
+      - name: Plan CodeQL execution
+        id: plan
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          profile = json.loads((Path(os.environ["RUNNER_TEMP"]) / "profile.json").read_text(encoding="utf-8"))
+          codeql = profile.get("codeql", {})
+          setup = codeql.get("setup", {})
+          languages = [item for item in codeql.get("languages", []) if item]
+          enabled = bool(codeql.get("enabled", True) and languages)
+
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as handle:
+              handle.write(f"codeql_enabled={'true' if enabled else 'false'}\n")
+              handle.write(f"codeql_runner={codeql.get('runner', 'ubuntu-latest')}\n")
+              handle.write(f"codeql_languages_csv={','.join(languages)}\n")
+              handle.write(f"codeql_build_mode={codeql.get('build_mode', 'none')}\n")
+              handle.write(f"codeql_go_version={setup.get('go', '')}\n")
+              java = setup.get('java', {})
+              handle.write(f"codeql_java_distribution={java.get('distribution', '')}\n")
+              handle.write(f"codeql_java_version={java.get('version', '')}\n")
+          PY
+
+  codeql:
+    name: CodeQL
+    needs: resolve-profile
+    if: ${{ needs.resolve-profile.outputs.enabled == 'true' }}
+    runs-on: ${{ needs.resolve-profile.outputs.runner }}
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha != '' && inputs.sha || github.sha }}
+
+      - name: Set up Go
+        if: ${{ needs.resolve-profile.outputs.go_version != '' }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ needs.resolve-profile.outputs.go_version }}
+
+      - name: Set up Java
+        if: ${{ needs.resolve-profile.outputs.java_version != '' }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ needs.resolve-profile.outputs.java_distribution }}
+          java-version: ${{ needs.resolve-profile.outputs.java_version }}
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ needs.resolve-profile.outputs.languages_csv }}
+          build-mode: ${{ needs.resolve-profile.outputs.build_mode }}
+          queries: security-and-quality
+
+      - name: Autobuild
+        if: ${{ needs.resolve-profile.outputs.build_mode == 'autobuild' }}
+        uses: github/codeql-action/autobuild@v4
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4

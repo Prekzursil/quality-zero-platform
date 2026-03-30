@@ -60,6 +60,7 @@ required_contexts:
   always:
     - Coverage 100 Gate
     - Codecov Analytics
+    - CodeQL
     - QLTY Zero
     - Sonar Zero
     - Codacy Zero
@@ -74,6 +75,7 @@ required_contexts:
   target:
     - Coverage 100 Gate
     - Codecov Analytics
+    - CodeQL
     - QLTY Zero
     - qlty check
     - qlty coverage
@@ -101,3 +103,13 @@ required_contexts:
 vendors:
   sonar:
     project_key_from_repo_slug: true
+codeql:
+  languages:
+    - actions
+    - c-cpp
+    - javascript-typescript
+    - python
+dependabot:
+  updates:
+    - ecosystem: npm
+      directory: /airline-gui

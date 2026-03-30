@@ -41,3 +41,14 @@ providers:
 vendors:
   sonar:
     project_key_parts: [Prekzursil, WebCoder]
+codeql:
+  languages:
+    - actions
+    - javascript-typescript
+    - python
+dependabot:
+  updates:
+    - ecosystem: pip
+      directory: /backend
+    - ecosystem: npm
+      directory: /frontend/webcoder_ui

@@ -15,3 +15,9 @@ coverage:
 vendors:
   sonar:
     project_key: Prekzursil_Star-Wars-Galactic-Battlegrounds-Save-Game-Editor
+codeql:
+  languages:
+    - actions
+    - python
+dependabot:
+  updates: []

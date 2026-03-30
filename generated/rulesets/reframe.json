@@ -70,12 +70,6 @@
             "context": "Web build"
           },
           {
-            "context": "Analyze (python)"
-          },
-          {
-            "context": "Analyze (typescript)"
-          },
-          {
             "context": "Chromatic Playwright"
           },
           {

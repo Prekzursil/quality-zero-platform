@@ -34,6 +34,9 @@
             "context": "Codecov Analytics"
           },
           {
+            "context": "CodeQL"
+          },
+          {
             "context": "QLTY Zero"
           },
           {

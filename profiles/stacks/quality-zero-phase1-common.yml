@@ -40,6 +40,7 @@ required_contexts:
   always:
     - Coverage 100 Gate
     - Codecov Analytics
+    - CodeQL
     - QLTY Zero
     - Sonar Zero
     - Codacy Zero
@@ -56,6 +57,7 @@ required_contexts:
   target:
     - Coverage 100 Gate
     - Codecov Analytics
+    - CodeQL
     - QLTY Zero
     - qlty check
     - qlty coverage
@@ -107,3 +109,15 @@ vendors:
 trigger:
   mode: standard
   pr_head_sha: false
+codeql:
+  enabled: true
+  runner: ubuntu-latest
+  build_mode: none
+dependabot:
+  enabled: true
+  open_pull_requests_limit: 10
+  schedule_interval: weekly
+  labels:
+    - dependencies
+    - type:chore
+    - area:ci

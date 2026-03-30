@@ -6,6 +6,7 @@ required_contexts:
   always:
     - Coverage 100 Gate
     - Codecov Analytics
+    - CodeQL
     - QLTY Zero
     - Sonar Zero
     - Codacy Zero
@@ -18,6 +19,7 @@ required_contexts:
   target:
     - Coverage 100 Gate
     - Codecov Analytics
+    - CodeQL
     - QLTY Zero
     - Sonar Zero
     - Codacy Zero
@@ -43,3 +45,11 @@ coverage:
 vendors:
   sonar:
     project_key: Prekzursil_quality-zero-platform
+codeql:
+  languages:
+    - actions
+    - python
+dependabot:
+  updates:
+    - ecosystem: pip
+      directory: /

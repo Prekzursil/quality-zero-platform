@@ -12,3 +12,11 @@ coverage:
 vendors:
   sonar:
     project_key: Prekzursil_Personal-Finance-Management
+codeql:
+  languages:
+    - actions
+    - java-kotlin
+dependabot:
+  updates:
+    - ecosystem: gradle
+      directory: /

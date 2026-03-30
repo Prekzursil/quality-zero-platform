@@ -15,3 +15,11 @@ vendors:
   sentry:
     project_vars:
       - SENTRY_PROJECT
+codeql:
+  languages:
+    - actions
+    - javascript-typescript
+dependabot:
+  updates:
+    - ecosystem: npm
+      directory: /

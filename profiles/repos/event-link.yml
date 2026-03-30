@@ -21,3 +21,14 @@ coverage:
 vendors:
   sonar:
     project_key: Prekzursil_event-link
+codeql:
+  languages:
+    - actions
+    - javascript-typescript
+    - python
+dependabot:
+  updates:
+    - ecosystem: pip
+      directory: /backend
+    - ecosystem: npm
+      directory: /ui

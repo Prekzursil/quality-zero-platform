@@ -37,6 +37,9 @@
             "context": "scan"
           },
           {
+            "context": "CodeQL"
+          },
+          {
             "context": "dependency-review"
           },
           {

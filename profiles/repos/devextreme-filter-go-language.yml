@@ -15,3 +15,14 @@ coverage:
 vendors:
   sonar:
     project_key: Prekzursil_DevExtreme-Filter-Go-Language
+codeql:
+  build_mode: autobuild
+  languages:
+    - actions
+    - go
+  setup:
+    go: "1.22"
+dependabot:
+  updates:
+    - ecosystem: gomod
+      directory: /

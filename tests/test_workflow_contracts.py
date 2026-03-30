@@ -33,6 +33,7 @@ class WorkflowContractTests(unittest.TestCase):
             ROOT / ".github" / "workflows" / "quality-zero-platform.yml",
             ROOT / ".github" / "workflows" / "quality-zero-gate.yml",
             ROOT / ".github" / "workflows" / "codecov-analytics.yml",
+            ROOT / ".github" / "workflows" / "codeql.yml",
             ROOT / ".github" / "workflows" / "quality-zero-remediation.yml",
             ROOT / ".github" / "workflows" / "quality-zero-backlog.yml",
         ]
@@ -42,6 +43,10 @@ class WorkflowContractTests(unittest.TestCase):
             self.assertNotIn("secrets: inherit", text, path.name)
             if path.name in {"quality-zero-platform.yml", "quality-zero-gate.yml"}:
                 self.assertIn("platform_repository: ${{ github.repository }}", text, path.name)
+            if path.name == "codeql.yml":
+                self.assertIn("uses: ./.github/workflows/reusable-codeql.yml", text, path.name)
+                self.assertIn("merge_group:", text, path.name)
+                self.assertIn("security-events: write", text, path.name)
 
     def test_repo_template_parity_wrappers_pin_controller_release_and_do_not_inherit_all_secrets(self) -> None:
         """Keep repo templates pinned to the controller release with explicit secrets only."""

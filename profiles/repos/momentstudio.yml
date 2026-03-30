@@ -38,3 +38,14 @@ providers:
     project_name: momentstudio
   sonar:
     project_key_parts: [Prekzursil, AdrianaArt]
+codeql:
+  languages:
+    - actions
+    - javascript-typescript
+    - python
+dependabot:
+  updates:
+    - ecosystem: pip
+      directory: /backend
+    - ecosystem: npm
+      directory: /frontend

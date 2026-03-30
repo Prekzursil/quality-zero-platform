@@ -43,6 +43,7 @@ required_contexts:
   always:
     - Coverage 100 Gate
     - Codecov Analytics
+    - CodeQL
     - Sonar Zero
     - Codacy Zero
     - Semgrep Zero
@@ -51,13 +52,10 @@ required_contexts:
     - SonarCloud Code Analysis
     - Python API & worker checks
     - Web build
-    - Analyze (python)
-    - Analyze (typescript)
     - Chromatic Playwright
     - Applitools Visual
   pull_request_only:
     - DeepScan
-    - CodeQL
     - CodeRabbit
     - Codacy Static Code Analysis
     - qlty check
@@ -78,8 +76,6 @@ required_contexts:
     - DeepScan
     - Python API & worker checks
     - Web build
-    - Analyze (python)
-    - Analyze (typescript)
     - Chromatic Playwright
     - Applitools Visual
     - CodeQL
@@ -100,3 +96,22 @@ providers:
 vendors:
   sonar:
     project_key_parts: [Prekzursil, Reframe]
+codeql:
+  languages:
+    - actions
+    - javascript-typescript
+    - python
+dependabot:
+  updates:
+    - ecosystem: pip
+      directory: /apps/api
+    - ecosystem: pip
+      directory: /services/worker
+    - ecosystem: pip
+      directory: /packages/media-core
+    - ecosystem: npm
+      directory: /apps/web
+    - ecosystem: npm
+      directory: /apps/desktop
+    - ecosystem: cargo
+      directory: /apps/desktop/src-tauri

@@ -35,3 +35,22 @@ providers:
 vendors:
   sonar:
     project_key_parts: [Prekzursil, TanksFlashMobile]
+codeql:
+  languages:
+    - actions
+    - javascript-typescript
+    - java-kotlin
+dependabot:
+  updates:
+    - ecosystem: npm
+      directory: /
+    - ecosystem: npm
+      directory: /apps/web
+    - ecosystem: npm
+      directory: /apps/desktop
+    - ecosystem: npm
+      directory: /apps/remake-web
+    - ecosystem: npm
+      directory: /apps/web/public/ruffle
+    - ecosystem: gradle
+      directory: /android

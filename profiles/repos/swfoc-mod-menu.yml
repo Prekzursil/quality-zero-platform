@@ -54,3 +54,15 @@ providers:
 vendors:
   sonar:
     project_key_parts: [Prekzursil, SWFOC-Mod-Menu]
+codeql:
+  runner: windows-latest
+  languages:
+    - actions
+    - csharp
+    - javascript-typescript
+dependabot:
+  updates:
+    - ecosystem: nuget
+      directory: /
+    - ecosystem: npm
+      directory: /tools/visual-chromatic

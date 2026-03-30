@@ -370,11 +370,11 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
             output = output_path.read_text(encoding="utf-8")
             self.assertIn("codecov_enabled=true", output)
             self.assertIn(
-                "coverage_input_files=repo/coverage/platform-coverage.xml",
+                "coverage_input_files=coverage/platform-coverage.xml",
                 output,
             )
             self.assertIn(
-                "qlty_coverage_files=repo/coverage/platform-coverage.xml",
+                "qlty_coverage_files=coverage/platform-coverage.xml",
                 output,
             )
 
@@ -402,16 +402,16 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
             output = output_path.read_text(encoding="utf-8")
             expected_files = (
                 "coverage_input_files="
-                "repo/coverage/python/coverage.xml,"
-                "repo/airline-gui/coverage/lcov.info,"
-                "repo/coverage/cpp/lcov.info"
+                "coverage/python/coverage.xml,"
+                "airline-gui/coverage/lcov.info,"
+                "coverage/cpp/lcov.info"
             )
             self.assertIn(expected_files, output)
             self.assertIn(
                 "qlty_coverage_files="
-                "repo/coverage/python/coverage.xml,"
-                "repo/airline-gui/coverage/lcov.info,"
-                "repo/coverage/cpp/lcov.info",
+                "coverage/python/coverage.xml,"
+                "airline-gui/coverage/lcov.info,"
+                "coverage/cpp/lcov.info",
                 output,
             )
 

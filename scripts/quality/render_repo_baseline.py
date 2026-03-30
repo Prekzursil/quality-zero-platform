@@ -167,6 +167,23 @@ def render_security_policy(profile: Dict[str, Any]) -> str:
     )
 
 
+def render_qlty_config() -> str:
+    """Return the managed QLTY baseline config."""
+    return "\n".join(
+        [
+            'config_version = "0"',
+            "",
+            "[[source]]",
+            'name = "default"',
+            "default = true",
+            "",
+            "[smells]",
+            'mode = "block"',
+            "",
+        ]
+    )
+
+
 def _write_text(path: Path, text: str) -> None:
     """Write UTF-8 text with a trailing newline."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -199,6 +216,8 @@ def render_repo_baseline(
         render_dependabot_config(profile),
     )
     _write_text(repo_root / "SECURITY.md", render_security_policy(profile))
+    if bool(profile.get("enabled_scanners", {}).get("qlty", False)):
+        _write_text(repo_root / ".qlty" / "qlty.toml", render_qlty_config())
 
 
 def main() -> int:

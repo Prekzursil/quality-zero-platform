@@ -11,6 +11,7 @@ from scripts.quality.render_repo_baseline import (
     LEGACY_ZERO_WORKFLOW_FILES,
     render_codeql_wrapper,
     render_dependabot_config,
+    render_qlty_config,
     render_repo_baseline,
     render_security_policy,
 )
@@ -18,7 +19,7 @@ from tests.control_plane_support import ROOT
 
 
 class SecurityBaselineProfileTests(unittest.TestCase):
-    """Protect the managed CodeQL, Dependabot, and SECURITY baseline contract."""
+    """Protect the managed CodeQL, Dependabot, SECURITY, and QLTY baseline contract."""
 
     def test_all_governed_repos_declare_codeql_and_dependabot(self) -> None:
         """Every enrolled repo should expose the managed security-baseline metadata."""
@@ -78,6 +79,13 @@ class SecurityBaselineProfileTests(unittest.TestCase):
         )
         self.assertIn("@Prekzursil", rendered)
 
+    def test_render_qlty_config_blocks_smells_for_governed_repos(self) -> None:
+        """Managed QLTY config should be the same minimal block-mode baseline."""
+        rendered = render_qlty_config()
+        self.assertIn('config_version = "0"', rendered)
+        self.assertIn('name = "default"', rendered)
+        self.assertIn('mode = "block"', rendered)
+
     def test_render_repo_baseline_removes_legacy_zero_workflows(self) -> None:
         """Baseline rendering should delete superseded repo-local zero workflows."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
@@ -98,3 +106,4 @@ class SecurityBaselineProfileTests(unittest.TestCase):
 
             for filename in LEGACY_ZERO_WORKFLOW_FILES:
                 self.assertFalse((workflows / filename).exists(), filename)
+            self.assertTrue((repo_root / ".qlty" / "qlty.toml").exists())

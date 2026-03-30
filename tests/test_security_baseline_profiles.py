@@ -1,13 +1,17 @@
 from __future__ import absolute_import
 
+import tempfile
 import unittest
+from pathlib import Path
 
 import yaml
 
 from scripts.quality.control_plane import active_required_contexts, load_inventory, load_repo_profile
 from scripts.quality.render_repo_baseline import (
+    LEGACY_ZERO_WORKFLOW_FILES,
     render_codeql_wrapper,
     render_dependabot_config,
+    render_repo_baseline,
     render_security_policy,
 )
 from tests.control_plane_support import ROOT
@@ -73,3 +77,24 @@ class SecurityBaselineProfileTests(unittest.TestCase):
             rendered,
         )
         self.assertIn("@Prekzursil", rendered)
+
+    def test_render_repo_baseline_removes_legacy_zero_workflows(self) -> None:
+        """Baseline rendering should delete superseded repo-local zero workflows."""
+        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
+        profile = load_repo_profile(inventory, "Prekzursil/pbinfo-get-unsolved")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_root = Path(tmp_dir)
+            workflows = repo_root / ".github" / "workflows"
+            workflows.mkdir(parents=True)
+            for filename in LEGACY_ZERO_WORKFLOW_FILES:
+                (workflows / filename).write_text("name: legacy\n", encoding="utf-8")
+
+            render_repo_baseline(
+                profile=profile,
+                repo_root=repo_root,
+                platform_release_sha="0123456789abcdef0123456789abcdef01234567",
+            )
+
+            for filename in LEGACY_ZERO_WORKFLOW_FILES:
+                self.assertFalse((workflows / filename).exists(), filename)

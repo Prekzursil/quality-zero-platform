@@ -16,6 +16,16 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
 
 from scripts.quality.control_plane import load_inventory, load_repo_profile
 
+LEGACY_ZERO_WORKFLOW_FILES = (
+    "coverage-100.yml",
+    "codacy-zero.yml",
+    "deepscan-zero.yml",
+    "semgrep-zero.yml",
+    "sentry-zero.yml",
+    "sonar-zero.yml",
+    "qlty-zero.yml",
+)
+
 
 def _parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
@@ -163,6 +173,15 @@ def _write_text(path: Path, text: str) -> None:
     path.write_text(text.rstrip() + "\n", encoding="utf-8")
 
 
+def _remove_legacy_zero_workflows(repo_root: Path) -> None:
+    """Delete repo-local zero-gate workflows superseded by shared governance."""
+    workflows_dir = repo_root / ".github" / "workflows"
+    for filename in LEGACY_ZERO_WORKFLOW_FILES:
+        path = workflows_dir / filename
+        if path.exists():
+            path.unlink()
+
+
 def render_repo_baseline(
     *,
     profile: Dict[str, Any],
@@ -170,6 +189,7 @@ def render_repo_baseline(
     platform_release_sha: str,
 ) -> None:
     """Render the managed baseline files into one repository checkout."""
+    _remove_legacy_zero_workflows(repo_root)
     _write_text(
         repo_root / ".github" / "workflows" / "codeql.yml",
         render_codeql_wrapper(platform_release_sha=platform_release_sha),

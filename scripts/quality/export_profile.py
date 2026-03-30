@@ -123,6 +123,7 @@ def _coverage_output_lines(
     """Return the coverage-related fields exported for one profile."""
     coverage = profile.get("coverage", {})
     issue_policy = profile.get("issue_policy", {})
+    enabled_scanners = profile.get("enabled_scanners", {})
     setup = coverage.get("setup", {})
     java = setup.get("java", {})
     return [

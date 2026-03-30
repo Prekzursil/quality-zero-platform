@@ -4,29 +4,29 @@ verify_command: bash scripts/verify
 required_contexts_mode: replace
 required_contexts:
   always:
-    - Coverage 100 Gate
-    - Codecov Analytics
-    - CodeQL
-    - QLTY Zero
-    - Sonar Zero
-    - Codacy Zero
-    - Semgrep Zero
-    - Sentry Zero
-    - DeepScan Zero
-    - DeepSource Visible Zero
+    - shared-scanner-matrix / Coverage 100 Gate
+    - shared-codecov-analytics / Codecov Analytics
+    - codeql / CodeQL
+    - shared-scanner-matrix / QLTY Zero
+    - shared-scanner-matrix / Sonar Zero
+    - shared-scanner-matrix / Codacy Zero
+    - shared-scanner-matrix / Semgrep Zero
+    - shared-scanner-matrix / Sentry Zero
+    - shared-scanner-matrix / DeepScan Zero
+    - shared-scanner-matrix / DeepSource Visible Zero
   pull_request_only:
     - SonarCloud Code Analysis
   target:
-    - Coverage 100 Gate
-    - Codecov Analytics
-    - CodeQL
-    - QLTY Zero
-    - Sonar Zero
-    - Codacy Zero
-    - Semgrep Zero
-    - Sentry Zero
-    - DeepScan Zero
-    - DeepSource Visible Zero
+    - shared-scanner-matrix / Coverage 100 Gate
+    - shared-codecov-analytics / Codecov Analytics
+    - codeql / CodeQL
+    - shared-scanner-matrix / QLTY Zero
+    - shared-scanner-matrix / Sonar Zero
+    - shared-scanner-matrix / Codacy Zero
+    - shared-scanner-matrix / Semgrep Zero
+    - shared-scanner-matrix / Sentry Zero
+    - shared-scanner-matrix / DeepScan Zero
+    - shared-scanner-matrix / DeepSource Visible Zero
     - SonarCloud Code Analysis
 enabled_scanners:
   deepsource_visible: true

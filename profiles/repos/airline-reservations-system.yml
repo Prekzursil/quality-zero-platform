@@ -58,14 +58,14 @@ coverage:
   branch_min_percent: 100.0
 required_contexts:
   always:
-    - Coverage 100 Gate
-    - Codecov Analytics
-    - CodeQL
-    - QLTY Zero
-    - Sonar Zero
-    - Codacy Zero
-    - Semgrep Zero
-    - Sentry Zero
+    - shared-scanner-matrix / Coverage 100 Gate
+    - shared-codecov-analytics / Codecov Analytics
+    - codeql / CodeQL
+    - shared-scanner-matrix / QLTY Zero
+    - shared-scanner-matrix / Sonar Zero
+    - shared-scanner-matrix / Codacy Zero
+    - shared-scanner-matrix / Semgrep Zero
+    - shared-scanner-matrix / Sentry Zero
     - "DeepSource: JavaScript"
     - "DeepSource: Python"
     - "DeepSource: C & C++"
@@ -73,23 +73,23 @@ required_contexts:
     - "DeepSource: Secrets"
     - SonarCloud Code Analysis
   target:
-    - Coverage 100 Gate
-    - Codecov Analytics
-    - CodeQL
-    - QLTY Zero
+    - shared-scanner-matrix / Coverage 100 Gate
+    - shared-codecov-analytics / Codecov Analytics
+    - codeql / CodeQL
+    - shared-scanner-matrix / QLTY Zero
     - qlty check
     - qlty coverage
     - qlty coverage diff
-    - Sonar Zero
-    - Codacy Zero
-    - Semgrep Zero
-    - Sentry Zero
+    - shared-scanner-matrix / Sonar Zero
+    - shared-scanner-matrix / Codacy Zero
+    - shared-scanner-matrix / Semgrep Zero
+    - shared-scanner-matrix / Sentry Zero
     - "DeepSource: JavaScript"
     - "DeepSource: Python"
     - "DeepSource: C & C++"
     - "DeepSource: Shell"
     - "DeepSource: Secrets"
-    - DeepScan Zero
+    - shared-scanner-matrix / DeepScan Zero
     - SonarCloud Code Analysis
     - Codacy Static Code Analysis
     - DeepScan
@@ -99,7 +99,7 @@ required_contexts:
     - qlty check
     - qlty coverage
     - qlty coverage diff
-    - DeepScan Zero
+    - shared-scanner-matrix / DeepScan Zero
 vendors:
   sonar:
     project_key_from_repo_slug: true

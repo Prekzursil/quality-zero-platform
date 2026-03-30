@@ -27,7 +27,7 @@ class RulesetPayloadTests(unittest.TestCase):
 
         self.assertEqual(payload["name"], "quality-zero-platform / pbinfo-get-unsolved")
         self.assertTrue(all(entry == {"context": entry["context"]} for entry in required))
-        self.assertIn("Coverage 100 Gate", contexts)
+        self.assertIn("shared-scanner-matrix / Coverage 100 Gate", contexts)
         self.assertIn("DeepScan", contexts)
         self.assertEqual(
             payload["rules"][0]["parameters"]["required_approving_review_count"],
@@ -47,7 +47,7 @@ class RulesetPayloadTests(unittest.TestCase):
         required = payload["rules"][1]["parameters"]["required_status_checks"]
         contexts = [entry["context"] for entry in required]
 
-        self.assertIn("CodeQL", contexts)
+        self.assertIn("codeql / CodeQL", contexts)
         self.assertIn("Codacy Static Code Analysis", contexts)
         self.assertIn("Chromatic Playwright", contexts)
         self.assertIn("Applitools Visual", contexts)
@@ -68,8 +68,8 @@ class RulesetPayloadTests(unittest.TestCase):
         required = payload["rules"][1]["parameters"]["required_status_checks"]
         contexts = [entry["context"] for entry in required]
 
-        self.assertIn("Codecov Analytics", contexts)
-        self.assertIn("QLTY Zero", contexts)
+        self.assertIn("shared-codecov-analytics / Codecov Analytics", contexts)
+        self.assertIn("shared-scanner-matrix / QLTY Zero", contexts)
         self.assertIn("qlty check", contexts)
         self.assertIn("qlty coverage", contexts)
         self.assertIn("qlty coverage diff", contexts)
@@ -84,7 +84,7 @@ class RulesetPayloadTests(unittest.TestCase):
         required = payload["rules"][1]["parameters"]["required_status_checks"]
         contexts = [entry["context"] for entry in required]
 
-        self.assertIn("QLTY Zero", contexts)
+        self.assertIn("shared-scanner-matrix / QLTY Zero", contexts)
         self.assertIn("qlty check", contexts)
         self.assertIn("qlty coverage", contexts)
         self.assertIn("qlty coverage diff", contexts)
@@ -123,5 +123,5 @@ class RulesetPayloadTests(unittest.TestCase):
             "DeepScan",
             profile["required_contexts"]["target"],
         )
-        self.assertIn("Codecov Analytics", contexts)
-        self.assertIn("QLTY Zero", contexts)
+        self.assertIn("shared-codecov-analytics / Codecov Analytics", contexts)
+        self.assertIn("shared-scanner-matrix / QLTY Zero", contexts)

@@ -25,9 +25,15 @@ class SecurityBaselineProfileTests(unittest.TestCase):
             self.assertTrue(profile["codeql"]["enabled"], entry["slug"])
             self.assertTrue(profile["codeql"]["languages"], entry["slug"])
             self.assertTrue(profile["dependabot"]["enabled"], entry["slug"])
-            self.assertIn("CodeQL", active_required_contexts(profile, event_name="push"))
-            self.assertIn("CodeQL", active_required_contexts(profile, event_name="ruleset"))
-            self.assertIn("CodeQL", profile["required_contexts"]["target"])
+            self.assertIn(
+                "codeql / CodeQL",
+                active_required_contexts(profile, event_name="push"),
+            )
+            self.assertIn(
+                "codeql / CodeQL",
+                active_required_contexts(profile, event_name="ruleset"),
+            )
+            self.assertIn("codeql / CodeQL", profile["required_contexts"]["target"])
 
     def test_render_dependabot_config_includes_github_actions_and_repo_updates(self) -> None:
         """Dependabot rendering should include repo ecosystems plus github-actions."""

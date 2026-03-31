@@ -16,16 +16,8 @@ coverage:
     python -m pip install pytest pytest-cov
     python -m pytest -q -s \
       --cov=env_inspector \
-      --cov=env_inspector_core.service \
-      --cov=env_inspector_core.service_listing \
-      --cov=env_inspector_core.service_models \
-      --cov=env_inspector_core.service_mutations \
-      --cov=env_inspector_core.service_ops \
-      --cov=env_inspector_core.service_privileged \
-      --cov=env_inspector_core.service_restore \
-      --cov=env_inspector_core.service_paths \
-      --cov=scripts.quality.assert_coverage_100 \
-      --cov=scripts.quality.check_sentry_zero \
+      --cov=env_inspector_core \
+      --cov=env_inspector_gui \
       --cov-branch \
       --cov-report=xml:coverage/python-coverage.xml
   inputs:
@@ -34,16 +26,8 @@ coverage:
       path: coverage/python-coverage.xml
   require_sources:
     - env_inspector.py
-    - env_inspector_core/service.py
-    - env_inspector_core/service_listing.py
-    - env_inspector_core/service_models.py
-    - env_inspector_core/service_mutations.py
-    - env_inspector_core/service_ops.py
-    - env_inspector_core/service_privileged.py
-    - env_inspector_core/service_restore.py
-    - env_inspector_core/service_paths.py
-    - scripts/quality/assert_coverage_100.py
-    - scripts/quality/check_sentry_zero.py
+    - env_inspector_core/
+    - env_inspector_gui/
   min_percent: 100.0
 trigger:
   mode: pr-focused

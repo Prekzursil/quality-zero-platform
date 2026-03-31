@@ -53,7 +53,12 @@ def render_codeql_wrapper(*, repo_slug: str, platform_release_sha: str) -> str:
     uses_line = (
         "    uses: ./.github/workflows/reusable-codeql.yml"
         if is_self_repo
-        else f"    uses: Prekzursil/quality-zero-platform/.github/workflows/reusable-codeql.yml@{platform_release_sha}"
+        else (
+            "    uses: Prekzursil/quality-zero-platform/"
+            ".github/workflows/"
+            "reusable-codeql.yml"
+            f"@{platform_release_sha}"
+        )
     )
     platform_repository = (
         "      platform_repository: ${{ github.repository }}"
@@ -158,12 +163,15 @@ def render_security_policy(profile: Dict[str, Any]) -> str:
             "",
             "## Reporting a Vulnerability",
             "",
-            "Please do **not** open public GitHub issues for undisclosed security findings.",
+            "Please do **not** open public GitHub issues"
+            " for undisclosed security findings.",
             "",
             "Use GitHub Private Vulnerability Reporting for this repository:",
             f"<https://github.com/{slug}/security/advisories/new>",
             "",
-            "If private advisory reporting is unavailable, contact the maintainer privately on GitHub (`@Prekzursil`).",
+            "If private advisory reporting is unavailable,"
+            " contact the maintainer privately"
+            " on GitHub (`@Prekzursil`).",
             "",
             "When reporting, include:",
             "",
@@ -177,7 +185,9 @@ def render_security_policy(profile: Dict[str, Any]) -> str:
             "",
             "- Initial acknowledgment: best effort within 3 business days.",
             "- Triage update: best effort within 7 business days.",
-            "- Coordinated disclosure is expected; please allow time to investigate and patch before public disclosure.",
+            "- Coordinated disclosure is expected;"
+            " please allow time to investigate"
+            " and patch before public disclosure.",
             "",
         ]
     )
@@ -225,7 +235,10 @@ def render_repo_baseline(
     _remove_legacy_zero_workflows(repo_root)
     _write_text(
         repo_root / ".github" / "workflows" / "codeql.yml",
-        render_codeql_wrapper(repo_slug=profile["slug"], platform_release_sha=platform_release_sha),
+        render_codeql_wrapper(
+            repo_slug=profile["slug"],
+            platform_release_sha=platform_release_sha,
+        ),
     )
     _write_text(
         repo_root / ".github" / "dependabot.yml",

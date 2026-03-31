@@ -1,13 +1,46 @@
 slug: Prekzursil/event-link
 stack: fullstack-web
 verify_command: bash scripts/verify
-required_contexts:
-  always:
-    - shared-scanner-matrix / DeepSource Visible Zero
-  target:
-    - shared-scanner-matrix / DeepSource Visible Zero
+issue_policy:
+  mode: ratchet
+  pr_behavior: introduced_only
+  main_behavior: absolute
 enabled_scanners:
   deepsource_visible: true
+required_contexts:
+  always:
+    - shared-scanner-matrix / Coverage 100 Gate
+    - shared-codecov-analytics / Codecov Analytics
+    - shared-scanner-matrix / QLTY Zero
+    - shared-scanner-matrix / Sonar Zero
+    - shared-scanner-matrix / Codacy Zero
+    - shared-scanner-matrix / Semgrep Zero
+    - shared-scanner-matrix / Sentry Zero
+    - shared-scanner-matrix / DeepScan Zero
+    - shared-scanner-matrix / DeepSource Visible Zero
+  target:
+    - shared-scanner-matrix / Coverage 100 Gate
+    - shared-codecov-analytics / Codecov Analytics
+    - shared-scanner-matrix / QLTY Zero
+    - shared-scanner-matrix / Sonar Zero
+    - shared-scanner-matrix / Codacy Zero
+    - shared-scanner-matrix / Semgrep Zero
+    - shared-scanner-matrix / Sentry Zero
+    - shared-scanner-matrix / DeepScan Zero
+    - shared-scanner-matrix / DeepSource Visible Zero
+    - SonarCloud Code Analysis
+    - Codacy Static Code Analysis
+    - DeepScan
+    - qlty check
+    - qlty coverage
+    - qlty coverage diff
+  pull_request_only:
+    - SonarCloud Code Analysis
+    - Codacy Static Code Analysis
+    - DeepScan
+    - qlty check
+    - qlty coverage
+    - qlty coverage diff
 coverage:
   command: |
     bash scripts/verify
@@ -18,6 +51,8 @@ coverage:
     - format: xml
       name: frontend
       path: ui/coverage/cobertura-coverage.xml
+  min_percent: 100.0
+  branch_min_percent: 100.0
 vendors:
   sonar:
     project_key: Prekzursil_event-link

@@ -12,32 +12,45 @@ from unittest.mock import patch
 
 ENVIRON_KEY = "os.environ"
 
+# Known-safe bootstrap lines used to invoke a script as __main__.
+_BOOTSTRAP_LINES = (
+    "import runpy, sys",
+    "script_path = sys.argv[1]",
+    "sys.argv = [script_path]",
+    "try:",
+    "    runpy.run_path(script_path, run_name='__main__')",
+    "except SystemExit as exc:",
+    "    code = exc.code",
+    "    if code is None:",
+    "        raise SystemExit(0)",
+    "    if isinstance(code, int):",
+    "        raise SystemExit(code)",
+    "    raise SystemExit(1)",
+    "raise SystemExit(255)",
+)
+
+
+def _validate_script_path(script_relative_path: str) -> Path:
+    """Resolve and validate a script path before subprocess invocation."""
+    script_path = Path(script_relative_path).resolve()
+    if not script_path.suffix == ".py":
+        raise ValueError(f"Script path must be a .py file: {script_path}")
+    if not script_path.is_file():
+        raise FileNotFoundError(f"Script not found: {script_path}")
+    return script_path
+
 
 def run_script_entrypoint_failure(script_relative_path: str) -> int:
     """Run a script as ``__main__`` and return its exit code."""
-    script_path = Path(script_relative_path).resolve()
-    bootstrap = "\n".join(
-        [
-            "import runpy, sys",
-            "script_path = sys.argv[1]",
-            "sys.argv = [script_path]",
-            "try:",
-            "    runpy.run_path(script_path, run_name='__main__')",
-            "except SystemExit as exc:",
-            "    code = exc.code",
-            "    if code is None:",
-            "        raise SystemExit(0)",
-            "    if isinstance(code, int):",
-            "        raise SystemExit(code)",
-            "    raise SystemExit(1)",
-            "raise SystemExit(255)",
-        ]
-    )
+    script_path = _validate_script_path(script_relative_path)
+    bootstrap = "\n".join(_BOOTSTRAP_LINES)
+    argv = [sys.executable, "-c", bootstrap, str(script_path)]
     with tempfile.TemporaryDirectory() as tmp, patch.dict(ENVIRON_KEY, {}, clear=True):
         completed = subprocess.run(
-            [sys.executable, "-c", bootstrap, str(script_path)],
+            argv,
             cwd=Path(tmp),
             env={},
+            shell=False,
             check=False,
             capture_output=True,
             text=True,

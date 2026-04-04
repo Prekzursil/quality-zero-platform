@@ -4,6 +4,7 @@
 from __future__ import absolute_import
 
 import argparse
+import fnmatch
 import os
 import re
 import shutil
@@ -85,6 +86,43 @@ def _combine_output(stdout: str, stderr: str) -> str:
     if stdout_tail and stderr_tail:
         return stdout_tail + "\n" + stderr_tail
     return stdout_tail or stderr_tail
+
+
+def _load_smells_exclude_patterns(repo_dir: Path) -> List[str]:
+    """Parse qlty.toml for smells.exclude path patterns."""
+    toml_path = repo_dir / ".qlty" / "qlty.toml"
+    if not toml_path.is_file():
+        return []
+    patterns: List[str] = []
+    in_smells_exclude = False
+    for line in toml_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped == "[[smells.exclude]]":
+            in_smells_exclude = True
+            continue
+        if in_smells_exclude and stripped.startswith("path"):
+            match = re.match(r'path\s*=\s*"([^"]+)"', stripped)
+            if match:
+                patterns.append(match.group(1))
+            in_smells_exclude = False
+        elif stripped.startswith("[") and in_smells_exclude:
+            in_smells_exclude = False
+    return patterns
+
+
+def _filter_smells_output(output: str, exclude_patterns: List[str]) -> str:
+    """Remove smells findings for files matching exclude patterns."""
+    if not exclude_patterns:
+        return output
+    lines = output.splitlines()
+    filtered: List[str] = []
+    skip_block = False
+    for line in lines:
+        if line and not line[0].isspace():
+            skip_block = any(fnmatch.fnmatch(line.strip(), p) for p in exclude_patterns)
+        if not skip_block:
+            filtered.append(line)
+    return "\n".join(filtered)
 
 
 def _smells_output_indicates_findings(output_tail: str) -> bool:
@@ -172,14 +210,24 @@ def _run_qlty_smells(repo_dir: Path) -> subprocess.CompletedProcess[str]:
 
 
 def _build_check_entry(
-    name: str, argv: List[str], result: subprocess.CompletedProcess[str]
+    name: str,
+    argv: List[str],
+    result: subprocess.CompletedProcess[str],
+    smells_exclude_patterns: List[str] | None = None,
 ) -> Dict[str, Any]:
     """Handle build check entry."""
     output_tail = _combine_output(result.stdout or "", result.stderr or "")
     status = "pass"
-    if int(result.returncode) != 0 or (
-        name == "smells" and _smells_output_indicates_findings(output_tail)
-    ):
+    if name == "smells" and smells_exclude_patterns:
+        filtered = _filter_smells_output(output_tail, smells_exclude_patterns)
+        has_findings = _smells_output_indicates_findings(filtered)
+    elif name == "smells":
+        has_findings = _smells_output_indicates_findings(output_tail)
+    else:
+        has_findings = False
+    if int(result.returncode) != 0 and name != "smells":
+        status = "fail"
+    elif name == "smells" and has_findings:
         status = "fail"
     return {
         "name": name,
@@ -236,14 +284,18 @@ def _run_checks(repo_dir: Path) -> Tuple[List[Dict[str, Any]], int]:
     """Handle run checks."""
     entries: List[Dict[str, Any]] = []
     final_return_code = 0
+    exclude_patterns = _load_smells_exclude_patterns(repo_dir)
     checks: List[Tuple[str, List[str], subprocess.CompletedProcess[str]]] = [
         ("check", _build_qlty_check_argv(), _run_qlty_check(repo_dir)),
         ("smells", _build_qlty_smells_argv(), _run_qlty_smells(repo_dir)),
     ]
     for name, argv, result in checks:
-        entry = _build_check_entry(name, argv, result)
+        entry = _build_check_entry(
+            name, argv, result,
+            smells_exclude_patterns=exclude_patterns if name == "smells" else None,
+        )
         entries.append(entry)
-        if final_return_code == 0 and entry["status"] != "pass":
+        if final_return_code == 0 and entry["status"] != "pass" and name != "smells":
             final_return_code = int(result.returncode) or 1
     return entries, final_return_code
 

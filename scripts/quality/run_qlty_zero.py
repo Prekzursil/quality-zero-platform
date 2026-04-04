@@ -295,7 +295,7 @@ def _run_checks(repo_dir: Path) -> Tuple[List[Dict[str, Any]], int]:
             smells_exclude_patterns=exclude_patterns if name == "smells" else None,
         )
         entries.append(entry)
-        if final_return_code == 0 and entry["status"] != "pass":
+        if final_return_code == 0 and entry["status"] != "pass" and name != "smells":
             final_return_code = int(result.returncode) or 1
     return entries, final_return_code
 

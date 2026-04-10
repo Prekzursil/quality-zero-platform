@@ -135,7 +135,7 @@ git commit -m "feat(qrv2-pr2): add SonarCloud scan step (SHA-pinned) + Codecov d
 ---
 engines:
   pylint:
-    enabled: true   # deprecated in favor of ruff — removed in PR 4 (§A.7)
+    enabled: false   # disabled in PR 2 per §A.7; .pylintrc deleted in PR 4
   bandit:
     enabled: true
   semgrep:
@@ -263,6 +263,16 @@ Created automatically at PR 2 merge per design §B.3.13." \
 - [ ] **Step 1: Run `bash scripts/verify`** — confirm ALL rollup_v2 tests pass + coverage is 100%
 - [ ] **Step 2: Run existing tests** to confirm zero regressions: `python -m unittest discover -s tests -p 'test_*.py' 2>&1 | tail -5`
 - [ ] **Step 3: Verify git status is clean**
+
+## Pinned Action SHAs (required by §A.2.4)
+
+The following third-party actions introduced in PR 2 MUST be pinned to commit SHAs (not floating tags). The implementer resolves the exact SHA at execution time via `gh api`:
+
+| Action | Tag | SHA resolution command |
+|---|---|---|
+| `SonarSource/sonarqube-scan-action` | `v4` | `gh api repos/SonarSource/sonarqube-scan-action/commits/v4 --jq .sha` |
+
+First-party actions (`actions/checkout`, `actions/setup-python`, etc.) are exempted per §A.2.4 — deferred to PR 4 for full SHA pinning.
 
 ## Self-review checklist
 

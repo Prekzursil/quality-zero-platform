@@ -4,9 +4,11 @@
 from __future__ import absolute_import
 
 import argparse
+import json
+from collections import defaultdict
 from pathlib import Path
 import sys
-from typing import Iterable, List, cast
+from typing import Any, Dict, Iterable, List, cast
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -31,6 +33,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--event-name", default="pull_request")
     parser.add_argument("--failure-context", default="")
     parser.add_argument("--artifact", action="append", default=[])
+    parser.add_argument("--canonical-json", default="")
     parser.add_argument("--output", default="")
     return parser.parse_args()
 
@@ -79,6 +82,63 @@ def _required_contexts_lines(profile: dict, *, event_name: str) -> List[str]:
         "",
         *[f"- `{name}`" for name in contexts],
     ]
+
+
+def _render_canonical_findings_section(findings: List[Dict[str, Any]]) -> str:
+    """Render structured canonical findings for the remediation prompt.
+
+    Groups findings by file, then renders each finding with severity,
+    message, fix_hint, providers, and suggested patch when available.
+    Returns an empty string if there are no findings.
+    """
+    if not findings:
+        return ""
+
+    # Group by file
+    by_file: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for f in findings:
+        by_file[f.get("file", "<unknown>")].append(f)
+
+    lines: List[str] = [
+        "## Findings requiring attention",
+        "",
+    ]
+
+    for file_path in sorted(by_file):
+        lines.append(f"### File: {file_path}")
+        lines.append("")
+        for finding in by_file[file_path]:
+            category = finding.get("category", "unknown")
+            line_num = finding.get("line", "?")
+            severity = finding.get("severity", "unknown")
+            message = finding.get("primary_message", "")
+            fix_hint = finding.get("fix_hint")
+            patch_diff = finding.get("patch")
+            corroborators = finding.get("corroborators", [])
+
+            provider_names = [c.get("provider", "") for c in corroborators if c.get("provider")]
+            provider_str = ", ".join(provider_names) if provider_names else "1 provider"
+            count_str = f"{len(provider_names)} agree" if len(provider_names) > 1 else ""
+            providers_line = (
+                f"{provider_str} ({count_str})" if count_str else provider_str
+            )
+
+            lines.append(
+                f"#### Finding: {category} (line {line_num} in {file_path})"
+            )
+            lines.append(f"- **Severity**: {severity}")
+            lines.append(f"- **Message**: {message}")
+            if fix_hint:
+                lines.append(f"- **Fix hint**: {fix_hint}")
+            lines.append(f"- **Providers**: {providers_line}")
+            if patch_diff:
+                lines.append("- **Suggested patch**:")
+                lines.append("```diff")
+                lines.append(patch_diff.rstrip())
+                lines.append("```")
+            lines.append("")
+
+    return "\n".join(lines)
 
 
 def _render_prompt(*args: object, **kwargs: object) -> str:
@@ -145,6 +205,16 @@ def main() -> int:
         failure_context=args.failure_context,
         artifacts=args.artifact,
     )
+    # Append structured canonical findings when provided
+    if args.canonical_json:
+        canonical_path = Path(args.canonical_json)
+        if canonical_path.is_file():
+            canonical = json.loads(canonical_path.read_text(encoding="utf-8"))
+            findings_section = _render_canonical_findings_section(
+                canonical.get("findings", [])
+            )
+            if findings_section:
+                prompt = prompt.rstrip("\n") + "\n\n" + findings_section
     if args.output:
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)

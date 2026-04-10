@@ -12,7 +12,9 @@ else
   exit 1
 fi
 
-"${PYTHON_CMD[@]}" -m unittest discover -s tests -p 'test_*.py'
+"${PYTHON_CMD[@]}" -m coverage run -m unittest discover -s tests -p 'test_*.py'
+"${PYTHON_CMD[@]}" -m coverage xml -o coverage.xml
+"${PYTHON_CMD[@]}" -m coverage report --fail-under=100 --show-missing
 if command -v node >/dev/null 2>&1; then
   node --test scripts/provider_ui/*.test.mjs
 fi

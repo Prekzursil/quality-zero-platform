@@ -1,3 +1,5 @@
+# DEPRECATED — kept for one cycle; removed in PR 4 (§A.7)
+# ruff is the primary linter since PR 2; pylint disabled in .codacy.yaml
 [MASTER]
 ignore-patterns=^NUL$
 

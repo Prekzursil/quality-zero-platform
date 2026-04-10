@@ -31,6 +31,7 @@ TOP_LEVEL_KEYS: Set[str] = {
     "trigger",
     "visual_pair_required",
     "visual_lane",
+    "visual_regression",
     "legacy_policy_checks",
     "required_contexts_mode",
     "stack_family",

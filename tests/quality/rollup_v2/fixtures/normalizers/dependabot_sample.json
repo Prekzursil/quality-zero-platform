@@ -1,0 +1,81 @@
+{
+  "alerts": [
+    {
+      "number": 1,
+      "state": "open",
+      "security_advisory": {
+        "ghsa_id": "GHSA-xxxx-yyyy-zzzz",
+        "summary": "Remote code execution in foo-package",
+        "severity": "critical",
+        "cve_id": "CVE-2025-0001",
+        "cwes": [
+          {"cwe_id": "CWE-94", "name": "Improper Control of Generation of Code"}
+        ]
+      },
+      "security_vulnerability": {
+        "severity": "critical",
+        "package": {
+          "name": "foo-package",
+          "ecosystem": "pip"
+        },
+        "vulnerable_version_range": "< 2.0.0",
+        "first_patched_version": {"identifier": "2.0.0"}
+      },
+      "dependency": {
+        "package": {"name": "foo-package", "ecosystem": "pip"},
+        "manifest_path": "requirements.txt",
+        "scope": "runtime"
+      }
+    },
+    {
+      "number": 2,
+      "state": "open",
+      "security_advisory": {
+        "ghsa_id": "GHSA-aaaa-bbbb-cccc",
+        "summary": "Denial of service in bar-package",
+        "severity": "high",
+        "cve_id": "CVE-2025-0002",
+        "cwes": []
+      },
+      "security_vulnerability": {
+        "severity": "high",
+        "package": {
+          "name": "bar-package",
+          "ecosystem": "pip"
+        },
+        "vulnerable_version_range": "< 1.5.0",
+        "first_patched_version": {"identifier": "1.5.0"}
+      },
+      "dependency": {
+        "package": {"name": "bar-package", "ecosystem": "pip"},
+        "manifest_path": "requirements.txt",
+        "scope": "runtime"
+      }
+    },
+    {
+      "number": 3,
+      "state": "open",
+      "security_advisory": {
+        "ghsa_id": "GHSA-dddd-eeee-ffff",
+        "summary": "Info leak in baz-package",
+        "severity": "low",
+        "cve_id": null,
+        "cwes": []
+      },
+      "security_vulnerability": {
+        "severity": "low",
+        "package": {
+          "name": "baz-package",
+          "ecosystem": "pip"
+        },
+        "vulnerable_version_range": "< 3.0.0",
+        "first_patched_version": null
+      },
+      "dependency": {
+        "package": {"name": "baz-package", "ecosystem": "pip"},
+        "manifest_path": "requirements.txt",
+        "scope": "runtime"
+      }
+    }
+  ]
+}

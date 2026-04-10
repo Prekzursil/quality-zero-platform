@@ -1,0 +1,8 @@
+{
+  "file": "unused_var.py",
+  "line": 2,
+  "category": "unused-variable",
+  "category_group": "quality",
+  "severity": "medium",
+  "primary_message": "Variable 'unused' is never used"
+}

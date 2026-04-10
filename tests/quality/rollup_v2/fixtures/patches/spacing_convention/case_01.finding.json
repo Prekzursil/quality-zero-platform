@@ -1,0 +1,8 @@
+{
+  "file": "spacing.py",
+  "line": 1,
+  "category": "spacing-convention",
+  "category_group": "style",
+  "severity": "low",
+  "primary_message": "Missing whitespace around operator"
+}

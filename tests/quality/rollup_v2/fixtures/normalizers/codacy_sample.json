@@ -1,0 +1,20 @@
+{
+  "issues": [
+    {
+      "message": "Catch a more specific exception",
+      "patternId": "Pylint_W0703",
+      "patternUrl": "https://app.codacy.com/p/123/patterns/Pylint_W0703",
+      "filename": "scripts/quality/coverage_parsers.py",
+      "line": 42,
+      "severity": "Warning"
+    },
+    {
+      "message": "Unused import",
+      "patternId": "Pylint_W0611",
+      "patternUrl": null,
+      "filename": "scripts/quality/common.py",
+      "line": 10,
+      "severity": "Info"
+    }
+  ]
+}

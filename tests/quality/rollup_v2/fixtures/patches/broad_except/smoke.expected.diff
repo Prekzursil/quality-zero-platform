@@ -1,0 +1,10 @@
+--- a/load_data.py
++++ b/load_data.py
+@@ -1,6 +1,6 @@
+ def load_data(path):
+     try:
+         return parse(path)
+-    except Exception as e:
++    except (IOError, ValueError) as e:
+         log.warning("failed: %s", e)
+         return None

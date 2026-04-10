@@ -1,0 +1,8 @@
+{
+  "file": "config.py",
+  "line": 1,
+  "category": "hardcoded-secret",
+  "category_group": "security",
+  "severity": "high",
+  "primary_message": "Hardcoded secret detected"
+}

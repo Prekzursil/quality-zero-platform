@@ -1,0 +1,8 @@
+{
+  "file": "bare.py",
+  "line": 3,
+  "category": "broad-except",
+  "category_group": "quality",
+  "severity": "medium",
+  "primary_message": "Do not use bare except"
+}

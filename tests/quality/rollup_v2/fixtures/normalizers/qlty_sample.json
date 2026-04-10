@@ -1,0 +1,41 @@
+{
+  "checks": [
+    {
+      "name": "check",
+      "status": "fail",
+      "return_code": 1,
+      "command": ["qlty", "check", "--all"],
+      "output_tail": "scripts/quality/coverage_parsers.py:42:1: error: unused-import (qlty_rule_unused_import)\nscripts/quality/common.py:10:1: warning: too-many-lines (qlty_rule_too_many_lines)"
+    },
+    {
+      "name": "smells",
+      "status": "pass",
+      "return_code": 0,
+      "command": ["qlty", "smells", "--all"],
+      "output_tail": "no smells"
+    }
+  ],
+  "issues": [
+    {
+      "rule_id": "qlty_rule_unused_import",
+      "file": "scripts/quality/coverage_parsers.py",
+      "line": 42,
+      "message": "Unused import detected",
+      "severity": "high"
+    },
+    {
+      "rule_id": "qlty_rule_too_many_lines",
+      "file": "scripts/quality/common.py",
+      "line": 10,
+      "message": "File has too many lines",
+      "severity": "medium"
+    },
+    {
+      "rule_id": "qlty_rule_unknown",
+      "file": "scripts/quality/common.py",
+      "line": 5,
+      "message": "Unknown QLTY rule",
+      "severity": "low"
+    }
+  ]
+}

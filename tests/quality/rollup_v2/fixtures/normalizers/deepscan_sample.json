@@ -1,0 +1,22 @@
+{
+  "alarms": [
+    {
+      "name": "DS_UNUSED_VAR",
+      "file": "scripts/quality/coverage_parsers.py",
+      "line": 42,
+      "message": "Variable 'x' is declared but never used"
+    },
+    {
+      "name": "DS_UNREACHABLE",
+      "file": "scripts/quality/common.py",
+      "line": 20,
+      "message": "Unreachable code after return"
+    },
+    {
+      "name": "DS_UNKNOWN_RULE",
+      "file": "scripts/quality/common.py",
+      "line": 5,
+      "message": "Some unknown alarm"
+    }
+  ]
+}

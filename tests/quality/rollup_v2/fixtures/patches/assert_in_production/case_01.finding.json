@@ -1,0 +1,8 @@
+{
+  "file": "validate.py",
+  "line": 2,
+  "category": "assert-in-production",
+  "category_group": "quality",
+  "severity": "medium",
+  "primary_message": "Do not use assert in production code"
+}

@@ -1,0 +1,7 @@
+--- a/hello.py
++++ b/hello.py
+@@ -1,4 +1,2 @@
+ def hello():
+     return "world"
+-
+-

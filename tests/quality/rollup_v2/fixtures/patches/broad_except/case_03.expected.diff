@@ -1,0 +1,8 @@
+--- a/base.py
++++ b/base.py
+@@ -1,4 +1,4 @@
+ try:
+     connect()
+-except BaseException as err:
++except (IOError, ValueError) as err:
+     cleanup(err)

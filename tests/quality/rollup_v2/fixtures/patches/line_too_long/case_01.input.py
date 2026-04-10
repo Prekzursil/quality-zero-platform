@@ -1,0 +1,3 @@
+# This is a very long comment that exceeds the maximum line length of 100 characters and should be wrapped to conform with PEP 8 style guidelines for Python code.
+def main():
+    pass

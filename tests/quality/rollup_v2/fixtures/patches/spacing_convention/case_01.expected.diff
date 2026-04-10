@@ -1,0 +1,6 @@
+--- a/spacing.py
++++ b/spacing.py
+@@ -1,2 +1,2 @@
+-x=1
++x = 1
+ y=2

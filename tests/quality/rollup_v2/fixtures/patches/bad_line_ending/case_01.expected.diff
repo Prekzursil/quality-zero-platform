@@ -1,0 +1,7 @@
+--- a/crlf.py
++++ b/crlf.py
+@@ -1,2 +1,2 @@
+-def hello():
+-    return "world"
++def hello():
++    return "world"

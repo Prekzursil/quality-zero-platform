@@ -1,0 +1,6 @@
+--- a/calc.py
++++ b/calc.py
+@@ -1,2 +1,3 @@
+ def calculate(x, y):
++    """TODO: document."""
+     return x + y

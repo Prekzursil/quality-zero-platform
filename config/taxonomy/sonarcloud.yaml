@@ -1,0 +1,8 @@
+---
+provider: SonarCloud
+mapping:
+  python:S1166: broad-except      # "Exception handlers should preserve..."
+  python:S1481: unused-variable
+  python:S1763: unreachable-code
+  python:S2245: insecure-random
+  python:S5547: weak-crypto

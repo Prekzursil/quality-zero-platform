@@ -1,0 +1,8 @@
+{
+  "file": "quotes.py",
+  "line": 1,
+  "category": "quote-style",
+  "category_group": "style",
+  "severity": "low",
+  "primary_message": "Use double quotes"
+}

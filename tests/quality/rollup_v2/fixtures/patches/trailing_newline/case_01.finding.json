@@ -1,0 +1,8 @@
+{
+  "file": "hello.py",
+  "line": 1,
+  "category": "trailing-newline",
+  "category_group": "style",
+  "severity": "low",
+  "primary_message": "File has multiple trailing newlines"
+}

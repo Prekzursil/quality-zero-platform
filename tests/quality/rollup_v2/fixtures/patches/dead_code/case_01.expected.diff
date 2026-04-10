@@ -1,0 +1,7 @@
+--- a/dead.py
++++ b/dead.py
+@@ -1,4 +1,2 @@
+ def get_value():
+     return 42
+-    x = 10
+-    print(x)

@@ -1,0 +1,6 @@
+---
+provider: Semgrep
+mapping:
+  python.lang.security.dangerous-eval: code-injection
+  python.lang.security.weak-cryptographic-hash: weak-crypto
+  python.flask.security.xss: xss

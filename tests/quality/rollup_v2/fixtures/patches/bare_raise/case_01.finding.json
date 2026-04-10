@@ -1,0 +1,8 @@
+{
+  "file": "bare.py",
+  "line": 2,
+  "category": "bare-raise",
+  "category_group": "quality",
+  "severity": "medium",
+  "primary_message": "Bare raise outside except block"
+}

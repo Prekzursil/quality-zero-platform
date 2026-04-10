@@ -1,0 +1,25 @@
+{
+  "issues": [
+    {
+      "rule": "python:S1166",
+      "severity": "MAJOR",
+      "line": 42,
+      "component": "my-project:scripts/quality/coverage_parsers.py",
+      "message": "Either log or rethrow this exception"
+    },
+    {
+      "rule": "python:S1481",
+      "severity": "MINOR",
+      "line": 15,
+      "component": "my-project:scripts/quality/common.py",
+      "message": "Remove this unused local variable"
+    },
+    {
+      "rule": "python:S9999",
+      "severity": "BLOCKER",
+      "line": 1,
+      "component": "my-project:scripts/quality/main.py",
+      "message": "Unknown Sonar rule"
+    }
+  ]
+}

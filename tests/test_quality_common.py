@@ -6,6 +6,7 @@ import contextlib
 import io
 import json
 import os
+import sys
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -317,4 +318,48 @@ class QualityCommonTests(unittest.TestCase):
             infer_coverage_inputs({"artifact_path": "coverage/lcov.info"}),
             [{"format": "lcov", "name": "default", "path": "coverage/lcov.info"}],
         )
+
+
+class EnsureWithinRootPR1Tests(unittest.TestCase):
+    """Augmenting tests for scripts.quality.common._ensure_within_root (per QRv2 §B.2.3).
+
+    These tests assume callers pre-resolve paths via Path.resolve(strict=False)
+    before invoking the helper — this is the contract that
+    scripts/quality/rollup_v2/path_safety.validate_finding_file enforces in PR 1.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp_root = Path(self._tmp.name).resolve()
+        (self.tmp_root / "a").mkdir()
+        (self.tmp_root / "a" / "b.py").write_text("pass", encoding="utf-8")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_well_formed_resolved_path_accepted(self):
+        from scripts.quality.common import _ensure_within_root
+        _ensure_within_root(
+            (self.tmp_root / "a" / "b.py").resolve(strict=False),
+            self.tmp_root,
+        )
+
+    def test_resolved_dotdot_escape_rejected(self):
+        from scripts.quality.common import _ensure_within_root
+        escape = (self.tmp_root / ".." / ".." / "etc" / "passwd").resolve(strict=False)
+        with self.assertRaises(ValueError):
+            _ensure_within_root(escape, self.tmp_root)
+
+    def test_absolute_escape_rejected(self):
+        from scripts.quality.common import _ensure_within_root
+        with self.assertRaises(ValueError):
+            _ensure_within_root(Path("/etc/passwd"), self.tmp_root)
+
+    @unittest.skipIf(sys.platform == "win32", "POSIX symlink behavior required")
+    def test_symlink_escape_rejected_when_resolved_by_caller(self):
+        escape_link = self.tmp_root / "a" / "escape"
+        escape_link.symlink_to(Path("/etc/passwd"))
+        from scripts.quality.common import _ensure_within_root
+        with self.assertRaises(ValueError):
+            _ensure_within_root(escape_link.resolve(strict=False), self.tmp_root)
 

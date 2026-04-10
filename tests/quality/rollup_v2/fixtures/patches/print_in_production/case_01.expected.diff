@@ -1,0 +1,7 @@
+--- a/debug.py
++++ b/debug.py
+@@ -1,2 +1,3 @@
++import logging
+ def debug():
+-    print("hello world")
++    logging.info("hello world")

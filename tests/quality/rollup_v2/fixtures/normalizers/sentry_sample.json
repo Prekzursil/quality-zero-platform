@@ -1,0 +1,35 @@
+{
+  "projects": [
+    {
+      "project": "backend",
+      "unresolved": 2,
+      "state": "ok",
+      "issues": [
+        {
+          "id": "12345",
+          "title": "ZeroDivisionError: division by zero",
+          "level": "error",
+          "metadata": {
+            "filename": "scripts/quality/coverage_parsers.py",
+            "type": "ZeroDivisionError",
+            "value": "division by zero"
+          },
+          "count": 15,
+          "firstSeen": "2025-01-01T00:00:00Z"
+        },
+        {
+          "id": "12346",
+          "title": "Warning: Deprecation notice",
+          "level": "warning",
+          "metadata": {
+            "filename": "scripts/quality/common.py",
+            "type": "DeprecationWarning",
+            "value": "Function deprecated"
+          },
+          "count": 3,
+          "firstSeen": "2025-02-01T00:00:00Z"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "file": "debug.py",
+  "line": 2,
+  "category": "print-in-production",
+  "category_group": "quality",
+  "severity": "medium",
+  "primary_message": "Do not use print in production code"
+}

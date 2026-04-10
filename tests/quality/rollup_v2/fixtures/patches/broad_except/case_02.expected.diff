@@ -1,0 +1,8 @@
+--- a/bare.py
++++ b/bare.py
+@@ -1,4 +1,4 @@
+ try:
+     do_something()
+-except:
++except (IOError, ValueError):
+     pass

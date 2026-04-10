@@ -1,0 +1,40 @@
+{
+  "status": "fail",
+  "mode": "enforce",
+  "components": [
+    {
+      "name": "scripts-quality",
+      "format": "xml",
+      "total": 200,
+      "covered": 150,
+      "percent": 75.0,
+      "branch_total": 100,
+      "branch_covered": 60,
+      "branch_percent": 60.0,
+      "uncovered_lines": [10, 20, 30]
+    },
+    {
+      "name": "scripts-rollup",
+      "format": "xml",
+      "total": 100,
+      "covered": 90,
+      "percent": 90.0,
+      "branch_total": 50,
+      "branch_covered": 48,
+      "branch_percent": 96.0,
+      "uncovered_lines": [5]
+    },
+    {
+      "name": "scripts-utils",
+      "format": "xml",
+      "total": 50,
+      "covered": 50,
+      "percent": 100.0,
+      "branch_total": 20,
+      "branch_covered": 20,
+      "branch_percent": 100.0,
+      "uncovered_lines": []
+    }
+  ],
+  "timestamp_utc": "2025-04-10T00:00:00Z"
+}

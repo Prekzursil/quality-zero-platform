@@ -1,0 +1,8 @@
+{
+  "file": "crlf.py",
+  "line": 1,
+  "category": "bad-line-ending",
+  "category_group": "style",
+  "severity": "low",
+  "primary_message": "Use LF line endings"
+}

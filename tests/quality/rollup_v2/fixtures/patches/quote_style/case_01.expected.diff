@@ -1,0 +1,7 @@
+--- a/quotes.py
++++ b/quotes.py
+@@ -1,2 +1,2 @@
+-name = 'hello'
+-value = 'world'
++name = "hello"
++value = "world"

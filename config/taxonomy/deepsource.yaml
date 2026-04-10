@@ -1,0 +1,8 @@
+---
+provider: DeepSource
+mapping:
+  PYL-W0703: broad-except
+  PYL-W0611: unused-import
+  BAN-B101: assert-in-production
+  PYL-C0301: line-too-long
+  BAN-B311: insecure-random

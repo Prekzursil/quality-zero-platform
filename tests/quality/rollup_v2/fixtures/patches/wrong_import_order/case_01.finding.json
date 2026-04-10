@@ -1,0 +1,8 @@
+{
+  "file": "imports.py",
+  "line": 1,
+  "category": "wrong-import-order",
+  "category_group": "style",
+  "severity": "low",
+  "primary_message": "Imports are not sorted"
+}

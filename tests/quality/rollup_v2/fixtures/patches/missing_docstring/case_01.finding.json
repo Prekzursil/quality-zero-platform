@@ -1,0 +1,8 @@
+{
+  "file": "calc.py",
+  "line": 1,
+  "category": "missing-docstring",
+  "category_group": "quality",
+  "severity": "low",
+  "primary_message": "Missing function docstring"
+}

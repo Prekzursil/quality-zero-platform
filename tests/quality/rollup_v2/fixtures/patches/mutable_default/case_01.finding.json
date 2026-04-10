@@ -1,0 +1,8 @@
+{
+  "file": "mutable.py",
+  "line": 1,
+  "category": "mutable-default",
+  "category_group": "quality",
+  "severity": "medium",
+  "primary_message": "Do not use mutable default argument"
+}

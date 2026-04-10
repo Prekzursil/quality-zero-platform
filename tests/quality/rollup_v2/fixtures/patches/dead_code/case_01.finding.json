@@ -1,0 +1,8 @@
+{
+  "file": "dead.py",
+  "line": 3,
+  "category": "dead-code",
+  "category_group": "quality",
+  "severity": "medium",
+  "primary_message": "Unreachable code after return"
+}

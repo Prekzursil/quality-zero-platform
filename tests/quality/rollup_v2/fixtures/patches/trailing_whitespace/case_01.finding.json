@@ -1,0 +1,8 @@
+{
+  "file": "hello.py",
+  "line": 1,
+  "category": "trailing-whitespace",
+  "category_group": "style",
+  "severity": "low",
+  "primary_message": "Trailing whitespace"
+}

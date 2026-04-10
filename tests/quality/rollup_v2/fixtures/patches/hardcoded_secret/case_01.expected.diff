@@ -1,0 +1,9 @@
+--- a/config.py
++++ b/config.py
+@@ -1,4 +1,5 @@
+-API_KEY = "sk_live_abcdef123456"
++import os
++API_KEY = os.environ["API_KEY"]  # TODO: load from secret manager
+ 
+ def connect():
+     return API_KEY

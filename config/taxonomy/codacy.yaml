@@ -1,0 +1,34 @@
+# Canonical category mapping for Codacy rule IDs (per design §3.2, §A.4.4).
+# Add new rule mappings here as they are encountered in production.
+# Rule IDs are the exact strings Codacy reports in its findings JSON.
+---
+provider: Codacy
+mapping:
+  # Pylint rules (most common Python rules)
+  Pylint_W0703: broad-except
+  Pylint_W0611: unused-import
+  Pylint_W0612: unused-variable
+  Pylint_W0102: mutable-default
+  Pylint_R0903: too-few-methods
+  Pylint_R0912: too-many-branches
+  Pylint_R0913: too-many-args
+  Pylint_R0914: too-many-locals
+  Pylint_R0915: too-many-statements
+  Pylint_C0301: line-too-long
+  Pylint_C0303: trailing-whitespace
+  Pylint_C0114: missing-docstring
+  Pylint_C0115: missing-docstring
+  Pylint_C0116: missing-docstring
+  Pylint_W0603: global-statement
+  Pylint_W0104: no-effect
+  Pylint_R1705: unnecessary-else
+  # Bandit rules (security)
+  Bandit_B101: assert-in-production
+  Bandit_B102: exec-used
+  Bandit_B104: hardcoded-bind-all-interfaces
+  Bandit_B105: hardcoded-password-string
+  Bandit_B303: weak-crypto
+  Bandit_B311: insecure-random
+  Bandit_B404: subprocess-import
+  Bandit_B602: command-injection
+  Bandit_B608: sql-injection

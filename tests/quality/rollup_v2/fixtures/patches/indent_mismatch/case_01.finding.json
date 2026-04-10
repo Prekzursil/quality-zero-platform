@@ -1,0 +1,8 @@
+{
+  "file": "indent.py",
+  "line": 2,
+  "category": "indent-mismatch",
+  "category_group": "style",
+  "severity": "low",
+  "primary_message": "Indentation is not a multiple of 4"
+}

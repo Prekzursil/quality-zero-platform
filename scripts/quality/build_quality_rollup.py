@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Build one markdown and JSON summary for the governed quality lanes."""
+"""Build one markdown and JSON summary for the governed quality lanes.
+
+# TODO(qrv2-pr4): remove this legacy wrapper after all downstream consumers
+# are migrated to scripts.quality.rollup_v2.pipeline.run_pipeline().
+# This module is kept for backward compatibility during the transition.
+# The canonical rollup_v2 pipeline is at scripts/quality/rollup_v2/pipeline.py.
+"""
 
 from __future__ import absolute_import
 

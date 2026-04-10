@@ -1,0 +1,6 @@
+---
+provider: QLTY
+mapping:
+  qlty_rule_unused_import: unused-import
+  qlty_rule_too_many_lines: too-long
+  qlty_rule_complexity: too-complex

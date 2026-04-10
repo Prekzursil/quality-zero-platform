@@ -1,0 +1,37 @@
+{
+  "issues": [
+    {
+      "issue_code": "PYL-W0703",
+      "location": {
+        "path": "scripts/quality/coverage_parsers.py",
+        "position": {
+          "begin": {"line": 42}
+        }
+      },
+      "title": "Too broad an exception catching",
+      "severity": "MAJOR"
+    },
+    {
+      "issue_code": "PYL-W0611",
+      "location": {
+        "path": "scripts/quality/common.py",
+        "position": {
+          "begin": {"line": 10}
+        }
+      },
+      "title": "Unused import os",
+      "severity": "MINOR"
+    },
+    {
+      "issue_code": "PYL-X9999",
+      "location": {
+        "path": "scripts/quality/common.py",
+        "position": {
+          "begin": {"line": 5}
+        }
+      },
+      "title": "Unknown rule",
+      "severity": "CRITICAL"
+    }
+  ]
+}

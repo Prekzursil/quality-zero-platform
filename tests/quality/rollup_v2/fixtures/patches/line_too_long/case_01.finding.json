@@ -1,0 +1,8 @@
+{
+  "file": "long.py",
+  "line": 1,
+  "category": "line-too-long",
+  "category_group": "style",
+  "severity": "low",
+  "primary_message": "Line too long"
+}

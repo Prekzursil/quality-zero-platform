@@ -1,0 +1,8 @@
+{
+  "file": "unused.py",
+  "line": 1,
+  "category": "unused-import",
+  "category_group": "quality",
+  "severity": "medium",
+  "primary_message": "'os' imported but unused"
+}

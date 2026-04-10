@@ -1,0 +1,7 @@
+---
+provider: CodeQL
+mapping:
+  py/bare-except: broad-except
+  py/command-line-injection: command-injection
+  py/sql-injection: sql-injection
+  py/weak-crypto-key: weak-crypto

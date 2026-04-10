@@ -1,0 +1,8 @@
+{
+  "file": "tabs.py",
+  "line": 2,
+  "category": "tab-vs-space",
+  "category_group": "style",
+  "severity": "low",
+  "primary_message": "Use spaces instead of tabs"
+}

@@ -1,0 +1,6 @@
+--- a/bare.py
++++ b/bare.py
+@@ -1,2 +1,2 @@
+ def fail():
+-    raise
++    raise RuntimeError("unexpected error")

@@ -167,6 +167,79 @@ class RunPipelineTests(unittest.TestCase):
         self.assertTrue(len(summaries) >= 1)
 
 
+class ProviderSummaryBranchTests(unittest.TestCase):
+    """Cover partial branches in _build_provider_summaries and run_pipeline."""
+
+    def test_severity_not_in_standard_levels_skips_increment(self) -> None:
+        """Cover branch 127->123: severity not in ('high','medium','low')."""
+        from scripts.quality.rollup_v2.pipeline import _build_provider_summaries
+
+        # Finding with severity "critical" -- not in the counts dict keys
+        f = _make_finding(category="broad-except")
+        f = replace(f, severity="critical")
+        summaries = _build_provider_summaries([f])
+        self.assertEqual(len(summaries), 1)
+        self.assertEqual(summaries[0]["total"], 1)
+        # "critical" is not a standard key, so high/medium/low all stay 0
+        self.assertEqual(summaries[0]["high"], 0)
+        self.assertEqual(summaries[0]["medium"], 0)
+        self.assertEqual(summaries[0]["low"], 0)
+
+    def test_placeholder_skipped_when_provider_already_configured(self) -> None:
+        """Cover branch 227->226: placeholder provider IS in configured_providers."""
+        from scripts.quality.rollup_v2.pipeline import (
+            RESERVED_LANE_KEYS,
+            run_pipeline,
+        )
+
+        tmp = tempfile.TemporaryDirectory()
+        repo_root = Path(tmp.name).resolve()
+        output_dir = repo_root / "output"
+        output_dir.mkdir()
+        (repo_root / "src").mkdir()
+        (repo_root / "src" / "app.py").write_text("x = 1\n" * 20, encoding="utf-8")
+
+        # Create an artifact that will produce findings with a provider name
+        # matching one of the RESERVED_LANE_KEYS labels. This means the
+        # placeholder for that provider should be SKIPPED (already configured).
+        # We mock a normalizer so its findings carry a matching provider.
+        reserved_label = sorted(RESERVED_LANE_KEYS.values())[0]
+
+        mock_finding = replace(
+            _make_finding(),
+            corroborators=(
+                Corroborator.from_provider(
+                    provider=reserved_label,
+                    rule_id="test",
+                    rule_url=None,
+                    original_message="test",
+                ),
+            ),
+        )
+
+        with patch(
+            "scripts.quality.rollup_v2.pipeline.NORMALIZER_REGISTRY",
+            {"qlty": MagicMock()},
+        ) as mock_registry:
+            mock_normalizer = mock_registry["qlty"]
+            mock_normalizer.run.return_value = MagicMock(
+                findings=[mock_finding],
+                normalizer_errors=[],
+                security_drops=[],
+            )
+            result = run_pipeline(
+                artifacts={"qlty": {"issues": []}},
+                repo_root=repo_root,
+                output_dir=output_dir,
+            )
+        tmp.cleanup()
+
+        # The reserved_label should appear once (from the finding), not twice
+        labels = [s["provider"] for s in result.canonical_payload["provider_summaries"]]
+        count = labels.count(reserved_label)
+        self.assertEqual(count, 1, f"{reserved_label} should appear exactly once")
+
+
 class PipelineErrorBoundaryTests(unittest.TestCase):
     """Test pipeline error boundary (per §A.6) -- malformed artifacts."""
 

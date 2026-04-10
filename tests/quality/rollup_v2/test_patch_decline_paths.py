@@ -321,6 +321,15 @@ class MissingDocstringEdgeCases(unittest.TestCase):
         result = _run(missing_docstring, f, source)
         self.assertIsNotNone(result)
 
+    def test_multiline_def_without_closing_colon(self):
+        """Cover branch 53->59: multi-line def where while loop exhausts without finding ':'."""
+        from scripts.quality.rollup_v2.patches import missing_docstring
+        # def line has no colon, subsequent lines also have no colon
+        source = "def foo(\n    x\n    y\n"
+        f = _make_finding("missing-docstring", "src/a.py", 1)
+        result = _run(missing_docstring, f, source)
+        self.assertIsNotNone(result)
+
 
 class AssertInProductionEdgeCases(unittest.TestCase):
     """Cover uncovered assert_in_production branches."""

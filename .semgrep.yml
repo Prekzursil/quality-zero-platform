@@ -1,0 +1,10 @@
+rules:
+  - id: no-hardcoded-secrets
+    patterns:
+      - pattern: $KEY = "..."
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: ".*(SECRET|TOKEN|PASSWORD|API_KEY|PRIVATE_KEY).*"
+    message: "Potential hardcoded secret in $KEY"
+    severity: ERROR
+    languages: [python]

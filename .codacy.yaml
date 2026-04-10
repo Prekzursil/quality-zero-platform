@@ -1,5 +1,21 @@
 ---
+engines:
+  pylint:
+    enabled: false   # disabled in PR 2 per §A.7; .pylintrc deleted in PR 4
+  bandit:
+    enabled: true
+  semgrep:
+    enabled: true
+  ruff:
+    enabled: true
+  prospector:
+    enabled: true
+  pydocstyle:
+    enabled: false   # enforced via ruff instead
 exclude_paths:
+  - "generated/**"
+  - "tests/**"
+  - "profiles/**"
+  - "docs/admin/**"
   - ".github/workflows/control-plane-admin.yml"
   - ".github/workflows/publish-admin-dashboard.yml"
-  - "docs/admin/styles.css"

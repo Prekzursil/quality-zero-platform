@@ -379,15 +379,14 @@ jobs:
           else:
             raise SystemExit(f"Unsupported lane: {lane}")
           PY
-      - name: Publish Codecov coverage
-        if: matrix.lane == 'coverage' && steps.profile.outputs.codecov_enabled == 'true' && steps.profile.outputs.coverage_input_files != ''
-        uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe
+      - name: SonarCloud scan
+        if: matrix.lane == 'coverage' && env.SONAR_TOKEN != ''
+        uses: SonarSource/sonarqube-scan-action@689fb39b34b9aa95ebc5f8f119343ddd51542402  # v4 — pinned per §A.2.4
         with:
-          files: ${{ steps.profile.outputs.coverage_input_files }}
-          fail_ci_if_error: true
-          use_oidc: ${{ secrets.CODECOV_TOKEN == '' }}
-          token: ${{ secrets.CODECOV_TOKEN }}
-          verbose: true
+          projectBaseDir: repo
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      # Codecov upload removed from scanner-matrix per §7.3 — kept in reusable-codecov-analytics.yml only
       - name: Publish Qlty coverage
         if: matrix.lane == 'coverage' && steps.profile.outputs.qlty_enabled == 'true' && steps.profile.outputs.qlty_coverage_files != '' && runner.os != 'Windows'
         shell: bash

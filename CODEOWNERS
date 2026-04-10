@@ -1,0 +1,6 @@
+# Scanner config files — require security-aware review (§B.3.18)
+.semgrep.yml     @Prekzursil
+.codacy.yaml     @Prekzursil
+.bandit          @Prekzursil
+.pylintrc        @Prekzursil
+pyproject.toml   @Prekzursil

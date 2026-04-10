@@ -103,6 +103,16 @@ class HardcodedSecretHappyPathTest(unittest.TestCase):
         self.assertIsInstance(result, PatchResult)
         self.assertIn("os.environ", result.unified_diff)
 
+    def test_replace_hardcoded_secret_when_os_already_imported(self):
+        from scripts.quality.rollup_v2.patches import hardcoded_secret
+        source = 'import os\nAPI_KEY = "sk_live_super_secret_key_value_1234"\n'
+        f = _make_finding("hardcoded-secret", "src/config.py", 2, category_group="security")
+        result = _run_generator(hardcoded_secret, f, source)
+        self.assertIsInstance(result, PatchResult)
+        self.assertIn("os.environ", result.unified_diff)
+        # Should NOT add duplicate import os
+        self.assertNotIn("+import os", result.unified_diff)
+
 
 class PrintInProductionHappyPathTest(unittest.TestCase):
     def test_remove_print(self):
@@ -111,6 +121,16 @@ class PrintInProductionHappyPathTest(unittest.TestCase):
         f = _make_finding("print-in-production", "src/app.py", 1)
         result = _run_generator(print_in_production, f, source)
         self.assertIsInstance(result, PatchResult)
+
+    def test_remove_print_when_logging_already_imported(self):
+        from scripts.quality.rollup_v2.patches import print_in_production
+        source = 'import logging\nprint("debug")\nx = 1\n'
+        f = _make_finding("print-in-production", "src/app.py", 2)
+        result = _run_generator(print_in_production, f, source)
+        self.assertIsInstance(result, PatchResult)
+        self.assertIn("logging.info", result.unified_diff)
+        # Should NOT add duplicate import logging
+        self.assertNotIn("+import logging", result.unified_diff)
 
 
 class TrailingWhitespaceHappyPathTest(unittest.TestCase):
@@ -193,6 +213,40 @@ class IndentMismatchHappyPathTest(unittest.TestCase):
         from scripts.quality.rollup_v2.patches import indent_mismatch
         source = "def f():\n   x = 1\n"
         f = _make_finding("indent-mismatch", "src/app.py", 2)
+        result = _run_generator(indent_mismatch, f, source)
+        self.assertIsInstance(result, PatchResult)
+
+    def test_fix_indent_after_colon_line(self):
+        """Cover branch 39->41: previous line ends with ':' adds extra indent."""
+        from scripts.quality.rollup_v2.patches import indent_mismatch
+        source = "if True:\n  x = 1\n"
+        f = _make_finding("indent-mismatch", "src/app.py", 2)
+        result = _run_generator(indent_mismatch, f, source)
+        self.assertIsInstance(result, PatchResult)
+
+    def test_fix_indent_on_first_line(self):
+        """Cover branch 35->33: target_index is 0, loop range is empty."""
+        from scripts.quality.rollup_v2.patches import indent_mismatch
+        source = "  x = 1\ny = 2\n"
+        f = _make_finding("indent-mismatch", "src/app.py", 1)
+        result = _run_generator(indent_mismatch, f, source)
+        self.assertIsInstance(result, PatchResult)
+
+    def test_fix_indent_line_without_trailing_newline(self):
+        """Cover branch 53->56: target line does not end with newline."""
+        from scripts.quality.rollup_v2.patches import indent_mismatch
+        source = "def f():\n\t    x = 1"
+        f = _make_finding("indent-mismatch", "src/app.py", 2)
+        result = _run_generator(indent_mismatch, f, source)
+        self.assertIsInstance(result, PatchResult)
+
+    def test_fix_indent_with_blank_lines_before_target(self):
+        """Cover branches 35->33 (blank line iteration) and 39->41 (colon ending)."""
+        from scripts.quality.rollup_v2.patches import indent_mismatch
+        # Blank lines between def and target force the loop to skip blanks
+        # then find 'def f():' which ends with ':', triggering colon branch
+        source = "def f():\n\n\n  x = 1\n"
+        f = _make_finding("indent-mismatch", "src/app.py", 4)
         result = _run_generator(indent_mismatch, f, source)
         self.assertIsInstance(result, PatchResult)
 

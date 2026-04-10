@@ -177,6 +177,35 @@ class ApplyPatchTests(unittest.TestCase):
         self.assertIn("reason", result)
 
 
+    def test_check_passes_but_apply_fails(self) -> None:
+        """Cover the edge case where git apply --check succeeds but git apply fails."""
+        from scripts.quality.rollup_v2.apply_deterministic_patches import (
+            apply_single_patch,
+        )
+
+        diff = "--- a/x.py\n+++ b/x.py\n@@ -1 +1 @@\n-old\n+new\n"
+
+        # Mock subprocess.run so --check succeeds (rc=0) but actual apply fails (rc=1)
+        call_count = [0]
+        original_run = subprocess.run
+
+        def mock_run(cmd, **kwargs):  # type: ignore[no-untyped-def]
+            if "git" in str(cmd) and "apply" in cmd:
+                call_count[0] += 1
+                if "--check" in cmd:
+                    return subprocess.CompletedProcess(cmd, 0, "", "")
+                else:
+                    return subprocess.CompletedProcess(cmd, 1, "", "apply failed race condition")
+            return original_run(cmd, **kwargs)
+
+        with patch("subprocess.run", side_effect=mock_run):
+            result = apply_single_patch(diff, self.repo_dir)
+
+        self.assertFalse(result["applied"])
+        self.assertTrue(result["skipped"])
+        self.assertIn("apply failed race condition", result["reason"])
+
+
 class RunPatcherTests(unittest.TestCase):
     """Test the full run_patcher orchestrator."""
 

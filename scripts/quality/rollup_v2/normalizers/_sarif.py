@@ -7,7 +7,7 @@ from __future__ import absolute_import
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Tuple
 
 from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer
 from scripts.quality.rollup_v2.taxonomy import lookup
@@ -25,7 +25,7 @@ class SarifTooLargeError(ValueError):
     """Raised when a SARIF artifact exceeds MAX_SARIF_BYTES."""
 
 
-_SARIF_LEVEL_TO_SEVERITY: dict[str, str] = {
+_SARIF_LEVEL_TO_SEVERITY: Dict[str, str] = {
     "error": "high",
     "warning": "medium",
     "note": "low",
@@ -41,7 +41,7 @@ _SECURITY_TAGS: frozenset[str] = frozenset({
 
 def _classify_category_group(
     category: str,
-    tags: tuple[str, ...],
+    tags: Tuple[str, ...],
 ) -> CategoryGroup:
     """Determine category_group from the category and tag set."""
     lower_cat = category.lower()
@@ -51,7 +51,7 @@ def _classify_category_group(
     return CATEGORY_GROUP_QUALITY
 
 
-def _extract_tags(result: dict[str, Any]) -> tuple[str, ...]:
+def _extract_tags(result: Dict[str, Any]) -> Tuple[str, ...]:
     """Extract tags from a SARIF result's properties bag."""
     props = result.get("properties", {})
     if not isinstance(props, dict):
@@ -62,7 +62,7 @@ def _extract_tags(result: dict[str, Any]) -> tuple[str, ...]:
     return tuple(str(t) for t in raw_tags if isinstance(t, str))
 
 
-def _extract_cwe(result: dict[str, Any]) -> str | None:
+def _extract_cwe(result: Dict[str, Any]) -> str | None:
     """Extract CWE identifier from SARIF properties or tags."""
     props = result.get("properties", {})
     if isinstance(props, dict):
@@ -76,7 +76,7 @@ def _extract_cwe(result: dict[str, Any]) -> str | None:
     return None
 
 
-def _extract_location(result: dict[str, Any]) -> tuple[str, int, int | None, int | None]:
+def _extract_location(result: Dict[str, Any]) -> Tuple[str, int, int | None, int | None]:
     """Extract (file, line, end_line, column) from the first SARIF location."""
     locations = result.get("locations", [])
     if not locations or not isinstance(locations, list):
@@ -98,7 +98,7 @@ def _extract_location(result: dict[str, Any]) -> tuple[str, int, int | None, int
     return (uri, line, end_line, column)
 
 
-def _extract_context_snippet(result: dict[str, Any]) -> str:
+def _extract_context_snippet(result: Dict[str, Any]) -> str:
     """Extract context snippet from SARIF location region."""
     locations = result.get("locations", [])
     if not locations or not isinstance(locations, list):
@@ -118,6 +118,44 @@ def _extract_context_snippet(result: dict[str, Any]) -> str:
     return ""
 
 
+def _build_rule_index(run: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """Build a rule-id-to-metadata index from tool.driver.rules in a SARIF run."""
+    rule_index: Dict[str, Dict[str, Any]] = {}
+    tool = run.get("tool", {})
+    if not isinstance(tool, dict):
+        return rule_index
+    driver = tool.get("driver", {})
+    if not isinstance(driver, dict):
+        return rule_index
+    rules = driver.get("rules", [])
+    if not isinstance(rules, list):
+        return rule_index
+    for rule in rules:
+        if isinstance(rule, dict):
+            rid = rule.get("id", "")
+            if rid:
+                rule_index[rid] = rule
+    return rule_index
+
+
+def _extract_message(result: Dict[str, Any]) -> str:
+    """Extract the message text from a SARIF result."""
+    message_obj = result.get("message", {})
+    if isinstance(message_obj, dict):
+        return str(message_obj.get("text", ""))
+    if isinstance(message_obj, str):
+        return message_obj
+    return ""
+
+
+def _extract_rule_url(rule_meta: Dict[str, Any]) -> str | None:
+    """Extract rule help URL from rule metadata."""
+    help_uri = rule_meta.get("helpUri")
+    if isinstance(help_uri, str) and help_uri:
+        return help_uri
+    return None
+
+
 def check_sarif_size(data: bytes | str) -> None:
     """Raise SarifTooLargeError if the raw SARIF data exceeds 50MB."""
     size = len(data) if isinstance(data, bytes) else len(data.encode("utf-8"))
@@ -128,11 +166,11 @@ def check_sarif_size(data: bytes | str) -> None:
 
 
 def parse_sarif(
-    data: dict[str, Any],
+    data: Dict[str, Any],
     provider: str,
     repo_root: Path,
     normalizer: BaseNormalizer,
-) -> list[Finding]:
+) -> List[Finding]:
     """Parse a SARIF 2.1.0 payload and return canonical Finding objects.
 
     Parameters
@@ -148,10 +186,10 @@ def parse_sarif(
 
     Returns
     -------
-    list[Finding]
+    List[Finding]
         Canonical findings parsed from all SARIF runs.
     """
-    findings: list[Finding] = []
+    findings: List[Finding] = []
     runs = data.get("runs", [])
     if not isinstance(runs, list):
         return findings
@@ -160,19 +198,7 @@ def parse_sarif(
     for run in runs:
         if not isinstance(run, dict):
             continue
-        # Build rule-id-to-metadata index from tool.driver.rules
-        rule_index: dict[str, dict[str, Any]] = {}
-        tool = run.get("tool", {})
-        if isinstance(tool, dict):
-            driver = tool.get("driver", {})
-            if isinstance(driver, dict):
-                rules = driver.get("rules", [])
-                if isinstance(rules, list):
-                    for rule in rules:
-                        if isinstance(rule, dict):
-                            rid = rule.get("id", "")
-                            if rid:
-                                rule_index[rid] = rule
+        rule_index = _build_rule_index(run)
 
         results = run.get("results", [])
         if not isinstance(results, list):
@@ -184,39 +210,15 @@ def parse_sarif(
 
             rule_id = str(result.get("ruleId", "unknown"))
             rule_meta = rule_index.get(rule_id, {})
-
-            # Message extraction
-            message_obj = result.get("message", {})
-            message = ""
-            if isinstance(message_obj, dict):
-                message = str(message_obj.get("text", ""))
-            elif isinstance(message_obj, str):
-                message = message_obj
-
-            # Severity from SARIF level
+            message = _extract_message(result)
             level = str(result.get("level", "warning")).lower()
             severity = _SARIF_LEVEL_TO_SEVERITY.get(level, "medium")
-
-            # Location
             file_path, line, end_line, column = _extract_location(result)
-
-            # Category via taxonomy lookup, falling back to rule_id
             category = lookup(provider, rule_id) or rule_id
-
-            # Tags and CWE
             tags = _extract_tags(result)
             cwe = _extract_cwe(result)
-
-            # Category group
             category_group = _classify_category_group(category, tags)
-
-            # Rule URL from rule metadata
-            rule_url = None
-            help_uri = rule_meta.get("helpUri")
-            if isinstance(help_uri, str) and help_uri:
-                rule_url = help_uri
-
-            # Context snippet
+            rule_url = _extract_rule_url(rule_meta)
             context_snippet = _extract_context_snippet(result)
 
             finding = normalizer._build_finding(

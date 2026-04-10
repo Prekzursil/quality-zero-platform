@@ -374,8 +374,8 @@ git commit -m "feat(qrv2): PROVIDER_PRIORITY_RANK + priority_rank_for() (§A.4.3
 ### Task 1.3: `Corroborator` frozen dataclass + `from_provider()` factory
 
 **Files:**
-- Create: `scripts/quality/rollup_v2/types/__init__.py` (empty module)
-- Create: `scripts/quality/rollup_v2/types/corroborator.py`
+- Create: `scripts/quality/rollup_v2/schema/__init__.py` (empty module)
+- Create: `scripts/quality/rollup_v2/schema/corroborator.py`
 - Create: `tests/quality/rollup_v2/test_corroborator.py`
 
 - [ ] **Step 1: Write failing test**
@@ -393,7 +393,7 @@ if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from scripts.quality.rollup_v2.providers import UNKNOWN_PROVIDER_RANK
-from scripts.quality.rollup_v2.types.corroborator import Corroborator
+from scripts.quality.rollup_v2.schema.corroborator import Corroborator
 
 
 class CorroboratorTests(unittest.TestCase):
@@ -443,7 +443,7 @@ Expected: ModuleNotFoundError.
 
 - [ ] **Step 3: Write minimal implementation**
 
-`scripts/quality/rollup_v2/types/corroborator.py`:
+`scripts/quality/rollup_v2/schema/corroborator.py`:
 ```python
 """Corroborator dataclass for canonical findings (per design §A.3.2 + §B.3.4)."""
 from __future__ import absolute_import
@@ -491,7 +491,7 @@ class Corroborator:
         )
 ```
 
-Also create: `scripts/quality/rollup_v2/types/__init__.py`:
+Also create: `scripts/quality/rollup_v2/schema/__init__.py`:
 ```python
 """Canonical types for rollup_v2 (per design §3.1 + §A.3.2 + §A.4.1)."""
 ```
@@ -502,14 +502,14 @@ Expected: 4 tests, all OK.
 
 - [ ] **Step 5: Commit**
 ```bash
-git add scripts/quality/rollup_v2/types tests/quality/rollup_v2/test_corroborator.py
+git add scripts/quality/rollup_v2/schema tests/quality/rollup_v2/test_corroborator.py
 git commit -m "feat(qrv2): Corroborator frozen dataclass + from_provider() factory (§A.3.2 §B.3.4)"
 ```
 
 ### Task 1.4: `Finding` frozen dataclass with all A.4.1 fields
 
 **Files:**
-- Create: `scripts/quality/rollup_v2/types/finding.py`
+- Create: `scripts/quality/rollup_v2/schema/finding.py`
 - Create: `tests/quality/rollup_v2/test_finding.py`
 
 - [ ] **Step 1: Write failing test**
@@ -526,8 +526,8 @@ from pathlib import Path
 if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from scripts.quality.rollup_v2.types.corroborator import Corroborator
-from scripts.quality.rollup_v2.types.finding import (
+from scripts.quality.rollup_v2.schema.corroborator import Corroborator
+from scripts.quality.rollup_v2.schema.finding import (
     SCHEMA_VERSION,
     CATEGORY_GROUP_SECURITY,
     CATEGORY_GROUP_QUALITY,
@@ -641,7 +641,7 @@ Expected: ModuleNotFoundError.
 
 - [ ] **Step 3: Write minimal implementation**
 
-`scripts/quality/rollup_v2/types/finding.py`:
+`scripts/quality/rollup_v2/schema/finding.py`:
 ```python
 """Canonical Finding dataclass (per design §3.1 + §A.3.2 + §A.4.1)."""
 from __future__ import absolute_import
@@ -649,7 +649,7 @@ from __future__ import absolute_import
 from dataclasses import dataclass
 from typing import Final, Literal
 
-from scripts.quality.rollup_v2.types.corroborator import Corroborator
+from scripts.quality.rollup_v2.schema.corroborator import Corroborator
 
 SCHEMA_VERSION: Final[str] = "qzp-finding/1"
 
@@ -724,14 +724,14 @@ Expected: 5 tests, all OK.
 
 - [ ] **Step 5: Commit**
 ```bash
-git add scripts/quality/rollup_v2/types/finding.py tests/quality/rollup_v2/test_finding.py
+git add scripts/quality/rollup_v2/schema/finding.py tests/quality/rollup_v2/test_finding.py
 git commit -m "feat(qrv2): Finding frozen dataclass with all §A.4.1 fields"
 ```
 
 ### Task 1.5: Add `patch_error` optional side-channel field to Finding (clarify A.6)
 
 **Files:**
-- Modify: `scripts/quality/rollup_v2/types/finding.py`
+- Modify: `scripts/quality/rollup_v2/schema/finding.py`
 - Modify: `tests/quality/rollup_v2/test_finding.py`
 
 - [ ] **Step 1: Write failing test**
@@ -797,7 +797,7 @@ Add to `tests/quality/rollup_v2/test_finding.py` at the end of `FindingTests`:
 
 - [ ] **Step 3: Add field to Finding**
 
-Add to `scripts/quality/rollup_v2/types/finding.py` Finding dataclass (last field before `__post_init__`):
+Add to `scripts/quality/rollup_v2/schema/finding.py` Finding dataclass (last field before `__post_init__`):
 ```python
     patch_error: str | None = None   # per A.6 — set when a patch generator raised; none otherwise
 ```
@@ -810,7 +810,7 @@ Expected: 7 tests, all OK.
 
 - [ ] **Step 5: Commit**
 ```bash
-git add scripts/quality/rollup_v2/types/finding.py tests/quality/rollup_v2/test_finding.py
+git add scripts/quality/rollup_v2/schema/finding.py tests/quality/rollup_v2/test_finding.py
 git commit -m "feat(qrv2): add Finding.patch_error side-channel field for §A.6 error boundaries"
 ```
 
@@ -1611,7 +1611,7 @@ if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer, NormalizerResult
-from scripts.quality.rollup_v2.types.finding import (
+from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_QUALITY,
     SCHEMA_VERSION,
     Finding,
@@ -1723,8 +1723,8 @@ from scripts.quality.rollup_v2.path_safety import (
     validate_finding_file,
 )
 from scripts.quality.rollup_v2.redaction import redact_secrets
-from scripts.quality.rollup_v2.types.corroborator import Corroborator
-from scripts.quality.rollup_v2.types.finding import (
+from scripts.quality.rollup_v2.schema.corroborator import Corroborator
+from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_QUALITY,
     SCHEMA_VERSION,
     Finding,
@@ -1900,7 +1900,7 @@ if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer
-from scripts.quality.rollup_v2.types.finding import CATEGORY_GROUP_QUALITY
+from scripts.quality.rollup_v2.schema.finding import CATEGORY_GROUP_QUALITY
 
 
 class _LeakyNormalizer(BaseNormalizer):
@@ -2104,7 +2104,7 @@ from typing import Any, Iterable
 
 from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer
 from scripts.quality.rollup_v2.taxonomy import lookup
-from scripts.quality.rollup_v2.types.finding import (
+from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_QUALITY,
     CATEGORY_GROUP_SECURITY,
     Finding,
@@ -2238,7 +2238,7 @@ from dataclasses import replace
 from typing import Iterable
 
 from scripts.quality.rollup_v2.severity import max_severity
-from scripts.quality.rollup_v2.types.finding import (
+from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_SECURITY,
     CATEGORY_GROUP_QUALITY,
     Finding,
@@ -2311,7 +2311,7 @@ def _pick_primary_by_provider_priority(findings: list[Finding]) -> Finding:
 ### Task 8.1: `PatchResult`, `PatchDeclined`, `PatchGenerator` Protocol types
 
 **Files:**
-- Create: `scripts/quality/rollup_v2/types/patch.py`
+- Create: `scripts/quality/rollup_v2/schema/patch.py`
 - Create: `tests/quality/rollup_v2/test_patch_types.py`
 
 - [ ] **Step 1: Write failing test**
@@ -2440,8 +2440,8 @@ from pathlib import Path
 from typing import Mapping
 
 from scripts.quality.rollup_v2.path_safety import PathEscapedRootError, validate_finding_file
-from scripts.quality.rollup_v2.types.finding import Finding
-from scripts.quality.rollup_v2.types.patch import PatchDeclined, PatchResult
+from scripts.quality.rollup_v2.schema.finding import Finding
+from scripts.quality.rollup_v2.schema.patch import PatchDeclined, PatchResult
 
 # Populated by Task 9.x — initially empty. Every new generator gets an entry here.
 GENERATORS: Mapping[str, object] = {}
@@ -2489,8 +2489,8 @@ import unittest
 from pathlib import Path
 
 from scripts.quality.rollup_v2.patches import dispatch
-from scripts.quality.rollup_v2.types.finding import Finding
-from scripts.quality.rollup_v2.types.patch import PatchResult
+from scripts.quality.rollup_v2.schema.finding import Finding
+from scripts.quality.rollup_v2.schema.patch import PatchResult
 
 _FIXTURES_DIR = Path(__file__).parent / "fixtures" / "patches"
 
@@ -2653,8 +2653,8 @@ import difflib
 import re
 from pathlib import Path
 
-from scripts.quality.rollup_v2.types.finding import Finding
-from scripts.quality.rollup_v2.types.patch import PatchDeclined, PatchResult
+from scripts.quality.rollup_v2.schema.finding import Finding
+from scripts.quality.rollup_v2.schema.patch import PatchDeclined, PatchResult
 
 GENERATOR_VERSION = "broad_except/1.0.0"
 CATEGORY = "broad-except"
@@ -2931,8 +2931,8 @@ if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from scripts.quality.rollup_v2.renderer import render_markdown
-from scripts.quality.rollup_v2.types.corroborator import Corroborator
-from scripts.quality.rollup_v2.types.finding import (
+from scripts.quality.rollup_v2.schema.corroborator import Corroborator
+from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_QUALITY,
     SCHEMA_VERSION,
     Finding,

@@ -27,8 +27,8 @@ from scripts.quality.rollup_v2.normalizers.sentry import SentryNormalizer
 from scripts.quality.rollup_v2.normalizers.sonarcloud import SonarCloudNormalizer
 from scripts.quality.rollup_v2 import patches as patch_dispatcher
 from scripts.quality.rollup_v2.renderer import render_markdown
-from scripts.quality.rollup_v2.types.finding import Finding
-from scripts.quality.rollup_v2.types.patch import PatchResult
+from scripts.quality.rollup_v2.schema.finding import Finding
+from scripts.quality.rollup_v2.schema.patch import PatchResult
 
 # Normalizer registry: maps artifact key -> normalizer instance
 NORMALIZER_REGISTRY: Dict[str, BaseNormalizer] = {

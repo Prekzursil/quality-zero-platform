@@ -9,9 +9,9 @@ from pathlib import Path
 if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from scripts.quality.rollup_v2.types.corroborator import Corroborator
-from scripts.quality.rollup_v2.types.finding import SCHEMA_VERSION, Finding
-from scripts.quality.rollup_v2.types.patch import PatchDeclined, PatchResult
+from scripts.quality.rollup_v2.schema.corroborator import Corroborator
+from scripts.quality.rollup_v2.schema.finding import SCHEMA_VERSION, Finding
+from scripts.quality.rollup_v2.schema.patch import PatchDeclined, PatchResult
 
 
 def _make_finding(category: str, file: str, line: int, **kwargs) -> Finding:

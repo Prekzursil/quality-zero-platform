@@ -12,9 +12,9 @@ import unittest
 from pathlib import Path
 
 from scripts.quality.rollup_v2.patches import dispatch
-from scripts.quality.rollup_v2.types.corroborator import Corroborator
-from scripts.quality.rollup_v2.types.finding import SCHEMA_VERSION, Finding
-from scripts.quality.rollup_v2.types.patch import PatchResult
+from scripts.quality.rollup_v2.schema.corroborator import Corroborator
+from scripts.quality.rollup_v2.schema.finding import SCHEMA_VERSION, Finding
+from scripts.quality.rollup_v2.schema.patch import PatchResult
 
 _FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "patches"
 

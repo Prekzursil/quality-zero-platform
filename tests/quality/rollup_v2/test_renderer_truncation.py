@@ -17,8 +17,8 @@ from scripts.quality.rollup_v2.renderer import (
     _MAX_VISIBLE_FILES,
     render_markdown,
 )
-from scripts.quality.rollup_v2.types.corroborator import Corroborator
-from scripts.quality.rollup_v2.types.finding import (
+from scripts.quality.rollup_v2.schema.corroborator import Corroborator
+from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_QUALITY,
     SCHEMA_VERSION,
     Finding,

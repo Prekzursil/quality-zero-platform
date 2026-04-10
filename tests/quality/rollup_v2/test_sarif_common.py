@@ -17,7 +17,7 @@ from scripts.quality.rollup_v2.normalizers._sarif import (
     check_sarif_size,
     parse_sarif,
 )
-from scripts.quality.rollup_v2.types.finding import Finding
+from scripts.quality.rollup_v2.schema.finding import Finding
 
 
 class _StubNormalizer(BaseNormalizer):

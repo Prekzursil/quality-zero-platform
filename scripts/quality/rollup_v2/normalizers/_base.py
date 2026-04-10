@@ -12,8 +12,8 @@ from scripts.quality.rollup_v2.path_safety import (
     validate_finding_file,
 )
 from scripts.quality.rollup_v2.redaction import redact_secrets
-from scripts.quality.rollup_v2.types.corroborator import Corroborator
-from scripts.quality.rollup_v2.types.finding import (
+from scripts.quality.rollup_v2.schema.corroborator import Corroborator
+from scripts.quality.rollup_v2.schema.finding import (
     SCHEMA_VERSION,
     CategoryGroup,
     Finding,

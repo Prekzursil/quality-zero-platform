@@ -4,7 +4,7 @@ from __future__ import absolute_import
 from dataclasses import dataclass
 from typing import Final, Literal, Tuple
 
-from scripts.quality.rollup_v2.types.corroborator import Corroborator
+from scripts.quality.rollup_v2.schema.corroborator import Corroborator
 
 SCHEMA_VERSION: Final[str] = "qzp-finding/1"
 

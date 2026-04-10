@@ -5,8 +5,8 @@ import difflib
 import re
 from pathlib import Path
 
-from scripts.quality.rollup_v2.types.finding import Finding
-from scripts.quality.rollup_v2.types.patch import PatchDeclined, PatchResult
+from scripts.quality.rollup_v2.schema.finding import Finding
+from scripts.quality.rollup_v2.schema.patch import PatchDeclined, PatchResult
 
 GENERATOR_VERSION = "tab_vs_space/1.0.0"
 CATEGORY = "tab-vs-space"

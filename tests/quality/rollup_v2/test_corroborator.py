@@ -9,7 +9,7 @@ if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from scripts.quality.rollup_v2.providers import UNKNOWN_PROVIDER_RANK
-from scripts.quality.rollup_v2.types.corroborator import Corroborator
+from scripts.quality.rollup_v2.schema.corroborator import Corroborator
 
 
 class CorroboratorTests(unittest.TestCase):

@@ -5,7 +5,7 @@ from dataclasses import replace
 from typing import Dict, Iterable, List
 
 from scripts.quality.rollup_v2.severity import max_severity
-from scripts.quality.rollup_v2.types.finding import (
+from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_QUALITY,
     CATEGORY_GROUP_SECURITY,
     Finding,

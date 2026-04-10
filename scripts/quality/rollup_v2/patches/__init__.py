@@ -6,8 +6,8 @@ from typing import Dict
 from pathlib import Path
 
 from scripts.quality.rollup_v2.path_safety import PathEscapedRootError, validate_finding_file
-from scripts.quality.rollup_v2.types.finding import Finding
-from scripts.quality.rollup_v2.types.patch import PatchDeclined, PatchResult
+from scripts.quality.rollup_v2.schema.finding import Finding
+from scripts.quality.rollup_v2.schema.patch import PatchDeclined, PatchResult
 
 from scripts.quality.rollup_v2.patches import (
     assert_in_production,

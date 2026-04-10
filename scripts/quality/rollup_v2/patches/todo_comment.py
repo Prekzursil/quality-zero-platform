@@ -3,8 +3,8 @@ from __future__ import absolute_import
 
 from pathlib import Path
 
-from scripts.quality.rollup_v2.types.finding import Finding
-from scripts.quality.rollup_v2.types.patch import PatchDeclined, PatchResult
+from scripts.quality.rollup_v2.schema.finding import Finding
+from scripts.quality.rollup_v2.schema.patch import PatchDeclined, PatchResult
 
 GENERATOR_VERSION = "todo_comment/1.0.0"
 CATEGORY = "todo-comment"

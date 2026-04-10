@@ -1,0 +1,94 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "CodeQL",
+          "semanticVersion": "2.16.0",
+          "rules": [
+            {
+              "id": "py/sql-injection",
+              "shortDescription": {"text": "SQL injection vulnerability"},
+              "helpUri": "https://codeql.github.com/codeql-query-help/python/py-sql-injection/"
+            },
+            {
+              "id": "py/bare-except",
+              "shortDescription": {"text": "Bare except clause"},
+              "helpUri": "https://codeql.github.com/codeql-query-help/python/py-bare-except/"
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "py/sql-injection",
+          "level": "error",
+          "message": {"text": "This query depends on a user-provided value."},
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {"uri": "src/db.py"},
+                "region": {
+                  "startLine": 23,
+                  "startColumn": 9,
+                  "endLine": 25,
+                  "snippet": {"text": "cursor.run(query)"}
+                }
+              }
+            }
+          ],
+          "codeFlows": [
+            {
+              "threadFlows": [
+                {
+                  "locations": [
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": {"uri": "src/api.py"},
+                          "region": {"startLine": 10}
+                        },
+                        "message": {"text": "User input enters here"}
+                      }
+                    },
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": {"uri": "src/db.py"},
+                          "region": {"startLine": 23}
+                        },
+                        "message": {"text": "Reaches SQL query here"}
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "properties": {"tags": ["security", "CWE-89"], "cwe": "CWE-89"}
+        },
+        {
+          "ruleId": "py/bare-except",
+          "level": "warning",
+          "message": {"text": "Bare except clause catches all exceptions including SystemExit."},
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {"uri": "src/utils.py"},
+                "region": {
+                  "startLine": 50,
+                  "startColumn": 1,
+                  "endLine": 50,
+                  "snippet": {"text": "except:"}
+                }
+              }
+            }
+          ],
+          "properties": {"tags": ["quality"]}
+        }
+      ]
+    }
+  ]
+}

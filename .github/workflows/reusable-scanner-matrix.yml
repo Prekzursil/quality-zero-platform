@@ -381,7 +381,7 @@ jobs:
           PY
       - name: Publish Codecov coverage
         if: matrix.lane == 'coverage' && steps.profile.outputs.codecov_enabled == 'true' && steps.profile.outputs.coverage_input_files != ''
-        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de
+        uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe
         with:
           files: ${{ steps.profile.outputs.coverage_input_files }}
           fail_ci_if_error: true

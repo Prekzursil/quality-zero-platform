@@ -78,10 +78,14 @@ def _make_golden_test(category: str, case_name: str, fixture_dir: Path):
         with open(expected_diff_path, encoding="utf-8", newline="") as f:
             expected_diff = f.read()
 
-        # Normalize CRLF → LF: Git autocrlf on Windows converts LF→CRLF in
-        # golden fixtures, but patch generators expect LF-only source.
-        # bad-line-ending tests embed their own intentional \r\n sequences.
-        if category != "bad-line-ending":
+        # Normalize line endings for platform independence.
+        # On Windows: Git converts LF→CRLF (autocrlf), generators expect LF.
+        # On Linux: Git keeps LF, but bad-line-ending tests NEED CRLF input.
+        if category == "bad-line-ending":
+            # Inject CRLF regardless of what Git did to the fixture file.
+            # Normalize first (remove any existing \r\n), then add \r\n.
+            source = source.replace("\r\n", "\n").replace("\n", "\r\n")
+        else:
             source = source.replace("\r\n", "\n")
 
         # Use a tmp dir as repo_root so path_safety passes

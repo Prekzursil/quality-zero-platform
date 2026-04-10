@@ -19,8 +19,10 @@ import re
 import sys
 from pathlib import Path
 
-# First-party action owners exempt from SHA pinning
-_EXEMPT_OWNERS: frozenset[str] = frozenset({"actions"})
+# First-party / GitHub-maintained action owners exempt from SHA pinning.
+# actions/* = GitHub first-party (checkout, setup-python, upload-artifact, etc.)
+# github/* = GitHub-maintained tools (codeql-action, super-linter, etc.)
+_EXEMPT_OWNERS: frozenset[str] = frozenset({"actions", "github"})
 
 # Regex to match `uses: owner/repo@ref` lines in workflow YAML
 _USES_RE = re.compile(

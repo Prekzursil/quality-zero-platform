@@ -239,6 +239,34 @@ class ProviderSummaryBranchTests(unittest.TestCase):
         self.assertEqual(count, 1, f"{test_label} should appear exactly once")
 
 
+    def test_not_configured_placeholder_appended_when_no_matching_finding(self) -> None:
+        """Cover line 231: placeholder appended when provider NOT in configured_providers."""
+        from scripts.quality.rollup_v2.pipeline import run_pipeline
+
+        tmp = tempfile.TemporaryDirectory()
+        repo_root = Path(tmp.name).resolve()
+        output_dir = repo_root / "output"
+        output_dir.mkdir()
+
+        # Mock a reserved key whose label does NOT appear in any finding
+        with patch(
+            "scripts.quality.rollup_v2.pipeline.NORMALIZER_REGISTRY",
+            {},
+        ), patch(
+            "scripts.quality.rollup_v2.pipeline.RESERVED_LANE_KEYS",
+            {"phantom": "Phantom Zero"},
+        ):
+            result = run_pipeline(
+                artifacts={},
+                repo_root=repo_root,
+                output_dir=output_dir,
+            )
+        tmp.cleanup()
+
+        labels = [s["provider"] for s in result.canonical_payload["provider_summaries"]]
+        self.assertIn("Phantom Zero", labels)
+
+
 class PipelineErrorBoundaryTests(unittest.TestCase):
     """Test pipeline error boundary (per §A.6) -- malformed artifacts."""
 

@@ -101,5 +101,56 @@ class ChromaticNormalizerTests(unittest.TestCase):
         self.assertEqual(len(result.findings), 0)
 
 
+    def test_builds_not_list_returns_empty(self):
+        result = ChromaticNormalizer().run(artifact={"builds": "not-list"}, repo_root=self.root)
+        self.assertEqual(len(result.findings), 0)
+
+    def test_build_not_dict_skipped(self):
+        result = ChromaticNormalizer().run(artifact={"builds": ["not-dict"]}, repo_root=self.root)
+        self.assertEqual(len(result.findings), 0)
+
+    def test_change_not_dict_skipped(self):
+        artifact = {
+            "builds": [{"errCount": 0, "webUrl": None, "changes": ["not-dict"]}],
+            "summary": {"total": 1, "accepted": 1, "errored": 0, "changed": 0, "unchanged": 1, "rejected": 0},
+        }
+        result = ChromaticNormalizer().run(artifact=artifact, repo_root=self.root)
+        self.assertEqual(len(result.findings), 0)
+
+    def test_multiple_builds_second_no_changes(self):
+        """Cover branch: changes loop exhausts then continues to next build."""
+        artifact = {
+            "builds": [
+                {"errCount": 0, "webUrl": None, "changes": [
+                    {"component": "A", "story": "B", "status": "CHANGED", "changeUrl": None},
+                ]},
+                {"errCount": 0, "webUrl": None, "changes": [
+                    {"component": "C", "story": "D", "status": "UNCHANGED", "changeUrl": None},
+                ]},
+            ],
+            "summary": {"total": 2, "accepted": 1, "errored": 0, "changed": 1, "unchanged": 1, "rejected": 0},
+        }
+        result = ChromaticNormalizer().run(artifact=artifact, repo_root=self.root)
+        self.assertEqual(len(result.findings), 1)
+
+    def test_changes_not_list_skipped(self):
+        artifact = {
+            "builds": [{"errCount": 0, "webUrl": None, "changes": "not-a-list"}],
+            "summary": {"total": 1, "accepted": 1, "errored": 0, "changed": 0, "unchanged": 1, "rejected": 0},
+        }
+        result = ChromaticNormalizer().run(artifact=artifact, repo_root=self.root)
+        self.assertEqual(len(result.findings), 0)
+
+    def test_unchanged_status_skipped(self):
+        artifact = {
+            "builds": [{"errCount": 0, "webUrl": None, "changes": [
+                {"component": "X", "story": "Y", "status": "UNCHANGED", "changeUrl": None},
+            ]}],
+            "summary": {"total": 1, "accepted": 1, "errored": 0, "changed": 0, "unchanged": 1, "rejected": 0},
+        }
+        result = ChromaticNormalizer().run(artifact=artifact, repo_root=self.root)
+        self.assertEqual(len(result.findings), 0)
+
+
 if __name__ == "__main__":
     unittest.main()

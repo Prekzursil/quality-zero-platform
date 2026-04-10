@@ -159,6 +159,14 @@ class ScanWorkflowsDirTests(unittest.TestCase):
         violations = scan_workflows_dir(self.workflows_dir)
         self.assertEqual(len(violations), 1)
 
+    def test_scans_yaml_extension_too(self):
+        (self.workflows_dir / "c.yaml").write_text(
+            "jobs:\n  j:\n    steps:\n      - uses: yaml-owner/yaml-action@v3\n", "utf-8"
+        )
+        violations = scan_workflows_dir(self.workflows_dir)
+        self.assertEqual(len(violations), 1)
+        self.assertEqual(violations[0]["action"], "yaml-owner/yaml-action")
+
     def test_empty_dir_returns_empty(self):
         violations = scan_workflows_dir(self.workflows_dir)
         self.assertEqual(len(violations), 0)

@@ -90,5 +90,23 @@ class ApplitoolsNormalizerTests(unittest.TestCase):
         self.assertIn("eyes.applitools.com", result.findings[0].corroborators[0].rule_url)
 
 
+    def test_results_not_list_returns_empty(self):
+        result = ApplitoolsNormalizer().run(artifact={"results": "not-list"}, repo_root=self.root)
+        self.assertEqual(len(result.findings), 0)
+
+    def test_result_not_dict_skipped(self):
+        result = ApplitoolsNormalizer().run(artifact={"results": ["not-dict"]}, repo_root=self.root)
+        self.assertEqual(len(result.findings), 0)
+
+    def test_passed_status_skipped(self):
+        artifact = {
+            "results": [
+                {"testName": "OK", "status": "Passed", "stepCount": 1, "unresolvedCount": 0, "failedCount": 0},
+            ],
+        }
+        result = ApplitoolsNormalizer().run(artifact=artifact, repo_root=self.root)
+        self.assertEqual(len(result.findings), 0)
+
+
 if __name__ == "__main__":
     unittest.main()

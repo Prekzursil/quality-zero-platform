@@ -12,9 +12,9 @@ import unittest
 from pathlib import Path
 
 from scripts.quality.rollup_v2.patches import dispatch
-from scripts.quality.rollup_v2.types.corroborator import Corroborator
-from scripts.quality.rollup_v2.types.finding import SCHEMA_VERSION, Finding
-from scripts.quality.rollup_v2.types.patch import PatchResult
+from scripts.quality.rollup_v2.schema.corroborator import Corroborator
+from scripts.quality.rollup_v2.schema.finding import SCHEMA_VERSION, Finding
+from scripts.quality.rollup_v2.schema.patch import PatchResult
 
 _FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "patches"
 
@@ -71,12 +71,22 @@ def _make_golden_test(category: str, case_name: str, fixture_dir: Path):
         finding_path = fixture_dir / f"{case_name}.finding.json"
         expected_diff_path = fixture_dir / f"{case_name}.expected.diff"
 
-        # Use newline="" to preserve exact line endings (needed for bad-line-ending tests)
+        # Read with newline="" to preserve exact line endings in the file
         with open(input_path, encoding="utf-8", newline="") as f:
             source = f.read()
         finding = _finding_from_json(json.loads(finding_path.read_text(encoding="utf-8")))
         with open(expected_diff_path, encoding="utf-8", newline="") as f:
             expected_diff = f.read()
+
+        # Normalize line endings for platform independence.
+        # On Windows: Git converts LF→CRLF (autocrlf), generators expect LF.
+        # On Linux: Git keeps LF, but bad-line-ending tests NEED CRLF input.
+        if category == "bad-line-ending":
+            # Inject CRLF regardless of what Git did to the fixture file.
+            # Normalize first (remove any existing \r\n), then add \r\n.
+            source = source.replace("\r\n", "\n").replace("\n", "\r\n")
+        else:
+            source = source.replace("\r\n", "\n")
 
         # Use a tmp dir as repo_root so path_safety passes
         with tempfile.TemporaryDirectory() as tmp:
@@ -88,10 +98,10 @@ def _make_golden_test(category: str, case_name: str, fixture_dir: Path):
             result = dispatch(finding, source_file_content=source, repo_root=root)
 
         self.assertIsInstance(result, PatchResult, f"Expected PatchResult for {category}/{case_name}")
-        self.assertEqual(
-            result.unified_diff.strip(),  # type: ignore[union-attr]
-            expected_diff.strip(),
-        )
+        # Normalize CRLF → LF to handle Windows Git autocrlf in golden fixtures
+        actual_diff = result.unified_diff.strip().replace("\r\n", "\n")  # type: ignore[union-attr]
+        expected = expected_diff.strip().replace("\r\n", "\n")
+        self.assertEqual(actual_diff, expected)
         self.assertEqual(result.category, category)  # type: ignore[union-attr]
 
     return test_method

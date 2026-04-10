@@ -11,8 +11,8 @@ from unittest.mock import patch as mock_patch, MagicMock
 if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from scripts.quality.rollup_v2.types.corroborator import Corroborator
-from scripts.quality.rollup_v2.types.finding import SCHEMA_VERSION, Finding
+from scripts.quality.rollup_v2.schema.corroborator import Corroborator
+from scripts.quality.rollup_v2.schema.finding import SCHEMA_VERSION, Finding
 
 
 def _make_finding(
@@ -103,7 +103,7 @@ class PipelineGapTests(unittest.TestCase):
     def test_patch_dispatch_returns_patch_result(self) -> None:
         """Lines 104-111: successful PatchResult."""
         from scripts.quality.rollup_v2.pipeline import _apply_patches
-        from scripts.quality.rollup_v2.types.patch import PatchResult
+        from scripts.quality.rollup_v2.schema.patch import PatchResult
 
         finding = _make_finding()
         patch_result = PatchResult(

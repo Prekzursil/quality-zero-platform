@@ -143,6 +143,30 @@ jobs:
             --auth-file "$CODEX_AUTH_FILE" \
             --bootstrap-env-var CODEX_AUTH_JSON \
             --out-json "$RUNNER_TEMP/codex-auth.json"
+      - name: Download quality-rollup artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: quality-rollup
+          path: "${{ runner.temp }}/quality-rollup"
+        continue-on-error: true
+      - name: Auto-apply deterministic patches from canonical.json
+        if: ${{ hashFiles(format('{0}/quality-rollup/canonical.json', runner.temp)) != '' }}
+        working-directory: repo
+        run: |
+          python platform/scripts/quality/rollup_v2/apply_deterministic_patches.py \
+            --canonical-json "$RUNNER_TEMP/quality-rollup/canonical.json" \
+            --repo-dir . \
+            --out-json "$RUNNER_TEMP/applied-patches.json"
+      - name: Commit deterministic fixes
+        if: ${{ hashFiles(format('{0}/applied-patches.json', runner.temp)) != '' }}
+        working-directory: repo
+        run: |
+          git add -A
+          APPLIED_COUNT=$(python -c "import json,sys; print(json.load(open(sys.argv[1]))['applied_count'])" "$RUNNER_TEMP/applied-patches.json")
+          if [ "$APPLIED_COUNT" -gt 0 ]; then
+            git diff --cached --quiet || \
+              git commit -m "fix: auto-apply $APPLIED_COUNT deterministic patches from rollup_v2"
+          fi
       - name: Render remediation prompt
         env:
           REPO_SLUG: ${{ inputs.repo_slug }}
@@ -150,6 +174,10 @@ jobs:
           TARGET_SHA: ${{ inputs.sha || github.sha }}
           ACTIONS_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          CANONICAL_ARG=""
+          if [ -f "$RUNNER_TEMP/quality-rollup/canonical.json" ]; then
+            CANONICAL_ARG="--canonical-json $RUNNER_TEMP/quality-rollup/canonical.json"
+          fi
           python platform/scripts/quality/render_codex_prompt.py \
             --repo-slug "$REPO_SLUG" \
             --lane remediation \
@@ -157,6 +185,7 @@ jobs:
             --failure-context "$FAILURE_CONTEXT" \
             --artifact "Actions run: $ACTIONS_RUN_URL" \
             --artifact "Target SHA: $TARGET_SHA" \
+            $CANONICAL_ARG \
             --output "$RUNNER_TEMP/remediation-prompt.md"
       - name: Run Codex on the trusted private runner
         run: |
@@ -214,6 +243,7 @@ jobs:
             ${{ runner.temp }}/codex-last-message.txt
             ${{ runner.temp }}/codex-events.jsonl
             ${{ runner.temp }}/remediation-prompt.md
+            ${{ runner.temp }}/applied-patches.json
       - name: Create or update remediation pull request
         uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c
         with:

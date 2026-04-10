@@ -13,8 +13,8 @@ from unittest.mock import MagicMock, patch
 if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from scripts.quality.rollup_v2.types.corroborator import Corroborator
-from scripts.quality.rollup_v2.types.finding import SCHEMA_VERSION, Finding
+from scripts.quality.rollup_v2.schema.corroborator import Corroborator
+from scripts.quality.rollup_v2.schema.finding import SCHEMA_VERSION, Finding
 
 
 def _make_finding(

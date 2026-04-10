@@ -13,7 +13,11 @@ from typing import Any, Dict
 from unittest.mock import patch
 
 from scripts.quality import render_codex_prompt
-from scripts.quality.render_codex_prompt import _parse_args, _render_prompt
+from scripts.quality.render_codex_prompt import (
+    _parse_args,
+    _render_canonical_findings_section,
+    _render_prompt,
+)
 
 
 class RenderCodexPromptTests(unittest.TestCase):
@@ -143,6 +147,7 @@ class RenderCodexPromptTests(unittest.TestCase):
                 "event_name": "pull_request",
                 "failure_context": "",
                 "artifact": [],
+                "canonical_json": "",
                 "output": "",
             },
         )()
@@ -224,3 +229,116 @@ class RenderCodexPromptTests(unittest.TestCase):
 
         self.assertEqual(result.exception.code, 0)
         self.assertIn("Coverage 100 Gate", buffer.getvalue())
+
+    def test_parse_args_accepts_canonical_json(self) -> None:
+        """Cover --canonical-json argument is accepted."""
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "render_codex_prompt.py",
+                "--repo-slug",
+                "owner/repo",
+                "--canonical-json",
+                "/tmp/canonical.json",
+            ],
+        ):
+            args = _parse_args()
+        self.assertEqual(args.canonical_json, "/tmp/canonical.json")
+
+    def test_parse_args_canonical_json_defaults_empty(self) -> None:
+        """Cover --canonical-json defaults to empty string."""
+        with patch.object(
+            sys,
+            "argv",
+            ["render_codex_prompt.py", "--repo-slug", "owner/repo"],
+        ):
+            args = _parse_args()
+        self.assertEqual(args.canonical_json, "")
+
+
+class RenderCanonicalFindingsSectionTests(unittest.TestCase):
+    """Tests for the canonical findings section renderer."""
+
+    def _make_finding(
+        self,
+        *,
+        finding_id: str = "f1",
+        file: str = "example.py",
+        line: int = 42,
+        category: str = "broad-except",
+        severity: str = "high",
+        primary_message: str = "Catch a more specific exception",
+        fix_hint: str | None = "Narrow the exception type",
+        patch_diff: str | None = None,
+        patch_source: str = "none",
+        corroborators: list | None = None,
+    ) -> dict:
+        return {
+            "finding_id": finding_id,
+            "file": file,
+            "line": line,
+            "category": category,
+            "severity": severity,
+            "primary_message": primary_message,
+            "fix_hint": fix_hint,
+            "patch": patch_diff,
+            "patch_source": patch_source,
+            "corroborators": corroborators or [],
+        }
+
+    def test_renders_finding_with_all_fields(self) -> None:
+        """A finding with fix_hint, corroborators, and patch renders fully."""
+        findings = [
+            self._make_finding(
+                corroborators=[
+                    {"provider": "Codacy"},
+                    {"provider": "SonarCloud"},
+                    {"provider": "DeepSource"},
+                ],
+                patch_diff="--- a/example.py\n+++ b/example.py\n@@ -1 +1 @@\n-old\n+new\n",
+                patch_source="llm",
+            ),
+        ]
+        section = _render_canonical_findings_section(findings)
+        self.assertIn("### Finding: broad-except", section)
+        self.assertIn("line 42", section)
+        self.assertIn("example.py", section)
+        self.assertIn("**Severity**: high", section)
+        self.assertIn("Catch a more specific exception", section)
+        self.assertIn("Narrow the exception type", section)
+        self.assertIn("Codacy", section)
+        self.assertIn("SonarCloud", section)
+        self.assertIn("DeepSource", section)
+        self.assertIn("```diff", section)
+        self.assertIn("-old", section)
+        self.assertIn("+new", section)
+
+    def test_renders_finding_without_optional_fields(self) -> None:
+        """A finding without fix_hint or patch omits those sections."""
+        findings = [
+            self._make_finding(fix_hint=None, patch_diff=None),
+        ]
+        section = _render_canonical_findings_section(findings)
+        self.assertIn("### Finding: broad-except", section)
+        self.assertNotIn("Fix hint", section)
+        self.assertNotIn("```diff", section)
+
+    def test_empty_findings_returns_empty_string(self) -> None:
+        """No findings produces empty section."""
+        self.assertEqual(_render_canonical_findings_section([]), "")
+
+    def test_multiple_findings_grouped_by_file(self) -> None:
+        """Multiple findings in the same file appear together."""
+        findings = [
+            self._make_finding(finding_id="f1", file="a.py", line=10),
+            self._make_finding(finding_id="f2", file="a.py", line=20, category="unused-import"),
+            self._make_finding(finding_id="f3", file="b.py", line=5, category="dead-code"),
+        ]
+        section = _render_canonical_findings_section(findings)
+        self.assertIn("### File: a.py", section)
+        self.assertIn("### File: b.py", section)
+        # Both findings for a.py should appear
+        self.assertIn("broad-except", section)
+        self.assertIn("unused-import", section)
+        self.assertIn("dead-code", section)

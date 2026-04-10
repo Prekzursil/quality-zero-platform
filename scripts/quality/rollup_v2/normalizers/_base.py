@@ -5,15 +5,15 @@ import traceback
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Iterable, final
+from typing import Any, Dict, Iterable, List, Tuple, final
 
 from scripts.quality.rollup_v2.path_safety import (
     PathEscapedRootError,
     validate_finding_file,
 )
 from scripts.quality.rollup_v2.redaction import redact_secrets
-from scripts.quality.rollup_v2.types.corroborator import Corroborator
-from scripts.quality.rollup_v2.types.finding import (
+from scripts.quality.rollup_v2.schema.corroborator import Corroborator
+from scripts.quality.rollup_v2.schema.finding import (
     SCHEMA_VERSION,
     CategoryGroup,
     Finding,
@@ -22,9 +22,9 @@ from scripts.quality.rollup_v2.types.finding import (
 
 @dataclass(frozen=True, slots=True)
 class NormalizerResult:
-    findings: tuple[Finding, ...]
-    normalizer_errors: tuple[dict[str, str], ...]
-    security_drops: tuple[dict[str, str], ...]
+    findings: Tuple[Finding, ...]
+    normalizer_errors: Tuple[Dict[str, str], ...]
+    security_drops: Tuple[Dict[str, str], ...]
 
 
 class BaseNormalizer(ABC):
@@ -50,9 +50,9 @@ class BaseNormalizer(ABC):
 
         This method is @final -- subclasses MUST NOT override it.
         """
-        findings_out: list[Finding] = []
-        errors: list[dict[str, str]] = []
-        drops: list[dict[str, str]] = []
+        findings_out: List[Finding] = []
+        errors: List[Dict[str, str]] = []
+        drops: List[Dict[str, str]] = []
         try:
             raw = list(self.parse(artifact, repo_root))
         except Exception as exc:

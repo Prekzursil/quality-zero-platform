@@ -2,9 +2,9 @@
 from __future__ import absolute_import
 
 import re
-from typing import Final
+from typing import Final, Tuple
 
-_NAMED_ASSIGNMENT_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
+_NAMED_ASSIGNMENT_PATTERNS: Final[Tuple[re.Pattern[str], ...]] = (
     re.compile(
         r"([A-Za-z_][A-Za-z0-9_]*(?:_?(?:KEY|TOKEN|SECRET|PASSWORD|PASS|PWD|DSN|API[_-]?KEY|"
         r"ACCESS[_-]?TOKEN|REFRESH[_-]?TOKEN|CLIENT[_-]?SECRET|PRIVATE[_-]?KEY|AUTH))"
@@ -14,7 +14,7 @@ _NAMED_ASSIGNMENT_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
     ),
 )
 
-_FULL_MATCH_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
+_FULL_MATCH_PATTERNS: Final[Tuple[re.Pattern[str], ...]] = (
     # Bare JWTs
     re.compile(r"\beyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\b"),
     # PEM blocks

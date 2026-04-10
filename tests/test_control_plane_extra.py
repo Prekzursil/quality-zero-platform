@@ -370,7 +370,7 @@ invalid codacy.dashboard_url
         contexts_payload = cast(List[str], outputs[2])
         self.assertEqual(profile_payload["slug"], "Prekzursil/quality-zero-platform")
         self.assertEqual(ruleset_payload["repo_slug"], "Prekzursil/quality-zero-platform")
-        self.assertIn("Coverage 100 Gate", contexts_payload)
+        self.assertIn("shared-scanner-matrix / Coverage 100 Gate", contexts_payload)
 
     def test_script_entrypoint_inserts_repo_root_when_missing(self) -> None:
         """Check the script entrypoint restores the repository root on sys.path."""
@@ -399,4 +399,4 @@ invalid codacy.dashboard_url
             runpy.run_path(str(CONTROL_PLANE_PATH), run_name="__main__")
 
         self.assertEqual(result.exception.code, 0)
-        self.assertIn("Coverage 100 Gate", json.loads(buffer.getvalue()))
+        self.assertIn("shared-scanner-matrix / Coverage 100 Gate", json.loads(buffer.getvalue()))

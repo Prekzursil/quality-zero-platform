@@ -44,6 +44,11 @@ on:
         type: string
         required: false
         default: ubuntu-latest
+      rollup_version:
+        type: string
+        required: false
+        default: "v2"
+        description: "Rollup pipeline version: v2 (canonical/rollup_v2) or v1 (legacy build_quality_rollup.py)"
     secrets:
       SONAR_TOKEN:
         required: false
@@ -387,7 +392,8 @@ jobs:
             --workflows-dir platform/.github/workflows
       - name: SonarCloud scan
         if: matrix.lane == 'coverage' && env.SONAR_TOKEN != ''
-        uses: SonarSource/sonarqube-scan-action@689fb39b34b9aa95ebc5f8f119343ddd51542402  # v4 — pinned per §A.2.4
+        # nosemgrep: generic.secrets.security.detected-sonarqube-docs-api-key -- this is a git commit SHA pin, not an API key
+        uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602  # v6 pinned per §A.2.4
         with:
           projectBaseDir: repo
         env:
@@ -567,7 +573,22 @@ jobs:
           path: artifacts
           pattern: "*-artifacts"
           merge-multiple: false
-      - name: Build quality rollup
+      - name: Build quality rollup (v2)
+        if: ${{ inputs.rollup_version != 'v1' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ROLLUP_REPO_SLUG: ${{ inputs.repo_slug }}
+          ROLLUP_SHA: ${{ inputs.sha != '' && inputs.sha || github.sha }}
+        working-directory: platform
+        run: |
+          mkdir -p ../quality-rollup
+          python -m scripts.quality.rollup_v2 \
+            --artifacts-dir ../artifacts \
+            --output-dir ../quality-rollup \
+            --repo "$ROLLUP_REPO_SLUG" \
+            --sha "$ROLLUP_SHA"
+      - name: Build quality rollup (v1 legacy)
+        if: ${{ inputs.rollup_version == 'v1' }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           ROLLUP_REPO_SLUG: ${{ inputs.repo_slug }}
@@ -591,8 +612,14 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           ROLLUP_REPO_SLUG: ${{ inputs.repo_slug }}
           ROLLUP_PULL_REQUEST: ${{ inputs.pull_request_number }}
+          ROLLUP_VERSION: ${{ inputs.rollup_version }}
         run: |
+          if [ "$ROLLUP_VERSION" != "v1" ]; then
+            MARKDOWN_FILE="quality-rollup/rollup.md"
+          else
+            MARKDOWN_FILE="quality-rollup/summary.md"
+          fi
           python platform/scripts/quality/post_pr_quality_comment.py \
             --repo "$ROLLUP_REPO_SLUG" \
             --pull-request "$ROLLUP_PULL_REQUEST" \
-            --markdown-file quality-rollup/summary.md
+            --markdown-file "$MARKDOWN_FILE"

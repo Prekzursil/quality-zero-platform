@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer
-from scripts.quality.rollup_v2.types.finding import (
+from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_QUALITY,
     Finding,
 )

@@ -12,13 +12,17 @@ Usage:
 """
 from __future__ import absolute_import
 
+from typing import Dict, List
+
 import argparse
 import re
 import sys
 from pathlib import Path
 
-# First-party action owners exempt from SHA pinning
-_EXEMPT_OWNERS: frozenset[str] = frozenset({"actions"})
+# First-party / GitHub-maintained action owners exempt from SHA pinning.
+# actions/* = GitHub first-party (checkout, setup-python, upload-artifact, etc.)
+# github/* = GitHub-maintained tools (codeql-action, super-linter, etc.)
+_EXEMPT_OWNERS: frozenset[str] = frozenset({"actions", "github"})
 
 # Regex to match `uses: owner/repo@ref` lines in workflow YAML
 _USES_RE = re.compile(
@@ -29,12 +33,12 @@ _USES_RE = re.compile(
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
-def scan_workflow(path: Path) -> list[dict[str, str]]:
+def scan_workflow(path: Path) -> List[Dict[str, str]]:
     """Scan a single workflow file for floating-tag action references.
 
     Returns a list of violation dicts with keys: file, line, action, ref.
     """
-    violations: list[dict[str, str]] = []
+    violations: List[Dict[str, str]] = []
     text = path.read_text(encoding="utf-8")
 
     for line_num, line in enumerate(text.splitlines(), start=1):
@@ -67,9 +71,9 @@ def scan_workflow(path: Path) -> list[dict[str, str]]:
     return violations
 
 
-def scan_workflows_dir(workflows_dir: Path) -> list[dict[str, str]]:
+def scan_workflows_dir(workflows_dir: Path) -> List[Dict[str, str]]:
     """Scan all YAML files in a workflows directory."""
-    all_violations: list[dict[str, str]] = []
+    all_violations: List[Dict[str, str]] = []
     if not workflows_dir.is_dir():
         return all_violations
 
@@ -82,7 +86,7 @@ def scan_workflows_dir(workflows_dir: Path) -> list[dict[str, str]]:
     return all_violations
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: List[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Verify third-party GitHub Actions are SHA-pinned (§B.3.6)"
     )

@@ -4,15 +4,15 @@ from __future__ import absolute_import
 import hashlib
 import hmac
 import json
-from typing import Any
+from typing import Any, Dict
 
 
-def _canonical_json(payload: dict[str, Any]) -> bytes:
+def _canonical_json(payload: Dict[str, Any]) -> bytes:
     """Canonical JSON: sorted keys, compact separators, UTF-8 encoded."""
     return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
-def encode_envelope(payload: dict[str, Any], hmac_key: str) -> dict[str, Any]:
+def encode_envelope(payload: Dict[str, Any], hmac_key: str) -> Dict[str, Any]:
     """Create an HMAC-signed envelope around *payload*.
 
     Returns ``{"signature": "hmac-sha256:<hex>", "payload": <payload>}``.
@@ -25,7 +25,7 @@ def encode_envelope(payload: dict[str, Any], hmac_key: str) -> dict[str, Any]:
     return {"signature": f"hmac-sha256:{sig}", "payload": payload}
 
 
-def verify_envelope(envelope: dict[str, Any], hmac_key: str) -> dict[str, Any] | None:
+def verify_envelope(envelope: Dict[str, Any], hmac_key: str) -> Dict[str, Any] | None:
     """Verify the HMAC signature on *envelope*.
 
     Returns the payload dict if valid, ``None`` if tampered, missing keys,

@@ -8,13 +8,15 @@ Checks: accepted == total AND errored == 0. Exits 0 on pass, 1 on fail.
 """
 from __future__ import absolute_import
 
+from typing import List, Tuple
+
 import argparse
 import json
 import sys
 from pathlib import Path
 
 
-def _check_chromatic(data: dict) -> tuple[bool, int, int, int]:
+def _check_chromatic(data: dict) -> Tuple[bool, int, int, int]:
     """Check Chromatic summary. Returns (passed, total, accepted, errored)."""
     summary = data.get("summary", {})
     if not isinstance(summary, dict):
@@ -33,7 +35,7 @@ def _check_chromatic(data: dict) -> tuple[bool, int, int, int]:
     return (passed, total, accepted, errored)
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: List[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Chromatic zero-regression gate")
     parser.add_argument("--json", required=True, dest="json_file", help="Path to Chromatic JSON output")
     parser.add_argument("--out-json", default=None, help="Write JSON summary")

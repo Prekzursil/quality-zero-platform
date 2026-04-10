@@ -1,12 +1,13 @@
 """Deterministic patch generator for `wrong-import-order` category."""
 from __future__ import absolute_import
+from typing import List, Optional, Tuple
 
 import difflib
 import re
 from pathlib import Path
 
-from scripts.quality.rollup_v2.types.finding import Finding
-from scripts.quality.rollup_v2.types.patch import PatchDeclined, PatchResult
+from scripts.quality.rollup_v2.schema.finding import Finding
+from scripts.quality.rollup_v2.schema.patch import PatchDeclined, PatchResult
 
 GENERATOR_VERSION = "wrong_import_order/1.0.0"
 CATEGORY = "wrong-import-order"
@@ -49,15 +50,11 @@ def _classify_import(line: str) -> int:
     return 2  # Assume third-party (conservative)
 
 
-def generate(
-    finding: Finding,
-    source_file_content: str,
-    repo_root: Path,
-) -> PatchResult | PatchDeclined | None:
-    """Sort imports in isort-style order: future, stdlib, third-party, first-party."""
-    lines = source_file_content.splitlines(keepends=True)
+def _find_import_block(lines: List[str]) -> Optional[Tuple[int, int]]:
+    """Find the contiguous import block at the top of the file.
 
-    # Find the contiguous import block at the top of the file
+    Returns (start, end) line indices or None if no imports found.
+    """
     import_start = None
     import_end = None
     for i, line in enumerate(lines):
@@ -67,26 +64,20 @@ def generate(
                 import_start = i
             import_end = i + 1
         elif stripped == "" and import_start is not None:
-            # Allow blank lines within import blocks
             continue
         elif stripped.startswith("#") and import_start is None:  # pragma: no cover -- leading comments before imports
-            # Skip leading comments
             continue
         elif import_start is not None:
             break
-
     if import_start is None or import_end is None:
-        return PatchDeclined(
-            reason_code="ambiguous-fix",
-            reason_text="no import block found",
-            suggested_tier="skip",
-        )
+        return None
+    return (import_start, import_end)
 
-    import_lines = [lines[i] for i in range(import_start, import_end) if lines[i].strip()]
+
+def _build_sorted_block(import_lines: List[str]) -> List[str]:
+    """Sort import lines by group and build a block with group separators."""
     sorted_imports = sorted(import_lines, key=lambda l: (_classify_import(l), l.strip()))
-
-    # Rebuild the import block with group separators
-    grouped: list[str] = []
+    grouped: List[str] = []
     prev_group = -1
     for imp in sorted_imports:
         group = _classify_import(imp)
@@ -94,8 +85,29 @@ def generate(
             grouped.append("\n")
         grouped.append(imp if imp.endswith("\n") else imp + "\n")
         prev_group = group
+    return grouped
 
-    # Replace the import section
+
+def generate(
+    finding: Finding,
+    source_file_content: str,
+    repo_root: Path,
+) -> PatchResult | PatchDeclined | None:
+    """Sort imports in isort-style order: future, stdlib, third-party, first-party."""
+    lines = source_file_content.splitlines(keepends=True)
+
+    block = _find_import_block(lines)
+    if block is None:
+        return PatchDeclined(
+            reason_code="ambiguous-fix",
+            reason_text="no import block found",
+            suggested_tier="skip",
+        )
+
+    import_start, import_end = block
+    import_lines = [lines[i] for i in range(import_start, import_end) if lines[i].strip()]
+    grouped = _build_sorted_block(import_lines)
+
     patched_lines = lines[:import_start] + grouped + lines[import_end:]
     if patched_lines == lines:
         return PatchDeclined(

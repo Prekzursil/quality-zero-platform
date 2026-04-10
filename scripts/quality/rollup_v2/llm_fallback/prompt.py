@@ -4,7 +4,7 @@ from __future__ import absolute_import
 from pathlib import Path
 
 from scripts.quality.rollup_v2.redaction import redact_secrets
-from scripts.quality.rollup_v2.types.finding import Finding
+from scripts.quality.rollup_v2.schema.finding import Finding
 
 _TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "templates" / "llm_patch_prompt.md"
 

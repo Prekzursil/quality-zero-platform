@@ -5,7 +5,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Dict, Iterable, List
 
 if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
@@ -17,7 +17,7 @@ from scripts.quality.rollup_v2.normalizers._sarif import (
     check_sarif_size,
     parse_sarif,
 )
-from scripts.quality.rollup_v2.types.finding import Finding
+from scripts.quality.rollup_v2.schema.finding import Finding
 
 
 class _StubNormalizer(BaseNormalizer):
@@ -28,7 +28,7 @@ class _StubNormalizer(BaseNormalizer):
         return []
 
 
-def _minimal_sarif(results: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+def _minimal_sarif(results: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
     """Build a minimal valid SARIF 2.1.0 envelope."""
     return {
         "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",

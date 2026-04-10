@@ -8,6 +8,8 @@ Exits 0 if zero findings, 1 otherwise.
 """
 from __future__ import absolute_import
 
+from typing import List
+
 import argparse
 import json
 import sys
@@ -25,7 +27,7 @@ def _count_sarif_results(data: dict) -> int:
     return total
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: List[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Semgrep zero-finding gate")
     parser.add_argument("--sarif", required=True, help="Path to Semgrep SARIF output")
     parser.add_argument("--out-json", default=None, help="Write JSON summary")

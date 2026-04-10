@@ -142,7 +142,8 @@ class RunQltyZeroTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(result, 1)
+        # Smells are non-blocking (b2fc326), so only check failures affect exit code
+        self.assertEqual(result, 0)
         self.assertEqual(len(call_args), 2)
         self.assertEqual(
             call_args[0].args[0],
@@ -181,10 +182,11 @@ class RunQltyZeroTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(result, 1)
+        # Smells are non-blocking (b2fc326), so check=pass + smells=fail => overall pass
+        self.assertEqual(result, 0)
         payload = json.loads(json_text)
-        self.assertEqual(payload["status"], "fail")
-        self.assertEqual(payload["return_code"], 1)
+        self.assertEqual(payload["status"], "pass")
+        self.assertEqual(payload["return_code"], 0)
         self.assertEqual(
             payload["commands"],
             [
@@ -286,7 +288,7 @@ class RunQltyZeroTests(unittest.TestCase):
     def test_smells_output_marks_run_as_failed_even_when_cli_exit_code_is_zero(
         self,
     ) -> None:
-        """Cover smells output marks run as failed even when cli exit code is zero."""
+        """Smells findings are recorded but non-blocking per b2fc326."""
         completed_check = type(
             "Completed", (), {"returncode": 0, "stdout": "clean\n", "stderr": ""}
         )()
@@ -300,10 +302,12 @@ class RunQltyZeroTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(result, 1)
+        # Smells are non-blocking: overall result is pass even when smells entry is fail
+        self.assertEqual(result, 0)
         payload = json.loads(json_text)
-        self.assertEqual(payload["status"], "fail")
-        self.assertEqual(payload["return_code"], 1)
+        self.assertEqual(payload["status"], "pass")
+        self.assertEqual(payload["return_code"], 0)
+        # Individual smells entry still records "fail" for visibility
         self.assertEqual(payload["checks"][1]["status"], "fail")
         self.assertIn("one smell", payload["checks"][1]["output_tail"])
 

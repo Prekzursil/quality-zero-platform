@@ -95,8 +95,9 @@ class QltyCoverageNormalizationTests(unittest.TestCase):
             self.assertEqual(len(payload), 2)
             frontend_text = self._normalized_text(payload[1])
             self.assertIn('filename="ui/src/App.tsx"', frontend_text)
+            # Use resolve().as_posix() consistently — the normalizer resolves paths
             self.assertIn(
-                f"<source>{repo_dir.as_posix()}</source>",
+                f"<source>{repo_dir.resolve().as_posix()}</source>",
                 frontend_text,
             )
 
@@ -169,7 +170,8 @@ class QltyCoverageNormalizationTests(unittest.TestCase):
             payload = json.loads(stdout.getvalue())
             normalized = payload[0]["normalized"]
             self.assertIsInstance(normalized, str)
-            self.assertTrue(normalized.startswith(str(out_dir.resolve())))
+            # Normalized paths use posix separators; compare consistently
+            self.assertTrue(normalized.startswith(out_dir.resolve().as_posix()))
             self.assertTrue(normalized.endswith("report-1.info"))
 
     def test_existing_candidate_covers_fallback_and_empty_paths(self) -> None:

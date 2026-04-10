@@ -1,6 +1,8 @@
 """Tests for renderer by-file default view (per design §A.1.1)."""
 from __future__ import absolute_import
 
+from typing import List, Tuple
+
 import sys
 import unittest
 from pathlib import Path
@@ -9,8 +11,8 @@ if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from scripts.quality.rollup_v2.renderer import render_markdown
-from scripts.quality.rollup_v2.types.corroborator import Corroborator
-from scripts.quality.rollup_v2.types.finding import (
+from scripts.quality.rollup_v2.schema.corroborator import Corroborator
+from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_QUALITY,
     CATEGORY_GROUP_SECURITY,
     SCHEMA_VERSION,
@@ -26,7 +28,7 @@ def _make_finding(
     patch: str | None = None,
     patch_source: str = "none",
     autofixable: bool = False,
-    providers: tuple[tuple[str, str | None], ...] = (("Codacy", None),),
+    providers: Tuple[Tuple[str, str | None], ...] = (("Codacy", None),),
     fix_hint: str | None = None,
     category_group: str = CATEGORY_GROUP_QUALITY,
 ) -> Finding:
@@ -65,7 +67,7 @@ def _make_finding(
     )
 
 
-def _payload(findings: list[Finding]) -> dict:
+def _payload(findings: List[Finding]) -> dict:
     return {
         "schema_version": SCHEMA_VERSION,
         "total_findings": len(findings),

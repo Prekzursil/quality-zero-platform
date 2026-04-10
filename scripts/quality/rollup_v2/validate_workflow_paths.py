@@ -11,6 +11,8 @@ Usage:
 """
 from __future__ import absolute_import
 
+from typing import List
+
 import argparse
 import sys
 from pathlib import Path
@@ -18,12 +20,12 @@ from pathlib import Path
 from scripts.quality.rollup_v2.path_safety import PathEscapedRootError, validate_finding_file
 
 
-def validate_paths(repo_root: Path, paths: list[str]) -> list[str]:
+def validate_paths(repo_root: Path, paths: List[str]) -> List[str]:
     """Validate a list of paths against repo_root.
 
     Returns a list of error messages (empty if all paths are valid).
     """
-    errors: list[str] = []
+    errors: List[str] = []
     for p in paths:
         try:
             validate_finding_file(p, repo_root)
@@ -32,7 +34,7 @@ def validate_paths(repo_root: Path, paths: list[str]) -> list[str]:
     return errors
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: List[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Validate workflow-supplied paths against repo root (§B.2.2)"
     )

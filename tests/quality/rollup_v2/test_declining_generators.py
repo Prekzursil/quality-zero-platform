@@ -22,9 +22,9 @@ from scripts.quality.rollup_v2.patches import (
     too_long,
     weak_crypto,
 )
-from scripts.quality.rollup_v2.types.corroborator import Corroborator
-from scripts.quality.rollup_v2.types.finding import SCHEMA_VERSION, Finding
-from scripts.quality.rollup_v2.types.patch import PatchDeclined
+from scripts.quality.rollup_v2.schema.corroborator import Corroborator
+from scripts.quality.rollup_v2.schema.finding import SCHEMA_VERSION, Finding
+from scripts.quality.rollup_v2.schema.patch import PatchDeclined
 
 
 def _make_finding(category: str, category_group: str = "quality") -> Finding:

@@ -1,6 +1,8 @@
 """CLI entrypoint for quality rollup v2 (per design §A.8 + Phase 13)."""
 from __future__ import absolute_import
 
+from typing import Dict, Tuple
+
 import argparse
 import json
 import sys
@@ -9,7 +11,7 @@ from pathlib import Path
 from scripts.quality.rollup_v2.pipeline import run_pipeline
 
 # Artifact discovery: maps lane key -> (subdir, filename)
-_ARTIFACT_LOCATIONS: dict[str, tuple[str, str]] = {
+_ARTIFACT_LOCATIONS: Dict[str, Tuple[str, str]] = {
     "codacy": ("codacy", "codacy.json"),
     "coverage": ("coverage", "coverage.json"),
     "deepscan": ("deepscan", "deepscan.json"),
@@ -63,9 +65,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _load_artifacts(artifacts_dir: Path) -> dict[str, object]:
+def _load_artifacts(artifacts_dir: Path) -> Dict[str, object]:
     """Discover and load JSON artifacts from the artifacts directory."""
-    artifacts: dict[str, object] = {}
+    artifacts: Dict[str, object] = {}
     for lane_key, (subdir, filename) in _ARTIFACT_LOCATIONS.items():
         json_path = artifacts_dir / subdir / filename
         if json_path.is_file():

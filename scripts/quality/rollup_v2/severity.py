@@ -1,9 +1,9 @@
 """Severity ordering for canonical findings (per design §A.4.2)."""
 from __future__ import absolute_import
 
-from typing import Final, Sequence
+from typing import Final, Sequence, Tuple
 
-SEVERITY_ORDER: Final[tuple[str, ...]] = ("critical", "high", "medium", "low", "info")
+SEVERITY_ORDER: Final[Tuple[str, ...]] = ("critical", "high", "medium", "low", "info")
 
 
 def max_severity(severities: Sequence[str]) -> str:

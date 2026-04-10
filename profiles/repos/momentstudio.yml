@@ -38,6 +38,17 @@ providers:
     project_name: momentstudio
   sonar:
     project_key_parts: [Prekzursil, AdrianaArt]
+visual_regression:
+  chromatic:
+    enabled: true
+    project_token_secret: CHROMATIC_PROJECT_TOKEN
+    storybook_build_script: "npm run build-storybook"
+    storybook_dir: "storybook-static"
+  applitools:
+    enabled: true
+    api_key_secret: APPLITOOLS_API_KEY
+    batch_name_strategy: "branch-sha"
+    eyes_config_path: "applitools.config.js"
 codeql:
   languages:
     - actions

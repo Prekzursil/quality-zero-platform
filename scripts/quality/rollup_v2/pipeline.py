@@ -13,12 +13,14 @@ from typing import Any
 from scripts.quality.rollup_v2.dedup import assign_stable_ids, dedup
 from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer, NormalizerResult
 from scripts.quality.rollup_v2.normalizers.codacy import CodacyNormalizer
+from scripts.quality.rollup_v2.normalizers.codeql import CodeQLNormalizer
 from scripts.quality.rollup_v2.normalizers.coverage import CoverageNormalizer
 from scripts.quality.rollup_v2.normalizers.deepscan import DeepScanNormalizer
 from scripts.quality.rollup_v2.normalizers.deepsource import DeepSourceNormalizer
 from scripts.quality.rollup_v2.normalizers.dependabot import DependabotNormalizer
 from scripts.quality.rollup_v2.normalizers.qlty import QLTYNormalizer
 from scripts.quality.rollup_v2.normalizers.secrets import SecretsNormalizer
+from scripts.quality.rollup_v2.normalizers.semgrep import SemgrepNormalizer
 from scripts.quality.rollup_v2.normalizers.sentry import SentryNormalizer
 from scripts.quality.rollup_v2.normalizers.sonarcloud import SonarCloudNormalizer
 from scripts.quality.rollup_v2 import patches as patch_dispatcher
@@ -29,20 +31,20 @@ from scripts.quality.rollup_v2.types.patch import PatchResult
 # Normalizer registry: maps artifact key -> normalizer instance
 NORMALIZER_REGISTRY: dict[str, BaseNormalizer] = {
     "codacy": CodacyNormalizer(),
+    "codeql": CodeQLNormalizer(),
     "coverage": CoverageNormalizer(),
     "deepscan": DeepScanNormalizer(),
     "deepsource": DeepSourceNormalizer(),
     "dependabot": DependabotNormalizer(),
     "qlty": QLTYNormalizer(),
     "secrets": SecretsNormalizer(),
+    "semgrep": SemgrepNormalizer(),
     "sentry": SentryNormalizer(),
     "sonarcloud": SonarCloudNormalizer(),
 }
 
-# Pre-reserved lane keys for PR 3 (§A.5)
+# Pre-reserved lane keys for PR 3+ (§A.5) — lanes not yet wired as normalizers
 RESERVED_LANE_KEYS: dict[str, str] = {
-    "semgrep": "Semgrep Zero",
-    "codeql": "CodeQL Zero",
     "chromatic": "Chromatic Zero",
     "applitools": "Applitools Zero",
 }

@@ -2,7 +2,7 @@
 from __future__ import absolute_import
 
 from dataclasses import dataclass
-from typing import Final, Literal
+from typing import Final, Literal, Tuple
 
 from scripts.quality.rollup_v2.types.corroborator import Corroborator
 
@@ -43,7 +43,7 @@ class Finding:
     severity: str
     corroboration: Corroboration
     primary_message: str
-    corroborators: tuple[Corroborator, ...]
+    corroborators: Tuple[Corroborator, ...]
     fix_hint: str | None
     patch: str | None
     patch_source: PatchSource
@@ -52,7 +52,7 @@ class Finding:
     source_file_hash: str
     cwe: str | None
     autofixable: bool
-    tags: tuple[str, ...]
+    tags: Tuple[str, ...]
     patch_error: str | None = None   # per A.6 — set when a patch generator raised; none otherwise
 
     def __post_init__(self) -> None:

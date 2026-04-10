@@ -8,7 +8,7 @@ from __future__ import absolute_import
 from collections import defaultdict
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List
 
 from scripts.quality.rollup_v2.dedup import assign_stable_ids, dedup
 from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer, NormalizerResult
@@ -31,7 +31,7 @@ from scripts.quality.rollup_v2.types.finding import Finding
 from scripts.quality.rollup_v2.types.patch import PatchResult
 
 # Normalizer registry: maps artifact key -> normalizer instance
-NORMALIZER_REGISTRY: dict[str, BaseNormalizer] = {
+NORMALIZER_REGISTRY: Dict[str, BaseNormalizer] = {
     "applitools": ApplitoolsNormalizer(),
     "chromatic": ChromaticNormalizer(),
     "codacy": CodacyNormalizer(),
@@ -48,21 +48,21 @@ NORMALIZER_REGISTRY: dict[str, BaseNormalizer] = {
 }
 
 # Pre-reserved lane keys (§A.5) — all 4 PR 3 lanes now registered above
-RESERVED_LANE_KEYS: dict[str, str] = {}
+RESERVED_LANE_KEYS: Dict[str, str] = {}
 
 
 @dataclass(frozen=True, slots=True)
 class PipelineResult:
     """Immutable result of a pipeline run."""
 
-    findings: list[Finding]
-    normalizer_errors: list[dict[str, str]]
-    security_drops: list[dict[str, str]]
-    canonical_payload: dict[str, Any]
+    findings: List[Finding]
+    normalizer_errors: List[Dict[str, str]]
+    security_drops: List[Dict[str, str]]
+    canonical_payload: Dict[str, Any]
     markdown: str
 
 
-def _derive_autofixable(findings: list[Finding]) -> list[Finding]:
+def _derive_autofixable(findings: List[Finding]) -> List[Finding]:
     """Derive autofixable from patch_source (per §A.4.1).
 
     Called once per pipeline run AFTER patch dispatch.
@@ -84,11 +84,11 @@ def _read_source_file(file_path: str, repo_root: Path) -> str:
 
 
 def _apply_patches(
-    findings: list[Finding],
+    findings: List[Finding],
     repo_root: Path,
-) -> list[Finding]:
+) -> List[Finding]:
     """Run patch dispatch for each finding and update with results."""
-    result: list[Finding] = []
+    result: List[Finding] = []
     for f in findings:
         source_content = _read_source_file(f.file, repo_root)
         try:
@@ -117,9 +117,9 @@ def _apply_patches(
     return result
 
 
-def _build_provider_summaries(findings: list[Finding]) -> list[dict[str, Any]]:
+def _build_provider_summaries(findings: List[Finding]) -> List[Dict[str, Any]]:
     """Build per-provider summary counts for the canonical payload."""
-    by_provider: dict[str, dict[str, int]] = defaultdict(
+    by_provider: Dict[str, Dict[str, int]] = defaultdict(
         lambda: {"total": 0, "high": 0, "medium": 0, "low": 0}
     )
     for f in findings:
@@ -129,14 +129,14 @@ def _build_provider_summaries(findings: list[Finding]) -> list[dict[str, Any]]:
             sev = f.severity.lower()
             if sev in counts:
                 counts[sev] += 1
-    summaries: list[dict[str, Any]] = []
+    summaries: List[Dict[str, Any]] = []
     for provider in sorted(by_provider):
         counts = by_provider[provider]
         summaries.append({"provider": provider, **counts})
     return summaries
 
 
-def _build_not_configured_summaries() -> list[dict[str, Any]]:
+def _build_not_configured_summaries() -> List[Dict[str, Any]]:
     """Build placeholder summaries for reserved-but-not-configured lanes."""
     return [
         {"provider": label, "status": "not-configured", "total": 0, "high": 0, "medium": 0, "low": 0}
@@ -144,7 +144,7 @@ def _build_not_configured_summaries() -> list[dict[str, Any]]:
     ]
 
 
-def _finding_to_dict(f: Finding) -> dict[str, Any]:
+def _finding_to_dict(f: Finding) -> Dict[str, Any]:
     """Serialize a Finding to a JSON-safe dict."""
     return {
         "schema_version": f.schema_version,
@@ -182,7 +182,7 @@ def _finding_to_dict(f: Finding) -> dict[str, Any]:
 
 
 def run_pipeline(
-    artifacts: dict[str, Any],
+    artifacts: Dict[str, Any],
     repo_root: Path,
     output_dir: Path,
 ) -> PipelineResult:
@@ -197,9 +197,9 @@ def run_pipeline(
     6. Build canonical payload
     7. Render markdown
     """
-    all_findings: list[Finding] = []
-    all_errors: list[dict[str, str]] = []
-    all_drops: list[dict[str, str]] = []
+    all_findings: List[Finding] = []
+    all_errors: List[Dict[str, str]] = []
+    all_drops: List[Dict[str, str]] = []
 
     # Step 1-2: Normalize
     for key, artifact in artifacts.items():
@@ -230,7 +230,7 @@ def run_pipeline(
         if placeholder["provider"] not in configured_providers:
             provider_summaries.append(placeholder)
 
-    canonical_payload: dict[str, Any] = {
+    canonical_payload: Dict[str, Any] = {
         "schema_version": "qzp-rollup/1",
         "total_findings": len(final_findings),
         "findings": final_findings,

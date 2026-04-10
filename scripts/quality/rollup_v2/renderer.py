@@ -2,7 +2,7 @@
 from __future__ import absolute_import
 
 from collections import defaultdict
-from typing import Any, Sequence
+from typing import Any, Dict, List, Sequence, Tuple
 
 from scripts.quality.rollup_v2.redaction import redact_secrets
 from scripts.quality.rollup_v2.severity import SEVERITY_ORDER
@@ -14,7 +14,7 @@ _MAX_FINDINGS_BEFORE_COLLAPSE: int = 200
 _MAX_CHARS: int = 60_000
 
 # --- Severity emoji mapping ---
-_SEVERITY_EMOJI: dict[str, str] = {
+_SEVERITY_EMOJI: Dict[str, str] = {
     "critical": "\U0001f534",  # red circle
     "high": "\U0001f534",      # red circle
     "medium": "\U0001f7e1",    # yellow circle
@@ -35,20 +35,20 @@ def _safe(value: str | None) -> str:
     return redact_secrets(value)
 
 
-def _provider_label(providers: Sequence[dict[str, Any]]) -> str:
+def _provider_label(providers: Sequence[Dict[str, Any]]) -> str:
     """Format provider count with correct pluralization."""
     n = len(providers)
     return f"{n} provider{'s' if n != 1 else ''}"
 
 
-def _render_empty(payload: dict[str, Any]) -> str:
+def _render_empty(payload: Dict[str, Any]) -> str:
     """Render the celebration banner when there are zero findings."""
     n_providers = len(payload.get("provider_summaries", []))
     label = f"{n_providers} provider{'s' if n_providers != 1 else ''}"
     return f"\u2705 **All gates passed \u2014 0 findings across {label}.**\n"
 
 
-def _render_provider_summary_table(payload: dict[str, Any]) -> str:
+def _render_provider_summary_table(payload: Dict[str, Any]) -> str:
     """Render the provider summary GFM table (§4.1)."""
     summaries = payload.get("provider_summaries", [])
     if not summaries:
@@ -114,9 +114,9 @@ def _render_finding_body(f: Finding) -> str:
     return "\n".join(lines)
 
 
-def _group_findings_by_file(findings: Sequence[Finding]) -> list[tuple[str, list[Finding]]]:
+def _group_findings_by_file(findings: Sequence[Finding]) -> List[Tuple[str, List[Finding]]]:
     """Group findings by file, sorted by (finding_count DESC, file_path ASC)."""
-    by_file: dict[str, list[Finding]] = defaultdict(list)
+    by_file: Dict[str, List[Finding]] = defaultdict(list)
     for f in findings:
         by_file[f.file].append(f)
     # Sort: most findings first, then alphabetical for tie-break
@@ -130,7 +130,7 @@ def _render_by_file_view(
 ) -> str:
     """Render the default by-file view (§A.1.1)."""
     grouped = _group_findings_by_file(findings)
-    lines: list[str] = []
+    lines: List[str] = []
 
     for idx, (file_path, file_findings) in enumerate(grouped):
         if collapse_after is not None and idx == collapse_after:
@@ -155,11 +155,11 @@ def _render_by_file_view(
 
 def _render_by_provider_view(findings: Sequence[Finding]) -> str:
     """Render the alternate by-provider view."""
-    by_provider: dict[str, list[Finding]] = defaultdict(list)
+    by_provider: Dict[str, List[Finding]] = defaultdict(list)
     for f in findings:
         for c in f.corroborators:
             by_provider[c.provider].append(f)
-    lines: list[str] = []
+    lines: List[str] = []
     for provider in sorted(by_provider):
         pf = by_provider[provider]
         lines.append(f"### {provider} ({len(pf)} finding{'s' if len(pf) != 1 else ''})\n")
@@ -174,10 +174,10 @@ def _render_by_provider_view(findings: Sequence[Finding]) -> str:
 
 def _render_by_severity_view(findings: Sequence[Finding]) -> str:
     """Render the alternate by-severity view."""
-    by_sev: dict[str, list[Finding]] = defaultdict(list)
+    by_sev: Dict[str, List[Finding]] = defaultdict(list)
     for f in findings:
         by_sev[f.severity.lower()].append(f)
-    lines: list[str] = []
+    lines: List[str] = []
     for sev in SEVERITY_ORDER:
         if sev not in by_sev:
             continue
@@ -199,7 +199,7 @@ def _render_autofixable_view(findings: Sequence[Finding]) -> str:
     fixable = [f for f in findings if f.autofixable]
     if not fixable:
         return "_No autofixable findings._\n"
-    lines: list[str] = []
+    lines: List[str] = []
     lines.append(f"**{len(fixable)} autofixable finding{'s' if len(fixable) != 1 else ''}:**\n")
     for f in sorted(fixable, key=lambda x: (x.file, x.line)):
         lines.append(
@@ -212,7 +212,7 @@ def _render_autofixable_view(findings: Sequence[Finding]) -> str:
 
 def _render_alternate_views(findings: Sequence[Finding]) -> str:
     """Render all alternate views wrapped in <details> (§A.1.1)."""
-    sections: list[str] = []
+    sections: List[str] = []
 
     sections.append("<details><summary>View by provider</summary>\n")
     sections.append(_render_by_provider_view(findings))
@@ -239,7 +239,7 @@ def _render_footer() -> str:
     )
 
 
-def _render_normalizer_errors(payload: dict[str, Any]) -> str:
+def _render_normalizer_errors(payload: Dict[str, Any]) -> str:
     """Render normalizer error banner if any errors occurred."""
     errors = payload.get("normalizer_errors", [])
     if not errors:
@@ -253,21 +253,21 @@ def _render_normalizer_errors(payload: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def render_markdown(payload: dict[str, Any]) -> str:
+def render_markdown(payload: Dict[str, Any]) -> str:
     """Render the full multi-view markdown report from a rollup payload.
 
     Deterministic: same input always produces the same output.
     Belt-and-suspenders: all user-content strings are redacted before emission.
     """
     total = payload.get("total_findings", 0)
-    findings: list[Finding] = payload.get("findings", [])
+    findings: List[Finding] = payload.get("findings", [])
 
     # Empty state (only celebrate if there are also no normalizer errors)
     has_normalizer_errors = bool(payload.get("normalizer_errors"))
     if total == 0 and not findings and not has_normalizer_errors:
         return _render_empty(payload)
 
-    parts: list[str] = []
+    parts: List[str] = []
 
     # Normalizer error banner
     parts.append(_render_normalizer_errors(payload))

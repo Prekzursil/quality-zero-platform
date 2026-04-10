@@ -1,6 +1,8 @@
 """Tests for renderer high-volume truncation + footer (per design §A.1.2 + §B.3.9 + §B.3.15 + §B.3.8)."""
 from __future__ import absolute_import
 
+from typing import List
+
 import sys
 import unittest
 from pathlib import Path
@@ -61,7 +63,7 @@ def _make_finding(
     )
 
 
-def _many_findings(n_files: int, per_file: int) -> list[Finding]:
+def _many_findings(n_files: int, per_file: int) -> List[Finding]:
     findings = []
     for fi in range(n_files):
         for li in range(per_file):
@@ -71,7 +73,7 @@ def _many_findings(n_files: int, per_file: int) -> list[Finding]:
     return findings
 
 
-def _payload(findings: list[Finding]) -> dict:
+def _payload(findings: List[Finding]) -> dict:
     return {
         "schema_version": SCHEMA_VERSION,
         "total_findings": len(findings),

@@ -5,7 +5,7 @@ import json
 import sys
 import unittest
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List
 
 if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
@@ -17,7 +17,7 @@ from scripts.quality.rollup_v2.types.finding import SCHEMA_VERSION, Finding
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "renderer"
 
 
-def _build_findings(count: int, *, unicode: bool = False) -> list[Finding]:
+def _build_findings(count: int, *, unicode: bool = False) -> List[Finding]:
     """Build deterministic findings for golden fixture tests."""
     files = [
         "src/api/auth.py",
@@ -38,7 +38,7 @@ def _build_findings(count: int, *, unicode: bool = False) -> list[Finding]:
     providers = ["QLTY", "SonarCloud", "Codacy", "DeepSource", "DeepScan"]
     patch_sources = ["deterministic", "none", "llm"]
 
-    findings: list[Finding] = []
+    findings: List[Finding] = []
     for i in range(count):
         f_idx = i % len(files)
         c_idx = i % len(categories)
@@ -116,12 +116,12 @@ def _build_findings(count: int, *, unicode: bool = False) -> list[Finding]:
     return findings
 
 
-def _build_payload(findings: list[Finding]) -> dict[str, Any]:
+def _build_payload(findings: List[Finding]) -> Dict[str, Any]:
     """Build a render-ready payload from findings."""
     # Build provider summaries
     from collections import defaultdict
 
-    by_provider: dict[str, dict[str, int]] = defaultdict(
+    by_provider: Dict[str, Dict[str, int]] = defaultdict(
         lambda: {"total": 0, "high": 0, "medium": 0, "low": 0}
     )
     for f in findings:

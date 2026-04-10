@@ -1,6 +1,8 @@
 """Tests for renderer provider summary table + alternate views (per design §4.1 + §A.1.1)."""
 from __future__ import absolute_import
 
+from typing import Tuple
+
 import sys
 import unittest
 from pathlib import Path
@@ -26,7 +28,7 @@ def _make_finding(
     patch: str | None = None,
     patch_source: str = "none",
     autofixable: bool = False,
-    providers: tuple[tuple[str, str | None], ...] = (("Codacy", None),),
+    providers: Tuple[Tuple[str, str | None], ...] = (("Codacy", None),),
     category_group: str = CATEGORY_GROUP_QUALITY,
 ) -> Finding:
     corroborators = tuple(

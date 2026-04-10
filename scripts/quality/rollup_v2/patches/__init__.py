@@ -1,6 +1,8 @@
 """Patch generator dispatcher (per design §A.1.4)."""
 from __future__ import absolute_import
 
+from typing import Dict
+
 from pathlib import Path
 
 from scripts.quality.rollup_v2.path_safety import PathEscapedRootError, validate_finding_file
@@ -42,7 +44,7 @@ from scripts.quality.rollup_v2.patches import (
 )
 
 # Populated by Phase 9 tasks. 31 entries: 30 from §5.1 + 1 coverage-gap (Task 9.31).
-GENERATORS: dict[str, object] = {
+GENERATORS: Dict[str, object] = {
     "assert-in-production": assert_in_production,
     "bad-line-ending": bad_line_ending,
     "bare-raise": bare_raise,

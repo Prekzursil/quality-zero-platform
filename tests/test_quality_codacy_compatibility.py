@@ -26,13 +26,20 @@ def _non_comment_line_count(path: Path) -> int:
     return total
 
 
+def _is_fixture_input(path: Path) -> bool:
+    """Return True for patch-harness fixture input files (intentionally bad Python)."""
+    return "fixtures" in path.parts and path.name.endswith(".input.py")
+
+
 def _python_sources():
     """Handle python sources."""
     sources = []
     for directory_name in TARGET_DIRS:
         directory = ROOT / directory_name
         sources.extend(
-            path for path in directory.rglob("*.py") if "__pycache__" not in path.parts
+            path
+            for path in directory.rglob("*.py")
+            if "__pycache__" not in path.parts and not _is_fixture_input(path)
         )
     return sorted(sources)
 

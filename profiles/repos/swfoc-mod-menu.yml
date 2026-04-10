@@ -24,6 +24,9 @@ coverage:
     default: enforce
     pull_request: non_regression
   evidence_note: PRs enforce non-regression against the last successful protected-branch baseline.
+visual_pair_required: true
+visual_lane:
+  kind: desktop-adapter
 trigger:
   mode: standard
   pr_head_sha: true

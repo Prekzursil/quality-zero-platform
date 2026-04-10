@@ -37,6 +37,7 @@ required_contexts:
     - shared-scanner-matrix / Semgrep Zero
     - shared-scanner-matrix / Sentry Zero
     - shared-scanner-matrix / DeepScan Zero
+    - shared-scanner-matrix / DeepSource Visible Zero
     - aggregate-gate / Quality Zero Gate
     - shared-scanner-matrix / Quality Rollup
   target:

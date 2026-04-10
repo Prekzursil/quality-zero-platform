@@ -228,14 +228,13 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c", remediation_text)
 
     def test_scanner_matrix_pins_codecov_upload_and_keeps_token_optional(self) -> None:
-        """Keep Codecov uploads pinned and compatible with optional tokenless OIDC mode."""
+        """Codecov upload removed from scanner-matrix per §7.3 — kept in reusable-codecov-analytics.yml only."""
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
+        # Scanner-matrix still declares the token secret (forwarded to lane runtime)
         self.assertIn("CODECOV_TOKEN:", text)
         self.assertIn("required: false", text)
-        self.assertIn("codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de", text)
-        self.assertIn("use_oidc: ${{ secrets.CODECOV_TOKEN == '' }}", text)
-        self.assertIn("token: ${{ secrets.CODECOV_TOKEN }}", text)
-        self.assertIn("files: ${{ steps.profile.outputs.coverage_input_files }}", text)
+        # Codecov upload action must NOT be in scanner-matrix (removed per §7.3)
+        self.assertNotIn("codecov/codecov-action@", text)
 
         wrapper_text = (ROOT / ".github" / "workflows" / "quality-zero-platform.yml").read_text(encoding="utf-8")
         self.assertIn("CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}", wrapper_text)
@@ -245,7 +244,7 @@ class WorkflowContractTests(unittest.TestCase):
 
         reusable_text = (ROOT / ".github" / "workflows" / "reusable-codecov-analytics.yml").read_text(encoding="utf-8")
         self.assertIn("required: false", reusable_text)
-        self.assertIn("codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de", reusable_text)
+        self.assertIn("codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe", reusable_text)
         self.assertIn("use_oidc: ${{ secrets.CODECOV_TOKEN == '' }}", reusable_text)
         self.assertIn("token: ${{ secrets.CODECOV_TOKEN }}", reusable_text)
         self.assertIn("files: ${{ steps.profile.outputs.coverage_input_files }}", reusable_text)

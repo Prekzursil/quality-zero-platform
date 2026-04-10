@@ -1,0 +1,37 @@
+{
+  "builds": [
+    {
+      "id": "build-abc123",
+      "status": "ACCEPTED",
+      "changeCount": 2,
+      "errCount": 0,
+      "componentCount": 15,
+      "specCount": 30,
+      "result": "SUCCESS",
+      "webUrl": "https://www.chromatic.com/build?appId=abc&number=42",
+      "storybookUrl": "https://abc--42.chromatic.com",
+      "changes": [
+        {
+          "component": "Button",
+          "story": "Primary",
+          "status": "CHANGED",
+          "changeUrl": "https://www.chromatic.com/snapshot?appId=abc&id=snap1"
+        },
+        {
+          "component": "Header",
+          "story": "Default",
+          "status": "CHANGED",
+          "changeUrl": "https://www.chromatic.com/snapshot?appId=abc&id=snap2"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total": 30,
+    "accepted": 28,
+    "rejected": 0,
+    "errored": 0,
+    "changed": 2,
+    "unchanged": 28
+  }
+}

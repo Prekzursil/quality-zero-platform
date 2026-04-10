@@ -165,6 +165,45 @@ jobs:
             --prompt-file "$RUNNER_TEMP/remediation-prompt.md" \
             --output-last-message "$RUNNER_TEMP/codex-last-message.txt" \
             --json-log "$RUNNER_TEMP/codex-events.jsonl"
+      - name: Post-remediation blocked-paths check (§B.3.17)
+        working-directory: repo
+        run: |
+          BLOCKED_PATTERNS=(
+            ".github/**"
+            "Dockerfile"
+            "docker-compose*.yml"
+            "requirements*.txt"
+            "pyproject.toml"
+            "setup.py"
+            ".npmrc"
+            ".pip/pip.conf"
+          )
+          VIOLATIONS=""
+          CHANGED=$(git diff --no-renames --name-only HEAD 2>/dev/null || true)
+          if [ -z "$CHANGED" ]; then
+            echo "No file changes detected after remediation."
+            exit 0
+          fi
+          for pattern in "${BLOCKED_PATTERNS[@]}"; do
+            MATCHES=$(echo "$CHANGED" | python3 -c "
+          import fnmatch, sys
+          pattern = '$pattern'
+          for line in sys.stdin:
+              line = line.strip()
+              if fnmatch.fnmatch(line, pattern):
+                  print(line)
+          " || true)
+            if [ -n "$MATCHES" ]; then
+              VIOLATIONS="${VIOLATIONS}${MATCHES}"$'\n'
+            fi
+          done
+          if [ -n "$VIOLATIONS" ]; then
+            echo "::error::Post-remediation blocked-paths violation (§B.3.17):"
+            echo "$VIOLATIONS" | sort -u
+            echo "Codex remediation touched protected infrastructure files. Aborting PR creation."
+            exit 1
+          fi
+          echo "Post-remediation blocked-paths check passed."
       - name: Upload Codex execution artifacts
         if: always()
         uses: actions/upload-artifact@v4

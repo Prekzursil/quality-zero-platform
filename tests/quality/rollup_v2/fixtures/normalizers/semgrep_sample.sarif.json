@@ -1,0 +1,66 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Semgrep",
+          "semanticVersion": "1.50.0",
+          "rules": [
+            {
+              "id": "python.lang.security.dangerous-eval",
+              "shortDescription": {"text": "Dangerous dynamic code invocation"},
+              "helpUri": "https://semgrep.dev/r/python.lang.security.dangerous-eval"
+            },
+            {
+              "id": "python.lang.security.weak-cryptographic-hash",
+              "shortDescription": {"text": "Use of weak cryptographic hash"},
+              "helpUri": "https://semgrep.dev/r/python.lang.security.weak-cryptographic-hash"
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "python.lang.security.dangerous-eval",
+          "level": "error",
+          "message": {"text": "Detected dynamic code invocation. This can allow arbitrary code running."},
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {"uri": "src/utils.py"},
+                "region": {
+                  "startLine": 15,
+                  "startColumn": 5,
+                  "endLine": 15,
+                  "snippet": {"text": "result = run_dynamic(user_input)"}
+                }
+              }
+            }
+          ],
+          "properties": {"tags": ["security", "CWE-95"]}
+        },
+        {
+          "ruleId": "python.lang.security.weak-cryptographic-hash",
+          "level": "warning",
+          "message": {"text": "Use of MD5 detected. MD5 is considered weak."},
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {"uri": "src/auth.py"},
+                "region": {
+                  "startLine": 42,
+                  "startColumn": 1,
+                  "endLine": 42,
+                  "snippet": {"text": "h = hashlib.md5(data)"}
+                }
+              }
+            }
+          ],
+          "properties": {"tags": ["security"]}
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "batchId": "batch-xyz-789",
+  "batchName": "PR #42 visual tests",
+  "batchUrl": "https://eyes.applitools.com/app/batches/batch-xyz-789",
+  "stepsInfo": {
+    "total": 20,
+    "passed": 17,
+    "unresolved": 2,
+    "failed": 1,
+    "mismatches": 2,
+    "missing": 0,
+    "new": 0
+  },
+  "results": [
+    {
+      "testName": "Homepage - Chrome",
+      "status": "Unresolved",
+      "stepCount": 3,
+      "unresolvedCount": 1,
+      "failedCount": 0,
+      "url": "https://eyes.applitools.com/app/test-results/test-001"
+    },
+    {
+      "testName": "Dashboard - Firefox",
+      "status": "Failed",
+      "stepCount": 5,
+      "unresolvedCount": 0,
+      "failedCount": 1,
+      "url": "https://eyes.applitools.com/app/test-results/test-002"
+    },
+    {
+      "testName": "Settings - Chrome",
+      "status": "Unresolved",
+      "stepCount": 2,
+      "unresolvedCount": 1,
+      "failedCount": 0,
+      "url": "https://eyes.applitools.com/app/test-results/test-003"
+    }
+  ]
+}

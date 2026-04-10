@@ -8,7 +8,7 @@ It replaces the old queue/template baseline with reusable workflows, shared qual
 - `inventory/repos.yml`: enrolled repositories, rollout wave, and profile bindings
 - `profiles/stacks/*.yml`: reusable stack defaults
 - `profiles/repos/*.yml`: repo-specific overrides
-- `scripts/quality/`: shared strict-zero policy, provider checks, ruleset generation, and remediation prompt rendering
+- `scripts/quality/`: shared strict-zero policy, provider checks (13 providers: Codacy, CodeQL, Chromatic, Applitools, SonarCloud, DeepSource, DeepScan, QLTY, Sentry, Semgrep, Dependabot, Coverage, Secrets), ruleset generation, and remediation prompt rendering
 - `scripts/provider_ui/`: Playwright-based provider-admin bootstrap scripts that persist browser state outside the repo
 - `.github/workflows/`: reusable workflows called by governed repos, including push-parity scanner, gate, rollup, admin, Pages, and Codecov analytics lanes
 - `templates/repo/`: thin wrapper contract for governed repos
@@ -41,7 +41,7 @@ Phase-1 compatibility still preserves the established public check names for the
 3. Ruleset payloads are generated from the same repo profile data that powers the gate.
 4. Failed pull requests enter the trusted-runner Codex remediation loop and write only to `codex/fix/<context>/<shortsha>`.
 5. Nightly backlog sweeps isolate one tool lane per run on `codex/backlog/<tool>`.
-6. Pull requests receive one aggregated quality rollup comment instead of forcing reviewers to inspect every individual scanner artifact.
+6. Pull requests receive one aggregated quality rollup v2 comment (multi-view markdown with by-file, by-severity, and provider-summary views) instead of forcing reviewers to inspect every individual scanner artifact.
 
 ## Hybrid Ratchet
 

@@ -1,0 +1,92 @@
+name: Reusable Chromatic Visual Regression
+
+permissions: {}
+
+on:
+  workflow_call:
+    inputs:
+      repo_slug:
+        type: string
+        required: true
+      storybook_build_script:
+        type: string
+        required: false
+        default: "npm run build-storybook"
+      storybook_dir:
+        type: string
+        required: false
+        default: "storybook-static"
+      working_directory:
+        type: string
+        required: false
+        default: "."
+      platform_repository:
+        type: string
+        required: false
+        default: Prekzursil/quality-zero-platform
+      platform_ref:
+        type: string
+        required: false
+        default: main
+    secrets:
+      CHROMATIC_PROJECT_TOKEN:
+        required: true
+
+jobs:
+  chromatic:
+    name: Chromatic Playwright
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.platform_repository }}
+          ref: ${{ inputs.platform_ref }}
+          path: platform
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install platform dependencies
+        run: python -m pip install -r platform/requirements-dev.txt
+
+      - name: Validate storybook_dir path (§B.2.2)
+        run: |
+          python platform/scripts/quality/rollup_v2/validate_workflow_paths.py \
+            --repo-root "${{ github.workspace }}" \
+            --path "${{ inputs.storybook_dir }}"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        working-directory: ${{ inputs.working_directory }}
+        run: npm ci
+
+      - name: Run Chromatic
+        id: chromatic
+        uses: chromaui/action@1cfa065cbdab28f6ca3afaeb3d761383076a35aa  # v11 — pinned per §A.2.4
+        with:
+          projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+          buildScriptName: ${{ inputs.storybook_build_script }}
+          storybookBuildDir: ${{ inputs.storybook_dir }}
+          workingDir: ${{ inputs.working_directory }}
+          exitZeroOnChanges: true
+          exitOnceUploaded: true
+
+      - name: Upload Chromatic artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chromatic-artifacts
+          path: |
+            ${{ inputs.working_directory }}/${{ inputs.storybook_dir }}

@@ -1,0 +1,26 @@
+# Visual Regression Profile Schema (per §9.3 §9.4)
+#
+# Add this block to any repo profile under `profiles/repos/<repo>.yml`
+# to enable Chromatic and/or Applitools visual regression lanes.
+#
+# All fields shown with their defaults. Only `enabled: true` is required
+# to activate a provider.
+
+visual_regression:
+  chromatic:
+    enabled: false
+    # Name of the GitHub Actions secret holding the Chromatic project token
+    project_token_secret: CHROMATIC_PROJECT_TOKEN
+    # npm script used to build Storybook
+    storybook_build_script: "npm run build-storybook"
+    # Directory where the built Storybook is output
+    storybook_dir: "storybook-static"
+
+  applitools:
+    enabled: false
+    # Name of the GitHub Actions secret holding the Applitools API key
+    api_key_secret: APPLITOOLS_API_KEY
+    # Strategy for naming Applitools batches: "branch-sha" or "pr-number"
+    batch_name_strategy: "branch-sha"
+    # Path to the Applitools Eyes configuration file (validated via §B.2.2)
+    eyes_config_path: "applitools.config.js"

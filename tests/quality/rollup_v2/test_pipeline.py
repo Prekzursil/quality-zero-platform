@@ -186,11 +186,12 @@ class ProviderSummaryBranchTests(unittest.TestCase):
         self.assertEqual(summaries[0]["low"], 0)
 
     def test_placeholder_skipped_when_provider_already_configured(self) -> None:
-        """Cover branch 227->226: placeholder provider IS in configured_providers."""
-        from scripts.quality.rollup_v2.pipeline import (
-            RESERVED_LANE_KEYS,
-            run_pipeline,
-        )
+        """Cover branch: placeholder provider IS in configured_providers.
+
+        All 4 PR 3 lanes are now registered normalizers, so RESERVED_LANE_KEYS
+        is empty. We inject a temporary reservation to test the dedup logic.
+        """
+        from scripts.quality.rollup_v2.pipeline import run_pipeline
 
         tmp = tempfile.TemporaryDirectory()
         repo_root = Path(tmp.name).resolve()
@@ -199,17 +200,12 @@ class ProviderSummaryBranchTests(unittest.TestCase):
         (repo_root / "src").mkdir()
         (repo_root / "src" / "app.py").write_text("x = 1\n" * 20, encoding="utf-8")
 
-        # Create an artifact that will produce findings with a provider name
-        # matching one of the RESERVED_LANE_KEYS labels. This means the
-        # placeholder for that provider should be SKIPPED (already configured).
-        # We mock a normalizer so its findings carry a matching provider.
-        reserved_label = sorted(RESERVED_LANE_KEYS.values())[0]
-
+        test_label = "TestReserved Zero"
         mock_finding = replace(
             _make_finding(),
             corroborators=(
                 Corroborator.from_provider(
-                    provider=reserved_label,
+                    provider=test_label,
                     rule_id="test",
                     rule_url=None,
                     original_message="test",
@@ -220,7 +216,10 @@ class ProviderSummaryBranchTests(unittest.TestCase):
         with patch(
             "scripts.quality.rollup_v2.pipeline.NORMALIZER_REGISTRY",
             {"qlty": MagicMock()},
-        ) as mock_registry:
+        ) as mock_registry, patch(
+            "scripts.quality.rollup_v2.pipeline.RESERVED_LANE_KEYS",
+            {"test_reserved": test_label},
+        ):
             mock_normalizer = mock_registry["qlty"]
             mock_normalizer.run.return_value = MagicMock(
                 findings=[mock_finding],
@@ -234,10 +233,38 @@ class ProviderSummaryBranchTests(unittest.TestCase):
             )
         tmp.cleanup()
 
-        # The reserved_label should appear once (from the finding), not twice
+        # The test_label should appear once (from the finding), not twice
         labels = [s["provider"] for s in result.canonical_payload["provider_summaries"]]
-        count = labels.count(reserved_label)
-        self.assertEqual(count, 1, f"{reserved_label} should appear exactly once")
+        count = labels.count(test_label)
+        self.assertEqual(count, 1, f"{test_label} should appear exactly once")
+
+
+    def test_not_configured_placeholder_appended_when_no_matching_finding(self) -> None:
+        """Cover line 231: placeholder appended when provider NOT in configured_providers."""
+        from scripts.quality.rollup_v2.pipeline import run_pipeline
+
+        tmp = tempfile.TemporaryDirectory()
+        repo_root = Path(tmp.name).resolve()
+        output_dir = repo_root / "output"
+        output_dir.mkdir()
+
+        # Mock a reserved key whose label does NOT appear in any finding
+        with patch(
+            "scripts.quality.rollup_v2.pipeline.NORMALIZER_REGISTRY",
+            {},
+        ), patch(
+            "scripts.quality.rollup_v2.pipeline.RESERVED_LANE_KEYS",
+            {"phantom": "Phantom Zero"},
+        ):
+            result = run_pipeline(
+                artifacts={},
+                repo_root=repo_root,
+                output_dir=output_dir,
+            )
+        tmp.cleanup()
+
+        labels = [s["provider"] for s in result.canonical_payload["provider_summaries"]]
+        self.assertIn("Phantom Zero", labels)
 
 
 class PipelineErrorBoundaryTests(unittest.TestCase):

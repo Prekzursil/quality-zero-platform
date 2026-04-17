@@ -2,6 +2,13 @@ slug: Prekzursil/DevExtreme-Filter-Go-Language
 stack: go
 verify_command: bash scripts/verify
 coverage:
+  # Go's coverage tooling (go test -cover) only measures statement coverage;
+  # it has no native branch coverage. gocover-cobertura therefore emits
+  # branches-valid=0, and the gate's "go branch coverage data missing"
+  # finding is structural, not a code-quality issue. Override
+  # branch_min_percent to null so the gate enforces only the line threshold
+  # (still 100%) for this repo.
+  branch_min_percent: null
   command: |
     mkdir -p coverage
     packages="$(go list ./... | grep -vE "/ent($|/)")"
@@ -16,12 +23,17 @@ vendors:
   sonar:
     project_key: Prekzursil_DevExtreme-Filter-Go-Language
 codeql:
-  build_mode: autobuild
+  # The `actions` CodeQL extractor does not support autobuild, so the repo
+  # uses its own workflow (.github/workflows/codeql.yml) with per-language
+  # matrix build modes instead of the reusable-codeql.yml pipeline. These
+  # fields remain for profile-contract validation if the reusable pipeline
+  # is reintroduced later.
+  build_mode: none
   languages:
     - actions
     - go
   setup:
-    go: "1.22"
+    go: "1.24"
 dependabot:
   updates:
     - ecosystem: gomod

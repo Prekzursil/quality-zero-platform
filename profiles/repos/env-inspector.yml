@@ -6,6 +6,8 @@ issue_policy:
   mode: zero
   pr_behavior: absolute
   main_behavior: absolute
+enabled_scanners:
+  deepsource_visible: true
 coverage:
   command: |
     mkdir -p coverage
@@ -43,6 +45,7 @@ required_contexts:
     - shared-scanner-matrix / Semgrep Zero
     - shared-scanner-matrix / Sentry Zero
     - shared-scanner-matrix / DeepScan Zero
+    - shared-scanner-matrix / DeepSource Visible Zero
   target:
     - shared-scanner-matrix / Coverage 100 Gate
     - shared-codecov-analytics / Codecov Analytics
@@ -53,6 +56,7 @@ required_contexts:
     - shared-scanner-matrix / Semgrep Zero
     - shared-scanner-matrix / Sentry Zero
     - shared-scanner-matrix / DeepScan Zero
+    - shared-scanner-matrix / DeepSource Visible Zero
     - SonarCloud Code Analysis
     - Codacy Static Code Analysis
     - DeepScan

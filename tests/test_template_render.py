@@ -206,6 +206,82 @@ class ListTemplatesTests(unittest.TestCase):
         self.assertEqual(list(mapping.keys()), ["stack/swift/config.toml.j2"])
 
 
+class CoverageThresholdsTemplateTests(unittest.TestCase):
+    """``common/coverage-thresholds.json.j2`` renders valid JSON."""
+
+    @staticmethod
+    def _render(profile: Dict) -> str:
+        """Render the thresholds template."""
+        return tr.render_template("common/coverage-thresholds.json.j2", profile)
+
+    def test_all_thresholds_default_to_min_percent(self) -> None:
+        """When only ``min_percent`` is set, every threshold mirrors it."""
+        import json as _json
+
+        rendered = self._render({"coverage": {"min_percent": 100.0}})
+        data = _json.loads(rendered)
+        self.assertEqual(data["lines"], 100.0)
+        self.assertEqual(data["branches"], 100.0)
+        self.assertEqual(data["functions"], 100.0)
+        self.assertEqual(data["statements"], 100.0)
+
+    def test_empty_coverage_falls_back_to_100(self) -> None:
+        """A profile with no coverage thresholds still emits a 100% gate."""
+        import json as _json
+
+        rendered = self._render({"coverage": {}})
+        data = _json.loads(rendered)
+        self.assertEqual(data["lines"], 100)
+        self.assertEqual(data["branches"], 100)
+
+
+class DependabotTemplateTests(unittest.TestCase):
+    """``common/dependabot.yml.j2`` renders valid Dependabot config."""
+
+    @staticmethod
+    def _render(profile: Dict) -> str:
+        """Render the dependabot template."""
+        return tr.render_template("common/dependabot.yml.j2", profile)
+
+    def test_minimum_profile_renders_one_update(self) -> None:
+        """One-ecosystem profile produces a parseable Dependabot config."""
+        profile = {
+            "dependabot": {
+                "updates": [
+                    {"ecosystem": "pip", "directory": "/backend"},
+                ]
+            }
+        }
+        data = yaml.safe_load(self._render(profile))
+        self.assertEqual(data["version"], 2)
+        self.assertEqual(len(data["updates"]), 1)
+        update = data["updates"][0]
+        self.assertEqual(update["package-ecosystem"], "pip")
+        self.assertEqual(update["directory"], "/backend")
+        self.assertEqual(update["schedule"]["interval"], "weekly")
+        self.assertEqual(update["open-pull-requests-limit"], 10)
+
+    def test_major_updates_are_ignored_by_default(self) -> None:
+        """Every rendered update blocks major bumps — goes via ``bumps.yml``."""
+        profile = {
+            "dependabot": {
+                "updates": [{"ecosystem": "npm", "directory": "/ui"}]
+            }
+        }
+        data = yaml.safe_load(self._render(profile))
+        ignores = data["updates"][0]["ignore"]
+        self.assertEqual(ignores[0]["dependency-name"], "*")
+        self.assertIn("version-update:semver-major", ignores[0]["update-types"])
+
+    def test_no_dependabot_block_yields_empty_updates_list(self) -> None:
+        """Profiles without ``dependabot`` still render a valid config."""
+        rendered = self._render({})
+        data = yaml.safe_load(rendered)
+        self.assertEqual(data["version"], 2)
+        # Empty update list is valid YAML; either ``updates: []`` or key absent.
+        self.assertIn(data.get("updates", []), ([], None))
+
+
 class EnvironmentContractTests(unittest.TestCase):
     """The Jinja2 environment pins the platform's non-HTML render policy."""
 

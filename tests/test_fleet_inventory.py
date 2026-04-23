@@ -6,17 +6,23 @@ layers land in their own test modules as those commits arrive.
 
 from __future__ import absolute_import
 
+import json
+import subprocess
 import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from typing import Any, List, Sequence, Tuple
 
 from scripts.quality.fleet_inventory import (
     FleetDiff,
     PRIVATE_INCLUDE_SLUGS,
     build_expected_fleet,
     diff_fleet,
+    fetch_authenticated_repos,
+    fetch_user_repos,
     load_inventory_slugs,
+    merge_repo_lists,
 )
 
 
@@ -126,6 +132,104 @@ class LoadInventorySlugsTests(unittest.TestCase):
                 load_inventory_slugs(inventory),
                 ["Prekzursil/valid"],
             )
+
+
+class FetchReposViaGhTests(unittest.TestCase):
+    """The ``gh api`` subprocess wrapper — mocked runner, no network."""
+
+    def _fake_runner(
+        self, payload: Any, *, returncode: int = 0
+    ) -> subprocess.CompletedProcess[str]:
+        """Return a CompletedProcess the code under test can consume."""
+        return subprocess.CompletedProcess(
+            args=[],
+            returncode=returncode,
+            stdout=json.dumps(payload),
+            stderr="",
+        )
+
+    def _capturing_runner(
+        self, payload: Any
+    ) -> Tuple[List[Sequence[str]], Any]:
+        """Capture the ``args`` passed to subprocess.run for assertion."""
+        captured: List[Sequence[str]] = []
+
+        def runner(args: Sequence[str], **_kwargs: Any) -> subprocess.CompletedProcess[str]:
+            captured.append(list(args))
+            return self._fake_runner(payload)
+
+        return captured, runner
+
+    def test_fetch_user_repos_flattens_paginated_payload(self) -> None:
+        # ``gh api --paginate --slurp`` returns [[page1], [page2], ...]
+        payload = [
+            [_repo(name="alpha"), _repo(name="beta")],
+            [_repo(name="gamma")],
+        ]
+        _captured, runner = self._capturing_runner(payload)
+        result = fetch_user_repos("Prekzursil", runner=runner)
+        self.assertEqual(
+            [r["full_name"] for r in result],
+            ["Prekzursil/alpha", "Prekzursil/beta", "Prekzursil/gamma"],
+        )
+
+    def test_fetch_user_repos_accepts_legacy_flat_payload(self) -> None:
+        # Older ``gh`` versions without --slurp return a flat array
+        payload = [_repo(name="alpha"), _repo(name="beta")]
+        _captured, runner = self._capturing_runner(payload)
+        result = fetch_user_repos("Prekzursil", runner=runner)
+        self.assertEqual(
+            [r["full_name"] for r in result],
+            ["Prekzursil/alpha", "Prekzursil/beta"],
+        )
+
+    def test_fetch_user_repos_targets_owner_endpoint(self) -> None:
+        captured, runner = self._capturing_runner([])
+        fetch_user_repos("Prekzursil", runner=runner)
+        self.assertEqual(len(captured), 1)
+        args = captured[0]
+        # first element is the binary, rest are args
+        self.assertEqual(args[0], "gh")
+        self.assertIn("--paginate", args)
+        self.assertIn("--slurp", args)
+        self.assertTrue(
+            any("/users/Prekzursil/repos" in str(a) for a in args),
+            f"expected owner endpoint in args, got {args!r}",
+        )
+
+    def test_fetch_authenticated_repos_uses_user_endpoint(self) -> None:
+        captured, runner = self._capturing_runner([])
+        fetch_authenticated_repos(runner=runner)
+        self.assertEqual(len(captured), 1)
+        args = captured[0]
+        self.assertTrue(
+            any("/user/repos" in str(a) for a in args),
+            f"expected /user/repos in args, got {args!r}",
+        )
+
+    def test_fetch_user_repos_propagates_gh_failure(self) -> None:
+        def runner(*_args: Any, **_kwargs: Any) -> subprocess.CompletedProcess[str]:
+            raise subprocess.CalledProcessError(1, ["gh"], stderr="rate limit")
+
+        with self.assertRaises(subprocess.CalledProcessError):
+            fetch_user_repos("Prekzursil", runner=runner)
+
+
+class MergeRepoListsTests(unittest.TestCase):
+    """De-duplication on ``full_name`` when combining owner + auth lists."""
+
+    def test_deduplicates_preserving_first_seen(self) -> None:
+        public = [_repo(name="alpha"), _repo(name="beta")]
+        private = [_repo(name="alpha", private=True), _repo(name="secret", private=True)]
+        merged = merge_repo_lists(public, private)
+        slugs = [r["full_name"] for r in merged]
+        self.assertEqual(slugs, ["Prekzursil/alpha", "Prekzursil/beta", "Prekzursil/secret"])
+        # First-seen wins → alpha remains public
+        alpha = next(r for r in merged if r["full_name"] == "Prekzursil/alpha")
+        self.assertFalse(alpha["private"])
+
+    def test_empty_inputs(self) -> None:
+        self.assertEqual(merge_repo_lists([], []), [])
 
 
 class DiffFleetTests(unittest.TestCase):

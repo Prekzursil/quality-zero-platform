@@ -131,11 +131,108 @@ jobs:
               cmd = ["bash", "-lc", command]
           subprocess.run(cmd, check=True)
           PY
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe
-        with:
-          files: ${{ steps.profile.outputs.coverage_input_files }}
-          fail_ci_if_error: true
-          use_oidc: ${{ secrets.CODECOV_TOKEN == '' }}
-          token: ${{ secrets.CODECOV_TOKEN }}
-          verbose: true
+      - name: Upload coverage to Codecov (per-flag split)
+        # QZP v2 Phase 2: loop once per ``coverage.inputs[]`` entry so
+        # Codecov records each file under its own flag instead of
+        # merging them into a single Python-only blob. See docs/QZP-V2-
+        # DESIGN.md §5.1 for the event-link case that surfaced this.
+        #
+        # ``codecov-action`` accepts a single ``flags`` value per call,
+        # so we iterate the structured ``coverage_inputs_json`` output
+        # and re-enter the action for each row. The old single-upload
+        # ``files:`` path is replaced; ``coverage_input_files`` stays in
+        # the profile exporter for legacy consumers (qlty, codacy).
+        shell: bash
+        working-directory: repo
+        env:
+          COVERAGE_INPUTS_JSON: ${{ steps.profile.outputs.coverage_inputs_json }}
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          PLATFORM_REPOSITORY: ${{ inputs.platform_repository }}
+          PLATFORM_REF: ${{ inputs.platform_ref }}
+          REPO_SLUG: ${{ inputs.repo_slug }}
+          TARGET_SHA: ${{ inputs.sha != '' && inputs.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import shutil
+          import subprocess
+          import sys
+          import urllib.request
+          from pathlib import Path
+
+          inputs = json.loads(os.environ.get("COVERAGE_INPUTS_JSON", "[]") or "[]")
+          if not isinstance(inputs, list) or not inputs:
+              print("No coverage inputs declared; skipping Codecov upload.", flush=True)
+              sys.exit(0)
+
+          # Pin the codecov uploader by pulling the same CLI the action
+          # would have used. `curl https://cli.codecov.io/...` returns a
+          # single static binary; no npm/yarn dependency footprint.
+          bin_dir = Path(os.environ["RUNNER_TEMP"]) / "codecov-cli"
+          bin_dir.mkdir(parents=True, exist_ok=True)
+          target = bin_dir / "codecov"
+          if not target.exists():
+              url = "https://cli.codecov.io/latest/linux/codecov"
+              with urllib.request.urlopen(url) as response:  # noqa: S310
+                  target.write_bytes(response.read())
+              target.chmod(0o755)
+
+          token = os.environ.get("CODECOV_TOKEN", "").strip()
+          sha = os.environ["TARGET_SHA"]
+          repo_slug = os.environ["REPO_SLUG"]
+
+          def run_cli(flag: str, path: str) -> None:
+              """Invoke codecov CLI for one (path, flag) pair."""
+              cmd = [
+                  str(target),
+                  "--verbose",
+                  "upload-process",
+                  "--fail-on-error",
+                  "--sha", sha,
+                  "--slug", repo_slug,
+                  "--file", path,
+                  "--flag", flag,
+                  "--disable-search",
+              ]
+              if token:
+                  cmd.extend(["--token", token])
+              print(f"[codecov] upload flag={flag} path={path}", flush=True)
+              subprocess.run(cmd, check=True)
+
+          missing = [row for row in inputs if not Path(row["path"]).is_file()]
+          if missing:
+              print(
+                  f"[codecov] missing coverage files on disk: {[row['path'] for row in missing]}",
+                  flush=True,
+              )
+              sys.exit(2)
+
+          for row in inputs:
+              run_cli(row["flag"], row["path"])
+
+          print(f"[codecov] uploaded {len(inputs)} flag(s) for {sha}", flush=True)
+          PY
+      - name: Validate Codecov flags
+        # Post-upload guard: poll Codecov's API and fail CI if any declared
+        # flag is missing from the commit report. Catches the silent-drop
+        # path where the upload "succeeded" (exit 0) but Codecov never
+        # wrote anything for a particular flag — the same class of failure
+        # that made event-link ship at 58% with three inputs declared.
+        #
+        # All GitHub-context values come in via env: (not interpolated into
+        # the run: script) to avoid the script-injection class Semgrep
+        # flags. ``profile.json`` carries the declared ``coverage.inputs``
+        # that the validator cross-checks against Codecov's API report.
+        if: always()
+        shell: bash
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          VALIDATE_REPO_SLUG: ${{ inputs.repo_slug }}
+          VALIDATE_SHA: ${{ inputs.sha != '' && inputs.sha || github.sha }}
+        run: |
+          python platform/scripts/quality/validate_codecov_flags.py \
+            --repo-slug "$VALIDATE_REPO_SLUG" \
+            --sha "$VALIDATE_SHA" \
+            --inputs-json "$RUNNER_TEMP/profile.json"

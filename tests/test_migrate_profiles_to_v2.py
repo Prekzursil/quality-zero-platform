@@ -202,8 +202,6 @@ class MigrationEdgeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw:
             path = Path(raw) / "weird.yml"
             path.write_text("- not a profile\n- just a list\n", encoding="utf-8")
-            from scripts.quality.migrate_profiles_to_v2 import migrate_profile_file
-
             self.assertFalse(migrate_profile_file(path))
 
 

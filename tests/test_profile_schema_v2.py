@@ -136,15 +136,19 @@ class NormalizeProfileVersionTests(unittest.TestCase):
     """Schema version parser — missing / invalid input falls back to v1."""
 
     def test_missing_version_returns_one(self) -> None:
+        """No ``version`` field ⇒ treat as v1."""
         self.assertEqual(normalize_profile_version(None), 1)
 
     def test_integer_two_returns_two(self) -> None:
+        """Integer 2 is accepted as v2."""
         self.assertEqual(normalize_profile_version(2), 2)
 
     def test_string_two_returns_two(self) -> None:
+        """String ``"2"`` coerces to v2."""
         self.assertEqual(normalize_profile_version("2"), 2)
 
     def test_unknown_value_falls_back_to_one(self) -> None:
+        """Unknown values (v3+, garbage strings) fall back to v1."""
         self.assertEqual(normalize_profile_version(3), 1)
         self.assertEqual(normalize_profile_version("ratchet"), 1)
 
@@ -153,6 +157,7 @@ class NormalizeModeTests(unittest.TestCase):
     """``mode`` normalisation across v1 and v2 inputs."""
 
     def test_v2_explicit_phase_wins_over_legacy(self) -> None:
+        """Explicit v2 ``mode.phase`` overrides the legacy issue_policy."""
         result = normalize_mode(
             {"phase": "shadow"},
             legacy_issue_policy={"mode": "absolute"},
@@ -160,22 +165,27 @@ class NormalizeModeTests(unittest.TestCase):
         self.assertEqual(result["phase"], "shadow")
 
     def test_legacy_ratchet_translates_to_phase_ratchet(self) -> None:
+        """``issue_policy.mode = ratchet`` → ``mode.phase = ratchet``."""
         result = normalize_mode(None, legacy_issue_policy={"mode": "ratchet"})
         self.assertEqual(result["phase"], "ratchet")
 
     def test_legacy_zero_translates_to_phase_absolute(self) -> None:
+        """``issue_policy.mode = zero`` → ``mode.phase = absolute``."""
         result = normalize_mode(None, legacy_issue_policy={"mode": "zero"})
         self.assertEqual(result["phase"], "absolute")
 
     def test_unknown_phase_coerces_to_absolute(self) -> None:
+        """Garbage ``mode.phase`` values coerce to the strict default."""
         result = normalize_mode({"phase": "bogus"})
         self.assertEqual(result["phase"], "absolute")
 
     def test_shadow_until_string_preserved(self) -> None:
+        """``mode.shadow_until`` passes through unchanged when a string."""
         result = normalize_mode({"phase": "shadow", "shadow_until": "2026-05-01"})
         self.assertEqual(result["shadow_until"], "2026-05-01")
 
     def test_ratchet_payload_normalised(self) -> None:
+        """Full ratchet payload is preserved and ``on_escalation`` defaults."""
         result = normalize_mode(
             {
                 "phase": "ratchet",
@@ -195,6 +205,7 @@ class NormalizeScannersTests(unittest.TestCase):
     """``scanners`` normalisation — legacy fill-in and severity coercion."""
 
     def test_legacy_enabled_scanner_maps_to_block(self) -> None:
+        """Legacy ``enabled_scanners[name]=true`` becomes severity:block."""
         result = normalize_scanners(
             None,
             legacy_enabled_scanners={"deepsource_visible": True, "codecov": False},
@@ -202,6 +213,7 @@ class NormalizeScannersTests(unittest.TestCase):
         self.assertEqual(result, {"deepsource_visible": {"severity": "block"}})
 
     def test_v2_explicit_scanners_win_and_severity_coerced(self) -> None:
+        """Explicit v2 scanner entries are case-normalised and coerced."""
         result = normalize_scanners(
             {
                 "codeql": {"severity": "block"},
@@ -215,6 +227,7 @@ class NormalizeScannersTests(unittest.TestCase):
         self.assertEqual(result["weird_scanner"]["severity"], "block")
 
     def test_v2_entries_override_legacy(self) -> None:
+        """v2 ``scanners`` entries override legacy enabled_scanners severity."""
         result = normalize_scanners(
             {"deepsource_visible": {"severity": "warn"}},
             legacy_enabled_scanners={"deepsource_visible": True, "codeql": True},
@@ -227,6 +240,7 @@ class NormalizeOverridesTests(unittest.TestCase):
     """Override list normalisation — drops malformed entries silently."""
 
     def test_valid_override_accepted(self) -> None:
+        """A complete override (file+key+reason) passes through untouched."""
         result = normalize_overrides(
             [
                 {

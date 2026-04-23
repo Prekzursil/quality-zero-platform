@@ -1,0 +1,68 @@
+{#- fullstack-web stack CI template.
+
+   Combines a Python backend + React frontend + integration layer.
+   Renders three parallel jobs. Backend + frontend each upload a
+   per-flag coverage XML for Codecov's flag-split pipeline (Phase 2).
+
+   Consumed variables:
+      default_branch                    - typically ``main``
+      coverage.setup.python             - backend Python series
+      coverage.setup.node               - frontend Node major
+      coverage.command                  - override for the canonical verify flow
+-#}
+name: Fullstack Web CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ["{{ default_branch | default('main', true) }}"]
+  pull_request:
+    branches: ["{{ default_branch | default('main', true) }}"]
+
+concurrency:
+  group: fullstack-web-ci-${{ '{{' }} github.ref {{ '}}' }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+{% include 'common/ci-fragments/setup-python.yml.j2' %}
+      - name: Install backend deps
+        working-directory: backend
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run backend tests with coverage
+        working-directory: backend
+        run: pytest --cov=app --cov-branch --cov-report=xml:coverage.xml
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+{% include 'common/ci-fragments/setup-node.yml.j2' %}
+      - name: Install frontend deps
+        working-directory: ui
+        run: npm ci
+      - name: Run frontend tests with coverage
+        working-directory: ui
+        run: npx vitest run --coverage
+
+  integration:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+{% include 'common/ci-fragments/setup-python.yml.j2' %}
+      - name: Run integration suite
+        shell: bash
+        run: |
+          {{ (coverage | default({}, true)).get('command') or 'bash scripts/verify' }}

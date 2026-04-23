@@ -40,6 +40,15 @@ TOP_LEVEL_KEYS: Set[str] = {
     "profile_id",
     "repo_name",
     "owner",
+    # v2 schema extensions (see docs/QZP-V2-DESIGN.md §3).
+    # `version: 2` marks a profile as opting into the v2 contract; absence
+    # means v1 (existing behaviour, no breaking change). v1 profiles remain
+    # fully valid; v2 introduces `mode`, `scanners`, and `overrides` as the
+    # structured replacements for `issue_policy` and `enabled_scanners`.
+    "version",
+    "mode",
+    "scanners",
+    "overrides",
 }
 NESTED_KEYS: Dict[str, Set[str]] = {
     "codex_environment": {
@@ -80,6 +89,9 @@ NESTED_KEYS: Dict[str, Set[str]] = {
         "schedule_interval",
         "labels",
     },
+    # v2: governance mode declares the phase the repo is in plus optional
+    # ratcheting details. `phase` must be one of {shadow, ratchet, absolute}.
+    "mode": {"phase", "shadow_until", "ratchet"},
 }
 
 

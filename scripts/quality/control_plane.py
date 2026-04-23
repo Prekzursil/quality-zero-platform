@@ -36,7 +36,11 @@ from scripts.quality.profile_normalization import (
     normalize_coverage_inputs as common_normalize_coverage_inputs,
     normalize_issue_policy as common_normalize_issue_policy,
     normalize_java_setup as common_normalize_java_setup,
+    normalize_mode as common_normalize_mode,
+    normalize_overrides as common_normalize_overrides,
+    normalize_profile_version as common_normalize_profile_version,
     normalize_required_contexts as common_normalize_required_contexts,
+    normalize_scanners as common_normalize_scanners,
 )
 
 
@@ -337,6 +341,20 @@ def _finalize_normalized_profile_sections(merged: Dict[str, Any]) -> None:
         merged.get("codex_environment", {}),
         verify_command=merged["verify_command"],
     )
+    # v2 schema fields (docs/QZP-V2-DESIGN.md §3): synthesise `version`,
+    # `mode`, `scanners`, and `overrides` on every profile so downstream
+    # consumers never have to re-check "is this v1 or v2?" — the canonical
+    # output is identical. v1 legacy values still win where v2 is absent.
+    merged["version"] = common_normalize_profile_version(merged.get("version"))
+    merged["mode"] = common_normalize_mode(
+        merged.get("mode"),
+        legacy_issue_policy=merged["issue_policy"],
+    )
+    merged["scanners"] = common_normalize_scanners(
+        merged.get("scanners"),
+        legacy_enabled_scanners=merged["enabled_scanners"],
+    )
+    merged["overrides"] = common_normalize_overrides(merged.get("overrides"))
 
 
 def load_repo_profile(inventory: Dict[str, Any], repo_slug: str) -> Dict[str, Any]:

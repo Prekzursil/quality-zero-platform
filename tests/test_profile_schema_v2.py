@@ -21,6 +21,7 @@ from __future__ import absolute_import
 
 import unittest
 
+from scripts.quality.control_plane import load_inventory, load_repo_profile
 from scripts.quality.profile_normalization import (
     normalize_mode,
     normalize_overrides,
@@ -28,6 +29,7 @@ from scripts.quality.profile_normalization import (
     normalize_scanners,
 )
 from scripts.quality.profile_shape import validate_profile_shape
+from tests.control_plane_support import ROOT
 
 
 class ProfileSchemaV2ShapeTests(unittest.TestCase):
@@ -248,6 +250,38 @@ class NormalizeOverridesTests(unittest.TestCase):
     def test_non_list_input_returns_empty(self) -> None:
         self.assertEqual(normalize_overrides("not a list"), [])
         self.assertEqual(normalize_overrides(None), [])
+
+
+class FinalizedProfileV2FieldsTests(unittest.TestCase):
+    """Loaded profiles carry the canonical v2 fields regardless of source shape.
+
+    v1 profiles (no explicit ``version``, ``mode``, ``scanners``, or
+    ``overrides``) must still end up with those four keys present after
+    ``load_repo_profile`` so downstream consumers need not branch on schema
+    version. Values derive from the existing legacy fields.
+    """
+
+    def test_event_link_profile_exposes_v2_derived_fields(self) -> None:
+        """event-link is v1 on disk; after load it should have v2 shape too."""
+        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
+        profile = load_repo_profile(inventory, "Prekzursil/event-link")
+
+        # version defaults to 1 for legacy profiles.
+        self.assertEqual(profile["version"], 1)
+
+        # mode.phase derived from legacy issue_policy.mode.
+        self.assertIn(profile["mode"]["phase"], {"shadow", "ratchet", "absolute"})
+        self.assertIn("ratchet", profile["mode"])
+        self.assertIn("shadow_until", profile["mode"])
+
+        # scanners synthesised from legacy enabled_scanners → severity:block.
+        self.assertIsInstance(profile["scanners"], dict)
+        for scanner_name, config in profile["scanners"].items():
+            self.assertIn(config["severity"], {"block", "warn", "info"})
+            self.assertIsInstance(scanner_name, str)
+
+        # overrides default to an empty list when unspecified.
+        self.assertEqual(profile["overrides"], [])
 
 
 if __name__ == "__main__":

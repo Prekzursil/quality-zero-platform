@@ -28,6 +28,8 @@ engines:
       - "scripts/quality/validate_codecov_flags.py"
       - "scripts/quality/marker_regions.py"
       - "scripts/quality/template_render.py"
+      - "scripts/quality/drift_sync.py"
+      - "scripts/quality/apply_drift_pr.py"
 exclude_paths:
   - "generated/**"
   - "tests/**"

@@ -21,6 +21,12 @@ from __future__ import absolute_import
 
 import unittest
 
+from scripts.quality.profile_normalization import (
+    normalize_mode,
+    normalize_overrides,
+    normalize_profile_version,
+    normalize_scanners,
+)
 from scripts.quality.profile_shape import validate_profile_shape
 
 
@@ -122,6 +128,126 @@ class ProfileSchemaV2ShapeTests(unittest.TestCase):
         findings = validate_profile_shape(profile, slug="Prekzursil/example")
         self.assertEqual(len(findings), 1)
         self.assertIn("unexpected profile key `versions`", findings[0])
+
+
+class NormalizeProfileVersionTests(unittest.TestCase):
+    """Schema version parser — missing / invalid input falls back to v1."""
+
+    def test_missing_version_returns_one(self) -> None:
+        self.assertEqual(normalize_profile_version(None), 1)
+
+    def test_integer_two_returns_two(self) -> None:
+        self.assertEqual(normalize_profile_version(2), 2)
+
+    def test_string_two_returns_two(self) -> None:
+        self.assertEqual(normalize_profile_version("2"), 2)
+
+    def test_unknown_value_falls_back_to_one(self) -> None:
+        self.assertEqual(normalize_profile_version(3), 1)
+        self.assertEqual(normalize_profile_version("ratchet"), 1)
+
+
+class NormalizeModeTests(unittest.TestCase):
+    """``mode`` normalisation across v1 and v2 inputs."""
+
+    def test_v2_explicit_phase_wins_over_legacy(self) -> None:
+        result = normalize_mode(
+            {"phase": "shadow"},
+            legacy_issue_policy={"mode": "absolute"},
+        )
+        self.assertEqual(result["phase"], "shadow")
+
+    def test_legacy_ratchet_translates_to_phase_ratchet(self) -> None:
+        result = normalize_mode(None, legacy_issue_policy={"mode": "ratchet"})
+        self.assertEqual(result["phase"], "ratchet")
+
+    def test_legacy_zero_translates_to_phase_absolute(self) -> None:
+        result = normalize_mode(None, legacy_issue_policy={"mode": "zero"})
+        self.assertEqual(result["phase"], "absolute")
+
+    def test_unknown_phase_coerces_to_absolute(self) -> None:
+        result = normalize_mode({"phase": "bogus"})
+        self.assertEqual(result["phase"], "absolute")
+
+    def test_shadow_until_string_preserved(self) -> None:
+        result = normalize_mode({"phase": "shadow", "shadow_until": "2026-05-01"})
+        self.assertEqual(result["shadow_until"], "2026-05-01")
+
+    def test_ratchet_payload_normalised(self) -> None:
+        result = normalize_mode(
+            {
+                "phase": "ratchet",
+                "ratchet": {
+                    "baseline": {"coverage_overall": 72.4},
+                    "target_date": "2026-06-30",
+                    "escalation_date": "2026-09-30",
+                },
+            }
+        )
+        self.assertEqual(result["ratchet"]["baseline"]["coverage_overall"], 72.4)
+        self.assertEqual(result["ratchet"]["target_date"], "2026-06-30")
+        self.assertEqual(result["ratchet"]["on_escalation"], "absolute")
+
+
+class NormalizeScannersTests(unittest.TestCase):
+    """``scanners`` normalisation — legacy fill-in and severity coercion."""
+
+    def test_legacy_enabled_scanner_maps_to_block(self) -> None:
+        result = normalize_scanners(
+            None,
+            legacy_enabled_scanners={"deepsource_visible": True, "codecov": False},
+        )
+        self.assertEqual(result, {"deepsource_visible": {"severity": "block"}})
+
+    def test_v2_explicit_scanners_win_and_severity_coerced(self) -> None:
+        result = normalize_scanners(
+            {
+                "codeql": {"severity": "block"},
+                "socket_project_report": {"severity": "INFO"},
+                "weird_scanner": {"severity": "bogus"},
+            },
+        )
+        self.assertEqual(result["codeql"]["severity"], "block")
+        self.assertEqual(result["socket_project_report"]["severity"], "info")
+        # Unknown severities fall back to the strict default.
+        self.assertEqual(result["weird_scanner"]["severity"], "block")
+
+    def test_v2_entries_override_legacy(self) -> None:
+        result = normalize_scanners(
+            {"deepsource_visible": {"severity": "warn"}},
+            legacy_enabled_scanners={"deepsource_visible": True, "codeql": True},
+        )
+        self.assertEqual(result["deepsource_visible"]["severity"], "warn")
+        self.assertEqual(result["codeql"]["severity"], "block")
+
+
+class NormalizeOverridesTests(unittest.TestCase):
+    """Override list normalisation — drops malformed entries silently."""
+
+    def test_valid_override_accepted(self) -> None:
+        result = normalize_overrides(
+            [
+                {
+                    "file": "ui/vite.config.ts",
+                    "key": "coverage.thresholds.functions",
+                    "value": 90,
+                    "reason": "legacy wrappers (#42)",
+                    "expires": "2026-12-31",
+                }
+            ]
+        )
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["value"], 90)
+
+    def test_missing_reason_dropped(self) -> None:
+        result = normalize_overrides(
+            [{"file": "a", "key": "b", "value": 1}]  # no reason
+        )
+        self.assertEqual(result, [])
+
+    def test_non_list_input_returns_empty(self) -> None:
+        self.assertEqual(normalize_overrides("not a list"), [])
+        self.assertEqual(normalize_overrides(None), [])
 
 
 if __name__ == "__main__":

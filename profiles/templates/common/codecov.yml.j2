@@ -17,7 +17,7 @@ codecov:
   require_ci_to_pass: true
 
 flags:
-{% for item in coverage.inputs %}
+{% for item in coverage.get('inputs') or [] %}
   {{ item.flag }}:
     paths:
 {% if item.get('sources') %}

@@ -278,23 +278,33 @@ def normalize_mode(
     * Unknown phases coerce to ``"absolute"`` (strict default, per §10.1).
     """
     payload = deepcopy(raw_mode or {}) if isinstance(raw_mode, Mapping) else {}
+    return {
+        "phase": _resolve_mode_phase(payload, legacy_issue_policy),
+        "shadow_until": _coerce_shadow_until(payload.get("shadow_until")),
+        "ratchet": _normalize_ratchet(payload.get("ratchet")),
+    }
+
+
+def _resolve_mode_phase(
+    payload: Mapping[str, Any],
+    legacy_issue_policy: Mapping[str, Any] | None,
+) -> str:
+    """Pick the canonical phase from explicit v2 input or the legacy field."""
     phase = str(payload.get("phase", "")).strip()
     if not phase:
         phase = _phase_from_issue_policy(legacy_issue_policy)
     if phase not in _VALID_PHASES:
-        phase = "absolute"
+        return "absolute"
+    return phase
 
-    shadow_until = payload.get("shadow_until")
-    if shadow_until is not None and not isinstance(shadow_until, str):
-        shadow_until = str(shadow_until)
-    if isinstance(shadow_until, str):
-        shadow_until = shadow_until.strip() or None
 
-    return {
-        "phase": phase,
-        "shadow_until": shadow_until,
-        "ratchet": _normalize_ratchet(payload.get("ratchet")),
-    }
+def _coerce_shadow_until(raw: Any) -> str | None:
+    """Accept an ISO-date string or ``None``; coerce everything else."""
+    if raw is None:
+        return None
+    value = raw if isinstance(raw, str) else str(raw)
+    stripped = value.strip()
+    return stripped or None
 
 
 def _coerce_severity(raw: Any) -> str:

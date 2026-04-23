@@ -51,37 +51,58 @@ def migrate_profile(raw_profile: Mapping[str, Any]) -> Dict[str, Any]:
     reviewable.
     """
     migrated: Dict[str, Any] = dict(raw_profile)
+    _ensure_version(migrated)
+    _ensure_mode(migrated)
+    _ensure_scanners(migrated)
+    _ensure_overrides(migrated)
+    _ensure_coverage_flags(migrated)
+    return _reorder_for_review(migrated)
 
+
+def _ensure_version(migrated: Dict[str, Any]) -> None:
+    """Set ``version: 2`` unless the file already declares v2 or later."""
     if "version" not in migrated:
         migrated["version"] = 2
-    else:
-        # Clamp unknown / v1 declarations to 2 — once this migrator touches
-        # a file, the file is v2 by definition.
-        try:
-            declared = int(migrated["version"])
-        except (TypeError, ValueError):
-            declared = 1
-        if declared < 2:
-            migrated["version"] = 2
+        return
+    # Clamp unknown / v1 declarations to 2 — once this migrator touches a
+    # file, the file is v2 by definition.
+    try:
+        declared = int(migrated["version"])
+    except (TypeError, ValueError):
+        declared = 1
+    if declared < 2:
+        migrated["version"] = 2
 
+
+def _ensure_mode(migrated: Dict[str, Any]) -> None:
+    """Synthesise ``mode`` from legacy ``issue_policy`` when absent."""
     if "mode" not in migrated:
         migrated["mode"] = _mode_block(migrated.get("issue_policy"))
 
+
+def _ensure_scanners(migrated: Dict[str, Any]) -> None:
+    """Synthesise ``scanners`` from legacy ``enabled_scanners`` when absent."""
     if "scanners" not in migrated:
         migrated["scanners"] = _scanners_block(migrated.get("enabled_scanners"))
 
+
+def _ensure_overrides(migrated: Dict[str, Any]) -> None:
+    """Ensure ``overrides`` exists as (at minimum) an empty list."""
     if "overrides" not in migrated:
         migrated["overrides"] = []
 
-    coverage = migrated.get("coverage")
-    if isinstance(coverage, Mapping):
-        inputs = coverage.get("inputs")
-        if isinstance(inputs, list):
-            migrated_coverage = dict(coverage)
-            migrated_coverage["inputs"] = _migrate_coverage_inputs(inputs)
-            migrated["coverage"] = migrated_coverage
 
-    return _reorder_for_review(migrated)
+def _ensure_coverage_flags(migrated: Dict[str, Any]) -> None:
+    """Rewrite ``coverage.inputs`` so each item carries a ``flag``."""
+    coverage = migrated.get("coverage")
+    if not isinstance(coverage, Mapping):
+        return
+    inputs = coverage.get("inputs")
+    if not isinstance(inputs, list):
+        return
+    migrated_coverage = dict(coverage)
+    migrated_coverage["inputs"] = _migrate_coverage_inputs(inputs)
+    migrated["coverage"] = migrated_coverage
 
 
 def _mode_block(legacy_issue_policy: Any) -> Dict[str, Any]:
@@ -187,30 +208,46 @@ def main(argv: List[str] | None = None) -> int:
         print(f"migrate_profiles_to_v2: no such dir: {profiles_dir}", flush=True)
         return 2
 
+    changed = _migrate_all(profiles_dir, dry_run=args.dry_run)
+    _print_summary(changed, dry_run=args.dry_run)
+    return 0
+
+
+def _migrate_all(profiles_dir: Path, *, dry_run: bool) -> List[Path]:
+    """Iterate every profile under ``profiles_dir`` and migrate or skip it."""
     changed: List[Path] = []
     for path in _iter_profile_paths(profiles_dir):
-        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        if not isinstance(raw, dict):
-            continue
-        migrated = migrate_profile(raw)
-        if migrated == raw:
-            continue
-        if args.dry_run:
-            print(f"would migrate: {path.name}", flush=True)
-        else:
-            path.write_text(
-                yaml.safe_dump(migrated, sort_keys=False, default_flow_style=False),
-                encoding="utf-8",
-            )
-            print(f"migrated: {path.name}", flush=True)
-        changed.append(path)
+        if _migrate_one(path, dry_run=dry_run):
+            changed.append(path)
+    return changed
 
+
+def _migrate_one(path: Path, *, dry_run: bool) -> bool:
+    """Return ``True`` when the file needs (or would need) a v2 migration."""
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(raw, dict):
+        return False
+    migrated = migrate_profile(raw)
+    if migrated == raw:
+        return False
+    if dry_run:
+        print(f"would migrate: {path.name}", flush=True)
+        return True
+    path.write_text(
+        yaml.safe_dump(migrated, sort_keys=False, default_flow_style=False),
+        encoding="utf-8",
+    )
+    print(f"migrated: {path.name}", flush=True)
+    return True
+
+
+def _print_summary(changed: List[Path], *, dry_run: bool) -> None:
+    """Emit the closing summary line for ``main``."""
     if not changed:
         print("No profiles required migration.", flush=True)
-    else:
-        verb = "would change" if args.dry_run else "migrated"
-        print(f"{len(changed)} profile(s) {verb}.", flush=True)
-    return 0
+        return
+    verb = "would change" if dry_run else "migrated"
+    print(f"{len(changed)} profile(s) {verb}.", flush=True)
 
 
 if __name__ == "__main__":  # pragma: no cover

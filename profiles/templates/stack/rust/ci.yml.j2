@@ -1,0 +1,58 @@
+{#- Rust stack CI template.
+
+   Renders Rust CI with cargo test, llvm-cov coverage, clippy, and
+   rustfmt. Pins ``dtolnay/rust-toolchain`` by SHA per §A.2.4.
+
+   Consumed variables:
+      default_branch              - typically ``main``
+      coverage.setup.rust_channel - Rust channel: stable, beta, nightly; defaults stable
+      coverage.command            - shell command to produce lcov; defaults to cargo-llvm-cov
+-#}
+name: Rust CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ["{{ default_branch | default('main', true) }}"]
+  pull_request:
+    branches: ["{{ default_branch | default('main', true) }}"]
+
+concurrency:
+  group: rust-ci-${{ '{{' }} github.ref {{ '}}' }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7
+        with:
+          toolchain: {{ (coverage | default({}, true)).get('setup', {}).get('rust_channel') or 'stable' }}
+          components: llvm-tools-preview
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov --locked
+      - name: Run tests with coverage
+        shell: bash
+        run: |
+          {{ (coverage | default({}, true)).get('command') or 'cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info' }}
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7
+        with:
+          toolchain: {{ (coverage | default({}, true)).get('setup', {}).get('rust_channel') or 'stable' }}
+          components: clippy, rustfmt
+      - name: Clippy
+        run: cargo clippy --all-features --all-targets -- -D warnings
+      - name: rustfmt
+        run: cargo fmt --all -- --check

@@ -1,0 +1,9 @@
+[flake8]
+# Align flake8/DeepSource FLK-* rules with ruff's line-length=120
+# (configured in pyproject.toml). DeepSource uses the flake8 default
+# of 88 which is too tight for the nosemgrep-suppression comments
+# (the Semgrep registry rule IDs alone exceed 80 chars).
+max-line-length = 120
+# D301 is pydocstyle — handled via ``.prospector.yaml`` instead,
+# don't double-flag.
+extend-ignore = E203, E501, W503, D301

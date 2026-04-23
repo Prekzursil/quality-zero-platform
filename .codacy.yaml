@@ -26,6 +26,8 @@ engines:
       - "scripts/quality/fleet_inventory.py"
       - "scripts/quality/migrate_profiles_to_v2.py"
       - "scripts/quality/validate_codecov_flags.py"
+      - "scripts/quality/marker_regions.py"
+      - "scripts/quality/template_render.py"
 exclude_paths:
   - "generated/**"
   - "tests/**"

@@ -31,7 +31,8 @@ from scripts.quality import template_render as tr
 class CodecovTemplateRenderTests(unittest.TestCase):
     """``common/codecov.yml.j2`` renders a valid Codecov config."""
 
-    def _render(self, profile: Dict) -> str:
+    @staticmethod
+    def _render(profile: Dict) -> str:
         """Render the real shipped template against ``profile`` as context."""
         return tr.render_template("common/codecov.yml.j2", profile)
 

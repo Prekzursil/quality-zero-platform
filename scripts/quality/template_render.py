@@ -72,7 +72,8 @@ def _build_environment(templates_root: Path | None = None) -> Environment:
     # match. The context comment above ``_build_environment`` explains
     # why disabling HTML autoescape is correct for this YAML/config
     # renderer.
-    env_factory = Environment  # nosemgrep: python.flask.security.xss.audit.direct-use-of-jinja2.direct-use-of-jinja2
+    # nosemgrep: python.flask.security.xss.audit.direct-use-of-jinja2.direct-use-of-jinja2
+    env_factory = Environment  # noqa: E501 — suppression ID above requires same-line match
     return env_factory(
         loader=loader,
         autoescape=autoescape_policy,
@@ -97,8 +98,10 @@ def render_template(
     """
     env = _build_environment(templates_root)
     template = env.get_template(relative_path)
+    # YAML/config output — see ``_build_environment`` docstring for why
+    # Jinja autoescape is off here.
     # nosemgrep: python.flask.security.xss.audit.direct-use-of-jinja2.direct-use-of-jinja2
-    return template.render(**dict(context))  # YAML/config output — see _build_environment comment
+    return template.render(**dict(context))  # noqa: E501 — same-line match required
 
 
 def template_exists(

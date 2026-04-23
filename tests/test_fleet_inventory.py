@@ -18,6 +18,7 @@ from scripts.quality.fleet_inventory import (
     ALERT_LABEL_NOT_PROFILED,
     FleetDiff,
     PRIVATE_INCLUDE_SLUGS,
+    _build_arg_parser,
     alert_issue_title,
     build_expected_fleet,
     close_alert_issue_for_profiled_repo,
@@ -25,9 +26,12 @@ from scripts.quality.fleet_inventory import (
     fetch_authenticated_repos,
     fetch_user_repos,
     find_existing_alert_issue,
+    format_diff_report,
     load_inventory_slugs,
+    main as fleet_inventory_main,
     merge_repo_lists,
     open_alert_issue_for_unprofiled_repo,
+    run_inventory_sweep,
 )
 
 
@@ -446,6 +450,211 @@ class DiffFleetTests(unittest.TestCase):
         self.assertIsInstance(diff, FleetDiff)
         with self.assertRaises(Exception):
             diff.missing = ["mutate-attempt"]  # type: ignore[misc]
+
+
+class FormatDiffReportTests(unittest.TestCase):
+    """Human-readable report — stable ordering for CI log diffs."""
+
+    def test_no_gap_report(self) -> None:
+        report = format_diff_report(
+            FleetDiff(
+                expected=["Prekzursil/a"],
+                inventoried=["Prekzursil/a"],
+                missing=[],
+                dead=[],
+            )
+        )
+        self.assertIn("Missing (gap):    0", report)
+        self.assertIn("Dead (orphan):    0", report)
+        self.assertNotIn("Missing from inventory:", report)
+
+    def test_gap_report_lists_missing_and_dead(self) -> None:
+        report = format_diff_report(
+            FleetDiff(
+                expected=["Prekzursil/a", "Prekzursil/b"],
+                inventoried=["Prekzursil/b", "Prekzursil/c"],
+                missing=["Prekzursil/a"],
+                dead=["Prekzursil/c"],
+            )
+        )
+        self.assertIn("Missing from inventory:", report)
+        self.assertIn("- Prekzursil/a", report)
+        self.assertIn("In inventory but not on GitHub:", report)
+        self.assertIn("- Prekzursil/c", report)
+
+
+class ArgParserTests(unittest.TestCase):
+    """CLI surface — defaults + flag parsing."""
+
+    def test_defaults(self) -> None:
+        ns = _build_arg_parser().parse_args([])
+        self.assertEqual(ns.owner, "Prekzursil")
+        self.assertEqual(ns.platform_slug, "Prekzursil/quality-zero-platform")
+        self.assertFalse(ns.open_alerts)
+        self.assertFalse(ns.close_resolved)
+        self.assertFalse(ns.dry_run)
+        self.assertFalse(ns.json_output)
+
+    def test_flags_toggle(self) -> None:
+        ns = _build_arg_parser().parse_args(
+            ["--open-alerts", "--close-resolved", "--dry-run", "--json"]
+        )
+        self.assertTrue(ns.open_alerts)
+        self.assertTrue(ns.close_resolved)
+        self.assertTrue(ns.dry_run)
+        self.assertTrue(ns.json_output)
+
+
+class RunInventorySweepTests(unittest.TestCase):
+    """End-to-end sweep with injected runner — no gh, no network."""
+
+    def _inventory_fixture(self, tmpdir: Path, slugs: List[str]) -> Path:
+        body = "version: 1\nrepos:\n" + "".join(f"  - slug: {s}\n" for s in slugs)
+        inventory = tmpdir / "repos.yml"
+        inventory.write_text(body, encoding="utf-8")
+        return inventory
+
+    def test_sweep_reports_clean_fleet(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            inventory = self._inventory_fixture(
+                Path(raw), ["Prekzursil/alpha"]
+            )
+            runner = QueuedRunner(
+                responses=[
+                    [_repo(name="alpha")],  # public fetch
+                    [],                      # auth fetch
+                ]
+            )
+            diff = run_inventory_sweep(
+                owner="Prekzursil",
+                platform_slug="Prekzursil/quality-zero-platform",
+                inventory_path=inventory,
+                runner=runner,
+            )
+            self.assertEqual(diff.missing, [])
+            self.assertEqual(diff.dead, [])
+
+    def test_sweep_surfaces_missing_slug(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            inventory = self._inventory_fixture(Path(raw), [])  # empty inventory
+            runner = QueuedRunner(
+                responses=[
+                    [_repo(name="alpha")],
+                    [],
+                ]
+            )
+            diff = run_inventory_sweep(
+                owner="Prekzursil",
+                platform_slug="Prekzursil/quality-zero-platform",
+                inventory_path=inventory,
+                runner=runner,
+            )
+            self.assertEqual(diff.missing, ["Prekzursil/alpha"])
+
+    def test_sweep_with_open_alerts_creates_issues(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            inventory = self._inventory_fixture(Path(raw), [])
+            runner = QueuedRunner(
+                responses=[
+                    [_repo(name="alpha")],   # public fetch
+                    [],                       # auth fetch
+                    [],                       # issue list (no existing)
+                    "https://github.com/x/y/issues/7\n",  # issue create
+                ]
+            )
+            diff = run_inventory_sweep(
+                owner="Prekzursil",
+                platform_slug="Prekzursil/quality-zero-platform",
+                inventory_path=inventory,
+                runner=runner,
+                open_alerts=True,
+            )
+            self.assertEqual(diff.missing, ["Prekzursil/alpha"])
+            # 4 gh calls: public fetch, auth fetch, issue list, issue create
+            self.assertEqual(len(runner.calls), 4)
+            self.assertIn("create", runner.calls[3])
+
+    def test_auth_fetch_failure_is_non_fatal(self) -> None:
+        """A CalledProcessError on auth fetch should fall back to public-only."""
+        with tempfile.TemporaryDirectory() as raw:
+            inventory = self._inventory_fixture(
+                Path(raw), ["Prekzursil/alpha"]
+            )
+            runner = QueuedRunner(
+                responses=[
+                    [_repo(name="alpha")],
+                    subprocess.CalledProcessError(1, ["gh"], stderr="auth missing"),
+                ]
+            )
+            diff = run_inventory_sweep(
+                owner="Prekzursil",
+                platform_slug="Prekzursil/quality-zero-platform",
+                inventory_path=inventory,
+                runner=runner,
+            )
+            self.assertEqual(diff.missing, [])
+            self.assertEqual(diff.dead, [])
+
+
+class MainCLITests(unittest.TestCase):
+    """main() exit codes for the three report states."""
+
+    def test_main_no_gap_exit_zero(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            inventory = Path(raw) / "repos.yml"
+            inventory.write_text(
+                "version: 1\nrepos:\n  - slug: Prekzursil/alpha\n",
+                encoding="utf-8",
+            )
+            import scripts.quality.fleet_inventory as module_under_test
+
+            original_fetch_user = module_under_test.fetch_user_repos
+            original_fetch_auth = module_under_test.fetch_authenticated_repos
+            module_under_test.fetch_user_repos = lambda *a, **k: [  # type: ignore[assignment]
+                _repo(name="alpha")
+            ]
+            module_under_test.fetch_authenticated_repos = lambda *a, **k: []  # type: ignore[assignment]
+            try:
+                exit_code = fleet_inventory_main(
+                    [
+                        "--owner",
+                        "Prekzursil",
+                        "--inventory",
+                        str(inventory),
+                    ]
+                )
+            finally:
+                module_under_test.fetch_user_repos = original_fetch_user  # type: ignore[assignment]
+                module_under_test.fetch_authenticated_repos = original_fetch_auth  # type: ignore[assignment]
+            self.assertEqual(exit_code, 0)
+
+    def test_main_gap_exit_one(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            inventory = Path(raw) / "repos.yml"
+            inventory.write_text(
+                "version: 1\nrepos: []\n", encoding="utf-8"
+            )
+            import scripts.quality.fleet_inventory as module_under_test
+
+            original_fetch_user = module_under_test.fetch_user_repos
+            original_fetch_auth = module_under_test.fetch_authenticated_repos
+            module_under_test.fetch_user_repos = lambda *a, **k: [  # type: ignore[assignment]
+                _repo(name="missing-from-inventory")
+            ]
+            module_under_test.fetch_authenticated_repos = lambda *a, **k: []  # type: ignore[assignment]
+            try:
+                exit_code = fleet_inventory_main(
+                    [
+                        "--owner",
+                        "Prekzursil",
+                        "--inventory",
+                        str(inventory),
+                    ]
+                )
+            finally:
+                module_under_test.fetch_user_repos = original_fetch_user  # type: ignore[assignment]
+                module_under_test.fetch_authenticated_repos = original_fetch_auth  # type: ignore[assignment]
+            self.assertEqual(exit_code, 1)
 
 
 if __name__ == "__main__":

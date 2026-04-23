@@ -391,3 +391,179 @@ def _issue_number_from_create_output(stdout: str) -> int:
         return int(tail)
     except ValueError:
         return 0
+
+
+# ---------------------------------------------------------------------------
+# CLI entrypoint. Ties fetch → diff → alerts into a single script invocation
+# so workflows can call one command and get a machine-readable report plus a
+# non-zero exit code on gaps.
+# ---------------------------------------------------------------------------
+
+
+import argparse
+
+
+def format_diff_report(diff: FleetDiff) -> str:
+    """Human-readable summary of a FleetDiff — stable ordering for CI logs."""
+    lines = [
+        "Fleet inventory report",
+        "======================",
+        f"Expected fleet:   {len(diff.expected)} repos",
+        f"Inventoried:      {len(diff.inventoried)} repos",
+        f"Missing (gap):    {len(diff.missing)}",
+        f"Dead (orphan):    {len(diff.dead)}",
+    ]
+    if diff.missing:
+        lines.append("")
+        lines.append("Missing from inventory:")
+        lines.extend(f"  - {slug}" for slug in diff.missing)
+    if diff.dead:
+        lines.append("")
+        lines.append("In inventory but not on GitHub:")
+        lines.extend(f"  - {slug}" for slug in diff.dead)
+    return "\n".join(lines) + "\n"
+
+
+def run_inventory_sweep(
+    *,
+    owner: str,
+    platform_slug: str,
+    inventory_path: Path,
+    open_alerts: bool = False,
+    close_resolved: bool = False,
+    dry_run: bool = False,
+    runner: ProcessRunner = subprocess.run,
+) -> FleetDiff:
+    """Perform one end-to-end inventory sweep.
+
+    1. Fetch public repos via ``gh api /users/{owner}/repos``.
+    2. Fetch private repos visible to token via ``gh api /user/repos``.
+       (A failure here is non-fatal — the public fetch already covers the
+       fleet filter except for explicit private exceptions.)
+    3. Apply fleet filter + diff against inventory file.
+    4. Optionally open alert issues for missing slugs / close for resolved.
+
+    Returns the computed FleetDiff so callers can render / exit-code.
+    """
+    public_repos = fetch_user_repos(owner, runner=runner)
+    try:
+        auth_repos = fetch_authenticated_repos(runner=runner)
+    except subprocess.CalledProcessError:
+        auth_repos = []
+
+    combined = merge_repo_lists(public_repos, auth_repos)
+    expected = build_expected_fleet(combined)
+    inventoried = load_inventory_slugs(inventory_path)
+    diff = diff_fleet(expected, inventoried)
+
+    if open_alerts:
+        for slug in diff.missing:
+            open_alert_issue_for_unprofiled_repo(
+                platform_slug,
+                slug=slug,
+                runner=runner,
+                dry_run=dry_run,
+            )
+
+    if close_resolved:
+        for slug in diff.inventoried:
+            if slug in diff.dead:
+                continue  # dead slug: inventory entry still present, skip
+            close_alert_issue_for_profiled_repo(
+                platform_slug,
+                slug=slug,
+                runner=runner,
+                dry_run=dry_run,
+            )
+
+    return diff
+
+
+def _build_arg_parser() -> argparse.ArgumentParser:
+    """Expose the CLI surface so tests can parse-and-inspect cleanly."""
+    parser = argparse.ArgumentParser(
+        description=(
+            "Fleet inventory sweep: compare the GitHub fleet filter to "
+            "inventory/repos.yml and optionally open alert:repo-not-profiled "
+            "issues for gaps."
+        ),
+    )
+    parser.add_argument("--owner", default="Prekzursil")
+    parser.add_argument(
+        "--platform-slug", default="Prekzursil/quality-zero-platform"
+    )
+    parser.add_argument(
+        "--inventory",
+        default=str(Path(__file__).resolve().parents[2] / "inventory" / "repos.yml"),
+    )
+    parser.add_argument(
+        "--open-alerts",
+        action="store_true",
+        help="Open an alert:repo-not-profiled issue for each missing slug.",
+    )
+    parser.add_argument(
+        "--close-resolved",
+        action="store_true",
+        help="Close any alert:repo-not-profiled issue that no longer applies.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Skip gh write operations; print what would happen.",
+    )
+    parser.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="Emit JSON instead of the human-readable report.",
+    )
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """CLI entrypoint.
+
+    Exit codes:
+        0 — fleet matches inventory (no gaps, no dead entries)
+        1 — gaps detected (non-fatal; useful for report-only CI step)
+        2 — error surfaced while talking to ``gh``
+    """
+    args = _build_arg_parser().parse_args(argv)
+    try:
+        diff = run_inventory_sweep(
+            owner=args.owner,
+            platform_slug=args.platform_slug,
+            inventory_path=Path(args.inventory),
+            open_alerts=args.open_alerts,
+            close_resolved=args.close_resolved,
+            dry_run=args.dry_run,
+        )
+    except subprocess.CalledProcessError as exc:
+        print(
+            f"fleet_inventory: gh call failed (exit={exc.returncode}):\n"
+            f"{exc.stderr}",
+            flush=True,
+        )
+        return 2
+
+    if args.json_output:
+        print(
+            json.dumps(
+                {
+                    "expected": diff.expected,
+                    "inventoried": diff.inventoried,
+                    "missing": diff.missing,
+                    "dead": diff.dead,
+                },
+                indent=2,
+            ),
+            flush=True,
+        )
+    else:
+        print(format_diff_report(diff), end="", flush=True)
+
+    return 0 if not diff.missing and not diff.dead else 1
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

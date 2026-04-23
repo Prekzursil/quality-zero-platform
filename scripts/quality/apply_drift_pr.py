@@ -16,7 +16,7 @@ from __future__ import absolute_import
 import argparse
 import json
 import os
-import subprocess  # noqa: S404 — gh CLI wrapper; args are controlled
+import subprocess  # nosec B404 # noqa: S404 — gh CLI wrapper; args are controlled
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Mapping
@@ -119,38 +119,21 @@ def _build_body(
     return "\n".join(lines) + "\n"
 
 
-def _run_drift_pr(args: argparse.Namespace, runner) -> int:
-    """Body of :func:`main`, split out so tests can inject ``runner``."""
-    report_path = Path(args.report)
+def _load_report(report_path: Path) -> Dict[str, Any] | None:
+    """Return the drift report JSON or ``None`` when missing."""
     if not report_path.is_file():
         print(
             f"apply_drift_pr: drift report not found: {report_path}",
             file=sys.stderr, flush=True,
         )
-        return 2
-    payload: Dict[str, Any] = json.loads(
-        report_path.read_text(encoding="utf-8")
-    )
-    entries = list(payload.get("entries") or [])
-    out_of_sync = _collect_out_of_sync(entries)
-    if not out_of_sync:
-        print(
-            "apply_drift_pr: fleet already in sync; nothing to do.",
-            flush=True,
-        )
-        return 0
+        return None
+    return json.loads(report_path.read_text(encoding="utf-8"))
 
-    cwd = Path(args.cwd).resolve()
-    branch = f"{_BRANCH_PREFIX}/{os.environ.get('GITHUB_RUN_ID', 'manual')}"
 
-    applied = _apply_entries(out_of_sync, cwd)
-    if not applied:
-        print(
-            "apply_drift_pr: no entries had output paths to apply.",
-            flush=True,
-        )
-        return 0
-
+def _git_commit_and_push(
+    branch: str, applied: List[str], cwd: Path, runner,
+) -> None:
+    """Run the git checkout/add/commit/push sequence."""
     _git(["checkout", "-b", branch], cwd, runner)
     _git(["add", *applied], cwd, runner)
     _git(
@@ -163,6 +146,24 @@ def _run_drift_pr(args: argparse.Namespace, runner) -> int:
         cwd, runner,
     )
     _git(["push", "--set-upstream", "origin", branch], cwd, runner)
+
+
+def _run_drift_pr(args: argparse.Namespace, runner) -> int:
+    """Body of :func:`main`, split out so tests can inject ``runner``."""
+    payload = _load_report(Path(args.report))
+    if payload is None:
+        return 2
+    out_of_sync = _collect_out_of_sync(list(payload.get("entries") or []))
+    if not out_of_sync:
+        print("apply_drift_pr: fleet already in sync; nothing to do.", flush=True)
+        return 0
+    cwd = Path(args.cwd).resolve()
+    branch = f"{_BRANCH_PREFIX}/{os.environ.get('GITHUB_RUN_ID', 'manual')}"
+    applied = _apply_entries(out_of_sync, cwd)
+    if not applied:
+        print("apply_drift_pr: no entries had output paths to apply.", flush=True)
+        return 0
+    _git_commit_and_push(branch, applied, cwd, runner)
     _gh_pr_create(
         branch, args.default_branch, _build_body(out_of_sync, args.platform_ref),
         cwd, runner,

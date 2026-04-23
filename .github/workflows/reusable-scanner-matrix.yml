@@ -394,7 +394,7 @@ jobs:
             --workflows-dir platform/.github/workflows
       - name: SonarCloud scan
         if: matrix.lane == 'coverage' && env.SONAR_TOKEN != ''
-        # nosemgrep: generic.secrets.security.detected-sonarqube-docs-api-key -- this is a git commit SHA pin, not an API key
+        # nosemgrep: generic.secrets.security.detected-sonarqube-docs-api-key.detected-sonarqube-docs-api-key
         uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602  # v6 pinned per §A.2.4
         with:
           projectBaseDir: repo

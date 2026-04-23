@@ -40,15 +40,20 @@ jobs:
           }
 
       - name: Check PR readiness
+        # Route ``github.*`` inputs through env to block ``run-shell-injection``
+        # (Semgrep / CWE-78). ``pr_number`` is user-supplied via workflow_dispatch
+        # so it must never land unquoted in a shell interpolation.
         env:
           GITHUB_TOKEN: ${{ secrets.GTG_PAT }}
+          PR_NUMBER: ${{ github.event.inputs.pr_number }}
+          REPO_SLUG: ${{ github.repository }}
         run: |
           set -o pipefail
-          echo "Checking PR #${{ github.event.inputs.pr_number }} readiness..."
+          echo "Checking PR #${PR_NUMBER} readiness..."
 
           set +e
-          gtg ${{ github.event.inputs.pr_number }} \
-            --repo ${{ github.repository }} \
+          gtg "$PR_NUMBER" \
+            --repo "$REPO_SLUG" \
             --semantic-codes \
             --format text \
             --verbose \
@@ -63,7 +68,7 @@ jobs:
 
           case $EXIT_CODE in
             0)
-              echo "::notice::PR #${{ github.event.inputs.pr_number }} is ready to merge"
+              echo "::notice::PR #${PR_NUMBER} is ready to merge"
               ;;
             1)
               echo "::error::PR has actionable comments that need to be addressed"

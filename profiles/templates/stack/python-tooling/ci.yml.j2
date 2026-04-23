@@ -1,0 +1,54 @@
+{#- python-tooling stack CI template.
+
+   Targets CLI tools + library packages (including the platform's
+   own scripts). Similar to python-only but adds complexity + lint
+   gates that matter for published tools. Frontend-less, pure Python.
+
+   Consumed variables:
+      default_branch              - typically ``main``
+      coverage.setup.python       - Python series; defaults to 3.12
+      coverage.command            - shell command to produce coverage.xml
+-#}
+name: Python Tooling CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ["{{ default_branch | default('main', true) }}"]
+  pull_request:
+    branches: ["{{ default_branch | default('main', true) }}"]
+
+concurrency:
+  group: python-tooling-ci-${{ '{{' }} github.ref {{ '}}' }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+{% include 'common/ci-fragments/setup-python.yml.j2' %}
+      - name: Install dev dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements-dev.txt
+      - name: Run tests with coverage
+        shell: bash
+        run: |
+          {{ (coverage | default({}, true)).get('command') or 'pytest --cov --cov-branch --cov-report=xml' }}
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+{% include 'common/ci-fragments/setup-python.yml.j2' %}
+      - name: Install lint tools
+        run: python -m pip install --upgrade pip && pip install ruff lizard
+      - name: Ruff lint
+        run: ruff check scripts/ tests/
+      - name: Lizard cyclomatic complexity
+        run: lizard scripts/ -C 15

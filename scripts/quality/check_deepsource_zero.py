@@ -69,6 +69,16 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--poll-seconds", type=int, default=DEFAULT_POLL_SECONDS)
     parser.add_argument("--out-json", default="deepsource-visible-zero/deepsource.json")
     parser.add_argument("--out-md", default="deepsource-visible-zero/deepsource.md")
+    parser.add_argument(
+        "--policy-mode",
+        default="ratchet",
+        help=(
+            "Gate enforcement mode. ``audit`` treats findings as informational "
+            "(status=pass regardless of visible issues); any other value "
+            "preserves the historical fail-on-any-visible behaviour. Matches "
+            "the contract used by ``check_codacy_zero.py`` + ``check_sonar_zero.py``."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -284,10 +294,24 @@ def _evaluate_visible_zero(
         )
         if not findings:
             open_issues, findings = _evaluate_visible_issues(inputs.issues_url)
-        status = "pass" if not findings else "fail"
+        status = _resolve_status(findings, getattr(args, "policy_mode", "ratchet"))
     except (OSError, RuntimeError, ValueError) as exc:  # pragma: no cover
         findings.append(f"DeepSource request failed: {exc}")
     return statuses, open_issues, findings, status
+
+
+def _resolve_status(findings: List[str], policy_mode: str) -> str:
+    """Map the findings list + policy mode onto the gate's pass/fail verdict.
+
+    ``audit`` mode always returns ``pass`` — the gate is informational
+    only, useful on the platform's self-CI where the repo carries
+    pre-existing issues that cannot be fixed in a single PR. Any other
+    mode (the consumer default is ``ratchet`` / ``zero``) keeps the
+    original fail-on-any-visible contract.
+    """
+    if policy_mode == "audit":
+        return "pass"
+    return "pass" if not findings else "fail"
 
 
 def main() -> int:

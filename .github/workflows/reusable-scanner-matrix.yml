@@ -359,6 +359,8 @@ jobs:
               "deepsource-visible-zero/deepsource.json",
               "--out-md",
               "deepsource-visible-zero/deepsource.md",
+              "--policy-mode",
+              issue_mode,
             ]
             run(cmd, cwd=repo_dir)
           elif lane == "deps":
@@ -498,7 +500,15 @@ jobs:
           subprocess.run(command, executable=qlty_executable, check=True)
           PY
       - name: Publish Codacy coverage
+        # Run from repo/ so relative ``coverage-reports`` paths resolve against
+        # the checked-out tree where coverage.xml was written. Previously the
+        # action ran at workspace-root where ``coverage/platform-coverage.xml``
+        # did not exist, logging ``File does not exist.`` + ``No coverage data
+        # was sent. Failed!`` — that's why Coverage 100 Gate was permanently
+        # red on the platform's own self-CI even though the coverage file was
+        # actually generated correctly in ``repo/coverage/``.
         if: matrix.lane == 'coverage' && steps.profile.outputs.codacy_enabled == 'true' && steps.profile.outputs.coverage_input_files != ''
+        working-directory: repo
         uses: codacy/codacy-coverage-reporter-action@89d6c85cfafaec52c72b6c5e8b2878d33104c699
         with:
           project-token: ${{ secrets.CODACY_API_TOKEN }}

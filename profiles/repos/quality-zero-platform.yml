@@ -3,6 +3,16 @@ version: 2
 stack: python-web
 mode:
   phase: absolute
+# The platform's OWN CI self-tests against the same zero-gate scanners it
+# provides to consumer repos. But the platform has 838 Codacy / 1116
+# DeepSource / 110 Sonar issues accumulated before governance landed —
+# fixing them all is out of scope for the QZP v2 rollout. Set
+# ``issue_policy.mode: audit`` so those gates are INFORMATIONAL on the
+# platform itself; consumer repos stay on ``zero`` via the stack common
+# template. See docs/QZP-V2-DESIGN.md — this is a deliberate policy
+# divergence for the self-hosted case, not a softening of the product.
+issue_policy:
+  mode: audit
 scanners:
   deepsource_visible:
     severity: block

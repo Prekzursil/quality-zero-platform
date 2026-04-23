@@ -30,6 +30,11 @@ jobs:
           python scripts/quality/build_admin_dashboard.py \
             --assets-dir docs/admin \
             --output-dir site
+      - name: Build Phase 5 dashboard pages (coverage / drift / audit)
+        run: |
+          python scripts/quality/admin_dashboard_pages.py \
+            --audit-jsonl audit/break-glass.jsonl \
+            --output-dir site
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:

@@ -1,0 +1,41 @@
+{#- .NET WPF stack CI template.
+
+   Runs on windows-latest (WPF targets require the Windows Desktop
+   framework). Uses ``dotnet test`` with coverage collection +
+   StyleCop. Consumed variables:
+      coverage.setup.dotnet  - .NET SDK major version; defaults to 8.0.x
+-#}
+name: .NET WPF CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ["{{ default_branch | default('main', true) }}"]
+  pull_request:
+    branches: ["{{ default_branch | default('main', true) }}"]
+
+concurrency:
+  group: dotnet-wpf-ci-${{ '{{' }} github.ref {{ '}}' }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "{{ (coverage | default({}, true)).get('setup', {}).get('dotnet') or '8.0.x' }}"
+      - name: Restore
+        run: dotnet restore
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+      - name: Test with coverage
+        shell: bash
+        run: |
+          {{ (coverage | default({}, true)).get('command') or 'dotnet test --no-build --configuration Release --collect:"XPlat Code Coverage" --results-directory coverage' }}

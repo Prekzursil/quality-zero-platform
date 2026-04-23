@@ -1,0 +1,49 @@
+{#- Swift stack CI template.
+
+   Renders Swift CI with xcodebuild + xcov coverage + swiftlint +
+   swiftformat. Runs on macOS.
+-#}
+name: Swift CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ["{{ default_branch | default('main', true) }}"]
+  pull_request:
+    branches: ["{{ default_branch | default('main', true) }}"]
+
+concurrency:
+  group: swift-ci-${{ '{{' }} github.ref {{ '}}' }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run tests with coverage
+        shell: bash
+        run: |
+          {{ (coverage | default({}, true)).get('command') or 'xcodebuild test -scheme $SCHEME -enableCodeCoverage YES -destination "platform=macOS"' }}
+      - name: Generate xcov report
+        run: |
+          gem install xcov
+          xcov --scheme "$SCHEME" --output_directory xcov-report
+  lint:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: SwiftLint
+        run: |
+          brew install swiftlint
+          swiftlint --strict
+      - name: SwiftFormat check
+        run: |
+          brew install swiftformat
+          swiftformat --lint .

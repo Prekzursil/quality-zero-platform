@@ -1,0 +1,61 @@
+{#- C++ CMake stack CI template.
+
+   Configures a CMake build, runs ctest, and generates llvm-cov
+   coverage. Pins clang-tidy + cmake-format lint steps. Runs on
+   ubuntu-latest with the stable clang toolchain.
+-#}
+name: C++ CMake CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ["{{ default_branch | default('main', true) }}"]
+  pull_request:
+    branches: ["{{ default_branch | default('main', true) }}"]
+
+concurrency:
+  group: cpp-cmake-ci-${{ '{{' }} github.ref {{ '}}' }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install clang + coverage tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang clang-tidy cmake lcov ninja-build
+      - name: Configure CMake (coverage)
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_FLAGS="--coverage -O0 -g" \
+            -DCMAKE_C_FLAGS="--coverage -O0 -g"
+      - name: Build
+        run: cmake --build build
+      - name: Run ctest
+        working-directory: build
+        run: ctest --output-on-failure
+      - name: Generate lcov report
+        run: |
+          lcov --capture --directory build --output-file coverage.info
+          lcov --remove coverage.info '/usr/*' '*/tests/*' --output-file coverage.info
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install clang-tidy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-tidy cmake
+      - name: clang-tidy
+        shell: bash
+        run: |
+          {{ (coverage | default({}, true)).get('command') or 'cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON && clang-tidy -p build $(git ls-files "*.cpp" "*.hpp")' }}

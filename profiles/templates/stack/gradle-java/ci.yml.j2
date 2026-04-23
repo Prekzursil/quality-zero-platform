@@ -1,0 +1,40 @@
+{#- Gradle Java stack CI template.
+
+   Runs Gradle build + test with Jacoco coverage + Checkstyle +
+   SpotBugs. Consumed variables:
+      coverage.setup.java.version       - JDK major version
+      coverage.setup.java.distribution  - Temurin, Zulu, etc.
+-#}
+name: Gradle Java CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ["{{ default_branch | default('main', true) }}"]
+  pull_request:
+    branches: ["{{ default_branch | default('main', true) }}"]
+
+concurrency:
+  group: gradle-java-ci-${{ '{{' }} github.ref {{ '}}' }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: {{ (coverage | default({}, true)).get('setup', {}).get('java', {}).get('distribution') or 'temurin' }}
+          java-version: "{{ (coverage | default({}, true)).get('setup', {}).get('java', {}).get('version') or '21' }}"
+      - name: Grant execute permission on gradlew
+        run: chmod +x gradlew
+      - name: Build + test with coverage
+        shell: bash
+        run: |
+          {{ (coverage | default({}, true)).get('command') or './gradlew build jacocoTestReport checkstyleMain spotbugsMain' }}

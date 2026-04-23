@@ -524,7 +524,19 @@ jobs:
           done
 
       - name: Publish Codacy coverage
+        # ``continue-on-error`` because Codacy's coverage reporter needs a
+        # project-scoped token (``CODACY_PROJECT_TOKEN``) that's distinct
+        # from the account-level ``CODACY_API_TOKEN`` used by the Codacy
+        # Zero gate. When only the API token is available, the reporter
+        # emits ``Request URL not found. Check if the API Token you are
+        # using and the API base URL are valid.`` and exits 1 — which
+        # shouldn't gate the PR because coverage enforcement happens
+        # locally via ``assert_coverage_100.py`` (that step already ran
+        # and passed before this upload). The Codacy dashboard upload is
+        # cosmetic; if the project token isn't wired, log the failure
+        # and move on.
         if: matrix.lane == 'coverage' && steps.profile.outputs.codacy_enabled == 'true' && steps.profile.outputs.coverage_input_files != ''
+        continue-on-error: true
         uses: codacy/codacy-coverage-reporter-action@89d6c85cfafaec52c72b6c5e8b2878d33104c699
         with:
           project-token: ${{ secrets.CODACY_API_TOKEN }}

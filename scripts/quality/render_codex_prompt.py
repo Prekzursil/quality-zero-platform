@@ -18,6 +18,10 @@ from scripts.quality.control_plane import (
     load_inventory,
     load_repo_profile,
 )
+from scripts.quality.known_issues import load_known_issues, qrv2_prompt_entries
+
+
+_KNOWN_ISSUES_ROOT = Path(__file__).resolve().parents[2] / "known-issues"
 
 
 def _parse_args() -> argparse.Namespace:
@@ -82,6 +86,57 @@ def _required_contexts_lines(profile: dict, *, event_name: str) -> List[str]:
         "",
         *[f"- `{name}`" for name in contexts],
     ]
+
+
+def _render_known_issues_section(
+    registry_path: Path = _KNOWN_ISSUES_ROOT,
+) -> str:
+    """Render the known-issues registry as a Codex prompt section.
+
+    QRv2 reads this section so the remediation loop applies the
+    canonical fix for every recurring false positive instead of
+    re-deriving it per run. Only entries with ``feeds_qrv2: true`` +
+    a non-empty ``fix_snippet`` appear; the ``qrv2_prompt_entries``
+    filter enforces that.
+
+    Returns an empty string when the registry is empty — the caller
+    simply omits the section in that case so older profiles don't see
+    a dangling heading.
+    """
+    entries = qrv2_prompt_entries(load_known_issues(registry_path))
+    if not entries:
+        return ""
+    lines: List[str] = [
+        "## Known-issues registry",
+        "",
+        (
+            "The entries below are documented false positives / recurring "
+            "patterns with verified canonical fixes. When a CI failure "
+            "matches one of them, apply the fix_snippet verbatim rather "
+            "than inventing a new fix."
+        ),
+        "",
+    ]
+    for entry in entries:
+        lines.append(f"### {entry.get('id', '?')} — {entry.get('title', '')}")
+        lines.append("")
+        description = str(entry.get("description", "")).strip()
+        if description:
+            lines.append(description)
+            lines.append("")
+        affects = entry.get("affects") or []
+        if affects:
+            lines.append(f"Affects: {', '.join(str(a) for a in affects)}")
+            lines.append("")
+        fix_snippet = str(entry.get("fix_snippet", "")).rstrip()
+        if fix_snippet:
+            lines.append("Canonical fix:")
+            lines.append("")
+            lines.append("```")
+            lines.append(fix_snippet)
+            lines.append("```")
+            lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def _render_canonical_findings_section(findings: List[Dict[str, Any]]) -> str:
@@ -190,7 +245,11 @@ def _render_prompt(*args: object, **kwargs: object) -> str:
         "",
         _artifact_lines(artifacts),
     ]
-    return "\n".join(sections) + "\n"
+    rendered = "\n".join(sections) + "\n"
+    known_issues_section = _render_known_issues_section()
+    if known_issues_section:
+        rendered = rendered.rstrip("\n") + "\n\n" + known_issues_section
+    return rendered
 
 
 def main() -> int:

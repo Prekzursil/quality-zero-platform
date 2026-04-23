@@ -5,9 +5,17 @@ session: qzp-v2-rollout
 
 # Execution State — QZP v2 Rollout
 
-**Current phase:** Phase 2 — Codecov flag-split fix.
-**Last merged:** PR #88 (squash commit `3b57801`) — Phase 1 schema v2 + fleet inventory + profile migration.
+**Current phase:** Phase 3 — templates + drift-sync (increment 1 in flight).
+**Last merged:** PR #90 (squash commit `cc7e3095`) — platform self-CI green
+(audit mode + Codacy cov staging + Semgrep CWE-78 remediations).
 **Design doc:** `docs/QZP-V2-DESIGN.md` (5 phases, 10-15 working days).
+
+## Recent merge log
+
+- 2026-04-23: PR #88 → `3b57801` — Phase 1 schema v2 + fleet inventory + 15 profile migration.
+- 2026-04-23: PR #89 → `062e5c3a` — Phase 2 Codecov flag-split + `validate_codecov_flags.py`.
+- 2026-04-23: PR #90 → `cc7e3095` — platform self-CI green (audit mode, Codacy cov path fix, 5 Semgrep CWE-78 fixes, DeepSource audit support).
+- 2026-04-23: event-link PR #129 (open) — bump 3 reusable-workflow SHAs to `cc7e3095` for Phase 2 verification.
 
 ## Phase 1 — COMPLETE ✅ (merged 2026-04-23)
 

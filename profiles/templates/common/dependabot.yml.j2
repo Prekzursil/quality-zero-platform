@@ -1,0 +1,38 @@
+{#- Render GitHub Dependabot config from ``dependabot.updates[]`` in the
+   profile. Keeps the weekly cadence + patch/minor grouping consistent
+   across every repo; ignores major upgrades by default so Dependabot
+   doesn't flood the queue with potentially breaking bumps — major
+   bumps go through the platform's ``reusable-bumps.yml`` canary
+   workflow instead (Phase 5). -#}
+{%- set dep = dependabot | default({}, true) -%}
+version: 2
+updates:
+{% for update in dep.get('updates') or [] %}
+  - package-ecosystem: {{ update['ecosystem'] }}
+    directory: "{{ update['directory'] }}"
+    schedule:
+      interval: {{ update.get('interval') or 'weekly' }}
+    open-pull-requests-limit: {{ update.get('limit') or 10 }}
+{% if update.get('groups') %}
+    groups:
+{% for group_name, group in update['groups'].items() %}
+      {{ group_name }}:
+        patterns:
+{% for pattern in group.get('patterns') or ['*'] %}
+          - "{{ pattern }}"
+{% endfor %}
+        update-types:
+{% for t in group.get('update_types') or ['patch', 'minor'] %}
+          - {{ t }}
+{% endfor %}
+{% endfor %}
+{% endif %}
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+    labels:
+{% for label in update.get('labels') or ['dependencies', 'type:chore', 'area:ci'] %}
+      - {{ label }}
+{% endfor %}
+{% endfor %}

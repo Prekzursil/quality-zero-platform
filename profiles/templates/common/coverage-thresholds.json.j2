@@ -1,0 +1,15 @@
+{#- Render ``.coverage-thresholds.json`` from the profile. Consumed by
+   consumer repos' CI as the source-of-truth threshold (per CLAUDE.md in
+   event-link and siblings). Rendering via Jinja guarantees every repo
+   stays in lockstep with its profile's declared thresholds — no hand
+   drift. -#}
+{#- Jinja's ``tojson`` filter pretty-prints the dict with 2-space indent.
+   We assemble the payload first so the render output matches what a
+   hand-written file would look like. -#}
+{%- set payload = {
+    "lines": coverage.get('min_percent') or 100,
+    "branches": coverage.get('branch_min_percent') or coverage.get('min_percent') or 100,
+    "functions": coverage.get('function_min_percent') or coverage.get('min_percent') or 100,
+    "statements": coverage.get('statement_min_percent') or coverage.get('min_percent') or 100,
+} -%}
+{{ payload | tojson(indent=2) }}

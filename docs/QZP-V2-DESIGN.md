@@ -401,7 +401,40 @@ Events and labels:
 
 ## 9. Migration plan (5 phases)
 
-Each phase is 1 PR to `quality-zero-platform` + N follow-up drift PRs on consumer repos.
+Each phase is 1+ PRs to `quality-zero-platform` + N follow-up drift PRs on consumer repos.
+
+### Phase status at a glance (updated 2026-04-23)
+
+| Phase | Code | PRs |
+|---|---|---|
+| 1 — schema v2 + fleet inventory | merged | pre-Phase-5 series |
+| 2 — Codecov flag fix + validator | merged | pre-Phase-5 series |
+| 3 — templates + drift-sync | merged (code) | pre-Phase-5 series |
+| 4 — severity map + break-glass + known-issues | merged | #102-#106 |
+| 5 — bootstrap + bumps + dashboard + alerts | merged | #107-#115 |
+
+**Phase 5 code inventory (all merged):**
+
+- #107 `verify_v2_deployment.py` — static audit of every Phase 1-5 deliverable
+- #108 `alerts.py` — dedupable per-event issue opener for all 8 alert types
+- #109 `reusable-bootstrap-repo.yml` + `bootstrap_repo.py` — shadow→absolute promotion primitives
+- #110 `bumps.py` + `profiles/bumps/2026-04-23-node-24.yml` — recipe schema + canary
+- #111 `admin_dashboard_pages.py` — coverage / drift / audit pages + private-repo redaction
+- #112 `alert_triggers.py` — 7 pure detector functions (one per remaining alert type)
+- #113 Self-governance profile: platform at `mode.phase: absolute`, full severity map
+- #114 `alert_dispatch.py` — detector → gh-issue glue
+- #115 `reusable-bumps.yml` + `bump_rollout.py` — rollout planner + workflow
+
+**Operational work remaining for `QZP_V2_FULLY_SHIPPED_AND_VERIFIED`:**
+
+- [ ] First drift-sync wave across 15 governed repos
+- [ ] event-link per-flag Codecov verification (PR #129 still pending)
+- [ ] All 15 governed repos on main with green quality rollup
+- [ ] Dashboard actually deployed to GitHub Pages
+- [ ] Scheduled alert dispatcher + secrets-sync workflow wiring
+- [ ] Zero open `alert:*` issues on the platform repo
+
+`scripts/quality/verify_v2_deployment.py --all` reports 39/39 required + optional artifacts present with zero warnings as of 2026-04-23.
 
 ### Phase 1 — schema v2 + fleet inventory (1-2 days)
 - Add profile schema v2 loader (backwards-compat: `version: 1` profiles still read).
@@ -430,7 +463,7 @@ Each phase is 1 PR to `quality-zero-platform` + N follow-up drift PRs on consume
 - `reusable-bootstrap-repo.yml` + shadow-mode lifecycle.
 - `reusable-bumps.yml` + staging/full-rollout.
 - Dashboard pages (heatmap, coverage trend, drift list, audit feed).
-- Alert issue openers + weekly digest.
+- Alert issue openers — **per-event only, no digest** (revised from the initial design to match §8's per-event contract).
 
 Total: ~10-15 working days for a single owner. Most of the value lands after Phase 3.
 

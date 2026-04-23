@@ -1,0 +1,48 @@
+{# Render a Codecov config from the resolved profile.
+
+Consumed variables (from the profile JSON emitted by export_profile.py):
+  coverage.inputs[]        - list of {name, flag, path, format, (optional) sources}
+  coverage.min_percent     - project-level threshold (defaults to 100)
+  coverage.ignore[]        - optional list of glob patterns to exclude
+
+When ``sources`` is absent on an input, the first segment of ``path`` is
+used as the source root heuristic (``backend/coverage.xml`` -> ``backend/``).
+That keeps existing profiles renderable without a migration; profiles
+that need finer-grained mappings can declare ``sources`` explicitly.
+
+Output is byte-stable across renders provided the profile is stable -
+the drift-sync workflow relies on that to emit clean no-op diffs.
+#}
+codecov:
+  require_ci_to_pass: true
+
+flags:
+{% for item in coverage.inputs %}
+  {{ item.flag }}:
+    paths:
+{% if item.get('sources') %}
+{% for src in item['sources'] %}
+      - {{ src }}
+{% endfor %}
+{% else %}
+      - {{ item['path'].split('/')[0] }}/
+{% endif %}
+{% endfor %}
+
+coverage:
+  status:
+    project:
+      default:
+        target: {{ (coverage.get('min_percent') or 100) | round(2) }}%
+        threshold: 0%
+    patch:
+      default:
+        target: {{ (coverage.get('min_percent') or 100) | round(2) }}%
+        threshold: 0%
+{% if coverage.get('ignore') %}
+
+ignore:
+{% for pattern in coverage['ignore'] %}
+  - {{ pattern }}
+{% endfor %}
+{% endif %}

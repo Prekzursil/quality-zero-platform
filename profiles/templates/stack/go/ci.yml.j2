@@ -1,0 +1,55 @@
+{#- Go stack CI template.
+
+   Renders a minimal Go CI workflow that sets up Go, runs ``go test``
+   with a coverage profile, and lints with ``golangci-lint``.
+
+   Consumed variables:
+      default_branch              - typically ``main``
+      coverage.setup.go           - Go series; defaults to 1.23
+      coverage.command            - shell command to produce coverage; defaults
+                                    to the standard ``go test`` invocation
+-#}
+name: Go CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ["{{ default_branch | default('main', true) }}"]
+  pull_request:
+    branches: ["{{ default_branch | default('main', true) }}"]
+
+concurrency:
+  group: go-ci-${{ '{{' }} github.ref {{ '}}' }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "{{ (coverage | default({}, true)).get('setup', {}).get('go') or '1.23' }}"
+      - name: Run tests with coverage
+        shell: bash
+        run: |
+          {{ (coverage | default({}, true)).get('command') or 'go test -race -coverprofile=coverage.out -covermode=atomic ./...' }}
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "{{ (coverage | default({}, true)).get('setup', {}).get('go') or '1.23' }}"
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@2226d7cb06a077cd73e56eedd38eecad18e5d837
+        with:
+          version: latest

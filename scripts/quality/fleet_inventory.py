@@ -1,11 +1,15 @@
-"""Fleet inventory (docs/QZP-V2-DESIGN.md §2).
+"""Fleet inventory.
+
+See ``docs/QZP-V2-DESIGN.md`` §2 for the governance contract.
 
 Produces a canonical list of the repos the quality-zero-platform should
 govern and diffs it against the hand-maintained ``inventory/repos.yml``.
 
-This first slice is the pure logic core — filter + diff — with no I/O.
-The ``gh api`` fetch and ``alert:repo-not-profiled`` issue-opener land
-in subsequent commits so each layer can be tested in isolation.
+This module is intentionally split into three tiers so each I/O
+boundary can be exercised in isolation: (1) the pure filter + diff
+logic, (2) the ``gh api`` fetch wrapper, and (3) the
+``alert:repo-not-profiled`` issue opener / closer. The CLI entrypoint
+composes them into a single invocation.
 
 Fleet filter (per Round 1 interview answer, captured in §2):
 
@@ -21,8 +25,9 @@ Fleet filter (per Round 1 interview answer, captured in §2):
 
 from __future__ import absolute_import
 
+import argparse
 import json
-import subprocess
+import subprocess  # nosec B404 — gh CLI wrapper; all args are controlled
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, FrozenSet, Iterable, List, Mapping, Sequence, Set
@@ -97,7 +102,7 @@ def build_expected_fleet(github_repos: Iterable[Mapping[str, Any]]) -> List[str]
         if not _should_include_repo(repo):
             continue
         slug = _slug_from_github_repo(repo)
-        if slug is not None:
+        if slug is not None:  # pragma: no branch — _should_include_repo guarantees slug
             expected.add(slug)
     return sorted(expected)
 
@@ -398,9 +403,6 @@ def _issue_number_from_create_output(stdout: str) -> int:
 # so workflows can call one command and get a machine-readable report plus a
 # non-zero exit code on gaps.
 # ---------------------------------------------------------------------------
-
-
-import argparse
 
 
 def format_diff_report(diff: FleetDiff) -> str:

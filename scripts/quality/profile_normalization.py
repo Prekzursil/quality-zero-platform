@@ -252,8 +252,11 @@ def _phase_from_issue_policy(legacy_issue_policy: Mapping[str, Any] | None) -> s
 
 def _normalize_ratchet(raw_ratchet: Any) -> Dict[str, Any]:
     """Return a canonical ratchet sub-structure from user input."""
-    payload = deepcopy(raw_ratchet or {}) if isinstance(raw_ratchet, Mapping) else {}
-    baseline = payload.get("baseline") if isinstance(payload.get("baseline"), Mapping) else {}
+    payload = (
+        deepcopy(raw_ratchet or {}) if isinstance(raw_ratchet, Mapping) else {}
+    )
+    raw_baseline = payload.get("baseline")
+    baseline = raw_baseline if isinstance(raw_baseline, Mapping) else {}
     return {
         "baseline": dict(baseline),
         "target_date": str(payload.get("target_date", "")).strip(),

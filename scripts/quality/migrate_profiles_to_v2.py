@@ -33,7 +33,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping
 
-if str(Path(__file__).resolve().parents[2]) not in sys.path:
+if str(Path(__file__).resolve().parents[2]) not in sys.path:  # pragma: no cover
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import yaml  # type: ignore[import-untyped]
@@ -168,6 +168,7 @@ def migrate_profile_file(path: Path) -> bool:
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
+    """Construct the CLI argument parser (extracted for testability)."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--profiles-dir",
@@ -183,6 +184,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: List[str] | None = None) -> int:
+    """CLI entrypoint. Returns 0 on success, 2 when the target dir is absent."""
     args = _build_arg_parser().parse_args(argv)
     profiles_dir = Path(args.profiles_dir)
     if not profiles_dir.is_dir():
@@ -210,7 +212,8 @@ def main(argv: List[str] | None = None) -> int:
     if not changed:
         print("No profiles required migration.", flush=True)
     else:
-        print(f"{len(changed)} profile(s) {'would change' if args.dry_run else 'migrated'}.", flush=True)
+        verb = "would change" if args.dry_run else "migrated"
+        print(f"{len(changed)} profile(s) {verb}.", flush=True)
     return 0
 
 

@@ -161,6 +161,41 @@ class MigrateProfileFileTests(unittest.TestCase):
             self.assertFalse(changed)
 
 
+class MigrationEdgeTests(unittest.TestCase):
+    """Branches the main happy-path tests don't exercise on their own."""
+
+    def test_declared_v1_version_bumps_to_v2(self) -> None:
+        """A profile explicitly declaring version:1 is bumped to 2."""
+        result = migrate_profile({"slug": "X", "version": 1})
+        self.assertEqual(result["version"], 2)
+
+    def test_garbage_version_falls_back_to_v2(self) -> None:
+        """Non-integer version strings are replaced with v2."""
+        result = migrate_profile({"slug": "X", "version": "not-a-number"})
+        self.assertEqual(result["version"], 2)
+
+    def test_non_mapping_coverage_input_is_preserved(self) -> None:
+        """Stray non-mapping inputs pass through untouched (no flag injection)."""
+        result = migrate_profile(
+            {
+                "slug": "X",
+                "coverage": {"inputs": ["stray-string", {"name": "backend"}]},
+            }
+        )
+        inputs = result["coverage"]["inputs"]
+        self.assertEqual(inputs[0], "stray-string")
+        self.assertEqual(inputs[1]["flag"], "backend")
+
+    def test_migrate_profile_file_rejects_non_dict_payload(self) -> None:
+        """A YAML file that parses to a list (not a dict) is skipped."""
+        with tempfile.TemporaryDirectory() as raw:
+            path = Path(raw) / "weird.yml"
+            path.write_text("- not a profile\n- just a list\n", encoding="utf-8")
+            from scripts.quality.migrate_profiles_to_v2 import migrate_profile_file
+
+            self.assertFalse(migrate_profile_file(path))
+
+
 class MigrateCLITests(unittest.TestCase):
     """The CLI entrypoint glues it all together."""
 
@@ -197,10 +232,45 @@ class MigrateCLITests(unittest.TestCase):
             self.assertEqual(migrated["version"], 2)
 
     def test_missing_dir_exit_two(self) -> None:
+        """A missing profiles dir exits 2 for the CLI."""
         exit_code = migrate_main(
             ["--profiles-dir", "/definitely/not/a/real/path"]
         )
         self.assertEqual(exit_code, 2)
+
+    def test_main_with_no_migrations_needed_prints_none_needed(self) -> None:
+        """When every profile is already v2, main() reports no migrations."""
+        with tempfile.TemporaryDirectory() as raw:
+            profile_dir = Path(raw)
+            # Write a profile that's already fully v2 so the migrator won't touch it.
+            v2 = migrate_profile(_v1_profile_fixture())
+            (profile_dir / "ready.yml").write_text(
+                yaml.safe_dump(v2, sort_keys=False), encoding="utf-8"
+            )
+            # Plus a non-mapping YAML file that the loop must skip cleanly.
+            (profile_dir / "stray.yml").write_text(
+                "- just a list\n- not a dict\n", encoding="utf-8"
+            )
+            from contextlib import redirect_stdout
+            import io
+
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                exit_code = migrate_main(["--profiles-dir", str(profile_dir)])
+            self.assertEqual(exit_code, 0)
+            self.assertIn("No profiles required migration.", buf.getvalue())
+
+    def test_migrate_profile_with_non_mapping_coverage_field(self) -> None:
+        """When ``coverage`` is not a mapping, it's left alone."""
+        result = migrate_profile({"slug": "X", "coverage": "not-a-dict"})
+        self.assertEqual(result["coverage"], "not-a-dict")
+
+    def test_migrate_profile_with_non_list_inputs_is_left_alone(self) -> None:
+        """When ``coverage.inputs`` isn't a list, don't touch it."""
+        result = migrate_profile(
+            {"slug": "X", "coverage": {"inputs": "not-a-list"}}
+        )
+        self.assertEqual(result["coverage"]["inputs"], "not-a-list")
 
 
 if __name__ == "__main__":

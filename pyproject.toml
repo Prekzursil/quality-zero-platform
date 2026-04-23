@@ -1,6 +1,13 @@
 [tool.coverage.run]
+# Phase 1 QZP v2 additions join rollup_v2 in the 100% enforced scope.
+# Phase 4 expands source to the full `scripts/quality/` tree once the
+# rollup_v2 rollout is stable. `source` accepts both paths and dotted
+# module names; the module names let coverage.py track the new modules
+# even though they sit outside the rollup_v2 directory.
 source = [
   "scripts/quality/rollup_v2",
+  "scripts.quality.fleet_inventory",
+  "scripts.quality.migrate_profiles_to_v2",
 ]
 branch = true
 omit = [

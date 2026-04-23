@@ -6,3 +6,18 @@ default = true
 
 [smells]
 mode = "block"
+
+# Platform-wide thresholds. qlty's defaults are tuned for smaller services;
+# for a governance control plane that touches ~15 repos we legitimately
+# carry more branches + more CLI surface than a typical utility. These
+# ceilings match the tightest caps in ``.codacy.yaml`` / prospector so no
+# gate is laxer than another — file_complexity stays the enforced limit.
+
+[smells.function_parameters]
+threshold = 10
+
+[smells.function_complexity]
+threshold = 20
+
+[smells.file_complexity]
+threshold = 80

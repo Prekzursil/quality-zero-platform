@@ -1,0 +1,120 @@
+name: Reusable Bumps
+
+# QZP v2 Phase 5 §5.5 — fleet-wide bump recipe rollout.
+# ``workflow_dispatch`` entry point that loads a recipe from
+# ``profiles/bumps/<date>-<name>.yml``, validates it against the
+# bump-recipe schema, plans the staging + rollout waves, and
+# (in a future increment) opens the per-repo PRs. Today this
+# workflow ships the PLAN step so the recipe schema is reachable
+# from CI. The per-repo PR-opening + staging-CI wait + rollback
+# land in a follow-up increment.
+#
+# Waves, per the design doc:
+#  1. Stage 1: open PRs against ``staging_repos``. Wait for CI
+#     green on all.
+#  2. Stage 2 (auto when ``full_rollout_after_staging: true``):
+#     open PRs against the rest of the affected fleet.
+#  3. Rollback: if stage 1 CI fails on >= 1 repo, revert the
+#     bump recipe commit + open ``alert:fleet-bump-fail``.
+
+permissions: {}
+
+on:
+  workflow_dispatch:
+    inputs:
+      recipe_path:
+        type: string
+        required: true
+        description: "Path to the bump recipe YAML (e.g. ``profiles/bumps/2026-04-23-node-24.yml``)."
+      fleet_path:
+        type: string
+        required: false
+        default: inventory/repos.yml
+        description: "Path to fleet inventory; used to compute the rollout wave."
+      dry_run:
+        type: boolean
+        required: false
+        default: true
+        description: "When true, print the plan but do not open PRs or touch alerts."
+
+concurrency:
+  group: bumps-${{ inputs.recipe_path }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      staging: ${{ steps.plan.outputs.staging }}
+      rollout: ${{ steps.plan.outputs.rollout }}
+      recipe_name: ${{ steps.plan.outputs.recipe_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install platform dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Plan rollout waves
+        id: plan
+        env:
+          BUMP_RECIPE_PATH: ${{ inputs.recipe_path }}
+          BUMP_FLEET_PATH: ${{ inputs.fleet_path }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          import yaml
+          from scripts.quality import bumps, bump_rollout
+
+          recipe_path = Path(os.environ["BUMP_RECIPE_PATH"].strip())
+          fleet_path_raw = os.environ.get("BUMP_FLEET_PATH", "").strip()
+
+          recipe = bumps.load_bump_recipe(recipe_path)
+          fleet: list = []
+          if fleet_path_raw and Path(fleet_path_raw).is_file():
+              raw = yaml.safe_load(Path(fleet_path_raw).read_text(encoding="utf-8")) or {}
+              fleet = list(raw.get("repos", []))
+
+          plan = bump_rollout.plan_rollout(recipe=recipe, fleet=fleet)
+
+          output_path = os.environ.get("GITHUB_OUTPUT")
+          if output_path:
+              with open(output_path, "a", encoding="utf-8") as fh:
+                  fh.write(f"recipe_name={recipe['name']}\n")
+                  fh.write(f"staging={json.dumps(plan['staging'])}\n")
+                  fh.write(f"rollout={json.dumps(plan['rollout'])}\n")
+
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a", encoding="utf-8") as fh:
+                  fh.write(f"## Bump Rollout Plan — {recipe['name']}\n\n")
+                  fh.write(f"- Recipe: `{recipe_path}`\n")
+                  fh.write(f"- Affects stacks: `{', '.join(recipe['affects_stacks'])}`\n")
+                  fh.write(f"- Staging ({len(plan['staging'])}): ")
+                  fh.write(", ".join(f"`{s}`" for s in plan['staging']) + "\n")
+                  fh.write(f"- Rollout ({len(plan['rollout'])}): ")
+                  fh.write(", ".join(f"`{s}`" for s in plan['rollout']) + "\n")
+                  fh.write("- Per-repo PR opening arrives in a follow-up "
+                           "increment (Phase 5 inc-3.6).\n")
+          PY
+
+  notify-dry-run:
+    needs: plan
+    if: ${{ inputs.dry_run }}
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Record dry-run
+        env:
+          BUMP_RECIPE_NAME: ${{ needs.plan.outputs.recipe_name }}
+          BUMP_STAGING: ${{ needs.plan.outputs.staging }}
+          BUMP_ROLLOUT: ${{ needs.plan.outputs.rollout }}
+        run: |
+          echo "Dry-run — no PRs opened for $BUMP_RECIPE_NAME."
+          echo "Staging: $BUMP_STAGING"
+          echo "Rollout: $BUMP_ROLLOUT"

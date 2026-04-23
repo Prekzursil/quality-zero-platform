@@ -15,14 +15,19 @@ from pathlib import Path
 from typing import Any, List, Sequence, Tuple
 
 from scripts.quality.fleet_inventory import (
+    ALERT_LABEL_NOT_PROFILED,
     FleetDiff,
     PRIVATE_INCLUDE_SLUGS,
+    alert_issue_title,
     build_expected_fleet,
+    close_alert_issue_for_profiled_repo,
     diff_fleet,
     fetch_authenticated_repos,
     fetch_user_repos,
+    find_existing_alert_issue,
     load_inventory_slugs,
     merge_repo_lists,
+    open_alert_issue_for_unprofiled_repo,
 )
 
 
@@ -230,6 +235,191 @@ class MergeRepoListsTests(unittest.TestCase):
 
     def test_empty_inputs(self) -> None:
         self.assertEqual(merge_repo_lists([], []), [])
+
+
+class AlertIssueTitleTests(unittest.TestCase):
+    """Canonical, dedupable alert title format."""
+
+    def test_title_contains_label_and_slug(self) -> None:
+        title = alert_issue_title("Prekzursil/foo")
+        self.assertIn(ALERT_LABEL_NOT_PROFILED, title)
+        self.assertIn("Prekzursil/foo", title)
+
+
+class QueuedRunner:
+    """Tiny scripted subprocess runner for multi-call test sequences."""
+
+    def __init__(self, responses: List[Any]) -> None:
+        self.responses: List[Any] = list(responses)
+        self.calls: List[Sequence[str]] = []
+
+    def __call__(
+        self, args: Sequence[str], **_kwargs: Any
+    ) -> subprocess.CompletedProcess[str]:
+        self.calls.append(list(args))
+        payload = self.responses.pop(0) if self.responses else []
+        if isinstance(payload, Exception):
+            raise payload
+        stdout = payload if isinstance(payload, str) else json.dumps(payload)
+        return subprocess.CompletedProcess(
+            args=args, returncode=0, stdout=stdout, stderr=""
+        )
+
+
+class FindExistingAlertIssueTests(unittest.TestCase):
+    """De-dupe: never open a second issue for the same slug."""
+
+    def test_returns_matching_issue(self) -> None:
+        runner = QueuedRunner(
+            responses=[
+                [
+                    {
+                        "number": 42,
+                        "title": alert_issue_title("Prekzursil/foo"),
+                        "state": "open",
+                    }
+                ]
+            ]
+        )
+        result = find_existing_alert_issue(
+            "Prekzursil/quality-zero-platform",
+            slug="Prekzursil/foo",
+            runner=runner,
+        )
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result["number"], 42)
+
+    def test_returns_none_when_title_differs(self) -> None:
+        runner = QueuedRunner(
+            responses=[
+                [
+                    {
+                        "number": 7,
+                        "title": "[alert:repo-not-profiled] Prekzursil/other",
+                        "state": "open",
+                    }
+                ]
+            ]
+        )
+        result = find_existing_alert_issue(
+            "Prekzursil/quality-zero-platform",
+            slug="Prekzursil/foo",
+            runner=runner,
+        )
+        self.assertIsNone(result)
+
+    def test_returns_none_when_empty_list(self) -> None:
+        runner = QueuedRunner(responses=[[]])
+        result = find_existing_alert_issue(
+            "Prekzursil/quality-zero-platform",
+            slug="Prekzursil/foo",
+            runner=runner,
+        )
+        self.assertIsNone(result)
+
+
+class OpenAlertIssueTests(unittest.TestCase):
+    """gh issue create wrapper — dedupe + dry-run + URL parsing."""
+
+    def test_dry_run_does_not_call_gh(self) -> None:
+        runner = QueuedRunner(responses=[])
+        result = open_alert_issue_for_unprofiled_repo(
+            "Prekzursil/quality-zero-platform",
+            slug="Prekzursil/foo",
+            runner=runner,
+            dry_run=True,
+        )
+        self.assertFalse(result["created"])
+        self.assertEqual(runner.calls, [])
+
+    def test_creates_issue_when_none_exists(self) -> None:
+        runner = QueuedRunner(
+            responses=[
+                [],  # issue list → empty
+                "https://github.com/Prekzursil/quality-zero-platform/issues/123\n",
+            ]
+        )
+        result = open_alert_issue_for_unprofiled_repo(
+            "Prekzursil/quality-zero-platform",
+            slug="Prekzursil/foo",
+            runner=runner,
+        )
+        self.assertTrue(result["created"])
+        self.assertEqual(result["number"], 123)
+        # Second call should be issue create
+        self.assertEqual(len(runner.calls), 2)
+        self.assertIn("create", runner.calls[1])
+
+    def test_reuses_existing_issue(self) -> None:
+        runner = QueuedRunner(
+            responses=[
+                [
+                    {
+                        "number": 99,
+                        "title": alert_issue_title("Prekzursil/foo"),
+                        "state": "open",
+                    }
+                ],
+            ]
+        )
+        result = open_alert_issue_for_unprofiled_repo(
+            "Prekzursil/quality-zero-platform",
+            slug="Prekzursil/foo",
+            runner=runner,
+        )
+        self.assertFalse(result["created"])
+        self.assertEqual(result["number"], 99)
+        self.assertEqual(len(runner.calls), 1)  # only list, no create
+
+
+class CloseAlertIssueTests(unittest.TestCase):
+    """gh issue close wrapper — skips if nothing to close."""
+
+    def test_closes_matching_open_issue(self) -> None:
+        runner = QueuedRunner(
+            responses=[
+                [
+                    {
+                        "number": 55,
+                        "title": alert_issue_title("Prekzursil/foo"),
+                        "state": "open",
+                    }
+                ],
+                "",  # gh issue close has no meaningful stdout
+            ]
+        )
+        result = close_alert_issue_for_profiled_repo(
+            "Prekzursil/quality-zero-platform",
+            slug="Prekzursil/foo",
+            runner=runner,
+        )
+        self.assertTrue(result["closed"])
+        self.assertEqual(result["number"], 55)
+        self.assertIn("close", runner.calls[1])
+        self.assertIn("55", runner.calls[1])
+
+    def test_no_matching_issue_returns_not_closed(self) -> None:
+        runner = QueuedRunner(responses=[[]])
+        result = close_alert_issue_for_profiled_repo(
+            "Prekzursil/quality-zero-platform",
+            slug="Prekzursil/foo",
+            runner=runner,
+        )
+        self.assertFalse(result["closed"])
+        self.assertEqual(result["number"], 0)
+        self.assertEqual(len(runner.calls), 1)
+
+    def test_dry_run_does_not_call_gh(self) -> None:
+        runner = QueuedRunner(responses=[])
+        result = close_alert_issue_for_profiled_repo(
+            "Prekzursil/quality-zero-platform",
+            slug="Prekzursil/foo",
+            runner=runner,
+            dry_run=True,
+        )
+        self.assertFalse(result["closed"])
+        self.assertEqual(runner.calls, [])
 
 
 class DiffFleetTests(unittest.TestCase):

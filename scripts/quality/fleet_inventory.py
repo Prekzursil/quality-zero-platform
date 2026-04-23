@@ -239,3 +239,155 @@ def merge_repo_lists(
             seen.add(slug)
             merged.append(repo)
     return merged
+
+
+# ---------------------------------------------------------------------------
+# alert:repo-not-profiled issue opener (docs/QZP-V2-DESIGN.md §8).
+# Keeps the platform's issue tracker as the single source of alert truth —
+# per-event only, no digests. Dedupes on issue title so re-running the
+# inventory sweep doesn't spam duplicate issues.
+# ---------------------------------------------------------------------------
+
+
+ALERT_LABEL_NOT_PROFILED = "alert:repo-not-profiled"
+
+
+def alert_issue_title(slug: str) -> str:
+    """Canonical, dedupable title for the repo-not-profiled alert."""
+    return f"[{ALERT_LABEL_NOT_PROFILED}] {slug}"
+
+
+def find_existing_alert_issue(
+    platform_slug: str,
+    *,
+    slug: str,
+    runner: ProcessRunner = subprocess.run,
+) -> Mapping[str, Any] | None:
+    """Return the matching open alert issue for ``slug`` if one exists."""
+    args = [
+        "issue",
+        "list",
+        "--repo",
+        platform_slug,
+        "--label",
+        ALERT_LABEL_NOT_PROFILED,
+        "--state",
+        "open",
+        "--search",
+        slug,
+        "--json",
+        "number,title,state",
+        "--limit",
+        "100",
+    ]
+    completed = _run_gh(args, runner=runner)
+    payload = json.loads(completed.stdout) if completed.stdout else []
+    if not isinstance(payload, list):
+        return None
+    expected_title = alert_issue_title(slug)
+    for issue in payload:
+        if isinstance(issue, Mapping) and issue.get("title") == expected_title:
+            return issue
+    return None
+
+
+def open_alert_issue_for_unprofiled_repo(
+    platform_slug: str,
+    *,
+    slug: str,
+    runner: ProcessRunner = subprocess.run,
+    dry_run: bool = False,
+) -> Mapping[str, Any]:
+    """Open (or re-use) an ``alert:repo-not-profiled`` issue for ``slug``.
+
+    Returns the issue record as ``{"number": int, "title": str, "created": bool}``.
+    When ``dry_run`` is true, no ``gh`` call is made and ``created`` is ``False``.
+    """
+    if dry_run:
+        return {"number": 0, "title": alert_issue_title(slug), "created": False}
+
+    existing = find_existing_alert_issue(platform_slug, slug=slug, runner=runner)
+    if existing is not None:
+        return {
+            "number": int(existing.get("number", 0)),
+            "title": str(existing.get("title", "")),
+            "created": False,
+        }
+
+    body = (
+        f"Repository `{slug}` appears in the fleet filter "
+        f"(see `scripts/quality/fleet_inventory.py`) but has no entry in "
+        f"`profiles/repos/` or `inventory/repos.yml`.\n\n"
+        f"To close: add `profiles/repos/{slug.split('/', 1)[-1]}.yml`, "
+        f"register the slug in `inventory/repos.yml`, and run "
+        f"`python scripts/quality/fleet_inventory.py --check` locally to "
+        f"confirm the gap closed."
+    )
+    args = [
+        "issue",
+        "create",
+        "--repo",
+        platform_slug,
+        "--title",
+        alert_issue_title(slug),
+        "--label",
+        ALERT_LABEL_NOT_PROFILED,
+        "--body",
+        body,
+    ]
+    completed = _run_gh(args, runner=runner)
+    stdout = completed.stdout.strip()
+    issue_number = _issue_number_from_create_output(stdout)
+    return {
+        "number": issue_number,
+        "title": alert_issue_title(slug),
+        "created": True,
+    }
+
+
+def close_alert_issue_for_profiled_repo(
+    platform_slug: str,
+    *,
+    slug: str,
+    runner: ProcessRunner = subprocess.run,
+    dry_run: bool = False,
+) -> Mapping[str, Any]:
+    """Close any open ``alert:repo-not-profiled`` issue for ``slug``.
+
+    Returns ``{"number": int, "closed": bool}``. When no matching open
+    issue exists, ``closed`` is ``False`` and ``number`` is ``0``.
+    """
+    if dry_run:
+        return {"number": 0, "closed": False}
+
+    existing = find_existing_alert_issue(platform_slug, slug=slug, runner=runner)
+    if existing is None:
+        return {"number": 0, "closed": False}
+
+    issue_number = int(existing.get("number", 0))
+    args = [
+        "issue",
+        "close",
+        str(issue_number),
+        "--repo",
+        platform_slug,
+        "--comment",
+        f"`{slug}` was profiled. Closing.",
+    ]
+    _run_gh(args, runner=runner)
+    return {"number": issue_number, "closed": True}
+
+
+def _issue_number_from_create_output(stdout: str) -> int:
+    """Parse ``gh issue create`` URL output to extract the issue number.
+
+    ``gh`` prints the issue URL on stdout: ``https://github.com/.../issues/123``.
+    """
+    if not stdout:
+        return 0
+    # Grab the trailing numeric component of the URL.
+    tail = stdout.rstrip().rsplit("/", 1)[-1]
+    try:
+        return int(tail)
+    except ValueError:
+        return 0

@@ -1,0 +1,45 @@
+{#- react-vite-vitest stack CI template.
+
+   Targets frontend-only repos: vitest + v8 coverage + eslint +
+   prettier + tsc. Mirror-image of ``python-only`` for the JS side.
+
+   Consumed variables:
+      default_branch                - typically ``main``
+      coverage.setup.node           - Node major version; defaults to 20
+      coverage.command              - shell command to produce coverage
+-#}
+name: React Vite Vitest CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ["{{ default_branch | default('main', true) }}"]
+  pull_request:
+    branches: ["{{ default_branch | default('main', true) }}"]
+
+concurrency:
+  group: react-vite-vitest-ci-${{ '{{' }} github.ref {{ '}}' }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+{% include 'common/ci-fragments/setup-node.yml.j2' %}
+      - name: Install dependencies
+        run: npm ci
+      - name: Type check
+        run: npx tsc --noEmit
+      - name: Lint
+        run: npx eslint .
+      - name: Prettier check
+        run: npx prettier --check .
+      - name: Run tests with coverage
+        shell: bash
+        run: |
+          {{ (coverage | default({}, true)).get('command') or 'npx vitest run --coverage' }}

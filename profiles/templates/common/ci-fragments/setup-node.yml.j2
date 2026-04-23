@@ -9,9 +9,9 @@
       coverage.setup.node  - Node major version, e.g. ``20`` or ``24``.
 #}
 {%- set node = (coverage | default({}, true)).get('setup', {}).get('node') -%}
-{%- if node %}
+{% if node %}
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "{{ node }}"
-{%- endif %}
+{% endif %}

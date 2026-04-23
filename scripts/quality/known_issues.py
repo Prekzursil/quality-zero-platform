@@ -98,6 +98,6 @@ def qrv2_prompt_entries(entries: Iterable[Dict[str, Any]]) -> List[Dict[str, Any
 
 
 if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
-    root = Path(__file__).resolve().parents[2] / "known-issues"
-    for entry in load_known_issues(root):
-        print(entry.get("id"), "-", entry.get("title"))
+    _root = Path(__file__).resolve().parents[2] / "known-issues"
+    for _issue in load_known_issues(_root):
+        print(_issue.get("id"), "-", _issue.get("title"))

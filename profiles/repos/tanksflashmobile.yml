@@ -1,25 +1,34 @@
 slug: Prekzursil/TanksFlashMobile
+version: 2
 stack: node-frontend
+mode:
+  phase: absolute
+scanners: {}
+overrides: []
 verify_command: make verify
 required_secrets:
-  - CHROMATIC_PROJECT_TOKEN
-  - APPLITOOLS_API_KEY
+- CHROMATIC_PROJECT_TOKEN
+- APPLITOOLS_API_KEY
 coverage:
-  command: |
-    npm ci
+  command: 'npm ci
+
     npm --prefix apps/web ci
+
     npm --prefix apps/web test -- --coverage --watch=false
+
+    '
   inputs:
-    - format: lcov
-      name: web
-      path: apps/web/coverage/lcov.info
+  - format: lcov
+    name: web
+    path: apps/web/coverage/lcov.info
+    flag: web
 required_contexts:
   always:
-    - Chromatic Playwright
-    - Applitools Visual
+  - Chromatic Playwright
+  - Applitools Visual
   target:
-    - Chromatic Playwright
-    - Applitools Visual
+  - Chromatic Playwright
+  - Applitools Visual
 visual_pair_required: true
 visual_lane:
   kind: web
@@ -27,30 +36,39 @@ providers:
   chromatic:
     status_context: Chromatic Playwright
     project_name: TanksFlashMobile
-    token_secret_parts: [CHROMATIC, PROJECT, TOKEN]
-    local_env_var_parts: [CHROMATIC, PROJECT, TOKEN, TANKSFLASHMOBILE]
+    token_secret_parts:
+    - CHROMATIC
+    - PROJECT
+    - TOKEN
+    local_env_var_parts:
+    - CHROMATIC
+    - PROJECT
+    - TOKEN
+    - TANKSFLASHMOBILE
   applitools:
     status_context: Applitools Visual
     project_name: TanksFlashMobile
 vendors:
   sonar:
-    project_key_parts: [Prekzursil, TanksFlashMobile]
+    project_key_parts:
+    - Prekzursil
+    - TanksFlashMobile
 codeql:
   languages:
-    - actions
-    - javascript-typescript
-    - java-kotlin
+  - actions
+  - javascript-typescript
+  - java-kotlin
 dependabot:
   updates:
-    - ecosystem: npm
-      directory: /
-    - ecosystem: npm
-      directory: /apps/web
-    - ecosystem: npm
-      directory: /apps/desktop
-    - ecosystem: npm
-      directory: /apps/remake-web
-    - ecosystem: npm
-      directory: /apps/web/public/ruffle
-    - ecosystem: gradle
-      directory: /android
+  - ecosystem: npm
+    directory: /
+  - ecosystem: npm
+    directory: /apps/web
+  - ecosystem: npm
+    directory: /apps/desktop
+  - ecosystem: npm
+    directory: /apps/remake-web
+  - ecosystem: npm
+    directory: /apps/web/public/ruffle
+  - ecosystem: gradle
+    directory: /android

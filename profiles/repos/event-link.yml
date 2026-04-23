@@ -1,5 +1,17 @@
 slug: Prekzursil/event-link
+version: 2
 stack: fullstack-web
+mode:
+  phase: ratchet
+  ratchet:
+    baseline: {}
+    target_date: ''
+    escalation_date: ''
+    on_escalation: absolute
+scanners:
+  deepsource_visible:
+    severity: block
+overrides: []
 verify_command: bash scripts/verify
 issue_policy:
   mode: ratchet
@@ -9,48 +21,51 @@ enabled_scanners:
   deepsource_visible: true
 required_contexts:
   always:
-    - shared-scanner-matrix / Coverage 100 Gate
-    - shared-codecov-analytics / Codecov Analytics
-    - shared-scanner-matrix / QLTY Zero
-    - shared-scanner-matrix / Sonar Zero
-    - shared-scanner-matrix / Codacy Zero
-    - shared-scanner-matrix / Semgrep Zero
-    - shared-scanner-matrix / Sentry Zero
-    - shared-scanner-matrix / DeepScan Zero
-    - shared-scanner-matrix / DeepSource Visible Zero
+  - shared-scanner-matrix / Coverage 100 Gate
+  - shared-codecov-analytics / Codecov Analytics
+  - shared-scanner-matrix / QLTY Zero
+  - shared-scanner-matrix / Sonar Zero
+  - shared-scanner-matrix / Codacy Zero
+  - shared-scanner-matrix / Semgrep Zero
+  - shared-scanner-matrix / Sentry Zero
+  - shared-scanner-matrix / DeepScan Zero
+  - shared-scanner-matrix / DeepSource Visible Zero
   target:
-    - shared-scanner-matrix / Coverage 100 Gate
-    - shared-codecov-analytics / Codecov Analytics
-    - shared-scanner-matrix / QLTY Zero
-    - shared-scanner-matrix / Sonar Zero
-    - shared-scanner-matrix / Codacy Zero
-    - shared-scanner-matrix / Semgrep Zero
-    - shared-scanner-matrix / Sentry Zero
-    - shared-scanner-matrix / DeepScan Zero
-    - shared-scanner-matrix / DeepSource Visible Zero
-    - SonarCloud Code Analysis
-    - Codacy Static Code Analysis
-    - DeepScan
-    - qlty check
-    - qlty coverage
-    - qlty coverage diff
+  - shared-scanner-matrix / Coverage 100 Gate
+  - shared-codecov-analytics / Codecov Analytics
+  - shared-scanner-matrix / QLTY Zero
+  - shared-scanner-matrix / Sonar Zero
+  - shared-scanner-matrix / Codacy Zero
+  - shared-scanner-matrix / Semgrep Zero
+  - shared-scanner-matrix / Sentry Zero
+  - shared-scanner-matrix / DeepScan Zero
+  - shared-scanner-matrix / DeepSource Visible Zero
+  - SonarCloud Code Analysis
+  - Codacy Static Code Analysis
+  - DeepScan
+  - qlty check
+  - qlty coverage
+  - qlty coverage diff
   pull_request_only:
-    - SonarCloud Code Analysis
-    - Codacy Static Code Analysis
-    - DeepScan
-    - qlty check
-    - qlty coverage
-    - qlty coverage diff
+  - SonarCloud Code Analysis
+  - Codacy Static Code Analysis
+  - DeepScan
+  - qlty check
+  - qlty coverage
+  - qlty coverage diff
 coverage:
-  command: |
-    bash scripts/verify
+  command: 'bash scripts/verify
+
+    '
   inputs:
-    - format: xml
-      name: backend
-      path: backend/coverage.xml
-    - format: xml
-      name: frontend
-      path: ui/coverage/cobertura-coverage.xml
+  - format: xml
+    name: backend
+    path: backend/coverage.xml
+    flag: backend
+  - format: xml
+    name: frontend
+    path: ui/coverage/cobertura-coverage.xml
+    flag: frontend
   min_percent: 100.0
   branch_min_percent: 100.0
 vendors:
@@ -58,12 +73,12 @@ vendors:
     project_key: Prekzursil_event-link
 codeql:
   languages:
-    - actions
-    - javascript-typescript
-    - python
+  - actions
+  - javascript-typescript
+  - python
 dependabot:
   updates:
-    - ecosystem: pip
-      directory: /backend
-    - ecosystem: npm
-      directory: /ui
+  - ecosystem: pip
+    directory: /backend
+  - ecosystem: npm
+    directory: /ui

@@ -1,0 +1,28 @@
+---
+# Prospector tuning for QZP. Codacy runs prospector by default; without
+# a repo-local config it enables the full pydocstyle rule set, which
+# internally contradicts itself (D212 vs D213). This file narrows the
+# doc-coverage rules so the project's existing single-line-summary +
+# optional body pattern is valid everywhere.
+
+strictness: medium
+
+pydocstyle:
+  disable:
+    # D212 and D213 are mutually exclusive summary-placement rules;
+    # the codebase uses the PEP-257 convention (summary on line 1).
+    - D213
+    # D203 requires a blank line before every class docstring; the
+    # project uses "no blank line" matching PEP-257 / rollup_v2/.
+    - D203
+    # D407 wants underlined section titles in numpy-style docstrings;
+    # we write simple reST-style prose.
+    - D407
+
+mccabe:
+  options:
+    max-complexity: 10
+
+pycodestyle:
+  options:
+    max-line-length: 120

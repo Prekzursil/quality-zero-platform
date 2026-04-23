@@ -1,5 +1,10 @@
 slug: Prekzursil/env-inspector
+version: 2
 stack: python-desktop
+mode:
+  phase: absolute
+scanners: {}
+overrides: []
 verify_command: make verify
 required_contexts_mode: replace
 issue_policy:
@@ -7,71 +12,64 @@ issue_policy:
   pr_behavior: absolute
   main_behavior: absolute
 coverage:
-  command: |
-    mkdir -p coverage
-    mkdir -p .tmp
-    export TMPDIR="$PWD/.tmp"
-    python -m pip install --upgrade pip
-    if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
-    python -m pip install pytest pytest-cov
-    python -m pytest -q -s \
-      --cov=env_inspector \
-      --cov=env_inspector_core \
-      --cov=env_inspector_gui \
-      --cov-branch \
-      --cov-report=xml:coverage/python-coverage.xml
+  command: "mkdir -p coverage\nmkdir -p .tmp\nexport TMPDIR=\"$PWD/.tmp\"\npython\
+    \ -m pip install --upgrade pip\nif [ -f requirements.txt ]; then python -m pip\
+    \ install -r requirements.txt; fi\npython -m pip install pytest pytest-cov\npython\
+    \ -m pytest -q -s \\\n  --cov=env_inspector \\\n  --cov=env_inspector_core \\\n\
+    \  --cov=env_inspector_gui \\\n  --cov-branch \\\n  --cov-report=xml:coverage/python-coverage.xml\n"
   inputs:
-    - format: xml
-      name: python
-      path: coverage/python-coverage.xml
+  - format: xml
+    name: python
+    path: coverage/python-coverage.xml
+    flag: python
   require_sources:
-    - env_inspector.py
-    - env_inspector_core/
-    - env_inspector_gui/
+  - env_inspector.py
+  - env_inspector_core/
+  - env_inspector_gui/
   min_percent: 100.0
 trigger:
   mode: pr-focused
   pr_head_sha: true
 required_contexts:
   always:
-    - shared-scanner-matrix / Coverage 100 Gate
-    - shared-codecov-analytics / Codecov Analytics
-    - codeql / CodeQL
-    - shared-scanner-matrix / QLTY Zero
-    - shared-scanner-matrix / Sonar Zero
-    - shared-scanner-matrix / Codacy Zero
-    - shared-scanner-matrix / Semgrep Zero
-    - shared-scanner-matrix / Sentry Zero
-    - shared-scanner-matrix / DeepScan Zero
+  - shared-scanner-matrix / Coverage 100 Gate
+  - shared-codecov-analytics / Codecov Analytics
+  - codeql / CodeQL
+  - shared-scanner-matrix / QLTY Zero
+  - shared-scanner-matrix / Sonar Zero
+  - shared-scanner-matrix / Codacy Zero
+  - shared-scanner-matrix / Semgrep Zero
+  - shared-scanner-matrix / Sentry Zero
+  - shared-scanner-matrix / DeepScan Zero
   target:
-    - shared-scanner-matrix / Coverage 100 Gate
-    - shared-codecov-analytics / Codecov Analytics
-    - codeql / CodeQL
-    - shared-scanner-matrix / QLTY Zero
-    - shared-scanner-matrix / Sonar Zero
-    - shared-scanner-matrix / Codacy Zero
-    - shared-scanner-matrix / Semgrep Zero
-    - shared-scanner-matrix / Sentry Zero
-    - shared-scanner-matrix / DeepScan Zero
-    - SonarCloud Code Analysis
-    - Codacy Static Code Analysis
-    - DeepScan
-    - qlty check
-    - qlty coverage
-    - qlty coverage diff
+  - shared-scanner-matrix / Coverage 100 Gate
+  - shared-codecov-analytics / Codecov Analytics
+  - codeql / CodeQL
+  - shared-scanner-matrix / QLTY Zero
+  - shared-scanner-matrix / Sonar Zero
+  - shared-scanner-matrix / Codacy Zero
+  - shared-scanner-matrix / Semgrep Zero
+  - shared-scanner-matrix / Sentry Zero
+  - shared-scanner-matrix / DeepScan Zero
+  - SonarCloud Code Analysis
+  - Codacy Static Code Analysis
+  - DeepScan
+  - qlty check
+  - qlty coverage
+  - qlty coverage diff
   pull_request_only:
-    - SonarCloud Code Analysis
-    - Codacy Static Code Analysis
-    - DeepScan
-    - qlty check
-    - qlty coverage
-    - qlty coverage diff
+  - SonarCloud Code Analysis
+  - Codacy Static Code Analysis
+  - DeepScan
+  - qlty check
+  - qlty coverage
+  - qlty coverage diff
 vendors:
   sonar:
     project_key: Prekzursil_env-inspector
 codeql:
   languages:
-    - actions
-    - python
+  - actions
+  - python
 dependabot:
   updates: []

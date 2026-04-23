@@ -1,31 +1,44 @@
 slug: Prekzursil/WebCoder
+version: 2
 stack: fullstack-web
+mode:
+  phase: absolute
+scanners: {}
+overrides: []
 verify_command: bash scripts/verify
 required_secrets:
-  - CHROMATIC_PROJECT_TOKEN
-  - APPLITOOLS_API_KEY
+- CHROMATIC_PROJECT_TOKEN
+- APPLITOOLS_API_KEY
 coverage:
-  command: |
-    mkdir -p coverage
+  command: 'mkdir -p coverage
+
     python -m pip install --upgrade pip
+
     python -m pip install -r backend/requirements.txt pytest pytest-cov
+
     python -m pytest backend --cov=backend --cov-branch --cov-report=xml:backend/coverage.xml
+
     npm --prefix frontend/webcoder_ui ci
+
     npm --prefix frontend/webcoder_ui test -- --coverage --watch=false
+
+    '
   inputs:
-    - format: xml
-      name: backend
-      path: backend/coverage.xml
-    - format: lcov
-      name: frontend
-      path: frontend/webcoder_ui/coverage/lcov.info
+  - format: xml
+    name: backend
+    path: backend/coverage.xml
+    flag: backend
+  - format: lcov
+    name: frontend
+    path: frontend/webcoder_ui/coverage/lcov.info
+    flag: frontend
 required_contexts:
   always:
-    - Chromatic Playwright
-    - Applitools Visual
+  - Chromatic Playwright
+  - Applitools Visual
   target:
-    - Chromatic Playwright
-    - Applitools Visual
+  - Chromatic Playwright
+  - Applitools Visual
 visual_pair_required: true
 visual_lane:
   kind: web
@@ -33,22 +46,31 @@ providers:
   chromatic:
     status_context: Chromatic Playwright
     project_name: WebCoder
-    token_secret_parts: [CHROMATIC, PROJECT, TOKEN]
-    local_env_var_parts: [CHROMATIC, PROJECT, TOKEN, WEBCODER]
+    token_secret_parts:
+    - CHROMATIC
+    - PROJECT
+    - TOKEN
+    local_env_var_parts:
+    - CHROMATIC
+    - PROJECT
+    - TOKEN
+    - WEBCODER
   applitools:
     status_context: Applitools Visual
     project_name: WebCoder
 vendors:
   sonar:
-    project_key_parts: [Prekzursil, WebCoder]
+    project_key_parts:
+    - Prekzursil
+    - WebCoder
 codeql:
   languages:
-    - actions
-    - javascript-typescript
-    - python
+  - actions
+  - javascript-typescript
+  - python
 dependabot:
   updates:
-    - ecosystem: pip
-      directory: /backend
-    - ecosystem: npm
-      directory: /frontend/webcoder_ui
+  - ecosystem: pip
+    directory: /backend
+  - ecosystem: npm
+    directory: /frontend/webcoder_ui

@@ -1,25 +1,33 @@
 slug: Prekzursil/pbinfo-get-unsolved
+version: 2
 stack: node-frontend
+mode:
+  phase: absolute
+scanners: {}
+overrides: []
 verify_command: bash scripts/verify
 coverage:
-  command: |
-    npm ci
+  command: 'npm ci
+
     npm test -- --coverage --watch=false
+
+    '
   inputs:
-    - format: lcov
-      name: node
-      path: coverage/lcov.info
+  - format: lcov
+    name: node
+    path: coverage/lcov.info
+    flag: node
 vendors:
   sonar:
     project_key: Prekzursil_pbinfo-get-unsolved
   sentry:
     project_vars:
-      - SENTRY_PROJECT
+    - SENTRY_PROJECT
 codeql:
   languages:
-    - actions
-    - javascript-typescript
+  - actions
+  - javascript-typescript
 dependabot:
   updates:
-    - ecosystem: npm
-      directory: /
+  - ecosystem: npm
+    directory: /

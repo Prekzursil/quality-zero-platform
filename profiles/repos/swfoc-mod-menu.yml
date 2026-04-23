@@ -1,29 +1,32 @@
 slug: Prekzursil/SWFOC-Mod-Menu
+version: 2
 stack: dotnet-wpf
-verify_command: dotnet test tests/SwfocTrainer.Tests/SwfocTrainer.Tests.csproj -c Release --no-build --filter "FullyQualifiedName!~SwfocTrainer.Tests.Profiles.Live&FullyQualifiedName!~RuntimeAttachSmokeTests"
+mode:
+  phase: absolute
+scanners: {}
+overrides: []
+verify_command: dotnet test tests/SwfocTrainer.Tests/SwfocTrainer.Tests.csproj -c
+  Release --no-build --filter "FullyQualifiedName!~SwfocTrainer.Tests.Profiles.Live&FullyQualifiedName!~RuntimeAttachSmokeTests"
 coverage:
   runner: windows-latest
   command_shell: pwsh
-  command: |
-    pwsh -ExecutionPolicy Bypass -File ./tools/quality/collect-dotnet-coverage.ps1 -Configuration Release -DeterministicOnly
-    $candidates = @(
-      (Join-Path (Get-Location) 'TestResults/coverage/cobertura.xml'),
-      (Join-Path (Get-Location) 'tests/SwfocTrainer.Tests/TestResults/coverage.cobertura.xml'),
-      (Join-Path (Get-Location) 'TestResults/coverage.cobertura.xml')
-    )
-    $resolved = $candidates | Where-Object { Test-Path -Path $_ } | Select-Object -First 1
-    if (-not $resolved) {
-      throw "Coverage report not found. Checked: $($candidates -join '; ')"
-    }
-    Write-Host "Using coverage report: $resolved"
+  command: "pwsh -ExecutionPolicy Bypass -File ./tools/quality/collect-dotnet-coverage.ps1\
+    \ -Configuration Release -DeterministicOnly\n$candidates = @(\n  (Join-Path (Get-Location)\
+    \ 'TestResults/coverage/cobertura.xml'),\n  (Join-Path (Get-Location) 'tests/SwfocTrainer.Tests/TestResults/coverage.cobertura.xml'),\n\
+    \  (Join-Path (Get-Location) 'TestResults/coverage.cobertura.xml')\n)\n$resolved\
+    \ = $candidates | Where-Object { Test-Path -Path $_ } | Select-Object -First 1\n\
+    if (-not $resolved) {\n  throw \"Coverage report not found. Checked: $($candidates\
+    \ -join '; ')\"\n}\nWrite-Host \"Using coverage report: $resolved\"\n"
   inputs:
-    - format: xml
-      name: dotnet
-      path: TestResults/coverage/cobertura.xml
+  - format: xml
+    name: dotnet
+    path: TestResults/coverage/cobertura.xml
+    flag: dotnet
   assert_mode:
     default: enforce
     pull_request: non_regression
-  evidence_note: PRs enforce non-regression against the last successful protected-branch baseline.
+  evidence_note: PRs enforce non-regression against the last successful protected-branch
+    baseline.
 visual_pair_required: true
 visual_lane:
   kind: desktop-adapter
@@ -31,17 +34,19 @@ trigger:
   mode: standard
   pr_head_sha: true
 legacy_policy_checks:
-  - code/snyk
+- code/snyk
 vendors:
   sonar:
-    project_key_parts: [Prekzursil, SWFOC-Mod-Menu]
+    project_key_parts:
+    - Prekzursil
+    - SWFOC-Mod-Menu
 codeql:
   runner: windows-latest
   languages:
-    - actions
-    - csharp
-    - javascript-typescript
+  - actions
+  - csharp
+  - javascript-typescript
 dependabot:
   updates:
-    - ecosystem: nuget
-      directory: /
+  - ecosystem: nuget
+    directory: /

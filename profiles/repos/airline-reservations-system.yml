@@ -1,5 +1,10 @@
 slug: Prekzursil/Airline-Reservations-System
+version: 2
 stack: cpp-cmake
+mode:
+  phase: absolute
+scanners: {}
+overrides: []
 verify_command: bash scripts/verify
 required_contexts_mode: replace
 issue_policy:
@@ -7,109 +12,95 @@ issue_policy:
   pr_behavior: introduced_only
   main_behavior: absolute
 coverage:
-  command: |
-    python3 -m venv .venv-pytest
-    . .venv-pytest/bin/activate
-    python -m pip install --disable-pip-version-check pytest pytest-cov
-    mkdir -p coverage/python
-    python -m pytest -q tests/test_quality_security_scripts.py tests/test_quality_coverage_scripts.py \
-      tests/test_quality_script_coverage.py \
-      tests/test_static_remediation_guards.py \
-      --cov=scripts \
-      --cov-branch \
-      --cov-report=xml:coverage/python/coverage.xml
-    npm --prefix airline-gui ci
-    npm --prefix airline-gui test -- --coverage --watch=false
-    bash scripts/verify
-    python3 -m venv .venv-gcovr
-    . .venv-gcovr/bin/activate
-    python -m pip install --disable-pip-version-check gcovr
-    mkdir -p coverage/cpp
-    gcovr \
-      --root . \
-      --filter '^src/' \
-      --exclude '^tests/' \
-      --exclude '^build/_deps/' \
-      --object-directory build \
-      --merge-mode-functions=merge-use-line-min \
-      --gcov-exclude-directory '.*/CMakeFiles/airline_api_server.dir/.*' \
-      --gcov-exclude-directory '.*/CMakeFiles/airline_reservation_system.dir/.*' \
-      --exclude-throw-branches \
-      --exclude-unreachable-branches \
-      --lcov coverage/cpp/lcov.info \
-      --print-summary
+  command: "python3 -m venv .venv-pytest\n. .venv-pytest/bin/activate\npython -m pip\
+    \ install --disable-pip-version-check pytest pytest-cov\nmkdir -p coverage/python\n\
+    python -m pytest -q tests/test_quality_security_scripts.py tests/test_quality_coverage_scripts.py\
+    \ \\\n  tests/test_quality_script_coverage.py \\\n  tests/test_static_remediation_guards.py\
+    \ \\\n  --cov=scripts \\\n  --cov-branch \\\n  --cov-report=xml:coverage/python/coverage.xml\n\
+    npm --prefix airline-gui ci\nnpm --prefix airline-gui test -- --coverage --watch=false\n\
+    bash scripts/verify\npython3 -m venv .venv-gcovr\n. .venv-gcovr/bin/activate\n\
+    python -m pip install --disable-pip-version-check gcovr\nmkdir -p coverage/cpp\n\
+    gcovr \\\n  --root . \\\n  --filter '^src/' \\\n  --exclude '^tests/' \\\n  --exclude\
+    \ '^build/_deps/' \\\n  --object-directory build \\\n  --merge-mode-functions=merge-use-line-min\
+    \ \\\n  --gcov-exclude-directory '.*/CMakeFiles/airline_api_server.dir/.*' \\\n\
+    \  --gcov-exclude-directory '.*/CMakeFiles/airline_reservation_system.dir/.*'\
+    \ \\\n  --exclude-throw-branches \\\n  --exclude-unreachable-branches \\\n  --lcov\
+    \ coverage/cpp/lcov.info \\\n  --print-summary\n"
   setup:
-    node: "22"
+    node: '22'
   inputs:
-    - format: xml
-      name: scripts
-      path: coverage/python/coverage.xml
-    - format: lcov
-      name: node
-      path: airline-gui/coverage/lcov.info
-    - format: lcov
-      name: cpp
-      path: coverage/cpp/lcov.info
+  - format: xml
+    name: scripts
+    path: coverage/python/coverage.xml
+    flag: scripts
+  - format: lcov
+    name: node
+    path: airline-gui/coverage/lcov.info
+    flag: node
+  - format: lcov
+    name: cpp
+    path: coverage/cpp/lcov.info
+    flag: cpp
   require_sources:
-    - scripts/
-    - src/
-    - airline-gui/src/
+  - scripts/
+  - src/
+  - airline-gui/src/
   min_percent: 100.0
   branch_min_percent: 100.0
 required_contexts:
   always:
-    - shared-scanner-matrix / Coverage 100 Gate
-    - shared-codecov-analytics / Codecov Analytics
-    - codeql / CodeQL
-    - shared-scanner-matrix / QLTY Zero
-    - shared-scanner-matrix / Sonar Zero
-    - shared-scanner-matrix / Codacy Zero
-    - shared-scanner-matrix / Semgrep Zero
-    - shared-scanner-matrix / Sentry Zero
-    - "DeepSource: JavaScript"
-    - "DeepSource: Python"
-    - "DeepSource: C & C++"
-    - "DeepSource: Shell"
-    - "DeepSource: Secrets"
-    - SonarCloud Code Analysis
+  - shared-scanner-matrix / Coverage 100 Gate
+  - shared-codecov-analytics / Codecov Analytics
+  - codeql / CodeQL
+  - shared-scanner-matrix / QLTY Zero
+  - shared-scanner-matrix / Sonar Zero
+  - shared-scanner-matrix / Codacy Zero
+  - shared-scanner-matrix / Semgrep Zero
+  - shared-scanner-matrix / Sentry Zero
+  - 'DeepSource: JavaScript'
+  - 'DeepSource: Python'
+  - 'DeepSource: C & C++'
+  - 'DeepSource: Shell'
+  - 'DeepSource: Secrets'
+  - SonarCloud Code Analysis
   target:
-    - shared-scanner-matrix / Coverage 100 Gate
-    - shared-codecov-analytics / Codecov Analytics
-    - codeql / CodeQL
-    - shared-scanner-matrix / QLTY Zero
-    - qlty check
-    - qlty coverage
-    - qlty coverage diff
-    - shared-scanner-matrix / Sonar Zero
-    - shared-scanner-matrix / Codacy Zero
-    - shared-scanner-matrix / Semgrep Zero
-    - shared-scanner-matrix / Sentry Zero
-    - "DeepSource: JavaScript"
-    - "DeepSource: Python"
-    - "DeepSource: C & C++"
-    - "DeepSource: Shell"
-    - "DeepSource: Secrets"
-    - shared-scanner-matrix / DeepScan Zero
-    - SonarCloud Code Analysis
-    - Codacy Static Code Analysis
-    - DeepScan
+  - shared-scanner-matrix / Coverage 100 Gate
+  - shared-codecov-analytics / Codecov Analytics
+  - codeql / CodeQL
+  - shared-scanner-matrix / QLTY Zero
+  - qlty check
+  - qlty coverage
+  - qlty coverage diff
+  - shared-scanner-matrix / Sonar Zero
+  - shared-scanner-matrix / Codacy Zero
+  - shared-scanner-matrix / Semgrep Zero
+  - shared-scanner-matrix / Sentry Zero
+  - 'DeepSource: JavaScript'
+  - 'DeepSource: Python'
+  - 'DeepSource: C & C++'
+  - 'DeepSource: Shell'
+  - 'DeepSource: Secrets'
+  - shared-scanner-matrix / DeepScan Zero
+  - SonarCloud Code Analysis
+  - Codacy Static Code Analysis
+  - DeepScan
   pull_request_only:
-    - Codacy Static Code Analysis
-    - DeepScan
-    - qlty check
-    - qlty coverage
-    - qlty coverage diff
-    - shared-scanner-matrix / DeepScan Zero
+  - Codacy Static Code Analysis
+  - DeepScan
+  - qlty check
+  - qlty coverage
+  - qlty coverage diff
+  - shared-scanner-matrix / DeepScan Zero
 vendors:
   sonar:
     project_key_from_repo_slug: true
 codeql:
   languages:
-    - actions
-    - c-cpp
-    - javascript-typescript
-    - python
+  - actions
+  - c-cpp
+  - javascript-typescript
+  - python
 dependabot:
   updates:
-    - ecosystem: npm
-      directory: /airline-gui
+  - ecosystem: npm
+    directory: /airline-gui

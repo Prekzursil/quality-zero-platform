@@ -6,7 +6,7 @@ exclude_patterns = [
   "build/**",
   "generated/**",
   "htmlcov/**",
-  "docs/admin/**",
+  "docs/**",
   "profiles/**",
   "scripts/**",
   "tests/**",

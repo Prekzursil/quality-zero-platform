@@ -29,7 +29,7 @@ class AlertTypeRegistryTests(unittest.TestCase):
     """The design spec's 8 alert types are all registered with labels."""
 
     def test_every_documented_alert_type_has_a_label(self) -> None:
-        """All 8 alert:* labels from §8 are exposed as ``AlertType`` members."""
+        """All §8 + §9 alert:* labels are exposed as ``AlertType`` members."""
         expected_labels = {
             "alert:regression",
             "alert:deadline-missed",
@@ -39,6 +39,7 @@ class AlertTypeRegistryTests(unittest.TestCase):
             "alert:fleet-bump-fail",
             "alert:repo-not-profiled",
             "alert:flag-missing",
+            "alert:secret-missing",
         }
         actual_labels = {member.label for member in alerts.AlertType}
         self.assertEqual(actual_labels, expected_labels)

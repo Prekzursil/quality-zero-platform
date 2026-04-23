@@ -247,9 +247,31 @@ def detect_flag_missing(
     return triggers
 
 
+def detect_secret_missing(
+    *, slug: str, missing_secrets: Iterable[str],
+) -> List[AlertTrigger]:
+    """One alert per severity:block scanner that lacks its configured secret."""
+    missing = [str(s).strip() for s in missing_secrets if str(s).strip()]
+    triggers: List[AlertTrigger] = []
+    for secret in missing:
+        subject = f"{slug}:{secret}"
+        body = (
+            f"Severity-block scanner on `{slug}` is missing its required "
+            f"secret **{secret}**. Add the secret to the repo's Actions "
+            f"secrets (or the org-level secret for shared scanners). Until "
+            f"the secret lands, the corresponding quality lane will fail."
+        )
+        triggers.append(AlertTrigger(
+            alert_type=alerts.AlertType.SECRET_MISSING,
+            subject=subject, body=body,
+        ))
+    return triggers
+
+
 if __name__ == "__main__":  # pragma: no cover — no ad-hoc CLI yet
     import json
     print(json.dumps({"detectors": [
         "coverage_regression", "deadline_missed", "escalation",
         "bypass_stale", "drift_stuck", "fleet_bump_fail", "flag_missing",
+        "secret_missing",
     ]}))

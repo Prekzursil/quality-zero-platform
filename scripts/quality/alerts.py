@@ -65,7 +65,7 @@ ProcessRunner = Callable[..., "subprocess.CompletedProcess[str]"]
 
 
 class AlertType(enum.Enum):
-    """The 8 platform alert types from ``docs/QZP-V2-DESIGN.md`` §8."""
+    """The platform alert types from ``docs/QZP-V2-DESIGN.md`` §8 + §9 secrets-sync."""
 
     REGRESSION = "alert:regression"
     DEADLINE_MISSED = "alert:deadline-missed"
@@ -75,6 +75,7 @@ class AlertType(enum.Enum):
     FLEET_BUMP_FAIL = "alert:fleet-bump-fail"
     REPO_NOT_PROFILED = "alert:repo-not-profiled"
     FLAG_MISSING = "alert:flag-missing"
+    SECRET_MISSING = "alert:secret-missing"
 
     @property
     def label(self) -> str:

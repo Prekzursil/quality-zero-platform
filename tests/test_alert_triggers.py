@@ -290,6 +290,48 @@ class DetectFleetBumpFailTests(unittest.TestCase):
         self.assertEqual(triggers, [])
 
 
+class DetectSecretMissingTests(unittest.TestCase):
+    """``detect_secret_missing`` fires one alert per missing scanner secret."""
+
+    def test_single_missing_secret_fires_one_alert(self) -> None:
+        """One missing secret → exactly one alert with slug:secret subject."""
+        triggers = at.detect_secret_missing(
+            slug="org/repo",
+            missing_secrets=["CODACY_API_TOKEN"],
+        )
+        self.assertEqual(len(triggers), 1)
+        self.assertEqual(triggers[0].alert_type, alerts.AlertType.SECRET_MISSING)
+        self.assertEqual(triggers[0].subject, "org/repo:CODACY_API_TOKEN")
+
+    def test_multiple_missing_secrets_each_open_separate_alert(self) -> None:
+        """Two missing secrets → two separate alerts."""
+        triggers = at.detect_secret_missing(
+            slug="org/repo",
+            missing_secrets=["SONAR_TOKEN", "CODECOV_TOKEN"],
+        )
+        self.assertEqual(len(triggers), 2)
+        subjects = sorted(t.subject for t in triggers)
+        self.assertEqual(
+            subjects, ["org/repo:CODECOV_TOKEN", "org/repo:SONAR_TOKEN"],
+        )
+
+    def test_empty_missing_list_does_not_fire(self) -> None:
+        """No missing secrets → no alerts."""
+        triggers = at.detect_secret_missing(
+            slug="org/repo", missing_secrets=[],
+        )
+        self.assertEqual(triggers, [])
+
+    def test_blank_entries_ignored(self) -> None:
+        """Blank / whitespace-only entries in ``missing_secrets`` are skipped."""
+        triggers = at.detect_secret_missing(
+            slug="org/repo",
+            missing_secrets=["", "  ", "REAL_SECRET"],
+        )
+        self.assertEqual(len(triggers), 1)
+        self.assertEqual(triggers[0].subject, "org/repo:REAL_SECRET")
+
+
 class DetectFlagMissingTests(unittest.TestCase):
     """``detect_flag_missing`` fires when a declared flag has no Codecov report."""
 

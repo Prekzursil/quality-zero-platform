@@ -44,7 +44,19 @@ src = ["scripts", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "TCH", "S", "PT"]
-ignore = ["S101"]  # assert is used in tests
+ignore = [
+  "S101",  # assert is used in tests
+  # The codacy-compat test in tests/test_quality_codacy_compatibility.py
+  # requires `from __future__ import absolute_import` AND typing-based
+  # generic imports (``typing.List`` etc.) so Codacy's python 2-compat
+  # checker stays happy. The pyupgrade rules below contradict that
+  # requirement; ignoring them project-wide keeps both contracts
+  # satisfied without per-line annotations.
+  "UP006",  # Use `list` instead of `typing.List`
+  "UP007",  # Use `X | Y` instead of `Union[X, Y]`
+  "UP010",  # Unnecessary `__future__` import for target Python version
+  "UP035",  # Import from `collections.abc` instead of `typing`
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["scripts"]

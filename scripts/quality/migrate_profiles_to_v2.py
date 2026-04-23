@@ -1,32 +1,29 @@
-"""Migrate ``profiles/repos/<slug>.yml`` files to schema v2 in-place.
+"""Migrate ``profiles/repos/<slug>.yml`` files to schema v2 in-place."""
+# The migration is idempotent: re-running it on an already-v2 profile
+# produces the same output. The script is thin by design — all derivation
+# rules live in :mod:`scripts.quality.profile_normalization`, which also
+# powers the load-time auto-migration path. Having the migration emit
+# those same values into the on-disk YAML means downstream tooling sees
+# explicit v2 fields instead of having to re-derive them every load.
+#
+# Rules:
+#   * Adds ``version: 2`` near the top of the file if absent.
+#   * Synthesises ``mode`` from legacy ``issue_policy.mode`` when absent.
+#   * Synthesises ``scanners`` from legacy ``enabled_scanners`` (every
+#     true-valued scanner maps to ``severity: block``, matching the strict
+#     default in docs/QZP-V2-DESIGN.md §10.1).
+#   * Adds ``flag`` to each ``coverage.inputs`` item when missing, using
+#     the item's ``name`` — this is the single most important migration
+#     because the reusable-codecov-analytics loop keys off ``flag`` for
+#     per-upload split (fixes the event-link 58% ghost-coverage bug).
+#   * Adds ``overrides: []`` if absent so drift-sync has a deterministic
+#     field to compare against.
+#   * Does NOT delete legacy ``issue_policy`` / ``enabled_scanners``.
+#     They stay during the migration window so consumers still reading
+#     those keys directly keep working; Phase 4 will remove them once
+#     every reader has switched to the v2 shape.
 
-The migration is idempotent: re-running it on an already-v2 profile
-produces the same output. The script is thin by design — all derivation
-rules live in :mod:`scripts.quality.profile_normalization`, which also
-powers the load-time auto-migration path. Having the migration emit
-those same values into the on-disk YAML means downstream tooling sees
-explicit v2 fields instead of having to re-derive them every load.
-
-Rules:
-
-* Adds ``version: 2`` near the top of the file if absent.
-* Synthesises ``mode`` from legacy ``issue_policy.mode`` when absent.
-* Synthesises ``scanners`` from legacy ``enabled_scanners`` (every
-  true-valued scanner maps to ``severity: block``, matching the strict
-  default in docs/QZP-V2-DESIGN.md §10.1).
-* Adds ``flag`` to each ``coverage.inputs`` item when missing, using
-  the item's ``name`` — this is the single most important migration
-  because the reusable-codecov-analytics loop keys off ``flag`` for
-  per-upload split (fixes the event-link 58% ghost-coverage bug).
-* Adds ``overrides: []`` if absent so drift-sync has a deterministic
-  field to compare against.
-* Does NOT delete legacy ``issue_policy`` / ``enabled_scanners``.
-  They stay during the migration window so consumers still reading
-  those keys directly keep working; Phase 4 will remove them once
-  every reader has switched to the v2 shape.
-"""
-
-from __future__ import absolute_import
+from __future__ import absolute_import  # noqa: UP010 — required by codacy-compat test
 
 import argparse
 import sys
@@ -42,7 +39,6 @@ from scripts.quality.profile_normalization import (
     normalize_mode,
     normalize_scanners,
 )
-
 
 PROFILES_DIR_DEFAULT = Path(__file__).resolve().parents[2] / "profiles" / "repos"
 

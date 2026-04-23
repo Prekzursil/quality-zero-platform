@@ -115,7 +115,7 @@ required_contexts:                # derived from scanners.*.severity == block
   pull_request_only: []
 
 vendors:
-  sonar:      { project_key: Prekzursil_event-link }
+  sonar:      { project_key: "${sonar_project_key}"  # e.g. <owner>_<repo-slug> }
   codacy:     { project_name: event-link }
   deepsource: { shortcode: event-link }
   codecov:    { slug: Prekzursil/event-link }
@@ -530,7 +530,7 @@ scanners:                        # severity only — no enabled flag
   qlty_check:             { severity: block }
 
 overrides: []
-vendors: { sonar: { project_key: Prekzursil_event-link }, ... }
+vendors: { sonar: { project_key: "${sonar_project_key}"  # e.g. <owner>_<repo-slug> }, ... }
 dependabot: { updates: [ ... ] }
 ```
 

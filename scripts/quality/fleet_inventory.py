@@ -1,29 +1,18 @@
-"""Fleet inventory.
+"""Fleet inventory — see ``docs/QZP-V2-DESIGN.md`` §2 for the contract."""
+# Filter + diff + gh wrapper + alert opener for the governed-repo roster.
+# The module splits cleanly into: (1) pure filter/diff logic, (2) the
+# ``gh api`` fetch wrapper, and (3) the ``alert:repo-not-profiled`` issue
+# opener/closer. A thin CLI at the bottom composes them.
+#
+# Fleet filter (per Round 1 interview answer in §2):
+#   * Owner: ``Prekzursil``.
+#   * Visibility: public only, with one explicit exception —
+#     ``Prekzursil/pbinfo-get-unsolved`` is private but MUST be governed.
+#   * Forks and GitHub template repos are excluded.
+#   * Archived repos stay in the fleet and carry their profile; the
+#     profile can flag them read-only if appropriate.
 
-See ``docs/QZP-V2-DESIGN.md`` §2 for the governance contract.
-
-Produces a canonical list of the repos the quality-zero-platform should
-govern and diffs it against the hand-maintained ``inventory/repos.yml``.
-
-This module is intentionally split into three tiers so each I/O
-boundary can be exercised in isolation: (1) the pure filter + diff
-logic, (2) the ``gh api`` fetch wrapper, and (3) the
-``alert:repo-not-profiled`` issue opener / closer. The CLI entrypoint
-composes them into a single invocation.
-
-Fleet filter (per Round 1 interview answer, captured in §2):
-
-* Owner: ``Prekzursil``.
-* Visibility: public only…
-* …with exactly one explicit exception: ``Prekzursil/pbinfo-get-unsolved``
-  is private but MUST be governed.
-* Forks are excluded.
-* Archived repos are *not* excluded — they stay in the fleet and carry
-  their profile, which can flag them read-only if appropriate.
-* GitHub template repos are excluded.
-"""
-
-from __future__ import absolute_import
+from __future__ import absolute_import  # noqa: UP010 — required by codacy-compat test
 
 import argparse
 import json
@@ -33,7 +22,6 @@ from pathlib import Path
 from typing import Any, Callable, FrozenSet, Iterable, List, Mapping, Sequence, Set
 
 import yaml  # type: ignore[import-untyped]
-
 
 # A process runner callable compatible with ``subprocess.run``. Tests inject
 # a fake to avoid shelling out to the real ``gh`` binary.
@@ -90,9 +78,8 @@ def _should_include_repo(repo: Mapping[str, Any]) -> bool:
     if slug is None:
         return False
     private = bool(repo.get("private"))
-    if private and slug not in PRIVATE_INCLUDE_SLUGS:
-        return False
-    return True
+    # Private repos are excluded unless explicitly whitelisted.
+    return not (private and slug not in PRIVATE_INCLUDE_SLUGS)
 
 
 def build_expected_fleet(github_repos: Iterable[Mapping[str, Any]]) -> List[str]:

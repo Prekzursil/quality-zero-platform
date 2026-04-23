@@ -16,6 +16,6 @@ exclude_paths:
   - "generated/**"
   - "tests/**"
   - "profiles/**"
-  - "docs/admin/**"
+  - "docs/**"  # QZP v2 design doc + other long-form prose; not production code
   - ".github/workflows/control-plane-admin.yml"
   - ".github/workflows/publish-admin-dashboard.yml"

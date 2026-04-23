@@ -1,0 +1,37 @@
+id: QZ-FP-002
+title: SonarCloud typescript:S3735 flags `void asyncCall()` as unnecessary
+description: >-
+  SonarCloud's ``typescript:S3735`` rule treats ``void someAsyncCall()`` as a
+  superfluous expression statement. The TypeScript community uses ``void`` to
+  explicitly discard a Promise (satisfying ``no-floating-promises``) when the
+  callee owns its own error handling. On Sonar-linted projects that don't have
+  ``no-floating-promises`` enabled, dropping the ``void`` prefix is preferred;
+  a bare call achieves the same effect without tripping S3735.
+
+  QRv2 should strip the ``void`` prefix on discard calls whose callee has
+  ``.catch(...)`` or ``try/catch`` around the await — and leave the prefix in
+  place when ``no-floating-promises`` is enabled in the project's ESLint
+  config (in which case S3735 is the false positive to silence via
+  ``// NOSONAR``).
+
+affects:
+  - sonarcloud
+
+feeds_qrv2: true
+
+fix_snippet: |
+  // Before (flagged by typescript:S3735):
+  void refreshCache();
+
+  // After (when no-floating-promises is NOT enabled):
+  refreshCache();
+
+  // Alternative when no-floating-promises IS enabled — suppress S3735 inline:
+  void refreshCache(); // NOSONAR - intentional Promise discard
+
+verified_at: "2026-04-23"
+verified_by: "~/.claude/CLAUDE.md — user's global guidance"
+
+references:
+  - https://rules.sonarsource.com/typescript/RSPEC-3735/
+  - https://typescript-eslint.io/rules/no-floating-promises/

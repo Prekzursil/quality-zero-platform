@@ -1,0 +1,61 @@
+id: QZ-CV-001
+title: Codecov merges multiple `coverage.inputs[]` under one unflagged blob
+description: >-
+  ``codecov/codecov-action`` accepts a single ``flags`` value per invocation.
+  A reusable workflow that uploads multiple coverage files with one action
+  call (passing a comma-separated list of file paths) ends up writing every
+  file under the same flag — or, when no ``flags`` is set, under Codecov's
+  auto-inferred language key (``python``, ``javascript``, …).
+
+  This silently merges distinct coverage lanes (backend, ui, integration)
+  into one row on the Codecov dashboard. The aggregate percentage averages
+  them — in event-link's case it read 58% while each individual input was
+  actually at 100%.
+
+  The canonical fix is the Phase 2 refactor of ``reusable-codecov-analytics
+  .yml``: iterate ``coverage_inputs_json`` and invoke the Codecov CLI once
+  per ``(path, flag)`` row. Paired with
+  ``scripts/quality/validate_codecov_flags.py`` which polls the Codecov v2
+  API and fails CI if any declared flag is missing from the report.
+
+affects:
+  - codecov
+
+feeds_qrv2: true
+
+fix_snippet: |
+  # reusable-codecov-analytics.yml — loop per input:
+  - name: Upload coverage to Codecov (per-flag split)
+    shell: bash
+    env:
+      COVERAGE_INPUTS_JSON: ${{ steps.profile.outputs.coverage_inputs_json }}
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    run: |
+      python - <<'PY'
+      import json, os, subprocess, urllib.request
+      from pathlib import Path
+      inputs = json.loads(os.environ.get("COVERAGE_INPUTS_JSON", "[]") or "[]")
+      for row in inputs:
+          subprocess.run(
+              ["./codecov", "upload-process",
+               "--sha", os.environ["TARGET_SHA"],
+               "--slug", os.environ["REPO_SLUG"],
+               "--file", row["path"],
+               "--flag", row["flag"],
+               "--disable-search"],
+              check=True,
+          )
+      PY
+
+  # Paired post-upload guard:
+  - name: Validate Codecov flags
+    run: python platform/scripts/quality/validate_codecov_flags.py \
+           --repo-slug "$REPO_SLUG" --sha "$TARGET_SHA" \
+           --inputs-json "$RUNNER_TEMP/profile.json"
+
+verified_at: "2026-04-23"
+verified_by: "platform PR #89 — Phase 2 flag-split merge (commit 062e5c3a)"
+
+references:
+  - https://docs.codecov.com/docs/flags
+  - docs/QZP-V2-DESIGN.md §5.1

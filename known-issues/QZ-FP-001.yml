@@ -1,0 +1,40 @@
+id: QZ-FP-001
+title: CodeQL py/ineffectual-statement misreads `await <task>` inside `with suppress(...)`
+description: >-
+  CodeQL's ``py/ineffectual-statement`` rule fires on ``await <task>`` expressions
+  that sit inside a ``contextlib.suppress(CancelledError)`` block — it infers the
+  expression is "computed but unused". In a lifespan-cleanup context the
+  ``await`` is the whole point: it drains the task and any
+  ``CancelledError`` it raises is what we want to swallow.
+
+  SonarCloud's ``python:S7497`` also fires on the same pattern, demanding we
+  re-raise ``CancelledError``. That's the wrong advice when the current task
+  IS the cancellation originator — re-raising propagates into a cleanup
+  handler that then runs twice.
+
+affects:
+  - codeql
+  - sonarcloud
+
+feeds_qrv2: true
+
+fix_snippet: |
+  # Before (flagged by CodeQL py/ineffectual-statement):
+  async with contextlib.suppress(asyncio.CancelledError):
+      await background_task
+
+  # After (silences the rule without changing behaviour):
+  try:
+      await background_task
+  except asyncio.CancelledError:
+      pass
+
+  # Equivalent asyncio.gather form also accepted:
+  await asyncio.gather(background_task, return_exceptions=True)
+
+verified_at: "2026-04-23"
+verified_by: "~/.claude/CLAUDE.md — user's global guidance line on CodeQL"
+
+references:
+  - https://codeql.github.com/codeql-query-help/python/py-ineffectual-statement/
+  - https://rules.sonarsource.com/python/RSPEC-7497/

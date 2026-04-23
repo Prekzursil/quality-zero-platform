@@ -1,0 +1,39 @@
+id: QZ-FP-003
+title: Codacy metric engine flags net-new CLI scripts' PR-level complexity delta
+description: >-
+  Codacy's ``metric`` engine is SEPARATE from Lizard and Ruff. It computes a
+  *delta* of total cyclomatic complexity between the PR and the base branch
+  and fails when that delta exceeds a fixed threshold (10 at the time of
+  writing). Net-new CLI scripts with legitimate branching (argparse
+  dispatching, status aggregators, retry/backoff loops) reliably trip the
+  delta even when every individual function sits well under the per-function
+  CCN ceiling.
+
+  File-level complexity is still bounded by qlty's 80 ceiling and per-function
+  CCN by Lizard/Codacy's 8-medium rule. The metric engine's PR-delta check
+  is redundant with those when the file is new.
+
+  The canonical fix is to list the new file under
+  ``engines.metric.exclude_paths`` in ``.codacy.yaml``. The top-level
+  ``exclude_paths`` doesn't cover the metric engine; it has its own list.
+
+affects:
+  - codacy
+
+feeds_qrv2: true
+
+fix_snippet: |
+  # .codacy.yaml — add the new file to engines.metric.exclude_paths:
+  engines:
+    metric:
+      exclude_paths:
+        - "scripts/quality/fleet_inventory.py"
+        - "scripts/quality/migrate_profiles_to_v2.py"
+        - "scripts/quality/validate_codecov_flags.py"
+        - "scripts/quality/<new_file>.py"  # <-- add here
+
+verified_at: "2026-04-23"
+verified_by: "PRs #88 / #89 / #90 / #98 / #99 — same remediation applied on each Phase 1-3 net-new CLI"
+
+references:
+  - https://docs.codacy.com/repositories-configure/codacy-configuration-file/#engine-configuration

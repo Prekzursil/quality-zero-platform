@@ -55,10 +55,12 @@ class MigrateProfileTests(unittest.TestCase):
     """Pure migration semantics — no file I/O."""
 
     def test_adds_version_2(self) -> None:
+        """A v1 profile gets ``version: 2`` injected."""
         result = migrate_profile(_v1_profile_fixture())
         self.assertEqual(result["version"], 2)
 
     def test_version_keys_near_top_for_reviewable_diff(self) -> None:
+        """v2 fields land in the first six keys so diffs stay reviewable."""
         result = migrate_profile(_v1_profile_fixture())
         keys = list(result.keys())
         # Keys we want the reviewer to see first.
@@ -69,6 +71,7 @@ class MigrateProfileTests(unittest.TestCase):
         self.assertIn("overrides", keys[:6])
 
     def test_mode_derived_from_legacy_issue_policy(self) -> None:
+        """``issue_policy.mode`` populates the new ``mode.phase`` block."""
         result = migrate_profile(_v1_profile_fixture())
         self.assertIn("mode", result)
         self.assertEqual(result["mode"]["phase"], "ratchet")
@@ -76,12 +79,14 @@ class MigrateProfileTests(unittest.TestCase):
         self.assertIn("ratchet", result["mode"])
 
     def test_non_ratchet_mode_stays_compact(self) -> None:
+        """Non-ratchet modes omit the placeholder ratchet sub-block."""
         raw = _v1_profile_fixture()
         raw["issue_policy"]["mode"] = "zero"
         result = migrate_profile(raw)
         self.assertEqual(result["mode"], {"phase": "absolute"})
 
     def test_scanners_mapped_from_legacy_enabled(self) -> None:
+        """``enabled_scanners[name]=true`` becomes ``scanners[name].severity=block``."""
         result = migrate_profile(_v1_profile_fixture())
         self.assertEqual(
             result["scanners"],
@@ -89,22 +94,26 @@ class MigrateProfileTests(unittest.TestCase):
         )
 
     def test_coverage_inputs_get_flag_from_name(self) -> None:
+        """Coverage inputs missing ``flag`` inherit it from ``name``."""
         result = migrate_profile(_v1_profile_fixture())
         inputs = result["coverage"]["inputs"]
         self.assertEqual(inputs[0]["flag"], "backend")
         self.assertEqual(inputs[1]["flag"], "frontend")
 
     def test_existing_flag_is_preserved(self) -> None:
+        """A pre-existing ``flag`` is not overwritten by the migration."""
         raw = _v1_profile_fixture()
         raw["coverage"]["inputs"][0]["flag"] = "backend-unit"
         result = migrate_profile(raw)
         self.assertEqual(result["coverage"]["inputs"][0]["flag"], "backend-unit")
 
     def test_overrides_empty_list_added(self) -> None:
+        """Profiles without ``overrides`` receive an empty list."""
         result = migrate_profile(_v1_profile_fixture())
         self.assertEqual(result["overrides"], [])
 
     def test_migration_is_idempotent(self) -> None:
+        """Running the migration twice yields the same output."""
         once = migrate_profile(_v1_profile_fixture())
         twice = migrate_profile(once)
         self.assertEqual(once, twice)
@@ -120,6 +129,7 @@ class MigrateProfileFileTests(unittest.TestCase):
     """File-level migration + idempotency."""
 
     def test_writes_changes_when_profile_is_v1(self) -> None:
+        """A v1 profile on disk gets rewritten with v2 fields."""
         with tempfile.TemporaryDirectory() as raw:
             profile_path = Path(raw) / "foo.yml"
             profile_path.write_text(
@@ -150,6 +160,7 @@ class MigrateProfileFileTests(unittest.TestCase):
             )
 
     def test_no_change_when_already_v2(self) -> None:
+        """A v2 profile on disk is not rewritten (no phantom diff)."""
         with tempfile.TemporaryDirectory() as raw:
             profile_path = Path(raw) / "foo.yml"
             first = migrate_profile(_v1_profile_fixture())
@@ -200,6 +211,7 @@ class MigrateCLITests(unittest.TestCase):
     """The CLI entrypoint glues it all together."""
 
     def test_dry_run_does_not_mutate(self) -> None:
+        """CLI ``--dry-run`` reports but never writes."""
         with tempfile.TemporaryDirectory() as raw:
             profile_dir = Path(raw)
             profile_path = profile_dir / "foo.yml"
@@ -217,6 +229,7 @@ class MigrateCLITests(unittest.TestCase):
             )
 
     def test_real_run_writes_file(self) -> None:
+        """CLI run (without ``--dry-run``) writes the migrated YAML."""
         with tempfile.TemporaryDirectory() as raw:
             profile_dir = Path(raw)
             profile_path = profile_dir / "foo.yml"

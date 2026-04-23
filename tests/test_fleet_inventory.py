@@ -178,6 +178,7 @@ class FetchReposViaGhTests(unittest.TestCase):
         def runner(
             args: Sequence[str], **_kwargs: Any
         ) -> subprocess.CompletedProcess[str]:
+            """Scripted subprocess.run mock that records each invocation."""
             captured.append(list(args))
             return self._fake_runner(payload)
 
@@ -237,6 +238,7 @@ class FetchReposViaGhTests(unittest.TestCase):
         def runner(
             *_args: Any, **_kwargs: Any
         ) -> subprocess.CompletedProcess[str]:
+            """Mocked runner that simulates a gh CLI failure."""
             raise subprocess.CalledProcessError(1, ["gh"], stderr="rate limit")
 
         with self.assertRaises(subprocess.CalledProcessError):
@@ -260,7 +262,12 @@ class MergeRepoListsTests(unittest.TestCase):
             ["Prekzursil/alpha", "Prekzursil/beta", "Prekzursil/secret"],
         )
         # First-seen wins → alpha remains public
-        alpha = next(r for r in merged if r["full_name"] == "Prekzursil/alpha")
+        alpha = next(
+            (r for r in merged if r["full_name"] == "Prekzursil/alpha"),
+            None,
+        )
+        self.assertIsNotNone(alpha)
+        assert alpha is not None  # type guard for mypy
         self.assertFalse(alpha["private"])
 
     def test_empty_inputs(self) -> None:
@@ -293,7 +300,7 @@ class QueuedRunner:
         self.calls.append(list(args))
         payload = self.responses.pop(0) if self.responses else []
         if isinstance(payload, Exception):
-            raise payload
+            raise payload  # skipcq: PYL-E0702 — isinstance guard narrows to Exception
         stdout = payload if isinstance(payload, str) else json.dumps(payload)
         return subprocess.CompletedProcess(
             args=args, returncode=0, stdout=stdout, stderr=""
@@ -831,6 +838,7 @@ class CoverageClosureTests(unittest.TestCase):
         original_fetch_user = module_under_test.fetch_user_repos
 
         def _raise(*_args: Any, **_kwargs: Any) -> None:
+            """Scripted replacement that simulates a gh failure mid-sweep."""
             raise subprocess.CalledProcessError(1, ["gh"], stderr="rate limit")
 
         module_under_test.fetch_user_repos = _raise  # type: ignore[assignment]

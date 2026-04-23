@@ -1,0 +1,147 @@
+name: Reusable Bootstrap Repo
+
+# QZP v2 Phase 5 §5.4 — bootstrap a new consumer repo through the
+# shadow-mode lifecycle. Today this workflow implements the
+# *promotion* half: poll ``gh run list`` on the target's default
+# branch, count 3 consecutive green shadow runs, then open a PR on
+# the platform repo that flips ``mode.phase: shadow`` →
+# ``mode.phase: absolute`` (or ``ratchet``). The initial onboarding
+# step (create profile from stack defaults, open consumer PR) is
+# tracked in Phase 5 inc-2.5 and will land as an extension to this
+# workflow.
+#
+# Callers dispatch this workflow from the platform repo via the UI
+# or ``gh workflow run`` once a repo has been onboarded in shadow
+# mode. Re-running it is idempotent — if not enough greens have
+# accumulated, the job exits clean without opening a promotion PR.
+
+permissions: {}
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo_slug:
+        type: string
+        required: true
+        description: "Target consumer repo, ``owner/name``. Used to poll CI."
+      profile_path:
+        type: string
+        required: true
+        description: "Path to the profile in this repo, e.g. ``profiles/repos/event-link.yml``."
+      workflow_name:
+        type: string
+        required: false
+        default: quality-rollup.yml
+        description: "Workflow file name polled on the consumer repo."
+      branch:
+        type: string
+        required: false
+        default: main
+        description: "Target branch on the consumer repo whose runs we count."
+      target_phase:
+        type: choice
+        required: true
+        options: [ratchet, absolute]
+        description: "Mode to flip to once 3 greens land."
+      required_green:
+        type: string
+        required: false
+        default: "3"
+        description: "Minimum consecutive green runs before promoting."
+
+concurrency:
+  group: bootstrap-repo-${{ inputs.repo_slug }}
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install platform dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Compute promotion plan
+        id: plan
+        env:
+          BOOTSTRAP_REPO_SLUG: ${{ inputs.repo_slug }}
+          BOOTSTRAP_PROFILE: ${{ inputs.profile_path }}
+          BOOTSTRAP_WORKFLOW: ${{ inputs.workflow_name }}
+          BOOTSTRAP_BRANCH: ${{ inputs.branch }}
+          BOOTSTRAP_TARGET_PHASE: ${{ inputs.target_phase }}
+          BOOTSTRAP_REQUIRED: ${{ inputs.required_green }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from scripts.quality import bootstrap_repo as br
+
+          slug = os.environ["BOOTSTRAP_REPO_SLUG"].strip()
+          profile_path = Path(os.environ["BOOTSTRAP_PROFILE"].strip())
+          workflow = os.environ["BOOTSTRAP_WORKFLOW"].strip()
+          branch = os.environ["BOOTSTRAP_BRANCH"].strip()
+          target_phase = os.environ["BOOTSTRAP_TARGET_PHASE"].strip()
+          required = int(os.environ.get("BOOTSTRAP_REQUIRED", "3"))
+
+          profile_text = profile_path.read_text(encoding="utf-8")
+          plan = br.compute_promotion_plan(
+              slug=slug,
+              workflow=workflow,
+              branch=branch,
+              profile_yaml=profile_text,
+              target_phase=target_phase,
+              required_green=required,
+          )
+
+          output_path = os.environ.get("GITHUB_OUTPUT")
+          if output_path:
+              with open(output_path, "a", encoding="utf-8") as fh:
+                  fh.write(f"ready={'true' if plan['ready'] else 'false'}\n")
+                  fh.write(f"green_runs={plan['green_runs']}\n")
+
+          if plan["ready"]:
+              profile_path.write_text(plan["promoted_yaml"], encoding="utf-8")
+
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a", encoding="utf-8") as fh:
+                  fh.write("## Bootstrap Repo — Promotion Plan\n\n")
+                  fh.write(f"- Target: `{slug}`\n")
+                  fh.write(f"- Profile: `{profile_path}`\n")
+                  fh.write(f"- Workflow polled: `{workflow}` on `{branch}`\n")
+                  fh.write(f"- Green runs: **{plan['green_runs']}** / required **{required}**\n")
+                  verdict = "READY — promotion PR opens next step" if plan["ready"] else "NOT READY — will re-run later"
+                  fh.write(f"- Verdict: **{verdict}**\n")
+          PY
+
+      - name: Open promotion PR on platform
+        if: ${{ steps.plan.outputs.ready == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BOOTSTRAP_REPO_SLUG: ${{ inputs.repo_slug }}
+          BOOTSTRAP_PROFILE: ${{ inputs.profile_path }}
+          BOOTSTRAP_TARGET_PHASE: ${{ inputs.target_phase }}
+        run: |
+          set -euo pipefail
+          slug_safe="${BOOTSTRAP_REPO_SLUG//\//-}"
+          branch_name="bootstrap/promote-${slug_safe}-${BOOTSTRAP_TARGET_PHASE}"
+          git config user.email "platform-bot@quality-zero.local"
+          git config user.name "quality-zero-platform bootstrap"
+          git checkout -b "$branch_name"
+          git add "$BOOTSTRAP_PROFILE"
+          git commit -m "feat(bootstrap): promote ${BOOTSTRAP_REPO_SLUG} mode.phase → ${BOOTSTRAP_TARGET_PHASE}"
+          git push -u origin "$branch_name"
+          gh pr create \
+            --title "feat(bootstrap): promote ${BOOTSTRAP_REPO_SLUG} → ${BOOTSTRAP_TARGET_PHASE}" \
+            --body "Automated promotion from \`reusable-bootstrap-repo.yml\`. 3 consecutive green shadow runs observed on \`${BOOTSTRAP_REPO_SLUG}\`. Promoting \`mode.phase\` to \`${BOOTSTRAP_TARGET_PHASE}\`." \
+            --label "quality-zero:bootstrap-promote" || true

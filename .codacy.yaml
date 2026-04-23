@@ -33,6 +33,7 @@ engines:
       - "scripts/quality/alerts.py"
       - "scripts/quality/bootstrap_repo.py"
       - "scripts/quality/bumps.py"
+      - "scripts/quality/admin_dashboard_pages.py"
 exclude_paths:
   - "generated/**"
   - "tests/**"

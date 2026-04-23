@@ -10,6 +10,7 @@ refactors cannot silently drop the ingest-drop detector.
 from __future__ import absolute_import
 
 import json
+import os
 import tempfile
 import unittest
 import urllib.error
@@ -19,15 +20,29 @@ from unittest.mock import patch
 from scripts.quality import validate_codecov_flags
 
 
+def _write_temp_json(payload: object, cleanup: unittest.TestCase) -> Path:
+    """Return a path to a temp profile.json, scheduled for cleanup.
+
+    Uses ``tempfile.mkstemp`` so the file descriptor is explicitly closed
+    — DeepSource PYL-R1732 flags ``NamedTemporaryFile(delete=False, ...)``
+    left open. The returned ``Path`` is registered with the test case's
+    ``addCleanup`` so the tempfile is removed regardless of assertion
+    outcome.
+    """
+    fd, name = tempfile.mkstemp(suffix=".json")
+    os.close(fd)
+    tmp = Path(name)
+    tmp.write_text(json.dumps(payload), encoding="utf-8")
+    cleanup.addCleanup(tmp.unlink, missing_ok=True)
+    return tmp
+
+
 class DeclaredFlagsTests(unittest.TestCase):
     """``_declared_flags`` parses the profile JSON emitted by ``export_profile``."""
 
     def _write(self, payload: dict) -> Path:
         """Return a path to a temp profile.json with ``payload`` serialised."""
-        tmp = Path(tempfile.NamedTemporaryFile(delete=False, suffix=".json").name)
-        tmp.write_text(json.dumps(payload), encoding="utf-8")
-        self.addCleanup(tmp.unlink, missing_ok=True)
-        return tmp
+        return _write_temp_json(payload, self)
 
     def test_returns_flag_value_when_present(self) -> None:
         """``flag`` is preferred over ``name`` when both exist."""
@@ -203,11 +218,11 @@ class FetchCodecovReportTests(unittest.TestCase):
         ):
             result = validate_codecov_flags._fetch_codecov_report(
                 "https://api.codecov.io/api/v2/github/x/repos/y/commits/abc/",
-                "secret-token",
+                "test-bearer-abc",
             )
         self.assertEqual(result, {"totals": {}})
         self.assertEqual(
-            captured["headers"]["Authorization"], "Bearer secret-token"
+            captured["headers"]["Authorization"], "Bearer test-bearer-abc"
         )
         self.assertEqual(captured["headers"]["Accept"], "application/json")
         self.assertEqual(captured["allowed_hosts"], {"api.codecov.io"})
@@ -435,10 +450,7 @@ class MainCliTests(unittest.TestCase):
 
     def _write_profile(self, payload: dict) -> Path:
         """Write ``payload`` to a temp profile.json and return its path."""
-        tmp = Path(tempfile.NamedTemporaryFile(delete=False, suffix=".json").name)
-        tmp.write_text(json.dumps(payload), encoding="utf-8")
-        self.addCleanup(tmp.unlink, missing_ok=True)
-        return tmp
+        return _write_temp_json(payload, self)
 
     def _run_main(self, argv: list) -> int:
         """Invoke ``main()`` with ``argv`` patched onto ``sys.argv``."""
@@ -521,6 +533,71 @@ class MainCliTests(unittest.TestCase):
                 "--inputs-json", str(path),
             ])
         self.assertEqual(rc, 3)
+
+    def test_http_401_is_warn_and_skip(self) -> None:
+        """Exit 0 on 401 Unauthorized — auth is a platform config issue.
+
+        The CODECOV_TOKEN in CI is an upload (write-scope) token. The
+        Codecov v2 commit API needs a separate read-scope Bearer token,
+        which most consumer repos don't have wired. Treat missing read
+        auth as warn-and-skip rather than hard-fail: otherwise every
+        repo without the read token has permanent red CI on a config
+        problem, not a regression.
+        """
+        path = self._write_profile({
+            "coverage": {"inputs": [{"name": "ui", "flag": "ui", "path": "x"}]}
+        })
+        http_401 = urllib.error.HTTPError(
+            "u", 401, "Unauthorized", {}, None  # type: ignore[arg-type]
+        )
+        with patch(
+            "scripts.quality.validate_codecov_flags._poll_for_flags",
+            side_effect=http_401,
+        ):
+            rc = self._run_main([
+                "--repo-slug", "Prekzursil/event-link",
+                "--sha", "abc123",
+                "--inputs-json", str(path),
+            ])
+        self.assertEqual(rc, 0)
+
+    def test_http_403_is_warn_and_skip(self) -> None:
+        """Exit 0 on 403 Forbidden — same reasoning as the 401 case."""
+        path = self._write_profile({
+            "coverage": {"inputs": [{"name": "ui", "flag": "ui", "path": "x"}]}
+        })
+        http_403 = urllib.error.HTTPError(
+            "u", 403, "Forbidden", {}, None  # type: ignore[arg-type]
+        )
+        with patch(
+            "scripts.quality.validate_codecov_flags._poll_for_flags",
+            side_effect=http_403,
+        ):
+            rc = self._run_main([
+                "--repo-slug", "Prekzursil/event-link",
+                "--sha", "abc123",
+                "--inputs-json", str(path),
+            ])
+        self.assertEqual(rc, 0)
+
+    def test_http_500_still_propagates(self) -> None:
+        """Non-auth HTTP errors still surface — they indicate real failures."""
+        path = self._write_profile({
+            "coverage": {"inputs": [{"name": "ui", "flag": "ui", "path": "x"}]}
+        })
+        http_500 = urllib.error.HTTPError(
+            "u", 500, "Server Error", {}, None  # type: ignore[arg-type]
+        )
+        with patch(
+            "scripts.quality.validate_codecov_flags._poll_for_flags",
+            side_effect=http_500,
+        ):
+            with self.assertRaises(urllib.error.HTTPError):
+                self._run_main([
+                    "--repo-slug", "Prekzursil/event-link",
+                    "--sha", "abc123",
+                    "--inputs-json", str(path),
+                ])
 
 
 if __name__ == "__main__":

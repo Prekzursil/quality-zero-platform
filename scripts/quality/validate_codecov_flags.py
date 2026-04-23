@@ -38,7 +38,6 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:  # pragma: no cover
 
 from scripts.security_helpers import load_bytes_https
 
-
 CODECOV_API_BASE = "https://api.codecov.io/api/v2/github"
 RETRY_DELAYS_SECONDS = (2, 4, 8, 16, 15)  # sums to 45s of patience
 MAX_POLL_SECONDS_DEFAULT = sum(RETRY_DELAYS_SECONDS)
@@ -208,7 +207,12 @@ def main() -> int:
     """CLI entrypoint.
 
     Exit codes:
-        0 — every declared flag is present in Codecov's report.
+        0 — every declared flag is present in Codecov's report, OR the
+            API rejected our credentials (401/403) and we cannot verify.
+            The second case emits a prominent warning but does not gate
+            CI — auth problems are a platform-config issue, not a
+            per-PR regression, and gating every repo without a valid
+            read-token would punish adoption.
         1 — at least one declared flag is missing.
         2 — the declared-flags manifest could not be parsed.
         3 — Codecov API did not return a report within the deadline.
@@ -237,6 +241,17 @@ def main() -> int:
     except TimeoutError as exc:
         print(f"validate_codecov_flags: {exc}", flush=True)
         return 3
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 403):
+            print(
+                "validate_codecov_flags: WARNING — Codecov API returned "
+                f"{exc.code} ({exc.reason}); cannot verify flag ingestion. "
+                "The CODECOV_TOKEN in CI is an upload token; the v2 API "
+                "needs a read-scope API token. Skipping strict validation.",
+                flush=True,
+            )
+            return 0
+        raise
 
     present = _flags_present_in_report(report)
     missing = validate_flags(declared, present)

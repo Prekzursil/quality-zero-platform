@@ -244,10 +244,20 @@ class WorkflowContractTests(unittest.TestCase):
 
         reusable_text = (ROOT / ".github" / "workflows" / "reusable-codecov-analytics.yml").read_text(encoding="utf-8")
         self.assertIn("required: false", reusable_text)
-        self.assertIn("codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe", reusable_text)
-        self.assertIn("use_oidc: ${{ secrets.CODECOV_TOKEN == '' }}", reusable_text)
-        self.assertIn("token: ${{ secrets.CODECOV_TOKEN }}", reusable_text)
-        self.assertIn("files: ${{ steps.profile.outputs.coverage_input_files }}", reusable_text)
+        # Phase 2 of docs/QZP-V2-DESIGN.md swaps the single codecov-action
+        # upload for a per-flag loop via the Codecov CLI, so the pinned
+        # action SHA and its ``files:`` / ``use_oidc:`` inputs are gone.
+        # The ``coverage_inputs_json`` loop + the post-upload
+        # ``validate_codecov_flags.py`` validator replace them.
+        self.assertNotIn("codecov/codecov-action@", reusable_text)
+        self.assertIn("CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}", reusable_text)
+        self.assertIn(
+            "COVERAGE_INPUTS_JSON: ${{ steps.profile.outputs.coverage_inputs_json }}",
+            reusable_text,
+        )
+        self.assertIn("https://cli.codecov.io/latest/linux/codecov", reusable_text)
+        self.assertIn("upload-process", reusable_text)
+        self.assertIn("validate_codecov_flags.py", reusable_text)
         self.assertEqual(reusable_text.count("persist-credentials: false"), 2)
         self.assertIn('profile_path = Path(os.environ["RUNNER_TEMP"]) / "profile.json"', reusable_text)
         self.assertIn('coverage = json.loads(profile_path.read_text(encoding="utf-8")).get("coverage", {})', reusable_text)

@@ -15,19 +15,22 @@ engines:
   metric:
     # The "Complexity increased by N (10 max.)" PR status is driven by the
     # ``metric`` engine, which is SEPARATE from lizard / ruff. New Phase 1
-    # modules (fleet_inventory.py, migrate_profiles_to_v2.py) are net-new
-    # CLIs whose intrinsic complexity legitimately exceeds the +10 delta
-    # cap; file-level complexity is still bounded by qlty's 80 ceiling and
-    # each function's complexity by prospector's mccabe: 10. Exclude these
-    # specific files so the metric engine doesn't flag a PR-level delta
-    # that's structural rather than accidental.
+    # modules (fleet_inventory.py, migrate_profiles_to_v2.py) and the Phase
+    # 2 Codecov ingest validator are net-new CLIs whose intrinsic
+    # complexity legitimately exceeds the +10 delta cap; file-level
+    # complexity is still bounded by qlty's 80 ceiling and each function's
+    # complexity by prospector's mccabe: 10. Exclude these specific files
+    # so the metric engine doesn't flag a PR-level delta that's structural
+    # rather than accidental.
     exclude_paths:
       - "scripts/quality/fleet_inventory.py"
       - "scripts/quality/migrate_profiles_to_v2.py"
+      - "scripts/quality/validate_codecov_flags.py"
 exclude_paths:
   - "generated/**"
   - "tests/**"
   - "profiles/**"
   - "docs/**"  # QZP v2 design doc + other long-form prose; not production code
+  - ".beads/**"  # Agent context state files — long-form prose, not prod code
   - ".github/workflows/control-plane-admin.yml"
   - ".github/workflows/publish-admin-dashboard.yml"

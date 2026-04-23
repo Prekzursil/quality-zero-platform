@@ -41,6 +41,38 @@ def _coverage_input_files(coverage: Dict[str, Any]) -> str:
     )
 
 
+def _coverage_inputs_payload(coverage: Dict[str, Any]) -> List[Dict[str, str]]:
+    """Return structured per-input rows for the per-flag Codecov upload loop.
+
+    Phase 2 of docs/QZP-V2-DESIGN.md wires reusable-codecov-analytics.yml
+    to loop once per coverage input so each flag gets its own upload.
+    Emitting the full ``[{path, flag, name, format}, ...]`` shape here is
+    what lets the workflow iterate without parsing strings.
+
+    ``flag`` defaults to ``name`` when the on-disk profile omits it — the
+    migration script added ``flag`` to every governed profile, but the
+    fallback keeps the export resilient to hand-edits.
+    """
+    payload: List[Dict[str, str]] = []
+    for item in coverage.get("inputs", []):
+        raw_path = str(item.get("path", "")).replace("\\", "/")
+        path = str(PurePosixPath(raw_path)) if raw_path else ""
+        name = str(item.get("name", "")).strip()
+        flag = str(item.get("flag", "")).strip() or name
+        fmt = str(item.get("format", "")).strip()
+        if not path or not flag:
+            continue
+        payload.append(
+            {
+                "path": path,
+                "flag": flag,
+                "name": name or flag,
+                "format": fmt,
+            }
+        )
+    return payload
+
+
 def _json_output(key: str, value: object) -> str:
     """Handle json output."""
     return f"{key}={json.dumps(value, separators=(',', ':'))}"
@@ -50,7 +82,9 @@ def _profile_output_lines(profile: Dict[str, Any], event_name: str) -> List[str]
     """Handle profile output lines."""
     contexts = active_required_contexts(profile, event_name=event_name)
     codex_environment = profile.get("codex_environment", {})
-    coverage_input_files = _coverage_input_files(profile.get("coverage", {}))
+    coverage = profile.get("coverage", {})
+    coverage_input_files = _coverage_input_files(coverage)
+    coverage_inputs_payload = _coverage_inputs_payload(coverage)
     enabled_scanners = profile.get("enabled_scanners", {})
     codecov_enabled = str(bool(enabled_scanners.get("codecov", False))).lower()
     qlty_enabled = str(bool(enabled_scanners.get("qlty", False))).lower()
@@ -63,6 +97,7 @@ def _profile_output_lines(profile: Dict[str, Any], event_name: str) -> List[str]
             coverage_input_files,
             codecov_enabled,
             qlty_enabled,
+            coverage_inputs_payload,
         ),
         _json_output("enabled_scanners_json", profile.get("enabled_scanners", {})),
         _json_output("vendors_json", profile.get("vendors", {})),
@@ -119,6 +154,7 @@ def _coverage_output_lines(
     coverage_input_files: str,
     codecov_enabled: str,
     qlty_enabled: str,
+    coverage_inputs_payload: List[Dict[str, str]],
 ) -> List[str]:
     """Return the coverage-related fields exported for one profile."""
     coverage = profile.get("coverage", {})
@@ -145,6 +181,7 @@ def _coverage_output_lines(
             f"{str(bool(enabled_scanners.get('deepsource_visible', False))).lower()}"
         ),
         f"coverage_input_files={coverage_input_files}",
+        _json_output("coverage_inputs_json", coverage_inputs_payload),
         f"qlty_enabled={qlty_enabled}",
         f"qlty_coverage_files={coverage_input_files}",
     ]

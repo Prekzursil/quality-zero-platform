@@ -499,16 +499,32 @@ jobs:
           ]
           subprocess.run(command, executable=qlty_executable, check=True)
           PY
-      - name: Publish Codacy coverage
-        # Run from repo/ so relative ``coverage-reports`` paths resolve against
-        # the checked-out tree where coverage.xml was written. Previously the
-        # action ran at workspace-root where ``coverage/platform-coverage.xml``
-        # did not exist, logging ``File does not exist.`` + ``No coverage data
-        # was sent. Failed!`` — that's why Coverage 100 Gate was permanently
-        # red on the platform's own self-CI even though the coverage file was
-        # actually generated correctly in ``repo/coverage/``.
+      - name: Stage Codacy coverage files at workspace root
+        # Codacy's reporter action doesn't accept ``working-directory`` and
+        # resolves relative ``coverage-reports`` against the workspace root.
+        # Coverage is written inside ``repo/`` by the earlier lane step, so
+        # without this staging the reporter logs ``File does not exist.`` +
+        # ``No coverage data was sent. Failed!`` — that's why Coverage 100
+        # Gate was permanently red on the platform's own self-CI even
+        # though the coverage file was generated correctly in ``repo/coverage/``.
         if: matrix.lane == 'coverage' && steps.profile.outputs.codacy_enabled == 'true' && steps.profile.outputs.coverage_input_files != ''
-        working-directory: repo
+        env:
+          COVERAGE_FILES: ${{ steps.profile.outputs.coverage_input_files }}
+        run: |
+          set -euo pipefail
+          IFS=',' read -ra FILES <<< "$COVERAGE_FILES"
+          for rel in "${FILES[@]}"; do
+            rel=$(echo "$rel" | xargs)  # trim whitespace
+            [ -z "$rel" ] && continue
+            mkdir -p "$(dirname "$rel")"
+            if [ -f "repo/$rel" ]; then
+              cp "repo/$rel" "$rel"
+              echo "staged repo/$rel -> $rel"
+            fi
+          done
+
+      - name: Publish Codacy coverage
+        if: matrix.lane == 'coverage' && steps.profile.outputs.codacy_enabled == 'true' && steps.profile.outputs.coverage_input_files != ''
         uses: codacy/codacy-coverage-reporter-action@89d6c85cfafaec52c72b6c5e8b2878d33104c699
         with:
           project-token: ${{ secrets.CODACY_API_TOKEN }}

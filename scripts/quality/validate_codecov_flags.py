@@ -46,7 +46,8 @@ def _ensure_platform_on_syspath() -> None:
     platform_root = Path(__file__).resolve().parents[2]
     if str(platform_root) in sys.path:
         return
-    sys.path.insert(0, str(platform_root))  # pragma: no cover — exercised only when run as a script outside pytest
+    # Only runs when invoked outside pytest (where the root is already staged).
+    sys.path.insert(0, str(platform_root))  # pragma: no cover
 
 
 _ensure_platform_on_syspath()

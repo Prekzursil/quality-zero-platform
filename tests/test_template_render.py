@@ -282,6 +282,42 @@ class DependabotTemplateTests(unittest.TestCase):
         self.assertIn(data.get("updates", []), ([], None))
 
 
+class CiFragmentTemplateTests(unittest.TestCase):
+    """``common/ci-fragments/*.j2`` render reusable workflow step snippets."""
+
+    def test_setup_python_defaults_to_3_12(self) -> None:
+        """Fragment defaults to Python 3.12 when profile omits it."""
+        rendered = tr.render_template(
+            "common/ci-fragments/setup-python.yml.j2", {"coverage": {}}
+        )
+        self.assertIn("uses: actions/setup-python@v5", rendered)
+        self.assertIn('python-version: "3.12"', rendered)
+
+    def test_setup_python_honours_profile_version(self) -> None:
+        """``coverage.setup.python`` propagates into the fragment."""
+        rendered = tr.render_template(
+            "common/ci-fragments/setup-python.yml.j2",
+            {"coverage": {"setup": {"python": "3.13"}}},
+        )
+        self.assertIn('python-version: "3.13"', rendered)
+
+    def test_setup_node_omitted_when_profile_has_no_node(self) -> None:
+        """Python-only stacks render the setup-node fragment as empty."""
+        rendered = tr.render_template(
+            "common/ci-fragments/setup-node.yml.j2", {"coverage": {}}
+        )
+        self.assertNotIn("setup-node", rendered)
+
+    def test_setup_node_renders_when_profile_declares_it(self) -> None:
+        """Frontend stacks render the standard ``setup-node@v4`` step."""
+        rendered = tr.render_template(
+            "common/ci-fragments/setup-node.yml.j2",
+            {"coverage": {"setup": {"node": "20"}}},
+        )
+        self.assertIn("uses: actions/setup-node@v4", rendered)
+        self.assertIn('node-version: "20"', rendered)
+
+
 class EnvironmentContractTests(unittest.TestCase):
     """The Jinja2 environment pins the platform's non-HTML render policy."""
 

@@ -1,0 +1,14 @@
+{#- Reusable CI fragment: set up Python for quality-zero jobs.
+
+   The consumer workflow embeds this fragment inside a ``BEGIN quality-zero
+   :setup-python`` / ``END quality-zero:setup-python`` marker pair; the
+   drift-sync workflow re-renders it in place when the platform's pinned
+   python version or action SHA changes.
+
+   Consumed variables (from the resolved profile):
+      coverage.setup.python  - Python series, e.g. ``3.12``.
+#}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "{{ (coverage | default({}, true)).get('setup', {}).get('python') or '3.12' }}"

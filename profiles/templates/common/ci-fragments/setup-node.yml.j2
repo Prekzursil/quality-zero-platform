@@ -1,0 +1,17 @@
+{#- Reusable CI fragment: set up Node.js for frontend quality-zero jobs.
+
+   Conditional on ``coverage.setup.node`` being declared in the profile —
+   Python-only stacks omit this fragment entirely. Rendered inside a
+   ``BEGIN quality-zero:setup-node`` / ``END quality-zero:setup-node``
+   marker pair.
+
+   Consumed variables:
+      coverage.setup.node  - Node major version, e.g. ``20`` or ``24``.
+#}
+{%- set node = (coverage | default({}, true)).get('setup', {}).get('node') -%}
+{%- if node %}
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "{{ node }}"
+{%- endif %}

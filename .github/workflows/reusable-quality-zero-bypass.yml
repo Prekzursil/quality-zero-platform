@@ -1,0 +1,183 @@
+name: Reusable Quality Zero Bypass
+
+# QZP v2 Phase 4 §5.2 — record a ``quality-zero:break-glass`` or
+# ``quality-zero:skip`` label event and fail/succeed the downstream
+# merge gate accordingly. Consumer repos call this via ``workflow_call``
+# on their ``labeled`` PR event.
+
+permissions: {}
+
+on:
+  workflow_call:
+    inputs:
+      label:
+        type: string
+        required: true
+        description: "Literal label that triggered the event (break-glass | skip)."
+      pr_slug:
+        type: string
+        required: true
+        description: "``owner/name`` of the repo hosting the PR."
+      pr_number:
+        type: number
+        required: true
+      head_sha:
+        type: string
+        required: true
+      actor:
+        type: string
+        required: true
+        description: "GitHub username that applied the label."
+      pr_body:
+        type: string
+        required: false
+        default: ""
+        description: "PR body — scanned for the ``Incident:`` line on break-glass."
+      audit_dir:
+        type: string
+        required: false
+        default: audit
+        description: "Relative path within the platform repo where the jsonl lands."
+      platform_repository:
+        type: string
+        required: false
+        default: Prekzursil/quality-zero-platform
+      platform_ref:
+        type: string
+        required: false
+        default: main
+    secrets:
+      BYPASS_AUDIT_PAT:
+        required: false
+        description: "Fine-grained PAT with ``contents:write`` on the platform repo for appending audit logs. Absent = dry-run."
+
+jobs:
+  bypass:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.platform_repository }}
+          ref: ${{ inputs.platform_ref }}
+          token: ${{ secrets.BYPASS_AUDIT_PAT || github.token }}
+          persist-credentials: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install platform dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Evaluate bypass
+        id: evaluate
+        env:
+          QZ_LABEL: ${{ inputs.label }}
+          QZ_PR_SLUG: ${{ inputs.pr_slug }}
+          QZ_PR_NUMBER: ${{ inputs.pr_number }}
+          QZ_HEAD_SHA: ${{ inputs.head_sha }}
+          QZ_ACTOR: ${{ inputs.actor }}
+          QZ_PR_BODY: ${{ inputs.pr_body }}
+          QZ_AUDIT_DIR: ${{ inputs.audit_dir }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+          from scripts.quality import bypass_labels as bl
+
+          label = os.environ["QZ_LABEL"].strip()
+          pr_body = os.environ.get("QZ_PR_BODY", "")
+          pr_slug = os.environ["QZ_PR_SLUG"].strip()
+          pr_number = int(os.environ["QZ_PR_NUMBER"])
+          head_sha = os.environ["QZ_HEAD_SHA"].strip()
+          actor = os.environ["QZ_ACTOR"].strip()
+          audit_dir = Path(os.environ.get("QZ_AUDIT_DIR", "audit"))
+
+          if label == bl.BREAK_GLASS_LABEL:
+            try:
+              decision = bl.evaluate_break_glass(
+                  pr_body=pr_body, pr_slug=pr_slug, pr_number=pr_number,
+                  head_sha=head_sha, actor=actor,
+              )
+            except bl.BypassError as exc:
+              print(f"::error::{exc}", flush=True)
+              sys.exit(1)
+            filename = "break-glass.jsonl"
+          elif label == bl.SKIP_LABEL:
+            decision = bl.evaluate_skip(
+                pr_body=pr_body, pr_slug=pr_slug, pr_number=pr_number,
+                head_sha=head_sha, actor=actor,
+            )
+            filename = "skip.jsonl"
+          else:
+            print(f"::error::Unknown bypass label: {label}", flush=True)
+            sys.exit(2)
+
+          audit_path = audit_dir / filename
+          bl.append_jsonl(audit_path, decision.audit_record)
+
+          output_path = os.environ.get("GITHUB_OUTPUT")
+          if output_path:
+            with open(output_path, "a", encoding="utf-8") as handle:
+              handle.write(f"allowed={'true' if decision.allowed else 'false'}\n")
+              handle.write(f"label={decision.label}\n")
+              handle.write(f"audit_path={audit_path}\n")
+              if decision.incident:
+                handle.write(f"incident={decision.incident}\n")
+              if decision.tracking_issue_title:
+                handle.write(
+                    f"tracking_issue_title={decision.tracking_issue_title}\n"
+                )
+          step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if step_summary:
+            with open(step_summary, "a", encoding="utf-8") as handle:
+              handle.write(f"## Quality Zero Bypass — {decision.label}\n\n")
+              handle.write(f"- PR: `{pr_slug}#{pr_number}`\n")
+              handle.write(f"- Actor: `@{actor}`\n")
+              if decision.incident:
+                handle.write(f"- Incident: `{decision.incident}`\n")
+              handle.write(f"- Audit log: `{audit_path}`\n")
+          PY
+
+      - name: Commit audit log
+        if: ${{ secrets.BYPASS_AUDIT_PAT != '' }}
+        env:
+          QZ_AUDIT_PATH: ${{ steps.evaluate.outputs.audit_path }}
+          QZ_LABEL: ${{ inputs.label }}
+          QZ_PR_SLUG: ${{ inputs.pr_slug }}
+          QZ_PR_NUMBER: ${{ inputs.pr_number }}
+        run: |
+          git config user.email "platform-bot@quality-zero.local"
+          git config user.name "quality-zero-platform bypass"
+          git add "$QZ_AUDIT_PATH"
+          git commit -m "chore(audit): record $QZ_LABEL for $QZ_PR_SLUG#$QZ_PR_NUMBER"
+          git push
+
+      - name: Open post-merge tracking issue
+        if: ${{ inputs.label == 'quality-zero:break-glass' && steps.evaluate.outputs.tracking_issue_title != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.BYPASS_AUDIT_PAT || github.token }}
+          QZ_ISSUE_TITLE: ${{ steps.evaluate.outputs.tracking_issue_title }}
+          QZ_PR_SLUG: ${{ inputs.pr_slug }}
+          QZ_PR_NUMBER: ${{ inputs.pr_number }}
+          QZ_ACTOR: ${{ inputs.actor }}
+          QZ_INCIDENT: ${{ steps.evaluate.outputs.incident }}
+          QZ_PLATFORM_REPO: ${{ inputs.platform_repository }}
+        run: |
+          gh issue create \
+            --repo "$QZ_PLATFORM_REPO" \
+            --title "$QZ_ISSUE_TITLE" \
+            --label "quality-zero:break-glass-followup" \
+            --body "Automated tracking issue from the reusable-quality-zero-bypass workflow.
+
+          - PR: $QZ_PR_SLUG#$QZ_PR_NUMBER
+          - Actor: @$QZ_ACTOR
+          - Incident: $QZ_INCIDENT
+
+          Post-merge remediation required: the PR merged past a red quality-zero gate using break-glass. Debrief the incident, resolve the underlying failure, and close this issue when the gate is green again on main."

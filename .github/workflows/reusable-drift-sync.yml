@@ -1,0 +1,158 @@
+name: Reusable Drift Sync
+
+# QZP v2 Phase 3 §4 — render profile templates against a consumer repo
+# and open a PR when the rendered output diverges from the repo's
+# current state. Each fleet repo wires this workflow via a thin caller
+# that supplies the ``repo_slug`` + secrets.
+
+permissions: {}
+
+on:
+  workflow_call:
+    inputs:
+      repo_slug:
+        type: string
+        required: true
+        description: "owner/name of the target consumer repo."
+      default_branch:
+        type: string
+        required: false
+        default: main
+      dry_run:
+        type: boolean
+        required: false
+        default: false
+        description: "When true, report drift but do not open a PR."
+      platform_repository:
+        type: string
+        required: false
+        default: Prekzursil/quality-zero-platform
+      platform_ref:
+        type: string
+        required: false
+        default: main
+    secrets:
+      DRIFT_SYNC_PAT:
+        required: false
+        description: "Fine-grained PAT with ``pull-requests:write`` + ``contents:write`` on the target repo. Absent = dry-run mode."
+
+jobs:
+  drift-sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.platform_repository }}
+          ref: ${{ inputs.platform_ref }}
+          path: platform
+          persist-credentials: false
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.repo_slug }}
+          ref: ${{ inputs.default_branch }}
+          path: repo
+          token: ${{ secrets.DRIFT_SYNC_PAT || github.token }}
+          persist-credentials: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install platform dependencies
+        run: python -m pip install -r platform/requirements-dev.txt
+
+      - name: Export resolved profile
+        id: profile
+        env:
+          REPO_SLUG: ${{ inputs.repo_slug }}
+        run: |
+          python platform/scripts/quality/export_profile.py \
+            --repo-slug "$REPO_SLUG" \
+            --out-json "$RUNNER_TEMP/profile.json"
+
+      - name: Detect template drift
+        id: detect
+        run: |
+          python platform/scripts/quality/drift_sync.py \
+            --profile-json "$RUNNER_TEMP/profile.json" \
+            --repo-root "$GITHUB_WORKSPACE/repo" \
+            --out-json "$RUNNER_TEMP/drift.json"
+
+      - name: Upload drift report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drift-report-${{ inputs.repo_slug == '' && 'unknown' || inputs.repo_slug }}
+          path: ${{ runner.temp }}/drift.json
+
+      - name: Summarise drift
+        env:
+          DRIFT_REPORT_PATH: ${{ runner.temp }}/drift.json
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads(Path(os.environ["DRIFT_REPORT_PATH"]).read_text(encoding="utf-8"))
+          summary = report.get("summary", {})
+          missing = int(summary.get("missing", 0))
+          drift = int(summary.get("drift", 0))
+          in_sync = int(summary.get("in_sync", 0))
+          print(f"Drift summary: missing={missing} drift={drift} in_sync={in_sync}", flush=True)
+          out_of_sync = missing + drift
+          step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if step_summary:
+            with open(step_summary, "a", encoding="utf-8") as handle:
+              handle.write(f"## Drift Sync\n\n- missing: {missing}\n- drift: {drift}\n- in_sync: {in_sync}\n")
+              if out_of_sync:
+                handle.write("\nOut-of-sync entries:\n\n")
+                for entry in report.get("entries", []):
+                  if entry["status"] in ("missing", "drift"):
+                    handle.write(f"- `{entry['output_path']}` ({entry['status']})\n")
+          PY
+
+      - name: Apply drift fixes + open PR
+        if: ${{ !inputs.dry_run && env.DRIFT_SYNC_PAT_PRESENT == 'true' }}
+        env:
+          REPO_SLUG: ${{ inputs.repo_slug }}
+          DEFAULT_BRANCH: ${{ inputs.default_branch }}
+          PLATFORM_REF: ${{ inputs.platform_ref }}
+          DRIFT_REPORT_PATH: ${{ runner.temp }}/drift.json
+          GH_TOKEN: ${{ secrets.DRIFT_SYNC_PAT }}
+          DRIFT_SYNC_PAT_PRESENT: ${{ secrets.DRIFT_SYNC_PAT != '' }}
+        working-directory: repo
+        run: |
+          set -euo pipefail
+          # Run the applier + open a PR. Keeps the body of the step in
+          # a Python here-doc so env-var indirection replaces every
+          # ``${{ github.* }}`` interpolation (Semgrep CWE-78).
+          python "$GITHUB_WORKSPACE/platform/scripts/quality/apply_drift_pr.py" \
+            --report "$DRIFT_REPORT_PATH" \
+            --repo-slug "$REPO_SLUG" \
+            --default-branch "$DEFAULT_BRANCH" \
+            --platform-ref "$PLATFORM_REF"
+
+      - name: Fail on drift when dry_run
+        if: ${{ inputs.dry_run }}
+        env:
+          DRIFT_REPORT_PATH: ${{ runner.temp }}/drift.json
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          report = json.loads(Path(os.environ["DRIFT_REPORT_PATH"]).read_text(encoding="utf-8"))
+          summary = report.get("summary", {})
+          out_of_sync = int(summary.get("missing", 0)) + int(summary.get("drift", 0))
+          if out_of_sync:
+              print(f"drift-sync (dry-run): {out_of_sync} entries out of sync", flush=True)
+              sys.exit(1)
+          print("drift-sync (dry-run): fully in sync.", flush=True)
+          PY

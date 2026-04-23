@@ -59,10 +59,15 @@ jobs:
         run: python -m pip install -r platform/requirements-dev.txt
 
       - name: Validate storybook_dir path (§B.2.2)
+        # Semgrep ``run-shell-injection``: route ``github.*`` and ``inputs.*``
+        # into env vars instead of interpolating into ``run:`` directly.
+        env:
+          REPO_ROOT: ${{ github.workspace }}
+          STORYBOOK_DIR: ${{ inputs.storybook_dir }}
         run: |
           python platform/scripts/quality/rollup_v2/validate_workflow_paths.py \
-            --repo-root "${{ github.workspace }}" \
-            --path "${{ inputs.storybook_dir }}"
+            --repo-root "$REPO_ROOT" \
+            --path "$STORYBOOK_DIR"
 
       - uses: actions/setup-node@v4
         with:

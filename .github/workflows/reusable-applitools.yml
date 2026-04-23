@@ -58,10 +58,18 @@ jobs:
         run: python -m pip install -r platform/requirements-dev.txt
 
       - name: Validate eyes_config_path (§B.2.2)
+        # Semgrep ``run-shell-injection``: route ``github.*`` and ``inputs.*``
+        # values through ``env:`` instead of interpolating them into the
+        # ``run:`` script directly. Keeps a malicious workflow input
+        # (``eyes_config_path``) from breaking out of the argument slot into
+        # arbitrary shell.
+        env:
+          REPO_ROOT: ${{ github.workspace }}
+          EYES_CONFIG_PATH: ${{ inputs.eyes_config_path }}
         run: |
           python platform/scripts/quality/rollup_v2/validate_workflow_paths.py \
-            --repo-root "${{ github.workspace }}" \
-            --path "${{ inputs.eyes_config_path }}"
+            --repo-root "$REPO_ROOT" \
+            --path "$EYES_CONFIG_PATH"
 
       - uses: actions/setup-node@v4
         with:
@@ -72,12 +80,15 @@ jobs:
         run: npm ci
 
       - name: Run Applitools Eyes
+        # Route ``inputs.eyes_config_path`` through env for the same reason
+        # as the validation step above (Semgrep ``run-shell-injection``).
         working-directory: ${{ inputs.working_directory }}
         env:
           APPLITOOLS_API_KEY: ${{ secrets.APPLITOOLS_API_KEY }}
           APPLITOOLS_BATCH_NAME: ${{ inputs.batch_name != '' && inputs.batch_name || format('PR {0}', github.event.pull_request.number) }}
+          EYES_CONFIG_PATH: ${{ inputs.eyes_config_path }}
         run: |
-          npx @applitools/eyes-storybook --conf "${{ inputs.eyes_config_path }}" \
+          npx @applitools/eyes-storybook --conf "$EYES_CONFIG_PATH" \
             --exitcode || true
 
       - name: Upload Applitools artifacts

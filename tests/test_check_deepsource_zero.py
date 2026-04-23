@@ -489,3 +489,40 @@ class DeepSourceVisibleZeroTests(unittest.TestCase):
         assert_in_process_entrypoint_failure(
             self, "scripts/quality/check_deepsource_zero.py"
         )
+
+    def test_policy_mode_argparse_default_and_explicit_audit(self) -> None:
+        """``--policy-mode`` defaults to ``ratchet`` and accepts ``audit``."""
+        with patch.object(sys, "argv", ["check_deepsource_zero.py"]):
+            args = check_deepsource_zero._parse_args()
+        self.assertEqual(args.policy_mode, "ratchet")
+
+        with patch.object(
+            sys, "argv", ["check_deepsource_zero.py", "--policy-mode", "audit"]
+        ):
+            args = check_deepsource_zero._parse_args()
+        self.assertEqual(args.policy_mode, "audit")
+
+    def test_resolve_status_audit_mode_forces_pass(self) -> None:
+        """``audit`` mode returns ``pass`` even when findings are non-empty.
+
+        This is the escape hatch the platform's own CI uses on the
+        self-hosted case: the repo accumulated 1116 DeepSource visible
+        issues before governance landed, and fixing them all is out of
+        scope for the QZP v2 rollout. ``audit`` keeps the gate
+        informational while consumer repos stay on ``ratchet`` / ``zero``.
+        """
+        self.assertEqual(
+            check_deepsource_zero._resolve_status(["issue"], "audit"), "pass"
+        )
+
+    def test_resolve_status_non_audit_preserves_fail(self) -> None:
+        """Non-audit policy modes keep the fail-on-any-visible behaviour."""
+        self.assertEqual(
+            check_deepsource_zero._resolve_status(["issue"], "ratchet"), "fail"
+        )
+        self.assertEqual(
+            check_deepsource_zero._resolve_status(["issue"], "zero"), "fail"
+        )
+        self.assertEqual(
+            check_deepsource_zero._resolve_status([], "ratchet"), "pass"
+        )

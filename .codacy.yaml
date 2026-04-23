@@ -35,6 +35,7 @@ engines:
       - "scripts/quality/bumps.py"
       - "scripts/quality/admin_dashboard_pages.py"
       - "scripts/quality/alert_triggers.py"
+      - "scripts/quality/alert_dispatch.py"
 exclude_paths:
   - "generated/**"
   - "tests/**"

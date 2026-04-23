@@ -76,7 +76,8 @@ class CoverageInputsPayloadTests(unittest.TestCase):
 class ProfileOutputLinesCoverageInputsTests(unittest.TestCase):
     """The exported ``coverage_inputs_json`` output key reflects the payload."""
 
-    def _minimum_profile(self) -> dict:
+    @staticmethod
+    def _minimum_profile() -> dict:
         """A profile skeleton with just enough to pass ``_profile_output_lines``."""
         return {
             "slug": "Prekzursil/example",
@@ -158,10 +159,13 @@ class GithubActionsOutputFileTests(unittest.TestCase):
             content = out.read_text(encoding="utf-8")
             self.assertIn("coverage_inputs_json=", content)
             # And the payload itself must be valid JSON.
-            line = next(
-                ln for ln in content.splitlines()
-                if ln.startswith("coverage_inputs_json=")
-            )
+            try:
+                line = next(
+                    ln for ln in content.splitlines()
+                    if ln.startswith("coverage_inputs_json=")
+                )
+            except StopIteration:  # pragma: no cover — assertIn above rules this out
+                self.fail("coverage_inputs_json= line missing despite assertIn hit")
             payload = json.loads(line.split("=", 1)[1])
             self.assertIsInstance(payload, list)
             self.assertEqual(len(payload), 2)

@@ -255,32 +255,33 @@ class NormalizeOverridesTests(unittest.TestCase):
 class FinalizedProfileV2FieldsTests(unittest.TestCase):
     """Loaded profiles carry the canonical v2 fields regardless of source shape.
 
-    v1 profiles (no explicit ``version``, ``mode``, ``scanners``, or
-    ``overrides``) must still end up with those four keys present after
-    ``load_repo_profile`` so downstream consumers need not branch on schema
-    version. Values derive from the existing legacy fields.
+    After Phase 1's on-disk migration every profile has ``version: 2``
+    explicitly. The load-time path still has to work for any future v1
+    input (e.g. a freshly bootstrapped repo that hasn't yet run the
+    migration), so the loader synthesises the v2 block on both v1 and v2
+    inputs. This test checks the v2 path through a real repo profile.
     """
 
     def test_event_link_profile_exposes_v2_derived_fields(self) -> None:
-        """event-link is v1 on disk; after load it should have v2 shape too."""
+        """event-link is v2 on disk; loaded profile keeps the v2 fields intact."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/event-link")
 
-        # version defaults to 1 for legacy profiles.
-        self.assertEqual(profile["version"], 1)
+        # Migration places version:2 explicitly; load_repo_profile must preserve it.
+        self.assertEqual(profile["version"], 2)
 
-        # mode.phase derived from legacy issue_policy.mode.
+        # mode.phase should come through as the ratchet value declared on-disk.
         self.assertIn(profile["mode"]["phase"], {"shadow", "ratchet", "absolute"})
         self.assertIn("ratchet", profile["mode"])
-        self.assertIn("shadow_until", profile["mode"])
 
-        # scanners synthesised from legacy enabled_scanners → severity:block.
+        # scanners dict present with valid severities (legacy ``enabled_scanners``
+        # still fills in any scanner the v2 block omits).
         self.assertIsInstance(profile["scanners"], dict)
         for scanner_name, config in profile["scanners"].items():
             self.assertIn(config["severity"], {"block", "warn", "info"})
             self.assertIsInstance(scanner_name, str)
 
-        # overrides default to an empty list when unspecified.
+        # overrides: [] is written by the migration script.
         self.assertEqual(profile["overrides"], [])
 
 

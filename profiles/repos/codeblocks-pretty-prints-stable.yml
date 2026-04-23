@@ -1,27 +1,37 @@
 slug: Prekzursil/codeblocks-pretty-prints-stable
+version: 2
 stack: python-desktop
+mode:
+  phase: absolute
+scanners: {}
+overrides: []
 verify_command: bash scripts/verify
 coverage:
-  command: |
-    python -m pip install --upgrade pip
+  command: 'python -m pip install --upgrade pip
+
     python -m pip install -r requirements-dev.txt
+
     npm ci
+
     bash scripts/verify
+
+    '
   inputs:
-    - format: xml
-      name: repo
-      path: build/coverage.xml
+  - format: xml
+    name: repo
+    path: build/coverage.xml
+    flag: repo
 vendors:
   sonar:
     project_key: Prekzursil_codeblocks-pretty-prints-stable
 codeql:
   languages:
-    - actions
-    - javascript-typescript
-    - python
+  - actions
+  - javascript-typescript
+  - python
 dependabot:
   updates:
-    - ecosystem: pip
-      directory: /
-    - ecosystem: npm
-      directory: /
+  - ecosystem: pip
+    directory: /
+  - ecosystem: npm
+    directory: /

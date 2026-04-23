@@ -1,22 +1,30 @@
 slug: Prekzursil/Personal-Finance-Management
+version: 2
 stack: gradle-java
+mode:
+  phase: absolute
+scanners: {}
+overrides: []
 verify_command: bash scripts/verify
 coverage:
-  command: |
-    chmod +x gradlew || true
+  command: 'chmod +x gradlew || true
+
     ./gradlew test jacocoTestReport
+
+    '
   inputs:
-    - format: xml
-      name: java
-      path: app/build/reports/jacoco/test/jacocoTestReport.xml
+  - format: xml
+    name: java
+    path: app/build/reports/jacoco/test/jacocoTestReport.xml
+    flag: java
 vendors:
   sonar:
     project_key: Prekzursil_Personal-Finance-Management
 codeql:
   languages:
-    - actions
-    - java-kotlin
+  - actions
+  - java-kotlin
 dependabot:
   updates:
-    - ecosystem: gradle
-      directory: /
+  - ecosystem: gradle
+    directory: /

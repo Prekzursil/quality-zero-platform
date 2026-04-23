@@ -1,86 +1,84 @@
 slug: Prekzursil/Reframe
+version: 2
 stack: fullstack-web
+mode:
+  phase: absolute
+scanners: {}
+overrides: []
 verify_command: make verify
 required_contexts_mode: replace
 required_secrets:
-  - CHROMATIC_PROJECT_TOKEN
-  - APPLITOOLS_API_KEY
+- CHROMATIC_PROJECT_TOKEN
+- APPLITOOLS_API_KEY
 coverage:
   setup:
     rust: true
     system_packages:
-      - libgtk-3-dev
-      - libwebkit2gtk-4.1-dev
-      - librsvg2-dev
-      - patchelf
-  command: |
-    python -m venv .venv
-    .venv/bin/python -m pip install --upgrade pip
-    .venv/bin/pip install -r apps/api/requirements.txt -r services/worker/requirements.txt
-    .venv/bin/pip install pytest pytest-cov
-    npm --prefix apps/web ci
-    npm --prefix apps/desktop ci
-    mkdir -p coverage
-    PYTHONPATH=.:apps/api:packages/media-core/src .venv/bin/python -m pytest \
-      --cov=apps/api/app \
-      --cov=services/worker \
-      --cov=packages/media-core/src/media_core \
-      --cov-branch \
-      --cov-report=xml:coverage/python-coverage.xml \
-      apps/api/tests services/worker packages/media-core/tests
-    npm --prefix apps/web run test:coverage
-    npm --prefix apps/desktop run test:coverage
-    cargo install cargo-llvm-cov --locked
-    (cd apps/desktop/src-tauri && cargo llvm-cov --workspace --all-features --lcov --output-path ../../../coverage/desktop-rust.lcov)
+    - libgtk-3-dev
+    - libwebkit2gtk-4.1-dev
+    - librsvg2-dev
+    - patchelf
+  command: "python -m venv .venv\n.venv/bin/python -m pip install --upgrade pip\n\
+    .venv/bin/pip install -r apps/api/requirements.txt -r services/worker/requirements.txt\n\
+    .venv/bin/pip install pytest pytest-cov\nnpm --prefix apps/web ci\nnpm --prefix\
+    \ apps/desktop ci\nmkdir -p coverage\nPYTHONPATH=.:apps/api:packages/media-core/src\
+    \ .venv/bin/python -m pytest \\\n  --cov=apps/api/app \\\n  --cov=services/worker\
+    \ \\\n  --cov=packages/media-core/src/media_core \\\n  --cov-branch \\\n  --cov-report=xml:coverage/python-coverage.xml\
+    \ \\\n  apps/api/tests services/worker packages/media-core/tests\nnpm --prefix\
+    \ apps/web run test:coverage\nnpm --prefix apps/desktop run test:coverage\ncargo\
+    \ install cargo-llvm-cov --locked\n(cd apps/desktop/src-tauri && cargo llvm-cov\
+    \ --workspace --all-features --lcov --output-path ../../../coverage/desktop-rust.lcov)\n"
   inputs:
-    - format: lcov
-      name: web
-      path: apps/web/coverage/lcov.info
-    - format: lcov
-      name: desktop-ts
-      path: apps/desktop/coverage/lcov.info
+  - format: lcov
+    name: web
+    path: apps/web/coverage/lcov.info
+    flag: web
+  - format: lcov
+    name: desktop-ts
+    path: apps/desktop/coverage/lcov.info
+    flag: desktop-ts
 required_contexts:
   always:
-    - shared-scanner-matrix / Coverage 100 Gate
-    - shared-codecov-analytics / Codecov Analytics
-    - codeql / CodeQL
-    - shared-scanner-matrix / Sonar Zero
-    - shared-scanner-matrix / Codacy Zero
-    - shared-scanner-matrix / Semgrep Zero
-    - shared-scanner-matrix / Sentry Zero
-    - shared-scanner-matrix / DeepScan Zero
-    - SonarCloud Code Analysis
-    - Python API & worker checks
-    - Web build
-    - Chromatic Playwright
-    - Applitools Visual
+  - shared-scanner-matrix / Coverage 100 Gate
+  - shared-codecov-analytics / Codecov Analytics
+  - codeql / CodeQL
+  - shared-scanner-matrix / Sonar Zero
+  - shared-scanner-matrix / Codacy Zero
+  - shared-scanner-matrix / Semgrep Zero
+  - shared-scanner-matrix / Sentry Zero
+  - shared-scanner-matrix / DeepScan Zero
+  - SonarCloud Code Analysis
+  - Python API & worker checks
+  - Web build
+  - Chromatic Playwright
+  - Applitools Visual
   pull_request_only:
-    - DeepScan
-    - CodeRabbit
-    - Codacy Static Code Analysis
-    - qlty check
-    - qlty coverage
-    - qlty coverage diff
+  - DeepScan
+  - CodeRabbit
+  - Codacy Static Code Analysis
+  - qlty check
+  - qlty coverage
+  - qlty coverage diff
   target:
-    - shared-scanner-matrix / Coverage 100 Gate
-    - shared-codecov-analytics / Codecov Analytics
-    - qlty check
-    - qlty coverage
-    - qlty coverage diff
-    - shared-scanner-matrix / Sonar Zero
-    - shared-scanner-matrix / Codacy Zero
-    - shared-scanner-matrix / Semgrep Zero
-    - shared-scanner-matrix / Sentry Zero
-    - shared-scanner-matrix / DeepScan Zero
-    - SonarCloud Code Analysis
-    - DeepScan
-    - Python API & worker checks
-    - Web build
-    - Chromatic Playwright
-    - Applitools Visual
-    - codeql / CodeQL
-    - CodeRabbit
-    - Codacy Static Code Analysis
+  - shared-scanner-matrix / Coverage 100 Gate
+  - shared-codecov-analytics / Codecov Analytics
+  - qlty check
+  - qlty coverage
+  - qlty coverage diff
+  - shared-scanner-matrix / Sonar Zero
+  - shared-scanner-matrix / Codacy Zero
+  - shared-scanner-matrix / Semgrep Zero
+  - shared-scanner-matrix / Sentry Zero
+  - shared-scanner-matrix / DeepScan Zero
+  - SonarCloud Code Analysis
+  - DeepScan
+  - Python API & worker checks
+  - Web build
+  - Chromatic Playwright
+  - Applitools Visual
+  - codeql / CodeQL
+  - CodeRabbit
+  - Codacy Static Code Analysis
 visual_pair_required: true
 visual_lane:
   kind: web
@@ -88,30 +86,39 @@ providers:
   chromatic:
     status_context: Chromatic Playwright
     project_name: Reframe
-    token_secret_parts: [CHROMATIC, PROJECT, TOKEN]
-    local_env_var_parts: [CHROMATIC, PROJECT, TOKEN, REFRAME]
+    token_secret_parts:
+    - CHROMATIC
+    - PROJECT
+    - TOKEN
+    local_env_var_parts:
+    - CHROMATIC
+    - PROJECT
+    - TOKEN
+    - REFRAME
   applitools:
     status_context: Applitools Visual
     project_name: Reframe
 vendors:
   sonar:
-    project_key_parts: [Prekzursil, Reframe]
+    project_key_parts:
+    - Prekzursil
+    - Reframe
 codeql:
   languages:
-    - actions
-    - javascript-typescript
-    - python
+  - actions
+  - javascript-typescript
+  - python
 dependabot:
   updates:
-    - ecosystem: pip
-      directory: /apps/api
-    - ecosystem: pip
-      directory: /services/worker
-    - ecosystem: pip
-      directory: /packages/media-core
-    - ecosystem: npm
-      directory: /apps/web
-    - ecosystem: npm
-      directory: /apps/desktop
-    - ecosystem: cargo
-      directory: /apps/desktop/src-tauri
+  - ecosystem: pip
+    directory: /apps/api
+  - ecosystem: pip
+    directory: /services/worker
+  - ecosystem: pip
+    directory: /packages/media-core
+  - ecosystem: npm
+    directory: /apps/web
+  - ecosystem: npm
+    directory: /apps/desktop
+  - ecosystem: cargo
+    directory: /apps/desktop/src-tauri

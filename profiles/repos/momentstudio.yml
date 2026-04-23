@@ -1,29 +1,40 @@
 slug: Prekzursil/momentstudio
+version: 2
 stack: fullstack-web
+mode:
+  phase: absolute
+scanners: {}
+overrides: []
 verify_command: make verify
 required_secrets:
-  - CHROMATIC_PROJECT_TOKEN
-  - APPLITOOLS_API_KEY
+- CHROMATIC_PROJECT_TOKEN
+- APPLITOOLS_API_KEY
 coverage:
-  command: |
-    python -m pip install --upgrade pip
+  command: 'python -m pip install --upgrade pip
+
     python -m pip install -r backend/requirements.txt coverage pytest ruff mypy
+
     npm --prefix frontend ci
+
     make coverage
+
+    '
   inputs:
-    - format: xml
-      name: backend
-      path: backend/coverage.xml
-    - format: lcov
-      name: frontend
-      path: frontend/coverage/lcov.info
+  - format: xml
+    name: backend
+    path: backend/coverage.xml
+    flag: backend
+  - format: lcov
+    name: frontend
+    path: frontend/coverage/lcov.info
+    flag: frontend
 required_contexts:
   always:
-    - Chromatic Playwright
-    - Applitools Visual
+  - Chromatic Playwright
+  - Applitools Visual
   target:
-    - Chromatic Playwright
-    - Applitools Visual
+  - Chromatic Playwright
+  - Applitools Visual
 visual_pair_required: true
 visual_lane:
   kind: web
@@ -31,32 +42,41 @@ providers:
   chromatic:
     status_context: Chromatic Playwright
     project_name: momentstudio
-    token_secret_parts: [CHROMATIC, PROJECT, TOKEN]
-    local_env_var_parts: [CHROMATIC, PROJECT, TOKEN, MOMENTSTUDIO]
+    token_secret_parts:
+    - CHROMATIC
+    - PROJECT
+    - TOKEN
+    local_env_var_parts:
+    - CHROMATIC
+    - PROJECT
+    - TOKEN
+    - MOMENTSTUDIO
   applitools:
     status_context: Applitools Visual
     project_name: momentstudio
   sonar:
-    project_key_parts: [Prekzursil, AdrianaArt]
+    project_key_parts:
+    - Prekzursil
+    - AdrianaArt
 visual_regression:
   chromatic:
     enabled: true
     project_token_secret: CHROMATIC_PROJECT_TOKEN
-    storybook_build_script: "npm run build-storybook"
-    storybook_dir: "storybook-static"
+    storybook_build_script: npm run build-storybook
+    storybook_dir: storybook-static
   applitools:
     enabled: true
     api_key_secret: APPLITOOLS_API_KEY
-    batch_name_strategy: "branch-sha"
-    eyes_config_path: "applitools.config.js"
+    batch_name_strategy: branch-sha
+    eyes_config_path: applitools.config.js
 codeql:
   languages:
-    - actions
-    - javascript-typescript
-    - python
+  - actions
+  - javascript-typescript
+  - python
 dependabot:
   updates:
-    - ecosystem: pip
-      directory: /backend
-    - ecosystem: npm
-      directory: /frontend
+  - ecosystem: pip
+    directory: /backend
+  - ecosystem: npm
+    directory: /frontend

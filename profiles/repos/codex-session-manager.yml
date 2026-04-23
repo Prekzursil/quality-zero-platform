@@ -1,5 +1,17 @@
 slug: Prekzursil/codex-session-manager
+version: 2
 stack: dotnet-wpf
+mode:
+  phase: ratchet
+  ratchet:
+    baseline: {}
+    target_date: ''
+    escalation_date: ''
+    on_escalation: absolute
+scanners:
+  deepsource_visible:
+    severity: block
+overrides: []
 verify_command: bash scripts/verify
 required_contexts_mode: replace
 issue_policy:
@@ -10,82 +22,89 @@ enabled_scanners:
   deepsource_visible: true
 required_contexts:
   always:
-    - build-test
-    - scan
-    - codeql / CodeQL
-    - shared-codecov-analytics / Codecov Analytics
-    - shared-scanner-matrix / Coverage 100 Gate
-    - shared-scanner-matrix / QLTY Zero
-    - shared-scanner-matrix / Sonar Zero
-    - shared-scanner-matrix / Codacy Zero
-    - shared-scanner-matrix / Semgrep Zero
-    - shared-scanner-matrix / Sentry Zero
-    - shared-scanner-matrix / DeepScan Zero
-    - shared-scanner-matrix / DeepSource Visible Zero
+  - build-test
+  - scan
+  - codeql / CodeQL
+  - shared-codecov-analytics / Codecov Analytics
+  - shared-scanner-matrix / Coverage 100 Gate
+  - shared-scanner-matrix / QLTY Zero
+  - shared-scanner-matrix / Sonar Zero
+  - shared-scanner-matrix / Codacy Zero
+  - shared-scanner-matrix / Semgrep Zero
+  - shared-scanner-matrix / Sentry Zero
+  - shared-scanner-matrix / DeepScan Zero
+  - shared-scanner-matrix / DeepSource Visible Zero
   pull_request_only:
-    - dependency-review
+  - dependency-review
   required_now:
-    - build-test
-    - scan
-    - codeql / CodeQL
-    - dependency-review
-    - shared-codecov-analytics / Codecov Analytics
-    - shared-scanner-matrix / Coverage 100 Gate
-    - shared-scanner-matrix / QLTY Zero
-    - shared-scanner-matrix / Sonar Zero
-    - shared-scanner-matrix / Codacy Zero
-    - shared-scanner-matrix / Semgrep Zero
-    - shared-scanner-matrix / Sentry Zero
-    - shared-scanner-matrix / DeepScan Zero
-    - shared-scanner-matrix / DeepSource Visible Zero
-    - aggregate-gate / Quality Zero Gate
-    - shared-scanner-matrix / Quality Rollup
+  - build-test
+  - scan
+  - codeql / CodeQL
+  - dependency-review
+  - shared-codecov-analytics / Codecov Analytics
+  - shared-scanner-matrix / Coverage 100 Gate
+  - shared-scanner-matrix / QLTY Zero
+  - shared-scanner-matrix / Sonar Zero
+  - shared-scanner-matrix / Codacy Zero
+  - shared-scanner-matrix / Semgrep Zero
+  - shared-scanner-matrix / Sentry Zero
+  - shared-scanner-matrix / DeepScan Zero
+  - shared-scanner-matrix / DeepSource Visible Zero
+  - aggregate-gate / Quality Zero Gate
+  - shared-scanner-matrix / Quality Rollup
   target:
-    - build-test
-    - scan
-    - codeql / CodeQL
-    - dependency-review
-    - shared-codecov-analytics / Codecov Analytics
-    - shared-scanner-matrix / Coverage 100 Gate
-    - shared-scanner-matrix / QLTY Zero
-    - shared-scanner-matrix / Sonar Zero
-    - shared-scanner-matrix / Codacy Zero
-    - shared-scanner-matrix / Semgrep Zero
-    - shared-scanner-matrix / Sentry Zero
-    - shared-scanner-matrix / DeepScan Zero
-    - shared-scanner-matrix / DeepSource Visible Zero
-    - aggregate-gate / Quality Zero Gate
-    - shared-scanner-matrix / Quality Rollup
+  - build-test
+  - scan
+  - codeql / CodeQL
+  - dependency-review
+  - shared-codecov-analytics / Codecov Analytics
+  - shared-scanner-matrix / Coverage 100 Gate
+  - shared-scanner-matrix / QLTY Zero
+  - shared-scanner-matrix / Sonar Zero
+  - shared-scanner-matrix / Codacy Zero
+  - shared-scanner-matrix / Semgrep Zero
+  - shared-scanner-matrix / Sentry Zero
+  - shared-scanner-matrix / DeepScan Zero
+  - shared-scanner-matrix / DeepSource Visible Zero
+  - aggregate-gate / Quality Zero Gate
+  - shared-scanner-matrix / Quality Rollup
 coverage:
   runner: windows-latest
   command_shell: pwsh
-  command: |
-    dotnet restore CodexSessionManager.sln
+  command: 'dotnet restore CodexSessionManager.sln
+
     dotnet build CodexSessionManager.sln --configuration Release --no-restore
-    pwsh -ExecutionPolicy Bypass -File ./scripts/collect-dotnet-coverage.ps1 -Configuration Release
+
+    pwsh -ExecutionPolicy Bypass -File ./scripts/collect-dotnet-coverage.ps1 -Configuration
+    Release
+
+    '
   inputs:
-    - format: xml
-      name: app
-      path: coverage/app/coverage.cobertura.xml
-    - format: xml
-      name: core
-      path: coverage/core/coverage.cobertura.xml
-    - format: xml
-      name: storage
-      path: coverage/storage/coverage.cobertura.xml
+  - format: xml
+    name: app
+    path: coverage/app/coverage.cobertura.xml
+    flag: app
+  - format: xml
+    name: core
+    path: coverage/core/coverage.cobertura.xml
+    flag: core
+  - format: xml
+    name: storage
+    path: coverage/storage/coverage.cobertura.xml
+    flag: storage
   require_sources:
-    - src/CodexSessionManager.App/
-    - src/CodexSessionManager.Core/
-    - src/CodexSessionManager.Storage/
+  - src/CodexSessionManager.App/
+  - src/CodexSessionManager.Core/
+  - src/CodexSessionManager.Storage/
 vendors:
   sonar:
     project_key: Prekzursil_codex-session-manager
 codeql:
   runner: windows-latest
   languages:
-    - actions
-    - csharp
+  - actions
+  - csharp
 dependabot:
   updates:
-    - ecosystem: nuget
-      directory: /
+  - ecosystem: nuget
+    directory: /

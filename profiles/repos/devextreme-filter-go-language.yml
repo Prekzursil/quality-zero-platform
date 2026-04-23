@@ -1,40 +1,40 @@
 slug: Prekzursil/DevExtreme-Filter-Go-Language
+version: 2
 stack: go
+mode:
+  phase: absolute
+scanners: {}
+overrides: []
 verify_command: bash scripts/verify
 coverage:
-  # Go's coverage tooling (go test -cover) only measures statement coverage;
-  # it has no native branch coverage. gocover-cobertura therefore emits
-  # branches-valid=0, and the gate's "go branch coverage data missing"
-  # finding is structural, not a code-quality issue. Override
-  # branch_min_percent to null so the gate enforces only the line threshold
-  # (still 100%) for this repo.
   branch_min_percent: null
-  command: |
-    mkdir -p coverage
+  command: 'mkdir -p coverage
+
     packages="$(go list ./... | grep -vE "/ent($|/)")"
+
     go test $packages -coverprofile=coverage/go-coverage.out -covermode=count
+
     go install github.com/boumenot/gocover-cobertura@latest
+
     "$(go env GOPATH)/bin/gocover-cobertura" < coverage/go-coverage.out > coverage/go-coverage.xml
+
+    '
   inputs:
-    - format: xml
-      name: go
-      path: coverage/go-coverage.xml
+  - format: xml
+    name: go
+    path: coverage/go-coverage.xml
+    flag: go
 vendors:
   sonar:
     project_key: Prekzursil_DevExtreme-Filter-Go-Language
 codeql:
-  # The `actions` CodeQL extractor does not support autobuild, so the repo
-  # uses its own workflow (.github/workflows/codeql.yml) with per-language
-  # matrix build modes instead of the reusable-codeql.yml pipeline. These
-  # fields remain for profile-contract validation if the reusable pipeline
-  # is reintroduced later.
   build_mode: none
   languages:
-    - actions
-    - go
+  - actions
+  - go
   setup:
-    go: "1.24"
+    go: '1.24'
 dependabot:
   updates:
-    - ecosystem: gomod
-      directory: /
+  - ecosystem: gomod
+    directory: /

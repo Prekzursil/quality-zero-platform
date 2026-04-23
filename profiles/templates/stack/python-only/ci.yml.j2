@@ -1,0 +1,42 @@
+{#- python-only stack CI template.
+
+   Renders a minimal consumer ``ci.yml`` that runs the profile's
+   ``coverage.command`` on push/PR. Stack-specific variants
+   (``python-web``, ``python-desktop``, ``python-tooling``) can
+   compose this fragment via ``{% include %}`` and add their own
+   extra jobs.
+
+   Consumed variables:
+      default_branch              - typically ``main``
+      coverage.setup.python       - Python series; defaults to 3.12
+      coverage.command            - shell command to produce coverage.xml
+-#}
+name: Python CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ["{{ default_branch | default('main', true) }}"]
+  pull_request:
+    branches: ["{{ default_branch | default('main', true) }}"]
+
+concurrency:
+  group: python-ci-${{ '{{' }} github.ref {{ '}}' }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+{% include 'common/ci-fragments/setup-python.yml.j2' %}
+      - name: Install dev dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements-dev.txt
+      - name: Run tests with coverage
+        shell: bash
+        run: |
+          {{ (coverage | default({}, true)).get('command') or 'pytest --cov' }}

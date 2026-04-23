@@ -1,0 +1,9 @@
+extends: quality-zero-phase1-common
+stack_family: python-tooling
+# Phase 5 self-governance stack. Used by the platform repo itself and
+# any consumer python CLI-heavy tooling (no Flask / Django / FastAPI
+# surface). Coverage still aggregates through coverage.xml — same shape
+# as python-web so downstream tooling doesn't branch on stack.
+coverage:
+  mode: coverage-xml
+  artifact_path: quality-artifacts/coverage/coverage.xml

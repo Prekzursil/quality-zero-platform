@@ -1,6 +1,6 @@
 slug: Prekzursil/quality-zero-platform
 version: 2
-stack: python-web
+stack: python-tooling
 mode:
   phase: absolute
 # The platform's OWN CI self-tests against the same zero-gate scanners it
@@ -14,8 +14,23 @@ mode:
 issue_policy:
   mode: audit
 scanners:
-  deepsource_visible:
-    severity: block
+  # Every scanner is severity: block on the platform per Phase 5
+  # self-governance contract. Only socket_project_report drops to info
+  # because it's a probabilistic SBOM report, not an actionable finding.
+  codeql: { severity: block }
+  dependabot: { severity: block }
+  sonarcloud: { severity: block }
+  codacy_issues: { severity: block }
+  codacy_complexity: { severity: block }
+  codacy_clones: { severity: block }
+  codacy_coverage: { severity: block }
+  deepscan: { severity: block }
+  deepsource_visible: { severity: block }
+  semgrep: { severity: block }
+  sentry: { severity: block }
+  socket_pr_alerts: { severity: block }
+  socket_project_report: { severity: info }
+  qlty_check: { severity: block }
 overrides: []
 verify_command: bash scripts/verify
 required_contexts_mode: replace

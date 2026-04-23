@@ -1,0 +1,21 @@
+name: Node 20 -> 24
+# Canonical Phase 5 canary recipe — flips every actions/setup-node step's
+# node-version from '20' to '24' across the fullstack-web fleet. Used both
+# as the reference example in docs/QZP-V2-DESIGN.md §5.5 and as a live test
+# fixture for the bump-recipe validator.
+
+target:
+  - file_glob: "**/.github/workflows/*.yml"
+    yaml_path: "jobs.*.steps[?.uses contains 'setup-node'].with.node-version"
+    value: '24'
+
+affects_stacks:
+  - fullstack-web
+  - react-vite-vitest
+
+staging_repos:
+  - Prekzursil/env-inspector
+  - Prekzursil/webcoder
+
+full_rollout_after_staging: true
+rollback_on_failure: true

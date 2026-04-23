@@ -32,6 +32,7 @@ engines:
       - "scripts/quality/apply_drift_pr.py"
       - "scripts/quality/alerts.py"
       - "scripts/quality/bootstrap_repo.py"
+      - "scripts/quality/bumps.py"
 exclude_paths:
   - "generated/**"
   - "tests/**"

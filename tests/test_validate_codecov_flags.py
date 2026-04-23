@@ -304,6 +304,17 @@ class FlagsPresentInReportTests(unittest.TestCase):
             validate_codecov_flags._flags_present_in_report(report), {"ok"}
         )
 
+    def test_non_dict_top_level_report_yields_empty(self) -> None:
+        """A non-dict report (list/None) returns empty without crashing."""
+        self.assertEqual(
+            validate_codecov_flags._flags_present_in_report([]),  # type: ignore[arg-type]
+            set(),
+        )
+        self.assertEqual(
+            validate_codecov_flags._flags_present_in_report(None),  # type: ignore[arg-type]
+            set(),
+        )
+
 
 class ValidateFlagsTests(unittest.TestCase):
     """``validate_flags`` returns the declared flags missing from the report."""
@@ -534,70 +545,56 @@ class MainCliTests(unittest.TestCase):
             ])
         self.assertEqual(rc, 3)
 
-    def test_http_401_is_warn_and_skip(self) -> None:
-        """Exit 0 on 401 Unauthorized — auth is a platform config issue.
+    def _run_with_poll_error(
+        self, poll_exc: BaseException, path: Path
+    ) -> int:
+        """Patch ``_poll_for_flags`` to raise ``poll_exc`` and return the CLI rc.
+
+        Factored out because the 401/403/500 scenarios share an otherwise
+        identical setup — qlty flagged the three copies as duplicated code
+        (mass ≥ 104).
+        """
+        with patch(
+            "scripts.quality.validate_codecov_flags._poll_for_flags",
+            side_effect=poll_exc,
+        ):
+            return self._run_main([
+                "--repo-slug", "Prekzursil/event-link",
+                "--sha", "abc123",
+                "--inputs-json", str(path),
+            ])
+
+    def test_auth_http_errors_are_warn_and_skip(self) -> None:
+        """Exit 0 on 401/403 — auth is a platform config issue, not a regression.
 
         The CODECOV_TOKEN in CI is an upload (write-scope) token. The
         Codecov v2 commit API needs a separate read-scope Bearer token,
         which most consumer repos don't have wired. Treat missing read
         auth as warn-and-skip rather than hard-fail: otherwise every
         repo without the read token has permanent red CI on a config
-        problem, not a regression.
+        problem, not a regression. 401 and 403 share this policy, so
+        they share a parameterised test case.
         """
         path = self._write_profile({
             "coverage": {"inputs": [{"name": "ui", "flag": "ui", "path": "x"}]}
         })
-        http_401 = urllib.error.HTTPError(
-            "u", 401, "Unauthorized", {}, None  # type: ignore[arg-type]
-        )
-        with patch(
-            "scripts.quality.validate_codecov_flags._poll_for_flags",
-            side_effect=http_401,
-        ):
-            rc = self._run_main([
-                "--repo-slug", "Prekzursil/event-link",
-                "--sha", "abc123",
-                "--inputs-json", str(path),
-            ])
-        self.assertEqual(rc, 0)
-
-    def test_http_403_is_warn_and_skip(self) -> None:
-        """Exit 0 on 403 Forbidden — same reasoning as the 401 case."""
-        path = self._write_profile({
-            "coverage": {"inputs": [{"name": "ui", "flag": "ui", "path": "x"}]}
-        })
-        http_403 = urllib.error.HTTPError(
-            "u", 403, "Forbidden", {}, None  # type: ignore[arg-type]
-        )
-        with patch(
-            "scripts.quality.validate_codecov_flags._poll_for_flags",
-            side_effect=http_403,
-        ):
-            rc = self._run_main([
-                "--repo-slug", "Prekzursil/event-link",
-                "--sha", "abc123",
-                "--inputs-json", str(path),
-            ])
-        self.assertEqual(rc, 0)
+        for code, reason in ((401, "Unauthorized"), (403, "Forbidden")):
+            with self.subTest(code=code):
+                exc = urllib.error.HTTPError(
+                    "u", code, reason, {}, None  # type: ignore[arg-type]
+                )
+                self.assertEqual(self._run_with_poll_error(exc, path), 0)
 
     def test_http_500_still_propagates(self) -> None:
         """Non-auth HTTP errors still surface — they indicate real failures."""
         path = self._write_profile({
             "coverage": {"inputs": [{"name": "ui", "flag": "ui", "path": "x"}]}
         })
-        http_500 = urllib.error.HTTPError(
+        exc = urllib.error.HTTPError(
             "u", 500, "Server Error", {}, None  # type: ignore[arg-type]
         )
-        with patch(
-            "scripts.quality.validate_codecov_flags._poll_for_flags",
-            side_effect=http_500,
-        ):
-            with self.assertRaises(urllib.error.HTTPError):
-                self._run_main([
-                    "--repo-slug", "Prekzursil/event-link",
-                    "--sha", "abc123",
-                    "--inputs-json", str(path),
-                ])
+        with self.assertRaises(urllib.error.HTTPError):
+            self._run_with_poll_error(exc, path)
 
 
 if __name__ == "__main__":

@@ -31,5 +31,6 @@ exclude_paths:
   - "tests/**"
   - "profiles/**"
   - "docs/**"  # QZP v2 design doc + other long-form prose; not production code
+  - ".beads/**"  # Agent context state files — long-form prose, not prod code
   - ".github/workflows/control-plane-admin.yml"
   - ".github/workflows/publish-admin-dashboard.yml"

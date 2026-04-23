@@ -31,7 +31,7 @@ import sys
 import time
 import urllib.error
 from pathlib import Path
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:  # pragma: no cover
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -150,24 +150,40 @@ def _fetch_codecov_report(url: str, token: str) -> Dict[str, Any]:
     return json.loads(raw)
 
 
+def _flags_from_totals(totals: Any) -> Set[str]:
+    """Return flag names from the ``totals.flags`` list shape (older schema)."""
+    names: Set[str] = set()
+    if not isinstance(totals, dict):
+        return names
+    for flag in totals.get("flags", []) or []:
+        if isinstance(flag, dict):
+            name = str(flag.get("name", "")).strip()
+            if name:
+                names.add(name)
+    return names
+
+
+def _flags_from_inner_report(inner_report: Any) -> Set[str]:
+    """Return flag names from the ``report.flags`` dict shape (newer schema)."""
+    if not isinstance(inner_report, dict):
+        return set()
+    return {str(name) for name in (inner_report.get("flags") or {})}
+
+
 def _flags_present_in_report(report: Dict[str, Any]) -> Set[str]:
-    """Extract the flag names that Codecov recorded for this commit."""
-    seen: Set[str] = set()
-    # Codecov's commit endpoint structures flags under ``totals.flags`` or
-    # ``report.flags``; we tolerate both because the schema has shifted
-    # between minor releases.
-    totals = report.get("totals") if isinstance(report, dict) else None
-    if isinstance(totals, dict):
-        for flag in totals.get("flags", []) or []:
-            if isinstance(flag, dict):
-                name = str(flag.get("name", "")).strip()
-                if name:
-                    seen.add(name)
-    inner_report = report.get("report") if isinstance(report, dict) else None
-    if isinstance(inner_report, dict):
-        for flag_name, _ in (inner_report.get("flags") or {}).items():
-            seen.add(str(flag_name))
-    return seen
+    """Extract the flag names that Codecov recorded for this commit.
+
+    Codecov's commit endpoint structures flags under ``totals.flags`` or
+    ``report.flags``; we tolerate both because the schema has shifted
+    between minor releases. Splitting into two per-shape helpers keeps
+    cyclomatic complexity of each function comfortably under Lizard's
+    8-branch limit (this aggregate was previously CCN=11).
+    """
+    if not isinstance(report, dict):
+        return set()
+    return _flags_from_totals(report.get("totals")) | _flags_from_inner_report(
+        report.get("report")
+    )
 
 
 def _poll_for_flags(
@@ -175,7 +191,7 @@ def _poll_for_flags(
 ) -> Dict[str, Any]:
     """Return the Codecov report once the commit appears or raise TimeoutError."""
     start = time.monotonic()
-    last_error: BaseException | None = None
+    last_error: Optional[BaseException] = None
     for delay in RETRY_DELAYS_SECONDS:
         elapsed = time.monotonic() - start
         if elapsed >= deadline_seconds:
@@ -203,6 +219,54 @@ def validate_flags(
     return [flag for flag in declared_flags if flag not in present_flags]
 
 
+def _fetch_or_warn(
+    args: argparse.Namespace, token: str
+) -> Tuple[Optional[Dict[str, Any]], Optional[int]]:
+    """Return ``(report, None)`` on success or ``(None, exit_code)`` on soft-skip.
+
+    Separates the networking concern from the top-level ``main`` so the
+    CLI stays under Lizard's 50-line limit. Returns an exit code when
+    the caller should stop (TimeoutError → 3, 401/403 → 0 with warning);
+    otherwise returns the parsed Codecov report.
+    """
+    url = _codecov_commit_url(args.repo_slug, args.sha)
+    try:
+        return _poll_for_flags(url, token, args.max_wait_seconds), None
+    except TimeoutError as exc:
+        print(f"validate_codecov_flags: {exc}", flush=True)
+        return None, 3
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 403):
+            print(
+                "validate_codecov_flags: WARNING — Codecov API returned "
+                f"{exc.code} ({exc.reason}); cannot verify flag ingestion. "
+                "The CODECOV_TOKEN in CI is an upload token; the v2 API "
+                "needs a read-scope API token. Skipping strict validation.",
+                flush=True,
+            )
+            return None, 0
+        raise
+
+
+def _report_result(declared: List[str], present: Set[str]) -> int:
+    """Print the pass/fail summary and return the matching exit code."""
+    missing = validate_flags(declared, present)
+    if missing:
+        print(
+            "validate_codecov_flags: Codecov did not record these flags: "
+            + ", ".join(missing),
+            flush=True,
+        )
+        print(f"validate_codecov_flags: flags present in report: {sorted(present)}")
+        return 1
+    print(
+        f"validate_codecov_flags: all {len(declared)} declared flag(s) present: "
+        + ", ".join(declared),
+        flush=True,
+    )
+    return 0
+
+
 def main() -> int:
     """CLI entrypoint.
 
@@ -225,7 +289,6 @@ def main() -> int:
             flush=True,
         )
         return 2
-
     declared = _declared_flags(profile_path)
     if not declared:
         print(
@@ -233,43 +296,12 @@ def main() -> int:
             flush=True,
         )
         return 0
-
     token = os.environ.get("CODECOV_TOKEN", "").strip()
-    url = _codecov_commit_url(args.repo_slug, args.sha)
-    try:
-        report = _poll_for_flags(url, token, args.max_wait_seconds)
-    except TimeoutError as exc:
-        print(f"validate_codecov_flags: {exc}", flush=True)
-        return 3
-    except urllib.error.HTTPError as exc:
-        if exc.code in (401, 403):
-            print(
-                "validate_codecov_flags: WARNING — Codecov API returned "
-                f"{exc.code} ({exc.reason}); cannot verify flag ingestion. "
-                "The CODECOV_TOKEN in CI is an upload token; the v2 API "
-                "needs a read-scope API token. Skipping strict validation.",
-                flush=True,
-            )
-            return 0
-        raise
-
-    present = _flags_present_in_report(report)
-    missing = validate_flags(declared, present)
-    if missing:
-        print(
-            "validate_codecov_flags: Codecov did not record these flags: "
-            + ", ".join(missing),
-            flush=True,
-        )
-        print(f"validate_codecov_flags: flags present in report: {sorted(present)}")
-        return 1
-
-    print(
-        f"validate_codecov_flags: all {len(declared)} declared flag(s) present: "
-        + ", ".join(declared),
-        flush=True,
-    )
-    return 0
+    report, rc = _fetch_or_warn(args, token)
+    if rc is not None:
+        return rc
+    assert report is not None  # _fetch_or_warn invariant
+    return _report_result(declared, _flags_present_in_report(report))
 
 
 if __name__ == "__main__":  # pragma: no cover

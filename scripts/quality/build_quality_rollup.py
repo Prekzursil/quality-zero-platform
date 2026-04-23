@@ -27,6 +27,10 @@ from scripts.quality.check_required_checks import (
     _evaluate_observed_context,
     _resolve_observed_context,
 )
+from scripts.quality.severity_rollup import (
+    classify_lanes,
+    failing_lanes_to_gate_output,
+)
 from scripts.security_helpers import load_json_https
 
 GITHUB_API_BASE = "https://api.github.com"
@@ -189,6 +193,24 @@ def _build_rollup_row(
     }
 
 
+def _lane_statuses_from_rows(
+    rows: List[Dict[str, str]],
+    reverse_map: Mapping[str, str],
+) -> Dict[str, str]:
+    """Return ``{lane_id: status}`` keyed off ``reverse_map`` for severity rollup.
+
+    Contexts that can't be mapped to a lane (e.g. ``SonarCloud Code
+    Analysis`` isn't in ``LANE_CONTEXTS``) pass through under their
+    context name so the severity map can still match by that key.
+    """
+    statuses: Dict[str, str] = {}
+    for row in rows:
+        context_name = row["context"]
+        lane_key = reverse_map.get(context_name, context_name)
+        statuses[lane_key] = row["status"]
+    return statuses
+
+
 def build_rollup(
     *,
     profile: Mapping[str, Any],
@@ -196,7 +218,15 @@ def build_rollup(
     contexts: Mapping[str, Dict[str, str]],
     sha: str,
 ) -> Dict[str, Any]:
-    """Build the aggregated strict-zero rollup payload."""
+    """Build the aggregated strict-zero rollup payload.
+
+    v2 profiles declare ``scanners.*.severity`` (block/warn/info);
+    :func:`scripts.quality.severity_rollup.classify_lanes` downgrades
+    ``warn``/``info`` lane failures from the overall verdict while
+    still tracking them in the ``severity`` sub-payload. Legacy v1
+    profiles that don't declare ``scanners`` default every lane to
+    ``block`` severity (same as the existing behaviour).
+    """
     required_contexts = sorted(profile.get("active_required_contexts", []))
     rows: List[Dict[str, str]] = []
     overall = "pass"
@@ -213,12 +243,27 @@ def build_rollup(
         elif row["status"] == "pending" and overall == "pass":
             overall = "pending"
         rows.append(row)
+
+    severity_verdict = classify_lanes(
+        profile, _lane_statuses_from_rows(rows, reverse_map)
+    )
+    severity_payload = failing_lanes_to_gate_output(severity_verdict)
+    # Severity-aware overall: if the zero-rollup says ``fail`` but every
+    # failure is only ``warn``/``info`` severity, soften to ``warn`` or
+    # keep ``pass``. Preserves the hard ``fail`` when blockers exist
+    # AND preserves ``pending`` (not-yet-reported) regardless.
+    if overall == "fail":
+        if severity_verdict.verdict == "warn":
+            overall = "warn"
+        elif severity_verdict.verdict == "pass":
+            overall = "pass"
     return {
         "repo": profile["slug"],
         "sha": sha,
         "status": overall,
         "generated_at": utc_timestamp(),
         "contexts": rows,
+        "severity": severity_payload,
     }
 
 

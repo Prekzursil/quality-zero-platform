@@ -256,12 +256,14 @@ class NormalizeOverridesTests(unittest.TestCase):
         self.assertEqual(result[0]["value"], 90)
 
     def test_missing_reason_dropped(self) -> None:
+        """An override without ``reason`` is silently dropped."""
         result = normalize_overrides(
             [{"file": "a", "key": "b", "value": 1}]  # no reason
         )
         self.assertEqual(result, [])
 
     def test_non_list_input_returns_empty(self) -> None:
+        """Non-list inputs (string / None) yield an empty override list."""
         self.assertEqual(normalize_overrides("not a list"), [])
         self.assertEqual(normalize_overrides(None), [])
 

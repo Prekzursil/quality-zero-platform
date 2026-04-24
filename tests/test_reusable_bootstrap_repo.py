@@ -41,10 +41,28 @@ class ReusableBootstrapRepoWorkflowTests(unittest.TestCase):
     def test_required_inputs_are_declared(self) -> None:
         """Every field the Python planner reads must be a declared input."""
         inputs = self.doc[True]["workflow_dispatch"]["inputs"]
-        for required in ("repo_slug", "profile_path", "target_phase"):
+        for required in ("repo_slug", "stack", "initial_mode"):
             with self.subTest(input=required):
                 self.assertIn(required, inputs)
                 self.assertTrue(inputs[required].get("required"))
+
+    def test_stack_covers_all_phase3_stacks(self) -> None:
+        """``stack`` options include every Phase 3 seeded stack directory."""
+        inputs = self.doc[True]["workflow_dispatch"]["inputs"]
+        stack_options = set(inputs["stack"].get("options", []))
+        for stack_id in (
+            "fullstack-web", "python-only", "react-vite-vitest",
+            "go", "rust", "swift", "cpp-cmake", "dotnet-wpf",
+            "gradle-java", "python-tooling",
+        ):
+            with self.subTest(stack=stack_id):
+                self.assertIn(stack_id, stack_options)
+
+    def test_initial_mode_options_cover_every_phase(self) -> None:
+        """``initial_mode`` options are shadow / ratchet / absolute."""
+        inputs = self.doc[True]["workflow_dispatch"]["inputs"]
+        options = set(inputs["initial_mode"].get("options", []))
+        self.assertEqual(options, {"shadow", "ratchet", "absolute"})
 
     def test_target_phase_limited_to_ratchet_or_absolute(self) -> None:
         """``shadow`` is the starting state — cannot promote back to it."""

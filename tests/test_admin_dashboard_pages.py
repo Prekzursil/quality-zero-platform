@@ -181,5 +181,77 @@ class LoadAuditJsonlTests(unittest.TestCase):
         self.assertEqual(loaded[0]["label"], "real")
 
 
+class LoadCoverageRowsTests(unittest.TestCase):
+    """``load_coverage_rows`` parses per-repo coverage state JSON."""
+
+    def test_direct_list_returns_rows(self) -> None:
+        """File containing a bare JSON list of dicts → rows returned as-is."""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "coverage.json"
+            path.write_text(json.dumps([
+                {"slug": "org/a", "coverage_percent": 100.0},
+                {"slug": "org/b", "coverage_percent": 98.5},
+            ]), encoding="utf-8")
+            rows = pages.load_coverage_rows(path)
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["slug"], "org/a")
+
+    def test_object_with_repos_key_returns_inner_list(self) -> None:
+        """``{"repos": [...]}`` wrapper (matches inventory shape) also works."""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "coverage.json"
+            path.write_text(json.dumps({"repos": [
+                {"slug": "org/a", "coverage_percent": 100.0},
+            ]}), encoding="utf-8")
+            rows = pages.load_coverage_rows(path)
+        self.assertEqual(len(rows), 1)
+
+    def test_missing_file_returns_empty(self) -> None:
+        """Absent path → empty list, no exception."""
+        rows = pages.load_coverage_rows(Path("/does/not/exist.json"))
+        self.assertEqual(rows, [])
+
+    def test_non_dict_rows_filtered(self) -> None:
+        """Rows that aren't dicts (stray scalars) are dropped."""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "coverage.json"
+            path.write_text(json.dumps([
+                "not-a-dict",
+                {"slug": "org/a", "coverage_percent": 100.0},
+            ]), encoding="utf-8")
+            rows = pages.load_coverage_rows(path)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["slug"], "org/a")
+
+    def test_unexpected_root_shape_returns_empty(self) -> None:
+        """Root scalar (or dict without 'repos') → empty list, no exception."""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "coverage.json"
+            path.write_text(json.dumps("just-a-string"), encoding="utf-8")
+            rows = pages.load_coverage_rows(path)
+        self.assertEqual(rows, [])
+
+
+class LoadDriftEntriesTests(unittest.TestCase):
+    """``load_drift_entries`` parses drift-sync JSONL."""
+
+    def test_loads_each_line_as_dict(self) -> None:
+        """One JSONL line per entry."""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "drift.jsonl"
+            path.write_text(
+                json.dumps({"slug": "org/a", "status": "open"}) + "\n"
+                + json.dumps({"slug": "org/b", "status": "closed"}) + "\n",
+                encoding="utf-8",
+            )
+            entries = pages.load_drift_entries(path)
+        self.assertEqual(len(entries), 2)
+
+    def test_missing_file_returns_empty(self) -> None:
+        """Absent drift file → empty list."""
+        entries = pages.load_drift_entries(Path("/nope.jsonl"))
+        self.assertEqual(entries, [])
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

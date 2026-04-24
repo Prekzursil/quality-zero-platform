@@ -182,22 +182,52 @@ def load_audit_jsonl(path: Path) -> List[Dict[str, Any]]:
     return records
 
 
+def load_coverage_rows(path: Path) -> List[Dict[str, Any]]:
+    """Load a per-repo coverage-trend JSON file; empty list if absent."""
+    if not path.is_file():
+        return []
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(payload, dict) and isinstance(payload.get("repos"), list):
+        raw_rows = payload["repos"]
+    elif isinstance(payload, list):
+        raw_rows = payload
+    else:
+        return []
+    return [dict(row) for row in raw_rows if isinstance(row, dict)]
+
+
+def load_drift_entries(path: Path) -> List[Dict[str, Any]]:
+    """Load drift-sync entries from a JSONL file; empty list if absent."""
+    return load_audit_jsonl(path)
+
+
 if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
     import argparse
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--audit-jsonl", default="")
+    parser.add_argument("--coverage-json", default="")
+    parser.add_argument("--drift-jsonl", default="")
     parser.add_argument("--output-dir", required=True)
     _args = parser.parse_args()
 
     _out = Path(_args.output_dir)
     _out.mkdir(parents=True, exist_ok=True)
+
+    _cov_rows = redact_private_repos(
+        load_coverage_rows(Path(_args.coverage_json)) if _args.coverage_json else []
+    )
     (_out / "coverage.html").write_text(
-        render_coverage_trend_page(rows=[]), encoding="utf-8",
+        render_coverage_trend_page(rows=_cov_rows), encoding="utf-8",
+    )
+
+    _drift_rows = redact_private_repos(
+        load_drift_entries(Path(_args.drift_jsonl)) if _args.drift_jsonl else []
     )
     (_out / "drift.html").write_text(
-        render_drift_page(entries=[]), encoding="utf-8",
+        render_drift_page(entries=_drift_rows), encoding="utf-8",
     )
+
     _audit_rows = (
         load_audit_jsonl(Path(_args.audit_jsonl)) if _args.audit_jsonl else []
     )

@@ -5,13 +5,15 @@ from __future__ import absolute_import
 
 import argparse
 import os
+import subprocess  # nosec B404 # noqa: S404 — indirect gh CLI via alerts opener
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Mapping
+from typing import Any, Callable, Dict, Iterable, List, Mapping
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from scripts.quality import alert_triggers, alerts
 from scripts.quality.common import dedupe_strings, utc_timestamp, write_report
 
 NONE_BULLET = "- None"
@@ -48,6 +50,29 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--out-json", default="quality-secrets/secrets.json")
     parser.add_argument("--out-md", default="quality-secrets/secrets.md")
+    parser.add_argument(
+        "--open-alerts",
+        action="store_true",
+        help="Open alert:secret-missing issues on the platform repo for "
+        "every missing required secret.",
+    )
+    parser.add_argument(
+        "--dry-run-alerts",
+        action="store_true",
+        help="With --open-alerts, produce the would-be issues but do not "
+        "invoke gh (safety net for testing).",
+    )
+    parser.add_argument(
+        "--platform-slug",
+        default="Prekzursil/quality-zero-platform",
+        help="Platform repo to open alert issues on.",
+    )
+    parser.add_argument(
+        "--target-repo-slug",
+        default="",
+        help="Repo the secrets are missing on (subject of the alert). "
+        "Defaults to --platform-slug when empty.",
+    )
     return parser.parse_args()
 
 
@@ -115,6 +140,46 @@ def _build_payload(
     }
 
 
+def open_secret_missing_alerts(
+    *,
+    platform_slug: str,
+    target_repo_slug: str,
+    missing_secrets: Iterable[str],
+    runner: Callable[..., "subprocess.CompletedProcess[str]"] = subprocess.run,
+    dry_run: bool = False,
+) -> List[Dict[str, Any]]:
+    """Open one ``alert:secret-missing`` issue per missing scanner secret.
+
+    Thin composition of ``alert_triggers.detect_secret_missing`` and
+    ``alerts.open_alert_issue``: the detector filters blank entries +
+    builds pre-formatted bodies, the opener dedupes by canonical title
+    so re-running this on the same set is a no-op after the first call.
+    """
+    triggers = alert_triggers.detect_secret_missing(
+        slug=target_repo_slug, missing_secrets=missing_secrets,
+    )
+    results: List[Dict[str, Any]] = []
+    for trigger in triggers:
+        if dry_run:
+            results.append({
+                "number": 0,
+                "title": alerts.alert_issue_title(
+                    trigger.alert_type, trigger.subject,
+                ),
+                "created": False,
+            })
+            continue
+        record = alerts.open_alert_issue(
+            platform_slug,
+            alert_type=trigger.alert_type,
+            subject=trigger.subject,
+            body=trigger.body,
+            runner=runner,
+        )
+        results.append(dict(record))
+    return results
+
+
 def main() -> int:
     """Handle main."""
     args = _parse_args()
@@ -138,6 +203,13 @@ def main() -> int:
     )
     if return_code != 0:
         return return_code
+    if args.open_alerts and payload["missing_secrets"]:
+        open_secret_missing_alerts(
+            platform_slug=args.platform_slug,
+            target_repo_slug=args.target_repo_slug or args.platform_slug,
+            missing_secrets=payload["missing_secrets"],
+            dry_run=args.dry_run_alerts,
+        )
     return 0 if payload["status"] == "pass" else 1
 
 

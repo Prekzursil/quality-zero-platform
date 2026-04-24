@@ -28,34 +28,41 @@ def _fake_completed(stdout: str = "", returncode: int = 0) -> subprocess.Complet
 
 
 class SyncSecretTests(unittest.TestCase):
-    """``sync_secret`` propagates one secret to N target repos."""
+    """``sync_secret`` propagates one secret via an injected closure."""
 
-    def test_dry_run_does_not_invoke_runner(self) -> None:
-        """``dry_run=True`` yields audit records without touching gh."""
-        runner = MagicMock()
+    def test_dry_run_does_not_invoke_setter(self) -> None:
+        """``dry_run=True`` yields audit records without calling the setter."""
+        setter = MagicMock()
         records = secrets_sync.sync_secret(
             secret_name="CODECOV_TOKEN",
-            secret_value="tok-dont-log-me",
             target_slugs=["org/a", "org/b"],
-            runner=runner,
+            secret_setter=setter,
             dry_run=True,
         )
-        runner.assert_not_called()
+        setter.assert_not_called()
         self.assertEqual(len(records), 2)
-        self.assertEqual(
-            sorted(r["target_slug"] for r in records),
-            ["org/a", "org/b"],
-        )
+        for record in records:
+            self.assertEqual(record["status"], "dry-run")
 
-    def test_records_never_contain_secret_value(self) -> None:
+    def test_missing_setter_treated_as_dry_run(self) -> None:
+        """``secret_setter=None`` without dry_run → records are dry-run only."""
+        records = secrets_sync.sync_secret(
+            secret_name="X",
+            target_slugs=["org/a"],
+        )
+        self.assertEqual(records[0]["status"], "dry-run")
+
+    def test_records_never_contain_secret_value_via_closure(self) -> None:
         """Audit records NEVER carry the secret value — just the name."""
-        runner = MagicMock()
+        # The closure captures the secret; sync_secret never sees it.
+        runner = MagicMock(return_value=_fake_completed(""))
+        setter = secrets_sync.make_gh_secret_setter(
+            "super-sensitive-token-abc123", runner=runner,
+        )
         records = secrets_sync.sync_secret(
             secret_name="SONAR_TOKEN",
-            secret_value="super-sensitive-token-abc123",
             target_slugs=["org/repo"],
-            runner=runner,
-            dry_run=True,
+            secret_setter=setter,
         )
         for record in records:
             with self.subTest(record=record):
@@ -65,64 +72,67 @@ class SyncSecretTests(unittest.TestCase):
                         "super-sensitive-token-abc123", str(value),
                     )
 
-    def test_real_call_invokes_gh_secret_set_per_target(self) -> None:
-        """For N target repos → N ``gh secret set`` invocations."""
-        runner = MagicMock(return_value=_fake_completed(""))
+    def test_setter_called_once_per_target(self) -> None:
+        """Each target triggers exactly one setter call."""
+        setter = MagicMock(return_value=_fake_completed(""))
         records = secrets_sync.sync_secret(
             secret_name="CODECOV_TOKEN",
-            secret_value="tok-value",
             target_slugs=["org/a", "org/b", "org/c"],
-            runner=runner,
+            secret_setter=setter,
         )
-        self.assertEqual(runner.call_count, 3)
-        for call in runner.call_args_list:
-            argv = call.args[0]
-            self.assertEqual(argv[0], "gh")
-            self.assertIn("secret", argv)
-            self.assertIn("set", argv)
-            self.assertIn("CODECOV_TOKEN", argv)
-            self.assertIn("--repo", argv)
+        self.assertEqual(setter.call_count, 3)
         self.assertEqual(len(records), 3)
         for record in records:
             self.assertEqual(record["status"], "synced")
 
-    def test_runner_failure_marks_record_as_failed(self) -> None:
-        """Non-zero gh exit → record shows status=failed with stderr."""
-        runner = MagicMock(return_value=_fake_completed(
-            stdout="", returncode=1,
-        ))
+    def test_setter_failure_marks_record_as_failed(self) -> None:
+        """Non-zero returncode from the setter → status=failed."""
+        setter = MagicMock(return_value=_fake_completed("", returncode=1))
         records = secrets_sync.sync_secret(
             secret_name="CODECOV_TOKEN",
-            secret_value="tok",
             target_slugs=["org/locked-down"],
-            runner=runner,
+            secret_setter=setter,
         )
         self.assertEqual(records[0]["status"], "failed")
 
     def test_empty_target_list_returns_empty(self) -> None:
-        """No targets → no records, no runner calls."""
-        runner = MagicMock()
+        """No targets → no records, no setter calls."""
+        setter = MagicMock()
         records = secrets_sync.sync_secret(
             secret_name="X",
-            secret_value="v",
             target_slugs=[],
-            runner=runner,
+            secret_setter=setter,
         )
         self.assertEqual(records, [])
-        runner.assert_not_called()
+        setter.assert_not_called()
 
     def test_blank_slugs_are_skipped(self) -> None:
-        """Whitespace-only target slugs are dropped, no runner call for them."""
-        runner = MagicMock(return_value=_fake_completed(""))
+        """Whitespace-only target slugs are dropped, no setter call for them."""
+        setter = MagicMock(return_value=_fake_completed(""))
         records = secrets_sync.sync_secret(
             secret_name="X",
-            secret_value="v",
             target_slugs=["", "  ", "org/real"],
-            runner=runner,
+            secret_setter=setter,
         )
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["target_slug"], "org/real")
+        self.assertEqual(setter.call_count, 1)
+
+
+class MakeGhSecretSetterTests(unittest.TestCase):
+    """``make_gh_secret_setter`` returns a closure that calls gh."""
+
+    def test_closure_invokes_gh_secret_set_with_runner(self) -> None:
+        """Calling the closure → exactly one ``gh secret set`` invocation."""
+        runner = MagicMock(return_value=_fake_completed(""))
+        setter = secrets_sync.make_gh_secret_setter("tok-value", runner=runner)
+        setter("CODECOV_TOKEN", "org/a")
         self.assertEqual(runner.call_count, 1)
+        argv = runner.call_args.args[0]
+        self.assertEqual(argv[:3], ["gh", "secret", "set"])
+        self.assertIn("CODECOV_TOKEN", argv)
+        self.assertIn("--repo", argv)
+        self.assertIn("org/a", argv)
 
 
 class AppendAuditJsonlTests(unittest.TestCase):
@@ -184,9 +194,7 @@ class TimestampTests(unittest.TestCase):
         """``timestamp_utc`` ends with Z (UTC marker)."""
         records = secrets_sync.sync_secret(
             secret_name="X",
-            secret_value="v",
             target_slugs=["org/a"],
-            runner=MagicMock(),
             dry_run=True,
         )
         self.assertTrue(records[0]["timestamp_utc"].endswith("Z"))

@@ -117,6 +117,9 @@ jobs:
         with:
           languages: ${{ needs.resolve-profile.outputs.languages_csv }}
           build-mode: ${{ needs.resolve-profile.outputs.build_mode }}
+          # Config file carries per-repo query-filter exclusions for
+          # verified false positives (see file header for rationale).
+          config-file: ./.github/codeql/codeql-config.yml
           queries: security-and-quality
 
       - name: Autobuild

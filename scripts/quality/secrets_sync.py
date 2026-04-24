@@ -110,13 +110,34 @@ def sync_secret(
     return records
 
 
+_AUDIT_FIELDS: tuple = ("secret_name", "status", "target_slug", "timestamp_utc")
+
+
+def _sanitise_audit_record(record: Dict[str, Any]) -> Dict[str, Any]:
+    """Re-project a record onto the known-safe ``_AUDIT_FIELDS`` set only.
+
+    This is an explicit sanitiser: only the four whitelisted keys survive,
+    and each value is coerced to ``str``. Static analysers that track
+    taint through arbitrary dict flows break at this boundary because
+    every field is re-materialised from a closed set of safe keys.
+    """
+    return {field: str(record.get(field, "")) for field in _AUDIT_FIELDS}
+
+
 def append_audit_jsonl(path: Path, records: Iterable[Dict[str, Any]]) -> None:
-    """Append ``records`` to ``path`` as one-line JSONL with sort_keys=True."""
+    """Append ``records`` to ``path`` as one-line JSONL with sort_keys=True.
+
+    Each record is sanitised to the whitelisted ``_AUDIT_FIELDS`` set
+    before serialisation — anything else in the mapping (including any
+    hypothetical ``secret_value`` key a misuse might introduce) is
+    dropped at this boundary, not merely relied upon by convention.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as fh:
         for record in records:
+            safe = _sanitise_audit_record(record)
             fh.write(
-                json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n",
+                json.dumps(safe, sort_keys=True, separators=(",", ":")) + "\n",
             )
 
 
@@ -157,5 +178,13 @@ if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
         dry_run=_args.dry_run,
     )
     append_audit_jsonl(Path(_args.audit_log), _records)
-    # Records never contain the secret value — safe to print by construction.
-    sys.stdout.write(json.dumps(_records, sort_keys=True) + "\n")
+    # Summary only — never print records themselves (static analysers
+    # treat record dicts as secret-tainted via the closure capture
+    # chain, even though the sanitiser in append_audit_jsonl drops
+    # any non-whitelisted fields).
+    _synced = sum(1 for r in _records if r.get("status") == "synced")
+    _failed = sum(1 for r in _records if r.get("status") == "failed")
+    sys.stdout.write(
+        f"secrets-sync: {len(_records)} targets, "
+        f"{_synced} synced, {_failed} failed\n",
+    )

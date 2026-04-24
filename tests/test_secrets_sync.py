@@ -186,6 +186,26 @@ class AppendAuditJsonlTests(unittest.TestCase):
             ])
             self.assertTrue(path.is_file())
 
+    def test_sanitiser_drops_unknown_keys(self) -> None:
+        """Any non-whitelisted key (including ``secret_value``) is dropped."""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "secrets-sync.jsonl"
+            # A misuse that includes secret_value in the record would NOT
+            # survive to the JSONL thanks to the sanitiser.
+            secrets_sync.append_audit_jsonl(path, [
+                {
+                    "target_slug": "org/a", "secret_name": "X",
+                    "status": "synced",
+                    "secret_value": "should-never-land-in-jsonl",
+                    "extra_junk": "also-dropped",
+                },
+            ])
+            line = path.read_text(encoding="utf-8").strip()
+        parsed = json.loads(line)
+        self.assertNotIn("secret_value", parsed)
+        self.assertNotIn("extra_junk", parsed)
+        self.assertNotIn("should-never-land-in-jsonl", line)
+
 
 class TimestampTests(unittest.TestCase):
     """Records carry a UTC ISO-8601 timestamp."""

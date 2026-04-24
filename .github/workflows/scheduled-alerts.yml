@@ -1,0 +1,134 @@
+name: Scheduled Alerts
+
+# QZP v2 §8 scheduled alert dispatch. Runs every 6 hours and on
+# manual dispatch: gathers fleet state, runs every detector in
+# ``scripts.quality.alert_triggers``, and opens / reuses an issue
+# for each trigger via ``scripts.quality.alerts.open_alert_issue``.
+# Per-event only — no digest.
+#
+# Fleet state sources (all optional; absent → empty list):
+#   - quality-rollup/coverage-trend.json — coverage regression input
+#   - audit/bypass-tracking.jsonl — break-glass stale tracker
+#   - audit/drift-sync.jsonl — drift-stuck PRs
+#   - audit/bump-staging-results.jsonl — fleet-bump wave outcome
+#
+# In dry-run mode (default on workflow_dispatch), the dispatcher
+# computes which issues WOULD open but never calls ``gh``.
+
+permissions: {}
+
+on:
+  schedule:
+    # Every 6 hours, offset by 17 minutes to avoid the top-of-hour
+    # spike when every scheduled workflow in the fleet fires at once.
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        type: boolean
+        required: false
+        default: true
+        description: "When true, compute triggers but skip gh issue calls."
+
+concurrency:
+  group: scheduled-alerts
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install platform dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Gather fleet state + dispatch triggers
+        env:
+          # Default dry_run=true on scheduled runs; workflow_dispatch
+          # takes the explicit input value.
+          QZ_DRY_RUN: ${{ inputs.dry_run || 'true' }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import datetime as dt
+          import json
+          import os
+          import sys
+          from pathlib import Path
+          from scripts.quality import alert_dispatch
+
+          dry_run = os.environ.get("QZ_DRY_RUN", "true").strip().lower() == "true"
+
+          def _safe_jsonl(path_str: str) -> list:
+              path = Path(path_str)
+              if not path.is_file():
+                  return []
+              rows = []
+              for line in path.read_text(encoding="utf-8").splitlines():
+                  line = line.strip()
+                  if not line:
+                      continue
+                  rec = json.loads(line)
+                  if isinstance(rec, dict):
+                      rows.append(rec)
+              return rows
+
+          def _safe_json(path_str: str) -> dict:
+              path = Path(path_str)
+              if not path.is_file():
+                  return {}
+              parsed = json.loads(path.read_text(encoding="utf-8"))
+              return parsed if isinstance(parsed, dict) else {}
+
+          cov = _safe_json("quality-rollup/coverage-trend.json")
+          bypass_issues = _safe_jsonl("audit/bypass-tracking.jsonl")
+          drift_prs = _safe_jsonl("audit/drift-sync.jsonl")
+          staging = _safe_jsonl("audit/bump-staging-results.jsonl")
+
+          state = {
+              "today": dt.date.today(),
+              "now": dt.datetime.now(tz=dt.timezone.utc),
+              "profiles": cov.get("repos", []),
+              "bypass_issues": bypass_issues,
+              "drift_prs": drift_prs,
+              "staging_results": staging,
+              "recipe_name": cov.get("active_bump_recipe", ""),
+          }
+          triggers = alert_dispatch.build_triggers_from_fleet_state(state)
+          results = alert_dispatch.dispatch_detected_triggers(
+              platform_slug="Prekzursil/quality-zero-platform",
+              triggers=triggers,
+              dry_run=dry_run,
+          )
+
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a", encoding="utf-8") as fh:
+                  fh.write("## Scheduled Alerts Dispatch\n\n")
+                  fh.write(f"- Dry-run: `{dry_run}`\n")
+                  fh.write(f"- Triggers: {len(triggers)}\n")
+                  fh.write(f"- Issues opened/reused: {len(results)}\n")
+                  per_type = {}
+                  for t in triggers:
+                      key = t.alert_type.label
+                      per_type[key] = per_type.get(key, 0) + 1
+                  if per_type:
+                      fh.write("- By type:\n")
+                      for label, count in sorted(per_type.items()):
+                          fh.write(f"  - `{label}`: {count}\n")
+
+          sys.stdout.write(
+              f"scheduled-alerts: {len(triggers)} triggers, "
+              f"dry_run={dry_run}\n",
+          )
+          PY

@@ -210,3 +210,81 @@ PR #134 merged 2026-04-26 ~21:30Z. Platform code complete pending:
 
 verify_v2_deployment.py --all currently reports 39/39 ok (Phase
 1-5 deliverables + the new wave callers + the bumper module).
+
+---
+
+## 2026-04-26 — round 4 (bumps wave code-complete)
+
+### PRs merged this round
+
+| PR | Title | Effect |
+| --- | --- | --- |
+| #136 | bump-shas heredoc PYTHONPATH fix | bump-shas wave actually executes |
+| #137 | bumps applier — regex `replace` block + Node 20→24 wired | recipes can rewrite consumer files |
+| #138 | reusable-bump-apply per-repo bump worker | per-repo PR-opening machinery |
+| #139 | reusable-bumps stage-1 fan-out (staging matrix) | staging wave wired |
+| #140 | reusable-bumps stage-2 + rollback paths | full rollout + alert:fleet-bump-fail wired |
+
+### Operationally verified this round
+
+- bump-workflow-shas-wave dispatched: 14/14 SUCCESS in dry-run
+  after #136 (run 24965810326). event-link bump-report shows 6
+  pins identified. bumper module verified end-to-end.
+
+### Bumps wave is now CODE-COMPLETE
+
+`reusable-bumps.yml` traverses all three design-doc phases:
+
+  1. **plan**     — load recipe + compute staging/rollout split
+  2. **stage-1**  — fan out to staging_repos via matrix
+  3. **stage-2**  — fan out to rollout repos, gated on stage-1
+                    SUCCESS (broken bumps cannot silently
+                    propagate to the rest of the fleet)
+  4. **rollback** — fires on stage-1 FAILURE, opens
+                    `alert:fleet-bump-fail` via
+                    `alerts.open_alert_issue`
+
+Each fan-out matrix entry calls `reusable-bump-apply.yml` (#138),
+which runs `bumps.apply_bump_files(...)` and (when `!dry_run` +
+`DRIFT_SYNC_PAT` present) opens a PR on the consumer repo.
+
+### Absolute-done — every code-side bullet is now true
+
+The remaining **operator-only** bullets:
+
+1. **SonarCloud Auto-Analysis toggle OFF** on event-link →
+   unblocks Coverage 100 Gate → event-link PR #130 merges →
+   per-flag Codecov rows visible.
+2. **`DRIFT_SYNC_PAT` secret** + dispatch
+   `bump-workflow-shas-wave.yml` with `dry_run=false` →
+   14 consumer-repo bump PRs open (refresh stale Phase-1 SHAs).
+3. **Operator dispatches `drift-sync-wave.yml`** with
+   `dry_run=false` → 15 consumer-repo drift PRs open + fleet
+   converges.
+4. **Operator dispatches `reusable-bumps.yml`** with the Node
+   20→24 canary + `dry_run=false` → staging wave runs against
+   env-inspector + webcoder; if green, rollout; if red,
+   `alert:fleet-bump-fail` opens.
+5. After 1-4 settle: all 15 repos green on main, Codecov
+   per-flag for multi-flag repos visible, no open `alert:*`
+   issues, migration plan table fully done. Loop emits
+   `QZP_V2_FULLY_SHIPPED_AND_VERIFIED`.
+
+### Wave-as-integration-test pattern (now 5 rounds)
+
+| Round | Bug surfaced | Fix PR |
+| --- | --- | --- |
+| 1 | `codecov.yml.j2` UndefinedError on `flag` | #129 |
+| 2 | `upload-artifact@v4` rejects `/` in name | #130 |
+| 3 | "Fail on drift when dry_run" exits 1 (intended sentinel) | n/a |
+| 4 | `reusable-codeql` hardcoded consumer-only config-file | #133 |
+| 5 | bump-shas heredoc missing PYTHONPATH | #136 |
+
+Operationally dispatching each wave once per round — this is the
+fleet-wide integration test the design doc called for.
+
+## Last action
+
+PR #140 merged 2026-04-26 ~22:45Z. Platform code now complete for
+every Phase 1-5 absolute-done bullet. ``verify_v2_deployment.py
+--all`` → exit 0 (39/39 ok).

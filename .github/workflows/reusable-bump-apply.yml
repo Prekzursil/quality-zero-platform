@@ -1,0 +1,173 @@
+name: Reusable Bump Apply
+
+# QZP v2 Phase 5 §5.5 per-repo bump worker. Loads a recipe from
+# ``profiles/bumps/<file>.yml`` on the platform repo, runs
+# ``apply_bump_files`` against the consumer repo's checkout, commits
+# the changes on a fresh branch, and opens a PR. Dry-run = compute
+# + report only (no commit, no PR).
+#
+# Called per repo by ``reusable-bumps.yml`` in matrix mode (wave
+# dispatcher arrives in a follow-up increment). Designed to mirror
+# the per-repo pattern already established in
+# ``reusable-drift-sync.yml`` and ``reusable-bump-workflow-shas.yml``.
+
+permissions: {}
+
+on:
+  workflow_call:
+    inputs:
+      repo_slug:
+        type: string
+        required: true
+        description: "owner/name of the target consumer repo."
+      recipe_path:
+        type: string
+        required: true
+        description: "Path to the bump recipe YAML on the platform repo (e.g. ``profiles/bumps/2026-04-23-node-24.yml``)."
+      default_branch:
+        type: string
+        required: false
+        default: main
+      dry_run:
+        type: boolean
+        required: false
+        default: true
+        description: "When true, compute but do not commit / open a PR."
+    secrets:
+      DRIFT_SYNC_PAT:
+        required: false
+        description: "Fine-grained PAT with pull-requests:write + contents:write on the target repo. Absent = dry-run only."
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: platform
+          persist-credentials: false
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.repo_slug }}
+          ref: ${{ inputs.default_branch }}
+          path: repo
+          token: ${{ secrets.DRIFT_SYNC_PAT || github.token }}
+          persist-credentials: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install platform dependencies
+        run: python -m pip install -r platform/requirements-dev.txt
+
+      - name: Compute artifact-safe slug
+        id: artifact_name
+        env:
+          REPO_SLUG: ${{ inputs.repo_slug }}
+        run: |
+          set -euo pipefail
+          slug="${REPO_SLUG:-unknown}"
+          safe="${slug//\//__}"
+          printf 'slug_safe=%s\n' "$safe" >> "$GITHUB_OUTPUT"
+
+      - name: Apply bump recipe
+        id: apply
+        env:
+          BUMP_RECIPE_PATH: ${{ inputs.recipe_path }}
+          BUMP_REPO_SLUG: ${{ inputs.repo_slug }}
+          # Platform was checked out at ``./platform/`` — add it to
+          # PYTHONPATH so heredoc imports of ``scripts.quality.bumps``
+          # resolve. (Same plumbing as reusable-bump-workflow-shas.yml.)
+          PYTHONPATH: ${{ github.workspace }}/platform
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from scripts.quality import bumps
+
+          recipe_rel = os.environ["BUMP_RECIPE_PATH"].strip()
+          repo_root = Path(os.environ["GITHUB_WORKSPACE"]) / "repo"
+          platform_root = Path(os.environ["GITHUB_WORKSPACE"]) / "platform"
+          recipe_path = platform_root / recipe_rel
+
+          recipe = bumps.load_bump_recipe(recipe_path)
+          results = bumps.apply_bump_files(
+              repo_root=repo_root, targets=recipe["target"],
+          )
+
+          report = {
+              "consumer_repo": os.environ.get("BUMP_REPO_SLUG", ""),
+              "recipe_name": recipe["name"],
+              "recipe_path": str(recipe_path),
+              "bumped_files": results["bumped_files"],
+              "bumped_total": results["bumped_total"],
+              "skipped_targets": results["skipped_targets"],
+              "edited": results["edited"],
+          }
+          report_path = Path(os.environ["RUNNER_TEMP"]) / "bump-apply.json"
+          report_path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+          print(f"Wrote {report_path}")
+
+          out = os.environ.get("GITHUB_OUTPUT")
+          if out:
+              with open(out, "a", encoding="utf-8") as fh:
+                  fh.write(f"bumped_total={report['bumped_total']}\n")
+                  fh.write(f"bumped_files={report['bumped_files']}\n")
+
+          summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary_path:
+              with open(summary_path, "a", encoding="utf-8") as fh:
+                  fh.write(f"## Bump Apply — {report['consumer_repo']}\n\n")
+                  fh.write(f"- Recipe: `{recipe['name']}`\n")
+                  fh.write(f"- Files changed: {report['bumped_files']}\n")
+                  fh.write(f"- Total replacements: {report['bumped_total']}\n")
+                  if report["skipped_targets"]:
+                      fh.write(f"- Skipped targets (no `replace` block): {report['skipped_targets']}\n")
+                  for entry in report["edited"]:
+                      fh.write(f"  - `{entry['path']}` (target {entry['target_index']}, "
+                               f"{entry['replacements']} replacement(s))\n")
+          PY
+
+      - name: Upload bump-apply report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bump-apply-${{ steps.artifact_name.outputs.slug_safe }}
+          path: ${{ runner.temp }}/bump-apply.json
+          if-no-files-found: ignore
+
+      - name: Commit + open bump PR on consumer repo
+        if: ${{ !inputs.dry_run && steps.apply.outputs.bumped_total != '0' && env.DRIFT_SYNC_PAT_PRESENT == 'true' }}
+        env:
+          REPO_SLUG: ${{ inputs.repo_slug }}
+          DEFAULT_BRANCH: ${{ inputs.default_branch }}
+          BUMPED_TOTAL: ${{ steps.apply.outputs.bumped_total }}
+          BUMPED_FILES: ${{ steps.apply.outputs.bumped_files }}
+          RECIPE_PATH: ${{ inputs.recipe_path }}
+          GH_TOKEN: ${{ secrets.DRIFT_SYNC_PAT }}
+          DRIFT_SYNC_PAT_PRESENT: ${{ secrets.DRIFT_SYNC_PAT != '' }}
+        working-directory: repo
+        run: |
+          set -euo pipefail
+          recipe_basename=$(basename "$RECIPE_PATH" .yml)
+          branch_name="qzp/bump-${recipe_basename}"
+          git config user.email "platform-bot@quality-zero.local"
+          git config user.name "quality-zero-platform bumper"
+          git checkout -b "$branch_name"
+          git add -A
+          git commit -m "fix(ci): apply bump recipe ${recipe_basename}
+
+          ${BUMPED_TOTAL} replacement(s) across ${BUMPED_FILES} file(s).
+          Recipe: Prekzursil/quality-zero-platform/${RECIPE_PATH}"
+          git push -u origin "$branch_name"
+          gh pr create \
+            --title "fix(ci): apply bump recipe ${recipe_basename}" \
+            --body "Automated bump from \`reusable-bump-apply.yml\`. ${BUMPED_TOTAL} replacement(s) across ${BUMPED_FILES} file(s) per recipe \`Prekzursil/quality-zero-platform/${RECIPE_PATH}\`. Review the diff; the bumper only rewrites content matched by the recipe's \`replace.pattern\` regex." \
+            --label "qzp-bump-recipe" \
+            --base "$DEFAULT_BRANCH" || true

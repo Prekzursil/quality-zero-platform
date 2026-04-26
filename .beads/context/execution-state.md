@@ -73,6 +73,63 @@ Delivered in PR #88 (7 commits + 6 remediation rounds):
 
 Ralph loop emits `<promise>QZP_V2_FULLY_SHIPPED_AND_VERIFIED</promise>` ONLY when every ABSOLUTE DONE bullet is literally true, verified via gh CLI / curl / code inspection — not belief.
 
-## Last action
+## Last action — superseded
 
 Phase 1 PR #88 merged 2026-04-23 05:34Z (squash → `3b57801`). Execution state updated here. About to create `feat/qzp-v2-phase-2-codecov-flag-split` off main.
+
+---
+
+## 2026-04-26 — current state (post wave-dispatch round 2)
+
+**Branch:** main (all in-flight branches merged). 24 PRs merged across the
+2026-04-23 → 2026-04-26 push (PRs #107..#130 — phase-5 inc series + 5
+dependabot bumps + 2 wave-cycle fixes).
+
+**`verify_v2_deployment.py --all` → exit 0** (39 ok / 0 missing / 0 warnings).
+
+### Phase 5 — code-complete
+
+Every Phase 5 bullet has merged code:
+
+- `verify_v2_deployment.py` (#107)
+- `alerts.py` 9-type AlertType enum + dedupe-by-title opener (#108, #117)
+- `bootstrap_repo.py` + `reusable-bootstrap-repo.yml` accepting `repo_slug + stack + initial_mode` trio (#109, #122)
+- `bumps.py` schema loader + canonical Node-20→24 canary recipe (#110)
+- `bump_rollout.py` + `reusable-bumps.yml` plan workflow (#115)
+- `admin_dashboard_pages.py` 3 extra pages + redaction (#111) + state-JSON wiring (#120)
+- `alert_triggers.py` 7 detectors (#112) + `detect_secret_missing` (#117)
+- `alert_dispatch.py` glue (#114) + scheduled cron (#121)
+- self-governance profile @ phase:absolute (#113)
+- `secrets_sync.py` + `reusable-secrets-sync.yml` with closure-based secret handoff + CodeQL config (#119)
+- `check_quality_secrets.py` opens alert:secret-missing (#118)
+- `drift-sync-wave.yml` fleet dispatcher (#123)
+- `coverage_inputs.flag` passthrough fix (#129)
+- drift-sync artifact-name escape fix (#130)
+- §9 migration plan status table (#116)
+
+### Operational wave status
+
+- **Dashboard:** deployed to <https://prekzursil.github.io/quality-zero-platform/> — all 4 pages serve HTTP 200 (curl-verified 2026-04-24). Placeholder content while state JSON is empty.
+- **Drift-sync wave:** dispatched twice. After #129 + #130 the wave runs end-to-end on all 15 fleet repos; per-repo drift reports upload as artifacts. Each report shows real drift (event-link: 5 missing, 1 drift, 0 in_sync). Wave currently exits 1 in dry-run as designed (the "drift detected" sentinel). Real PR-opening run requires `dry_run=false` + `DRIFT_SYNC_PAT` secret.
+- **`alert:*` issues open on platform:** zero (verified 2026-04-24).
+
+### Absolute-done remaining (ordered by tractability)
+
+1. **Drift-sync conflicts resolved** — operator dispatches wave with `dry_run=false` + valid `DRIFT_SYNC_PAT`, reviews + merges 15 PRs, fleet repos converge.
+2. **All 15 governed repos green on main** — follows from (1) + downstream merges.
+3. **event-link Codecov per-flag rows visible** — depends on event-link PR #129 (Coverage 100 Gate currently red on `fix/bump-reusable-codecov-sha`) being remediated + merged + a fresh Codecov run.
+4. **Bumps full-flow tested with Node-20→24 canary** — operator dispatches `reusable-bumps.yml` with `dry_run=false` after staging-wave green.
+
+### Pattern: each wave dispatch surfaced one latent contract bug
+
+| Round | Block | Fix PR |
+| --- | --- | --- |
+| 1 | `codecov.yml.j2` UndefinedError on `flag` (normaliser dropped it) | #129 |
+| 2 | `upload-artifact@v4` rejects `/` in name (`drift-report-Prekzursil/repo`) | #130 |
+| 3 | "Fail on drift when dry_run" exits 1 (intended dry-run signal — not a bug) | n/a |
+
+The wave is now functioning as a fleet-wide integration test — exactly the role the Phase 3 design called for.
+
+## Last action
+
+Drift-sync wave run `24964344652` completed 2026-04-26 ~18:35Z; all 15 jobs reach the dry-run drift-detected sentinel. Wave is behaving correctly. Awaiting operator action for `dry_run=false` rollout.

@@ -74,6 +74,20 @@ jobs:
             --repo-slug "$REPO_SLUG" \
             --out-json "$RUNNER_TEMP/profile.json"
 
+      - name: Compute artifact-safe slug
+        id: artifact_name
+        # ``actions/upload-artifact@v4`` rejects ``/`` in artifact names
+        # (NTFS portability rule), so replace it with ``__``. Empty
+        # slugs fall back to ``unknown`` to keep the artifact step
+        # idempotent in degenerate inputs.
+        env:
+          REPO_SLUG: ${{ inputs.repo_slug }}
+        run: |
+          set -euo pipefail
+          slug="${REPO_SLUG:-unknown}"
+          safe="${slug//\//__}"
+          printf 'slug_safe=%s\n' "$safe" >> "$GITHUB_OUTPUT"
+
       - name: Detect template drift
         id: detect
         run: |
@@ -86,7 +100,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: drift-report-${{ inputs.repo_slug == '' && 'unknown' || inputs.repo_slug }}
+          name: drift-report-${{ steps.artifact_name.outputs.slug_safe }}
           path: ${{ runner.temp }}/drift.json
 
       - name: Summarise drift

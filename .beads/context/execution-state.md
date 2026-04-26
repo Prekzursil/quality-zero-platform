@@ -568,3 +568,84 @@ PR #155 merged 2026-04-26 ~23:01Z. Round 8 complete:
 Loop continues to be blocked only by the 3 operator-only items
 in issue #154 — every code-side, Sonar-side, and contract bullet
 is verified true.
+
+---
+
+## 2026-04-27 — round 9 (Phase 5 §8 dashboard redaction wiring)
+
+### Real Phase 5 contract bug surfaced by audit
+
+The Phase 5 contract bullet "Private-repo rows redacted in public view"
+read as done because the helper `redact_private_repos` existed in
+`admin_dashboard_pages.py` and was wired into the secondary CLI for
+`coverage.html` / `drift.html` / `audit.html`. **But the primary
+heatmap builder (`build_admin_dashboard.py` → `index.html` +
+`data/dashboard.json`) never imported or called the helper.** The
+public dashboard at `https://prekzursil.github.io/quality-zero-platform/`
+emitted every governed repo's slug verbatim — including private ones
+(if any were in the inventory).
+
+Audit method: traced the call graph backwards from
+`publish-admin-dashboard.yml` → `build_admin_dashboard.py main()` →
+`build_dashboard_payload()` → no `redact_*` call in the path.
+Lesson: Phase audits must trace from the deployment artifact, not
+from the helper.
+
+### Fix landed in PR #157
+
+- Imported `redact_private_repos` + `PRIVATE_SLUG_PLACEHOLDER` from
+  `admin_dashboard_pages.py` (single source of truth — both rendering
+  paths now share the masking logic).
+- Extended `_live_health` with a third gh-api call to fetch repo
+  metadata (`/repos/<slug>`), surfacing `visibility`. Defaults to
+  `"public"` on missing/erroring metadata so a fetch failure cannot
+  accidentally REDACT a public slug — asymmetric default favours
+  detect-and-fix over blanket-blackout.
+- Have `build_dashboard_payload` propagate `visibility` from
+  `live_state` into each repo entry, then call `redact_private_repos`
+  before returning. Redaction runs once at payload-build time,
+  upstream of every render/serialize path (`index.html` AND
+  `data/dashboard.json`).
+
+### Tests + coverage
+
+- Updated `test_github_payload_and_live_health_cover_token_paths`
+  for the new metadata-fetch (3 side-effects vs 2).
+- New `test_build_dashboard_payload_redacts_private_repo_slugs`:
+  asserts mixed-visibility payload masks private + preserves public.
+- New `test_build_dashboard_payload_defaults_visibility_to_public`:
+  pins the no-leak-via-redaction-skip default.
+- 29/29 tests passing (was 27).
+- Lizard `-C 15` clean (max CCN 3.2).
+- Pre-push verify hook — green.
+
+### Other Phase 4 + 5 contract bullets re-audited (all hold)
+
+- `evaluate_break_glass` raises `BypassError` if Incident ID is missing
+  from PR body (Phase 4 contract: "requires Incident ID in PR body" ✅).
+- Audit trail destinations are `audit/break-glass.jsonl` +
+  `audit/skip.jsonl` — match the directive verbatim.
+- `alerts.py` docstring + design exclude any digest/summary
+  aggregation: "Phase 5 alert issue dispatcher — per-event, no
+  digests." Confirmed via full-file grep — no `digest`/`summary`
+  aggregator code path exists.
+
+### Loop blocker count
+
+Same 3 operator-only items as end of round 7 (no change). Tracking
+via platform issue #154.
+
+## Last action
+
+PR #157 merged 2026-04-26 ~23:21Z. Round 9 complete:
+
+- Phase 5 §8 dashboard-redaction contract — restored
+- Heatmap dashboard now masks private slugs at payload-build time,
+  upstream of HTML render + JSON serialize
+- Phase 4 break-glass + skip contract re-audited live
+- Phase 5 per-event-only alert constraint re-audited live
+
+The platform is in its strongest code-side state since the rollout
+started: every code-verifiable absolute-done bullet has been
+re-traced from the deployment artifact backward and confirmed in
+place. Loop continues blocked only by the 3 operator-only items.

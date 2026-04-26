@@ -9,13 +9,12 @@ from __future__ import absolute_import
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List
-
-from scripts.quality.common import safe_output_path
 
 
 def parse_args() -> argparse.Namespace:
@@ -140,12 +139,23 @@ def main() -> int:
     canonical_path = Path(args.canonical_json)
     repo_dir = Path(args.repo_dir)
 
-    # ``safe_output_path`` resolves --out-json against the current
-    # working directory and rejects any path that escapes the workspace
-    # (Sonar pythonsecurity:S2083 path-traversal defence). Callers must
-    # invoke this script with cwd anchored to the workspace whose subtree
-    # should contain the result file.
-    out_path = safe_output_path(args.out_json, fallback="patcher-result.json")
+    # Inline path-traversal sanitisation (Sonar pythonsecurity:S2083).
+    # Sonar's taint analyser doesn't follow ``safe_output_path()`` from
+    # ``scripts.quality.common`` inter-procedurally, so the validation
+    # is performed inline here using the explicit ``str().startswith()``
+    # pattern Sonar recognises as a containment check. Resolves the raw
+    # arg against ``Path.cwd()`` (Python's ``Path.__truediv__`` discards
+    # the left operand when the right operand is absolute, so this
+    # single expression handles both relative and absolute inputs), then
+    # rejects anything that escapes that root.
+    workspace_root = Path.cwd().resolve()
+    out_path = (workspace_root / Path(args.out_json)).resolve(strict=False)
+    workspace_root_str = str(workspace_root)
+    out_path_str = str(out_path)
+    if not out_path_str.startswith(workspace_root_str + os.sep):
+        raise ValueError(
+            f"--out-json escapes workspace root: {out_path_str}",
+        )
 
     canonical = json.loads(canonical_path.read_text(encoding="utf-8"))
     result = run_patcher(canonical, repo_dir)

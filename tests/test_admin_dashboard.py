@@ -45,12 +45,65 @@ class AdminDashboardTests(unittest.TestCase):
         self.assertEqual(payload["repo_count"], 1)
         repo = payload["repos"][0]
         self.assertEqual(repo["slug"], "Prekzursil/example-repo")
+        self.assertEqual(repo["visibility"], "public")
         self.assertEqual(repo["issue_policy_mode"], "ratchet")
         self.assertEqual(repo["issue_policy_baseline_ref"], "main")
         self.assertEqual(repo["branch_min_percent"], 85.0)
         self.assertEqual(repo["deps_policy"], "zero_critical")
         self.assertEqual(repo["default_branch_health"], "partial")
         self.assertFalse(repo["ruleset_present"])
+
+    def test_build_dashboard_payload_redacts_private_repo_slugs(self) -> None:
+        """Phase 5 §8 contract: private-repo slugs MUST be masked on the public dashboard.
+
+        Builds a payload with one private repo + one public repo and
+        asserts the private slug is replaced by ``<private>`` while the
+        public one stays intact. This is the heatmap-side counterpart to
+        the redaction already present in admin_dashboard_pages.py's CLI;
+        without this wiring, the live ``index.html`` on GitHub Pages
+        would expose every private slug under the inventory.
+        """
+        payload = build_admin_dashboard.build_dashboard_payload(
+            inventory={
+                "repos": [
+                    {"slug": "Prekzursil/private-repo", "profile": "p", "rollout": "p"},
+                    {"slug": "Prekzursil/public-repo", "profile": "p", "rollout": "p"},
+                ]
+            },
+            profiles={
+                "Prekzursil/private-repo": {},
+                "Prekzursil/public-repo": {},
+            },
+            live={
+                "Prekzursil/private-repo": {"visibility": "private"},
+                "Prekzursil/public-repo": {"visibility": "public"},
+            },
+        )
+        slugs = [r["slug"] for r in payload["repos"]]
+        self.assertIn("<private>", slugs)
+        self.assertIn("Prekzursil/public-repo", slugs)
+        self.assertNotIn("Prekzursil/private-repo", slugs)
+
+    def test_build_dashboard_payload_defaults_visibility_to_public(self) -> None:
+        """Missing visibility defaults to ``public`` (no leak via redaction-skip).
+
+        If live state didn't capture visibility (e.g. token-less run with
+        no GitHub API access), the slug is treated as public — explicit
+        opt-in to private redaction prevents accidentally redacting
+        public repos when the metadata fetch failed.
+        """
+        payload = build_admin_dashboard.build_dashboard_payload(
+            inventory={
+                "repos": [
+                    {"slug": "Prekzursil/example-repo", "profile": "p", "rollout": "p"},
+                ]
+            },
+            profiles={"Prekzursil/example-repo": {}},
+            live={},  # no live state at all
+        )
+        repo = payload["repos"][0]
+        self.assertEqual(repo["slug"], "Prekzursil/example-repo")
+        self.assertEqual(repo["visibility"], "public")
 
     def test_render_dashboard_html_includes_controls_and_repo_rows(self) -> None:
         """Cover render dashboard html includes controls and repo rows."""

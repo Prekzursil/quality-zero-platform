@@ -14,6 +14,10 @@ from typing import Any, Dict, List, Mapping, Sequence, Set
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from scripts.quality.admin_dashboard_pages import (
+    PRIVATE_SLUG_PLACEHOLDER,
+    redact_private_repos,
+)
 from scripts.quality.common import utc_timestamp
 from scripts.quality.control_plane import load_inventory, load_repo_profile
 from scripts.security_helpers import load_json_https
@@ -47,6 +51,13 @@ def build_dashboard_payload(
         repos.append(
             {
                 "slug": slug,
+                # ``visibility`` rides the payload through ``redact_private_repos``
+                # below so the public heatmap (deployed to GitHub Pages) never
+                # exposes private-repo slugs. Defaults to "public" so missing
+                # live state can't accidentally mark a repo private — but
+                # also can't accidentally leak. Live state seeded from
+                # GitHub API in ``_live_health``.
+                "visibility": str(live_state.get("visibility", "public")).lower(),
                 "profile": repo_entry.get("profile", ""),
                 "rollout": repo_entry.get("rollout", ""),
                 "issue_policy_mode": profile.get("issue_policy", {}).get("mode", ""),
@@ -70,10 +81,14 @@ def build_dashboard_payload(
                 "ruleset_present": bool(live_state.get("ruleset_present", False)),
             }
         )
+    # Redact private slugs BEFORE the payload reaches any rendering or
+    # serialisation path. Phase 5 §8 requires that private-repo rows on
+    # the public dashboard show only the placeholder, never the real slug.
+    redacted = redact_private_repos(repos)
     return {
         "generated_at": utc_timestamp(),
-        "repo_count": len(repos),
-        "repos": repos,
+        "repo_count": len(redacted),
+        "repos": redacted,
     }
 
 
@@ -231,6 +246,18 @@ def _live_health(token: str, repo_slug: str, default_branch: str) -> Dict[str, A
         token,
     )
     rulesets = _github_payload(f"{GITHUB_API_BASE}/repos/{repo_slug}/rulesets", token)
+    # Fetch repo metadata to capture visibility for the redaction step
+    # in ``build_dashboard_payload``. Using the same token lets private
+    # repos (where the bot has read access) report their true visibility;
+    # repos visible only as public report ``"public"``. Defaults to
+    # ``"public"`` on any failure so a missing/erroring metadata fetch
+    # cannot accidentally redact (or leak via mis-default).
+    repo_meta = _github_payload(f"{GITHUB_API_BASE}/repos/{repo_slug}", token)
+    visibility = "public"
+    if isinstance(repo_meta, dict):
+        raw_visibility = repo_meta.get("visibility")
+        if isinstance(raw_visibility, str) and raw_visibility.strip():
+            visibility = raw_visibility.strip().lower()
     workflow_runs = runs.get("workflow_runs", []) if isinstance(runs, dict) else []
     return {
         "default_branch_health": _compute_health(workflow_runs),
@@ -239,6 +266,7 @@ def _live_health(token: str, repo_slug: str, default_branch: str) -> Dict[str, A
             filter_fn=lambda item: item.get("event") == "pull_request",
         ),
         "ruleset_present": bool(rulesets),
+        "visibility": visibility,
     }
 
 

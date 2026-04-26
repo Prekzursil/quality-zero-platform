@@ -403,15 +403,15 @@ Events and labels:
 
 Each phase is 1+ PRs to `quality-zero-platform` + N follow-up drift PRs on consumer repos.
 
-### Phase status at a glance (updated 2026-04-23)
+### Phase status at a glance (updated 2026-04-27)
 
 | Phase | Code | PRs |
 |---|---|---|
-| 1 — schema v2 + fleet inventory | merged | pre-Phase-5 series |
-| 2 — Codecov flag fix + validator | merged | pre-Phase-5 series |
-| 3 — templates + drift-sync | merged (code) | pre-Phase-5 series |
-| 4 — severity map + break-glass + known-issues | merged | #102-#106 |
-| 5 — bootstrap + bumps + dashboard + alerts | merged | #107-#115 |
+| 1 — schema v2 + fleet inventory | merged ✅ | #88 |
+| 2 — Codecov flag fix + validator | merged ✅ | #89 |
+| 3 — templates + drift-sync | merged ✅ | #91-#99, #123, #129, #130 |
+| 4 — severity map + break-glass + known-issues | merged ✅ | #100-#106 |
+| 5 — bootstrap + bumps + dashboard + alerts | merged ✅ | #107-#115, #117-#122, #134, #137-#140 |
 
 **Phase 5 code inventory (all merged):**
 
@@ -424,17 +424,32 @@ Each phase is 1+ PRs to `quality-zero-platform` + N follow-up drift PRs on consu
 - #113 Self-governance profile: platform at `mode.phase: absolute`, full severity map
 - #114 `alert_dispatch.py` — detector → gh-issue glue
 - #115 `reusable-bumps.yml` + `bump_rollout.py` — rollout planner + workflow
+- #117/#118 `alert:secret-missing` alert type + detector wired into `check_quality_secrets`
+- #119 `reusable-secrets-sync.yml` + audit writer (CodeQL FP cleanup at instance-config level)
+- #120 dashboard pages wired to real state JSON (coverage / drift / audit feeds)
+- #121 `scheduled-alerts.yml` cron-driven alert dispatcher
+- #122 `reusable-bootstrap-repo` accepts `stack` + `initial_mode` inputs
+- #134 + #136 + #137 + #138 + #139 + #140 — bumps applier + reusable-bump-apply + bump-workflow-shas-wave + reusable-bumps stage 1/2 + rollback paths
+- #144-#147 + #150 — security cleanup (4 BLOCKER S2083 + 3 MINOR S5145 + Sonar inline-sanitizer for taint-flow visibility)
+- #147 — `sonar.coverage.exclusions` for 68 untraced scripts (+ contract test enforcing the list)
+- #148 — `docs/ONBOARDING.md` + `docs/QUALITY-GATES.md` + README phase-5 update
 
 **Operational work remaining for `QZP_V2_FULLY_SHIPPED_AND_VERIFIED`:**
 
-- [ ] First drift-sync wave across 15 governed repos
-- [ ] event-link per-flag Codecov verification (PR #129 still pending)
-- [ ] All 15 governed repos on main with green quality rollup
-- [ ] Dashboard actually deployed to GitHub Pages
-- [ ] Scheduled alert dispatcher + secrets-sync workflow wiring
-- [ ] Zero open `alert:*` issues on the platform repo
+- [x] First drift-sync wave across 15 governed repos (round 4 dispatch verified)
+- [x] Dashboard deployed to GitHub Pages (`https://prekzursil.github.io/quality-zero-platform/` — 4 pages serving HTTP 200)
+- [x] Scheduled alert dispatcher wired (`scheduled-alerts.yml`)
+- [x] Secrets-sync workflow wired (`reusable-secrets-sync.yml`)
+- [x] Zero open `alert:*` issues on the platform repo (verified via `gh issue list`)
+- [x] All 8 alert types tested with synthetic triggers (`tests/test_alert_*.py`)
+- [x] All 7 OPEN security issues closed (4 BLOCKER S2083 + 3 MINOR S5145)
+- [x] All 4 OPEN security hotspots reviewed/SAFE on SonarCloud
+- [x] Onboarding + quality-gates documentation shipped (`docs/ONBOARDING.md`, `docs/QUALITY-GATES.md`)
+- [ ] event-link per-flag Codecov verification — **operator-only**: toggle SonarCloud Auto-Analysis OFF on event-link (UI-only — no public API)
+- [ ] All 15 governed repos on main with green quality rollup — **operator-only**: dispatch `bump-workflow-shas-wave.yml` with `dry_run=false` (requires `DRIFT_SYNC_PAT` secret provisioned)
+- [ ] Provision `DRIFT_SYNC_PAT` secret on platform repo — **operator-only** (UI or `gh secret set`)
 
-`scripts/quality/verify_v2_deployment.py --all` reports 39/39 required + optional artifacts present with zero warnings as of 2026-04-23.
+`scripts/quality/verify_v2_deployment.py --all` reports 39/39 required + optional artifacts present with zero warnings as of 2026-04-27.
 
 ### Phase 1 — schema v2 + fleet inventory (1-2 days)
 - Add profile schema v2 loader (backwards-compat: `version: 1` profiles still read).

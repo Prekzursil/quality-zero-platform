@@ -130,6 +130,83 @@ Every Phase 5 bullet has merged code:
 
 The wave is now functioning as a fleet-wide integration test — exactly the role the Phase 3 design called for.
 
-## Last action
+## Last action — superseded
 
 Drift-sync wave run `24964344652` completed 2026-04-26 ~18:35Z; all 15 jobs reach the dry-run drift-detected sentinel. Wave is behaving correctly. Awaiting operator action for `dry_run=false` rollout.
+
+---
+
+## 2026-04-26 — round 2 (post fleet-SHA audit + bumper tooling)
+
+Building on round 1, the fleet-SHA audit surfaced that **14 of 14
+consumer repos pin pre-Phase-2 reusable-workflow SHAs**. Drift-sync
+wouldn't fix this (it renders content files, not caller workflows).
+
+### PRs merged this round
+
+| PR | Title | Type |
+| --- | --- | --- |
+| #132 | `bump_workflow_shas` module + 11 unit tests | net-new tooling |
+| #133 | reusable-codeql consumer-safe (config-file as optional input) | cross-repo regression fix |
+| #134 | bump-workflow-shas-wave operator dispatcher | net-new tooling |
+
+PR #131 (state refresh) had already merged. Event-link PR #130
+(workflow-SHA bump on event-link) is in flight and re-bumped to the
+post-#133 SHA `6765a290…`; CodeQL is now SUCCESS there (the
+consumer-safe fix verified end-to-end).
+
+### Two new latent issues surfaced this round
+
+1. **CodeQL config-file hardcode** — PR #119 introduced
+   ``config-file: ./.github/codeql/codeql-config.yml`` directly into
+   the reusable workflow. Every fleet consumer that bumped to a SHA
+   ≥ #119 then crashed init with ``configuration file does not
+   exist``. Fixed in #133 (input becomes optional, empty default).
+2. **DeepSource Visible Zero polling timeout not honored** —
+   ``DEFAULT_TIMEOUT_SECONDS = 900`` but jobs are running 2+ hours
+   on event-link. Likely a ``time.sleep(poll_seconds)`` accumulator
+   that never checks ``deadline``. Tracking as a follow-up; not
+   blocking — admin-merge pattern unchanged.
+
+### Absolute-done remaining (operator-only)
+
+1. **Drift-sync conflicts resolved** — operator dispatches wave
+   with `dry_run=false` + valid `DRIFT_SYNC_PAT`. Reviews + merges
+   15 PRs, fleet repos converge.
+2. **Fleet SHA bump** — operator dispatches
+   `bump-workflow-shas-wave.yml` with `target_sha=<latest main>`
+   + `dry_run=false` + `DRIFT_SYNC_PAT`. Brings 14 consumer repos
+   to a post-Phase-2 SHA so per-flag Codecov / current scanner-
+   matrix shape work.
+3. **All 15 repos green on main** — follows from (1) + (2).
+4. **event-link Codecov per-flag rows visible** — depends on
+   - event-link PR #130 merging (CodeQL green; Coverage 100 Gate
+     blocked on SonarCloud Auto-Analysis vs CI conflict — operator
+     toggles Auto Analysis OFF at
+     <https://sonarcloud.io/project/configuration?id=Prekzursil_event-link>)
+   - Fresh Codecov run with the per-flag loop active
+5. **Bumps full-flow tested with Node-20→24 canary** — operator
+   dispatches `reusable-bumps.yml` with `dry_run=false` after
+   staging-wave green.
+
+### Wave-as-integration-test pattern (now 4 rounds, 3 bugs caught)
+
+| Round | Block | Fix PR |
+| --- | --- | --- |
+| 1 | `codecov.yml.j2` UndefinedError on `flag` (normaliser dropped it) | #129 |
+| 2 | `upload-artifact@v4` rejects `/` in name | #130 |
+| 3 | "Fail on drift when dry_run" exits 1 (intended sentinel — not a bug) | n/a |
+| 4 | Reusable-codeql hardcoded consumer-only config-file | #133 |
+
+## Last action
+
+PR #134 merged 2026-04-26 ~21:30Z. Platform code complete pending:
+
+- Operator dispatches `bump-workflow-shas-wave.yml` with the
+  latest platform main SHA (today: post-#134 HEAD).
+- Operator toggles SonarCloud Auto-Analysis OFF on event-link.
+- Operator dispatches `drift-sync-wave.yml` with `dry_run=false`
+  + a valid `DRIFT_SYNC_PAT` secret.
+
+verify_v2_deployment.py --all currently reports 39/39 ok (Phase
+1-5 deliverables + the new wave callers + the bumper module).

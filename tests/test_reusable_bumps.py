@@ -74,6 +74,37 @@ class ReusableBumpsWorkflowTests(unittest.TestCase):
         plan_perms = self.doc["jobs"]["plan"].get("permissions", {})
         self.assertEqual(plan_perms.get("contents"), "read")
 
+    def test_stage_1_calls_reusable_bump_apply_per_staging_repo(self) -> None:
+        """Stage 1 fans out via matrix calling ``reusable-bump-apply.yml``.
+
+        Closes the gap between the plan step (PR #115) and an
+        actually-executable rollout: now staging_repos receive PRs
+        per the recipe via the per-repo applier (PR #138).
+        """
+        jobs = self.doc["jobs"]
+        self.assertIn("stage-1", jobs)
+        stage_1 = jobs["stage-1"]
+        # Matrix strategy fanning out per staging slug.
+        strategy = stage_1.get("strategy", {})
+        matrix = strategy.get("matrix", {})
+        self.assertIn("slug", matrix)
+        self.assertIs(strategy.get("fail-fast"), False,
+            "fail-fast: false so one bad staging repo can't abort the wave")
+        # Calls the per-repo applier reusable workflow.
+        self.assertIn("reusable-bump-apply.yml", stage_1.get("uses", ""))
+        # Forwards DRIFT_SYNC_PAT secret.
+        self.assertIn("DRIFT_SYNC_PAT", stage_1.get("secrets", {}))
+        # Skipped when staging is empty (nothing to fan out to).
+        self.assertIn("staging", stage_1.get("if", ""))
+
+    def test_stage_1_forwards_recipe_path_and_dry_run(self) -> None:
+        """The stage-1 matrix passes recipe_path + dry_run through to the applier."""
+        stage_1 = self.doc["jobs"]["stage-1"]
+        with_block = stage_1.get("with", {})
+        self.assertIn("recipe_path", with_block)
+        self.assertIn("dry_run", with_block)
+        self.assertIn("matrix.slug", str(with_block.get("repo_slug", "")))
+
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

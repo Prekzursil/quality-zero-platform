@@ -118,3 +118,28 @@ jobs:
           echo "Dry-run — no PRs opened for $BUMP_RECIPE_NAME."
           echo "Staging: $BUMP_STAGING"
           echo "Rollout: $BUMP_ROLLOUT"
+
+  stage-1:
+    # Stage 1 fans out the recipe to every ``staging_repos`` entry via
+    # the per-repo applier. Always runs (even when dry_run=true) so
+    # operators can verify the bumper sees the right files; the
+    # applier's own dry_run gate decides whether to actually open a
+    # PR. Stage 2 (rollout to remaining affected fleet) is gated on
+    # this stage's matrix completing without any failure.
+    needs: plan
+    if: ${{ needs.plan.outputs.staging != '[]' && needs.plan.outputs.staging != '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        slug: ${{ fromJson(needs.plan.outputs.staging) }}
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    uses: ./.github/workflows/reusable-bump-apply.yml
+    with:
+      repo_slug: ${{ matrix.slug }}
+      recipe_path: ${{ inputs.recipe_path }}
+      dry_run: ${{ inputs.dry_run }}
+    secrets:
+      DRIFT_SYNC_PAT: ${{ secrets.DRIFT_SYNC_PAT }}

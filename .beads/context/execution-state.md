@@ -649,3 +649,89 @@ The platform is in its strongest code-side state since the rollout
 started: every code-verifiable absolute-done bullet has been
 re-traced from the deployment artifact backward and confirmed in
 place. Loop continues blocked only by the 3 operator-only items.
+
+---
+
+## 2026-04-27 — round 12 (Phase 3 drift-sync auto-merge wiring)
+
+### Real Phase 3 contract gap surfaced by audit
+
+Phase 3 contract bullet: *"reusable-drift-sync.yml opens PRs against
+governed repos when template drift detected; **auto-merge on green
+CI**"*. The "auto-merge on green CI" half was unmet:
+
+  grep -rE 'auto.merge|--auto' .github/workflows/ \
+    scripts/quality/{drift_sync,apply_drift_pr}.py
+  # zero matches
+
+`_gh_pr_create` only invoked `gh pr create` and never enabled
+auto-merge. Drift PRs would sit open until an operator merged them
+by hand, defeating the whole point of the fleet-wide drift-sync
+sweep. Latent since Phase 3 first shipped (PR #99) — never surfaced
+because no real `dry_run=false` drift-sync wave had run against a
+consumer with active drift.
+
+### Fix landed in PR #159
+
+After `gh pr create` succeeds, follow up with:
+
+  gh pr merge <branch> --auto --squash
+
+The PR squash-merges automatically once CI clears + branch
+protection requirements are satisfied. Auto-merge call is wrapped
+in try/except on `subprocess.CalledProcessError` so common failure
+modes (repo auto-merge disabled, branch protection forbids squash,
+token lacks permission) log to stderr but don't fail the script —
+the PR still exists and operator can merge manually. Asymmetric
+tolerance pattern (same shape as round 9's redaction default).
+
+### Tests + coverage
+
+- Updated `test_out_of_sync_runs_full_git_and_gh_sequence` — now
+  asserts both `gh pr create` AND `gh pr merge --auto --squash`
+  appear in the call sequence.
+- New `test_auto_merge_failure_is_non_fatal` — pins the asymmetric
+  tolerance: a `CalledProcessError` on the merge step doesn't
+  propagate to a non-zero exit.
+- 10/10 tests passing (was 9/9).
+- Lizard `-C 15` clean (max CCN 2.1).
+
+### Phase 5 bumps rollback path re-audited (passes)
+
+The Phase 5 contract bullet "staging wave + full rollout +
+**rollback paths** all tested with a real bump recipe (Node 20→24
+is the canary)" was re-traced this round:
+
+- `tests/test_reusable_bumps.py:128
+  test_rollback_opens_fleet_bump_fail_alert` ✅
+- `.github/workflows/reusable-bumps.yml:176 rollback:` job
+  - Triggered on `needs.stage-1.result == 'failure' && !inputs.dry_run`
+  - Imports from `scripts.quality.alerts` and dispatches
+    `FLEET_BUMP_FAIL`
+- Recipe `profiles/bumps/2026-04-23-node-24.yml` exists (Node 20→24
+  canary)
+
+The "real bump recipe live-tested" portion is operator-dispatch
+work (a real failing stage-1 would need to be staged) — the code
+path is verified.
+
+### Loop blocker count
+
+Same 3 operator-only items as end of round 7 (no change). Tracking
+via platform issue #154.
+
+## Last action
+
+PR #159 merged 2026-04-26 ~23:39Z. Round 12 complete:
+
+- Phase 3 drift-sync auto-merge contract — restored
+- Phase 5 bumps rollback path — re-verified
+
+Each round since round 7 has surfaced one real contract bug:
+- Round 8: fleet-filter fork-include
+- Round 9: dashboard private-repo redaction
+- Round 12: drift-sync auto-merge
+
+Audit-from-deployment-artifact pattern continues to find latent
+gaps that weren't visible in unit tests because no operator had run
+the live workflow with full options enabled.

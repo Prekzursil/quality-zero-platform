@@ -35,9 +35,10 @@ rollback_on_failure: true          # optional, defaults to True
 
 from __future__ import absolute_import
 
+import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping
+from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
 import yaml  # type: ignore[import-untyped]
 
@@ -140,6 +141,89 @@ def resolve_target_files(
                 key = hit.relative_to(repo_root).as_posix()
                 seen.setdefault(key, hit)
     return [seen[k] for k in sorted(seen)]
+
+
+def apply_bump_text(
+    text: str, *, pattern: str, replacement: str,
+) -> Tuple[str, int]:
+    """Run ``re.subn`` on ``text``; return ``(new_text, replacement_count)``.
+
+    Thin wrapper kept separate from the file walker so the regex
+    semantics are unit-testable in isolation. ``re.error`` from a
+    malformed pattern propagates to the caller — the recipe author
+    must own that regex correctness.
+    """
+    new_text, count = re.subn(pattern, replacement, text, flags=re.MULTILINE)
+    return new_text, count
+
+
+def apply_bump_files(
+    *,
+    repo_root: Path,
+    targets: Iterable[Mapping[str, Any]],
+) -> Dict[str, Any]:
+    """Apply every target's ``replace`` block to matching files.
+
+    Walks each target's ``file_glob``, finds files, and (when the
+    target carries an optional ``replace: {pattern, replacement}``
+    block) rewrites them in-place. Targets without ``replace`` are
+    skipped — the abstract ``yaml_path`` field is reserved for a
+    future yamlpath evaluator and is treated as documentation only
+    by this applier.
+
+    Returns ``{bumped_files, bumped_total, skipped_targets, edited}``:
+
+    * ``bumped_files``: number of distinct files written.
+    * ``bumped_total``: total ``re.subn`` substitutions applied
+      (sum across all (file, target) pairs that hit).
+    * ``skipped_targets``: list of indices into ``targets`` that
+      were skipped (no ``replace`` block).
+    * ``edited``: list of ``{path, target_index, replacements}`` records.
+    """
+    target_list = list(targets)
+    skipped: List[int] = []
+    edited: List[Dict[str, Any]] = []
+    files_changed: Dict[str, str] = {}
+
+    for idx, target in enumerate(target_list):
+        replace_block = target.get("replace") if isinstance(target, Mapping) else None
+        if not isinstance(replace_block, Mapping):
+            skipped.append(idx)
+            continue
+        pattern = str(replace_block.get("pattern", ""))
+        replacement = str(replace_block.get("replacement", ""))
+        if not pattern:
+            skipped.append(idx)
+            continue
+
+        glob = str(target["file_glob"])
+        for hit in sorted(repo_root.glob(glob)):
+            if not hit.is_file():
+                continue
+            key = hit.relative_to(repo_root).as_posix()
+            current = files_changed.get(key)
+            if current is None:
+                current = hit.read_text(encoding="utf-8")
+            new_text, count = apply_bump_text(
+                current, pattern=pattern, replacement=replacement,
+            )
+            if count > 0:
+                files_changed[key] = new_text
+                edited.append({
+                    "path": key, "target_index": idx, "replacements": count,
+                })
+
+    # Persist all changed files at the end (one write per file, even
+    # when multiple targets edited it).
+    for key, new_text in files_changed.items():
+        (repo_root / key).write_text(new_text, encoding="utf-8")
+
+    return {
+        "bumped_files": len(files_changed),
+        "bumped_total": sum(e["replacements"] for e in edited),
+        "skipped_targets": skipped,
+        "edited": edited,
+    }
 
 
 if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI

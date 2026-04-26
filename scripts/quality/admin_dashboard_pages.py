@@ -204,6 +204,8 @@ def load_drift_entries(path: Path) -> List[Dict[str, Any]]:
 if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
     import argparse
 
+    from scripts.quality.common import safe_output_path
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--audit-jsonl", default="")
     parser.add_argument("--coverage-json", default="")
@@ -211,27 +213,39 @@ if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
     parser.add_argument("--output-dir", required=True)
     _args = parser.parse_args()
 
-    _out = Path(_args.output_dir)
+    # ``safe_output_path`` resolves ``--output-dir`` against the
+    # current working directory and rejects any path that escapes
+    # the workspace (Sonar S2083 path-traversal defence). Each
+    # rendered page filename is a hardcoded constant, so the only
+    # user-controllable component is the parent directory — and
+    # that's pinned to the workspace by ``_ensure_within_root``.
+    _out = safe_output_path(_args.output_dir, fallback="site")
     _out.mkdir(parents=True, exist_ok=True)
 
     _cov_rows = redact_private_repos(
         load_coverage_rows(Path(_args.coverage_json)) if _args.coverage_json else []
     )
-    (_out / "coverage.html").write_text(
+    _coverage_path = (_out / "coverage.html").resolve()
+    _ensure_path_within_workspace = _coverage_path.relative_to(_out.resolve())
+    _coverage_path.write_text(
         render_coverage_trend_page(rows=_cov_rows), encoding="utf-8",
     )
 
     _drift_rows = redact_private_repos(
         load_drift_entries(Path(_args.drift_jsonl)) if _args.drift_jsonl else []
     )
-    (_out / "drift.html").write_text(
+    _drift_path = (_out / "drift.html").resolve()
+    _ensure_path_within_workspace = _drift_path.relative_to(_out.resolve())
+    _drift_path.write_text(
         render_drift_page(entries=_drift_rows), encoding="utf-8",
     )
 
     _audit_rows = (
         load_audit_jsonl(Path(_args.audit_jsonl)) if _args.audit_jsonl else []
     )
-    (_out / "audit.html").write_text(
+    _audit_path = (_out / "audit.html").resolve()
+    _ensure_path_within_workspace = _audit_path.relative_to(_out.resolve())
+    _audit_path.write_text(
         render_audit_page(entries=_audit_rows), encoding="utf-8",
     )
     print(f"Wrote coverage.html, drift.html, audit.html to {_out}")

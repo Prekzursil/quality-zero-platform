@@ -114,12 +114,12 @@ def merge_required_contexts(
     )
 
 
-def normalize_coverage_inputs(raw_inputs: Any) -> List[Dict[str, str]]:
+def normalize_coverage_inputs(raw_inputs: Any) -> List[Dict[str, Any]]:
     """Handle normalize coverage inputs."""
     return profile_coverage_normalization.normalize_coverage_inputs(raw_inputs)
 
 
-def infer_coverage_inputs(coverage: Mapping[str, Any] | None) -> List[Dict[str, str]]:
+def infer_coverage_inputs(coverage: Mapping[str, Any] | None) -> List[Dict[str, Any]]:
     """Handle infer coverage inputs."""
     return profile_coverage_normalization.infer_coverage_inputs(coverage)
 

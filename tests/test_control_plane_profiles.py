@@ -209,14 +209,24 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
             "shared-scanner-matrix / DeepSource Visible Zero",
             profile["required_contexts"]["target"],
         )
+        # Phase 2 contract: ``flag`` MUST flow through the normalizer
+        # so reusable-codecov-analytics.yml can upload one Codecov flag
+        # per coverage input. Drift-sync's ``codecov.yml.j2`` template
+        # also dereferences ``item.flag`` directly under StrictUndefined.
         self.assertEqual(
             profile["coverage"]["inputs"],
             [
-                {"format": "xml", "name": "backend", "path": "backend/coverage.xml"},
+                {
+                    "format": "xml",
+                    "name": "backend",
+                    "path": "backend/coverage.xml",
+                    "flag": "backend",
+                },
                 {
                     "format": "xml",
                     "name": "frontend",
                     "path": "ui/coverage/cobertura-coverage.xml",
+                    "flag": "frontend",
                 },
             ],
         )

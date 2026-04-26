@@ -299,6 +299,43 @@ class QualityCommonTests(unittest.TestCase):
                 {"format": "lcov", "name": "lcov", "path": "lcov.info"},
             ],
         )
+
+    def test_normalize_coverage_inputs_passes_phase2_optional_fields(self) -> None:
+        """Phase 2 ``flag`` + Phase 3 ``sources`` + per-input ``min_percent``
+        all survive the normalizer (they previously were silently dropped,
+        breaking ``codecov.yml.j2`` rendering during the drift-sync wave)."""
+        normalised = normalize_coverage_inputs(
+            [
+                {
+                    "format": "xml", "name": "backend", "path": "backend/cov.xml",
+                    "flag": "backend", "sources": ["backend/", " ui/api/ "],
+                    "min_percent": 99.5,
+                },
+                {
+                    "format": "lcov", "name": "ui", "path": "ui/lcov.info",
+                    "flag": " ui ",  # whitespace stripped on flag too
+                    "min_percent": "100",  # numeric strings coerce to float
+                },
+                {
+                    "format": "xml", "name": "no-extras",
+                    "path": "p/cov.xml",
+                    # min_percent of unparseable type is silently dropped
+                    "min_percent": [123],
+                    "sources": "not-a-list",  # silently ignored — must be list
+                },
+            ],
+        )
+        self.assertEqual(len(normalised), 3)
+        self.assertEqual(normalised[0]["flag"], "backend")
+        self.assertEqual(normalised[0]["sources"], ["backend/", "ui/api/"])
+        self.assertEqual(normalised[0]["min_percent"], 99.5)
+        self.assertEqual(normalised[1]["flag"], "ui")
+        self.assertEqual(normalised[1]["min_percent"], 100.0)
+        # Defensive entries: unparseable min_percent + non-list sources
+        # do NOT appear in the normalised dict.
+        self.assertNotIn("min_percent", normalised[2])
+        self.assertNotIn("sources", normalised[2])
+        self.assertNotIn("flag", normalised[2])  # absent on raw → absent on output
         self.assertEqual(
             infer_coverage_inputs(
                 {

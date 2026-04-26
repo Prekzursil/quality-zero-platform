@@ -23,11 +23,17 @@ import { parseArgs } from "util";
 // Log sanitisation
 // =============================================================================
 // SonarCloud rule tssecurity:S5145 (log injection) flags any log call whose
-// interpolated value can be tainted by network/IO data. Coerce-to-string +
-// strip-control-chars stops an attacker from smuggling CRLF + a fake log line
-// through e.g. a Slack API error string.
+// interpolated value can be tainted by network/IO data. Stripping the C0
+// control range (\x00-\x1f, which already covers CR/LF/TAB and friends)
+// stops an attacker from smuggling CRLF + a fake log line through e.g. a
+// Slack API error string. Objects go through JSON.stringify so we don't
+// emit the useless "[object Object]" placeholder.
 function sanitizeForLog(value: unknown): string {
-  return String(value).replace(/[\r\n\t\v\f\x00-\x1f]/g, " ");
+  const stringified =
+    typeof value === "object" && value !== null
+      ? JSON.stringify(value)
+      : String(value);
+  return stringified.replaceAll(/[\x00-\x1f]/g, " ");
 }
 
 // =============================================================================

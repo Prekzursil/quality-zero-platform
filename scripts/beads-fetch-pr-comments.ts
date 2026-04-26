@@ -21,10 +21,16 @@ import { dirname } from "path";
 // SonarCloud rule tssecurity:S5145 (log injection) flags any log call whose
 // interpolated value can be tainted by network/IO data — even when the value
 // is statically a number, the rule's taint analysis follows it conservatively.
-// Coerce-to-string + strip-control-chars normalises every log-bound value so
-// an attacker can't smuggle CRLF + a fake log line through e.g. a PR title.
+// Stripping the C0 control range (\x00-\x1f, which already covers CR/LF/TAB
+// and friends) prevents an attacker from smuggling CRLF + a fake log line
+// through e.g. a PR title. Objects go through JSON.stringify so we don't
+// emit the useless "[object Object]" placeholder.
 function sanitizeForLog(value: unknown): string {
-  return String(value).replace(/[\r\n\t\v\f\x00-\x1f]/g, " ");
+  const stringified =
+    typeof value === "object" && value !== null
+      ? JSON.stringify(value)
+      : String(value);
+  return stringified.replaceAll(/[\x00-\x1f]/g, " ");
 }
 
 // =============================================================================

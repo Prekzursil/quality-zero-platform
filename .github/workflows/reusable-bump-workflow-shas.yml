@@ -78,6 +78,12 @@ jobs:
         id: bump
         env:
           BUMP_TARGET_SHA: ${{ inputs.target_sha }}
+          # ``GITHUB_REPOSITORY`` resolves to the CALLER repo on a
+          # workflow_call invocation, not the bump target. Pass the
+          # target slug explicitly so the JSON report records which
+          # consumer was bumped (the artifact name uses the safe slug
+          # already; this aligns the JSON body too).
+          BUMP_TARGET_REPO_SLUG: ${{ inputs.repo_slug }}
           # Platform package was checked out at ``./platform/``, so add
           # that to PYTHONPATH so ``from scripts.quality...`` resolves.
           PYTHONPATH: ${{ github.workspace }}/platform
@@ -111,8 +117,11 @@ jobs:
                   changed.append({"file": name, "bumps": r["bumped"]})
 
           # Emit a JSON report as workflow artifact + step output.
+          # ``repo`` is the BUMP TARGET (consumer) — pulled from the
+          # explicit env var, NOT GITHUB_REPOSITORY which would resolve
+          # to the CALLER repo (platform) on workflow_call.
           report = {
-              "repo": os.environ.get("GITHUB_REPOSITORY", ""),
+              "repo": os.environ.get("BUMP_TARGET_REPO_SLUG", ""),
               "target_sha": target,
               "files": changed,
               "bumped_total": sum(c["bumps"] for c in changed),

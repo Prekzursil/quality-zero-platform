@@ -150,7 +150,7 @@ class RunDriftPrTests(unittest.TestCase):
         self.assertEqual(calls, [])
 
     def test_out_of_sync_runs_full_git_and_gh_sequence(self) -> None:
-        """Drift triggers checkout+add+commit+push+gh pr create."""
+        """Drift triggers checkout+add+commit+push+gh pr create+gh pr merge --auto."""
         rc, calls = self._run(
             {
                 "entries": [
@@ -172,6 +172,68 @@ class RunDriftPrTests(unittest.TestCase):
         self.assertIn(
             "chore(drift-sync): apply template updates", commit_cmd,
         )
+        # Phase 3 contract: drift PRs auto-merge on green CI.
+        # The script issues ``gh pr merge <branch> --auto --squash`` after
+        # ``gh pr create`` so the PR squash-merges itself the moment CI
+        # turns green — without this step, drift PRs would sit open
+        # indefinitely.
+        gh_calls = [c for c in calls if c[:2] == ["gh", "pr"]]
+        gh_actions = [c[2] for c in gh_calls]
+        self.assertIn("create", gh_actions)
+        self.assertIn("merge", gh_actions)
+        merge_call = next(c for c in gh_calls if c[2] == "merge")
+        self.assertIn("--auto", merge_call)
+        self.assertIn("--squash", merge_call)
+
+    def test_auto_merge_failure_is_non_fatal(self) -> None:
+        """If ``gh pr merge --auto`` fails, the PR is still created.
+
+        Common failure modes (repo auto-merge disabled, branch
+        protection forbids squash, token lacks permission) shouldn't
+        orphan the drift PR — it stays open for manual merge. This
+        test pins that asymmetric tolerance.
+        """
+        path = _write_report({
+            "entries": [
+                {
+                    "status": "drift",
+                    "output_path": "codecov.yml",
+                    "proposed_content": "x\n",
+                }
+            ]
+        })
+        self.addCleanup(path.unlink, missing_ok=True)
+
+        merge_attempts: List[List[str]] = []
+
+        def runner(
+            cmd, cwd=None, check=False, capture_output=False, text=False
+        ) -> subprocess.CompletedProcess:
+            """Succeed on everything except gh pr merge."""
+            if cmd[:3] == ["gh", "pr", "merge"]:
+                merge_attempts.append(list(cmd))
+                raise subprocess.CalledProcessError(
+                    returncode=1,
+                    cmd=cmd,
+                    stderr="auto-merge not enabled on repo",
+                )
+            return subprocess.CompletedProcess(args=cmd, returncode=0)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            args = argparse.Namespace(
+                report=str(path),
+                repo_slug="Prekzursil/test-repo",
+                default_branch="main",
+                platform_ref="main",
+                cwd=tmp,
+                runner=None,
+            )
+            rc = apr._run_drift_pr(args, runner)
+
+        # Auto-merge attempt was made — but its failure didn't propagate.
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(merge_attempts), 1)
+        self.assertIn("--auto", merge_attempts[0])
 
     def test_out_of_sync_but_no_writable_entries_returns_0(self) -> None:
         """If every entry has an empty output_path the script exits early."""

@@ -85,7 +85,16 @@ def _gh_pr_create(
     cwd: Path,
     runner,
 ) -> None:
-    """Invoke ``gh pr create`` with the staged branch."""
+    """Invoke ``gh pr create`` with the staged branch + enable auto-merge.
+
+    Phase 3 contract: drift-sync PRs auto-merge on green CI.
+    ``gh pr create`` itself has no auto-merge flag, so a follow-up
+    ``gh pr merge --auto --squash`` arms the merge once CI clears.
+    A failure to enable auto-merge is logged but **not fatal** — the
+    PR still exists and the operator can merge it manually. This
+    asymmetric tolerance prevents drift PRs from being orphaned by a
+    transient ``gh`` hiccup on the auto-merge step.
+    """
     runner(
         [
             "gh", "pr", "create",
@@ -99,6 +108,26 @@ def _gh_pr_create(
         capture_output=True,
         text=True,
     )
+    # gh resolves the PR by current branch — no need to parse the URL.
+    try:
+        runner(
+            ["gh", "pr", "merge", branch, "--auto", "--squash"],
+            cwd=str(cwd),
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        # Auto-merge is best-effort. Common failure modes: repo-level
+        # auto-merge disabled, branch protection prevents squash, token
+        # lacks permission. Log and continue so the PR is still useful.
+        print(
+            f"apply_drift_pr: enabling auto-merge on {branch} failed "
+            f"(exit {exc.returncode}); PR remains open for manual merge. "
+            f"stderr: {exc.stderr}",
+            file=sys.stderr,
+            flush=True,
+        )
 
 
 def _build_body(

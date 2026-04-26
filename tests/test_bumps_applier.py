@@ -172,6 +172,17 @@ class ApplyFilesTests(unittest.TestCase):
             self.assertEqual(results["bumped_total"], 0)
             self.assertIn(0, results["skipped_targets"])
 
+    def test_non_mapping_target_skipped(self) -> None:
+        """Defensive: a target that isn't a dict is recorded in skipped_targets."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            results = bumps.apply_bump_files(
+                repo_root=root,
+                targets=["not-a-dict", 42],
+            )
+            self.assertEqual(results["bumped_total"], 0)
+            self.assertEqual(sorted(results["skipped_targets"]), [0, 1])
+
     def test_directory_match_skipped(self) -> None:
         """Glob hit that's a directory (not a file) is silently skipped."""
         with tempfile.TemporaryDirectory() as tmp:

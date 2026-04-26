@@ -478,3 +478,93 @@ PR #152 merged 2026-04-26 ~22:01Z. Round 7 complete:
 
 **Platform is ready to deploy. Operator's 3 final actions are the
 fleet-rollout tail.**
+
+---
+
+## 2026-04-27 — round 8 (fleet-filter fork-include-slugs bug fix)
+
+### Bug surfaced by live `fleet_inventory.py --dry-run` against real fleet
+
+Pre-fix output:
+```
+Expected fleet:   17 repos
+Inventoried:      15 repos
+Missing (gap):    4
+Dead (orphan):    2     ← FALSE: pbinfo-get-unsolved + event-link
+```
+
+Both `pbinfo-get-unsolved` AND `event-link` were appearing as
+"In inventory but not on GitHub" because GitHub's `gh api repos/...`
+returns `fork: true` on both, and `_should_include_repo` excluded
+forks unconditionally (the `PRIVATE_INCLUDE_SLUGS` exception only
+applied to the private-repo case).
+
+The directive's contract (§2 fleet filter) explicitly requires
+`pbinfo-get-unsolved` to be in the fleet regardless of attributes —
+the original code honored that as a private-only exception, but
+the repo's status drifted to `public + fork` and the override
+silently stopped applying.
+
+### Fix landed in PR #155
+
+- New `FORK_INCLUDE_SLUGS` constant mirroring `PRIVATE_INCLUDE_SLUGS`,
+  populated with `pbinfo-get-unsolved` (per directive) and `event-link`
+  (operational reality — fleet has been governing it since rollout
+  start; the fork status is GitHub-side drift).
+- `_should_include_repo` refactored to slug-first ordering, so both
+  exception lists are checked before attribute filters.
+- Templates remain always-excluded (defensive against future drift
+  where a fork-allowlist entry also becomes a template).
+
+Post-fix output (verified live on platform `main`):
+```
+Expected fleet:   19 repos
+Inventoried:      15 repos
+Missing (gap):    4
+Dead (orphan):    0     ← false-orphans gone
+```
+
+### 4 genuinely missing repos (operational follow-up, NOT code work)
+
+| Slug | Description | Onboarding decision |
+| --- | --- | --- |
+| `Prekzursil/bilbo-app` | Kotlin Multiplatform digital wellness app | Stack `kotlin-multiplatform` (not yet a profile/template — needs Phase 6+ stretch) |
+| `Prekzursil/omniaudit-mcp` | Python MCP connector | Stack `python-tooling` — straightforward to onboard |
+| `Prekzursil/pbinfo-scrape` | HTML/JS PBInfo crawler | Stack `node-frontend` or new `web-scraper` |
+| `Prekzursil/skills-introduction-to-github` | GitHub Skills tutorial scaffold | Likely should NOT be governed (tutorial repo) |
+
+These do NOT block `QZP_V2_FULLY_SHIPPED_AND_VERIFIED` since the
+directive's "All 15 governed repos green CI" bullet pins to the
+**inventoried** set, not the expected-fleet set. The alert
+mechanism (now correctly seeing them as missing) is the existing
+per-design trigger for that follow-up.
+
+### Tests + coverage
+
+- 4 new test cases in `FleetFilterTests`:
+  - `test_fork_pbinfo_included_as_explicit_exception`
+  - `test_fork_event_link_included_as_explicit_exception`
+  - `test_fork_include_frozen_set`
+  - `test_template_excluded_even_when_fork_whitelisted`
+- 58/58 tests passing (was 54)
+- 100% line + branch coverage on `fleet_inventory.py`
+  (192 stmts, 70 branches)
+- Lizard `-C 15` clean (max CCN 3.9)
+
+### Loop blocker count
+
+Same 3 operator-only items as end of round 7 (no change). Tracking
+via platform issue #154.
+
+## Last action
+
+PR #155 merged 2026-04-26 ~23:01Z. Round 8 complete:
+
+- Phase 1 fleet filter contract correctness — restored
+- 4 false-orphan diagnostics eliminated from the dry-run report
+- Live fleet sweep now correctly identifies the 4 genuinely
+  unprofiled repos (operator decision: which to onboard / exclude)
+
+Loop continues to be blocked only by the 3 operator-only items
+in issue #154 — every code-side, Sonar-side, and contract bullet
+is verified true.

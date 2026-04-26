@@ -1,0 +1,112 @@
+name: Bump Workflow SHAs Wave
+
+# Operator-dispatched fleet sweep. Loops every consumer repo in
+# ``inventory/repos.yml`` and dispatches
+# ``reusable-bump-workflow-shas.yml`` against each, bumping every QZP
+# reusable-workflow ``uses:`` pin to the supplied target SHA. Default
+# is dry-run; the operator must opt into PR-creation by passing
+# ``dry_run=false`` AND a ``DRIFT_SYNC_PAT`` secret.
+
+permissions: {}
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_sha:
+        type: string
+        required: true
+        description: "40-char hex SHA every QZP reusable-workflow pin should be bumped to."
+      dry_run:
+        type: boolean
+        required: false
+        default: true
+        description: "When true, per-repo bump computes diffs but opens no PR."
+      slug_filter:
+        type: string
+        required: false
+        default: ""
+        description: "Optional substring filter — only repos whose slug contains this run."
+
+concurrency:
+  group: bump-workflow-shas-wave
+  cancel-in-progress: false
+
+jobs:
+  resolve-fleet:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      slugs: ${{ steps.plan.outputs.slugs }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install platform dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Enumerate governed repos
+        id: plan
+        env:
+          QZ_SLUG_FILTER: ${{ inputs.slug_filter }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          import yaml
+
+          inventory = yaml.safe_load(
+              Path("inventory/repos.yml").read_text(encoding="utf-8"),
+          ) or {}
+          repos = inventory.get("repos", [])
+          slug_filter = os.environ.get("QZ_SLUG_FILTER", "").strip()
+          slugs = []
+          for entry in repos:
+              if not isinstance(entry, dict):
+                  continue
+              slug = str(entry.get("slug", "")).strip()
+              if not slug:
+                  continue
+              if slug_filter and slug_filter not in slug:
+                  continue
+              # Skip the platform repo itself — it's the source of the
+              # reusable workflows, no SHA pinning to bump.
+              if slug == "Prekzursil/quality-zero-platform":
+                  continue
+              slugs.append(slug)
+          out = os.environ.get("GITHUB_OUTPUT")
+          if out:
+              with open(out, "a", encoding="utf-8") as fh:
+                  fh.write(f"slugs={json.dumps(slugs)}\n")
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a", encoding="utf-8") as fh:
+                  fh.write("## SHA Bump Wave — fleet resolution\n\n")
+                  fh.write(f"- Total repos in inventory: {len(repos)}\n")
+                  fh.write(f"- Selected after filter (excludes platform self): {len(slugs)}\n")
+                  for slug in slugs:
+                      fh.write(f"  - `{slug}`\n")
+          PY
+
+  bump:
+    needs: resolve-fleet
+    if: ${{ needs.resolve-fleet.outputs.slugs != '[]' && needs.resolve-fleet.outputs.slugs != '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        slug: ${{ fromJson(needs.resolve-fleet.outputs.slugs) }}
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    uses: ./.github/workflows/reusable-bump-workflow-shas.yml
+    with:
+      repo_slug: ${{ matrix.slug }}
+      target_sha: ${{ inputs.target_sha }}
+      dry_run: ${{ inputs.dry_run }}
+    secrets:
+      DRIFT_SYNC_PAT: ${{ secrets.DRIFT_SYNC_PAT }}

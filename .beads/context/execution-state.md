@@ -397,3 +397,84 @@ PR #146 merged 2026-04-26 ~21:36Z. Round 5 complete:
 - `verify_v2_deployment.py --all` → exit 0 (39/39 ok)
 
 Loop blocked only by the 3 operator-only steps listed above.
+
+---
+
+## 2026-04-27 — round 7 (Sonar main fully green)
+
+### Sonar BLOCKER S2083 finally cleared
+
+After 2 attempts the post-merge platform-main analysis closed the
+last OPEN security issue (`AZ12OZ5q3D5PhlS90BLb`). Root cause and
+fixes:
+
+| Attempt | PR | Approach | Result |
+| --- | --- | --- | --- |
+| 1 | #145 | helper-only `safe_output_path()` (Path-based) | Sonar's taint analyzer didn't follow the helper inter-procedurally — ISSUE STAYS OPEN |
+| 2 | #150 | inline `str(out_path).startswith(...)` (Path-based) | The check was on `str(out_path)` but the `write_text` SINK used `out_path` (Path) — taint flow saw sanitization on the str variable, not the Path that reached the sink — ISSUE STAYS OPEN |
+| 3 | #152 | `os.path.realpath` + plain `open(out_path_str, ...)` | Sanitized string variable used end-to-end through to the I/O sink — Sonar recognized the sanitization — ISSUE CLOSED ✅ |
+
+### Platform main quality gate (verified 2026-04-27 via REST API)
+
+| Condition | Threshold | Actual | Status |
+| --- | --- | --- | --- |
+| `new_reliability_rating` | ≤ 1 | 1 (A) | OK ✅ |
+| `new_security_rating` | ≤ 1 | 1 (A) | OK ✅ (was 5/E end of round 5) |
+| `new_maintainability_rating` | ≤ 1 | 1 (A) | OK ✅ |
+| `new_coverage` | ≥ 80% | 91.4% | OK ✅ |
+| `new_duplicated_lines_density` | ≤ 3% | 0.2% | OK ✅ |
+| `new_security_hotspots_reviewed` | 100% | 100% | OK ✅ |
+
+**Overall projectStatus: OK.**
+
+### Other absolute-done bullets verified live
+
+- `verify_v2_deployment.py --all` → exit 0, 39/39 ok, zero warnings
+- 4 dashboard pages all HTTP/1.1 200 OK
+  (`https://prekzursil.github.io/quality-zero-platform/{index,coverage,drift,audit}.html`)
+- Zero open `alert:*` issues on platform repo
+- Zero OPEN security issues on platform main
+- Zero security hotspots in TO_REVIEW status (all 4 marked SAFE)
+
+### What's left for `QZP_V2_FULLY_SHIPPED_AND_VERIFIED`
+
+The platform side is complete. The remaining bullets are
+**fleet-wide / operator-only**:
+
+1. **Provision `DRIFT_SYNC_PAT` secret** (verified missing via
+   `gh api repos/Prekzursil/quality-zero-platform/actions/secrets`).
+   Without it, the wave dispatches below run dry-run only.
+2. **Toggle SonarCloud Auto-Analysis OFF on event-link**
+   (`sonar.autoscan.enabled` is INSTANCE-scoped — confirmed UI-only
+   via 4 candidate API endpoints + webservices listing all returning
+   `Unknown url`).
+3. **Dispatch SHA-bump wave** with `dry_run=false` to push platform
+   main fixes to all 14 consumer repos.
+4. **Dispatch drift-sync wave** with `dry_run=false` to align
+   consumer template files.
+
+After (1)-(4), re-run `verify_v2_deployment.py --all`, confirm all
+15 governed repos are green on main + Codecov per-flag rows visible
+on event-link, and the loop's `QZP_V2_FULLY_SHIPPED_AND_VERIFIED`
+completion promise can fire.
+
+### PRs merged this round
+
+| PR | Title |
+| --- | --- |
+| #150 | inline workspace containment (Path-based attempt — didn't satisfy Sonar) |
+| #151 | docs: refresh migration plan status — round 5 complete |
+| #152 | switch S2083 sanitizer to os.path.realpath + open() — succeeded |
+
+## Last action
+
+PR #152 merged 2026-04-26 ~22:01Z. Round 7 complete:
+
+- Sonar main quality gate: OK on every condition
+- Platform code surface fully green
+- 0 open `alert:*` issues; 0 OPEN security issues; 100% hotspots reviewed
+- Verifier passes 39/39
+- Dashboard live with all 4 pages
+
+**Platform is ready to deploy. Operator's 3 final actions are the
+fleet-rollout tail.**

@@ -24,6 +24,17 @@ on:
         type: string
         required: false
         default: main
+      codeql_config_file:
+        type: string
+        required: false
+        default: ""
+        description: |
+          Optional path (relative to the consumer-repo checkout root)
+          to a CodeQL config YAML. Empty string = no config file is
+          passed to ``github/codeql-action/init``. Platform-internal
+          callers pass ``./.github/codeql/codeql-config.yml`` to wire
+          the false-positive suppressions for ``secrets_sync.py``;
+          fleet consumers leave this empty.
 
 jobs:
   resolve-profile:
@@ -117,9 +128,12 @@ jobs:
         with:
           languages: ${{ needs.resolve-profile.outputs.languages_csv }}
           build-mode: ${{ needs.resolve-profile.outputs.build_mode }}
-          # Config file carries per-repo query-filter exclusions for
-          # verified false positives (see file header for rationale).
-          config-file: ./.github/codeql/codeql-config.yml
+          # Config file is OPTIONAL — defaults to empty so consumer
+          # fleet repos (which don't ship the platform-internal
+          # ``codeql-config.yml``) don't error at init. The platform's
+          # own ``codeql.yml`` caller passes ``./.github/codeql/codeql-config.yml``
+          # to wire the false-positive suppressions for ``secrets_sync.py``.
+          config-file: ${{ inputs.codeql_config_file }}
           queries: security-and-quality
 
       - name: Autobuild

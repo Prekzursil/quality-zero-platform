@@ -29,3 +29,8 @@ jobs:
       sha: ${{ github.event.pull_request.head.sha || github.sha }}
       platform_repository: ${{ github.repository }}
       platform_ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      # Platform-internal: wire the false-positive suppressions for
+      # secrets_sync.py via the per-repo config file. Fleet consumers
+      # leave codeql_config_file empty so init doesn't try to read a
+      # file they don't ship.
+      codeql_config_file: ./.github/codeql/codeql-config.yml

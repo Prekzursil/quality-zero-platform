@@ -77,6 +77,30 @@ class ReusableBumpWorkflowShasContract(unittest.TestCase):
                 self.assertNotIn("${{ secrets.", body)
                 self.assertNotIn("${{ github.", body)
 
+    def test_bump_step_passes_target_repo_slug_for_reporting(self) -> None:
+        """JSON report's ``repo`` field reads the explicit target-slug
+        env var, NOT ``GITHUB_REPOSITORY`` (which resolves to the
+        CALLER repo on workflow_call — i.e. the platform, not the
+        consumer being bumped). Cosmetic but important for the
+        artifact's audit trail."""
+        steps = self.doc["jobs"]["bump"]["steps"]
+        bump_steps = [s for s in steps if s.get("id") == "bump"]
+        self.assertEqual(len(bump_steps), 1)
+        env = bump_steps[0].get("env", {}) or {}
+        self.assertIn("BUMP_TARGET_REPO_SLUG", env)
+        self.assertIn("inputs.repo_slug", str(env["BUMP_TARGET_REPO_SLUG"]))
+        # The heredoc body must reference BUMP_TARGET_REPO_SLUG, not
+        # GITHUB_REPOSITORY, when populating the report's repo field.
+        run_body = bump_steps[0].get("run", "")
+        self.assertIn("BUMP_TARGET_REPO_SLUG", run_body)
+        self.assertNotRegex(
+            run_body,
+            r'"repo":\s*os\.environ\.get\(\s*"GITHUB_REPOSITORY"',
+            "report.repo MUST come from BUMP_TARGET_REPO_SLUG, not "
+            "GITHUB_REPOSITORY (which resolves to the caller, not "
+            "the consumer being bumped)",
+        )
+
     def test_bump_step_sets_pythonpath_to_platform_checkout(self) -> None:
         """Platform was checked out at ``platform/``; PYTHONPATH must add it
         so ``from scripts.quality...`` resolves. First wave dispatch

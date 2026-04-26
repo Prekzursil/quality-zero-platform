@@ -95,6 +95,9 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
                     ]
                 },
                 [{"id": 1}],
+                # repo metadata fetch added in the Phase-5 redaction wiring
+                # (see _live_health) — third call returns visibility.
+                {"visibility": "public"},
             ],
         ):
             live = build_admin_dashboard._live_health(
@@ -103,6 +106,7 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
         self.assertEqual(live["default_branch_health"], "success")
         self.assertEqual(live["open_pr_health"], "success")
         self.assertTrue(live["ruleset_present"])
+        self.assertEqual(live["visibility"], "public")
 
     def test_main_uses_live_health_when_token_is_present(self) -> None:
         """Cover main uses live health when token is present."""

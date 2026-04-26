@@ -6,8 +6,19 @@ name: Node 20 -> 24
 
 target:
   - file_glob: "**/.github/workflows/*.yml"
+    # ``yaml_path`` is documentation / future-work for a real yamlpath
+    # evaluator; the in-tree applier today uses the ``replace`` block
+    # below, which keeps the canary executable without depending on a
+    # full yamlpath interpreter. The abstract spec stays so a future
+    # evaluator can be wired against the SAME recipe shape.
     yaml_path: "jobs.*.steps[?.uses contains 'setup-node'].with.node-version"
     value: '24'
+    replace:
+      # Match ``node-version: '20'`` / ``"20"`` (any indent), keep the
+      # surrounding indentation (re.MULTILINE + ^...$ anchors are NOT
+      # used so leading whitespace is preserved by the pattern).
+      pattern: "node-version:\\s*['\\\"]20['\\\"]"
+      replacement: "node-version: '24'"
 
 affects_stacks:
   - fullstack-web

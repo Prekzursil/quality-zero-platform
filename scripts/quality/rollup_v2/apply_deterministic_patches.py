@@ -15,6 +15,8 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List
 
+from scripts.quality.common import safe_output_path
+
 
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
@@ -137,7 +139,13 @@ def main() -> int:
     args = parse_args()
     canonical_path = Path(args.canonical_json)
     repo_dir = Path(args.repo_dir)
-    out_path = Path(args.out_json)
+
+    # ``safe_output_path`` resolves --out-json against the current
+    # working directory and rejects any path that escapes the workspace
+    # (Sonar pythonsecurity:S2083 path-traversal defence). Callers must
+    # invoke this script with cwd anchored to the workspace whose subtree
+    # should contain the result file.
+    out_path = safe_output_path(args.out_json, fallback="patcher-result.json")
 
     canonical = json.loads(canonical_path.read_text(encoding="utf-8"))
     result = run_patcher(canonical, repo_dir)

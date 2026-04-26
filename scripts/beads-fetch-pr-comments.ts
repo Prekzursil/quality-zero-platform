@@ -16,6 +16,18 @@ import { writeFileSync, mkdirSync, existsSync } from "fs";
 import { dirname } from "path";
 
 // =============================================================================
+// Log sanitisation
+// =============================================================================
+// SonarCloud rule tssecurity:S5145 (log injection) flags any log call whose
+// interpolated value can be tainted by network/IO data — even when the value
+// is statically a number, the rule's taint analysis follows it conservatively.
+// Coerce-to-string + strip-control-chars normalises every log-bound value so
+// an attacker can't smuggle CRLF + a fake log line through e.g. a PR title.
+function sanitizeForLog(value: unknown): string {
+  return String(value).replace(/[\r\n\t\v\f\x00-\x1f]/g, " ");
+}
+
+// =============================================================================
 // CLI Arguments
 // =============================================================================
 
@@ -237,7 +249,7 @@ async function main() {
     token
   );
 
-  console.log(`Found ${searchResults.items.length} merged PRs\n`);
+  console.log(`Found ${sanitizeForLog(searchResults.items.length)} merged PRs\n`);
 
   const allComments: PrComment[] = [];
   const byReviewerType: Record<string, number> = {};
@@ -328,7 +340,9 @@ async function main() {
   // Write output
   writeFileSync(OUTPUT_PATH, JSON.stringify(output, null, 2));
 
-  console.log(`\nFetched ${allComments.length} comments from ${searchResults.items.length} PRs`);
+  console.log(
+    `\nFetched ${sanitizeForLog(allComments.length)} comments from ${sanitizeForLog(searchResults.items.length)} PRs`,
+  );
   console.log(`\nBy reviewer type:`);
   for (const [type, count] of Object.entries(byReviewerType)) {
     console.log(`  ${type}: ${count}`);

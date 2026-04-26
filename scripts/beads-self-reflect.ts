@@ -20,6 +20,17 @@
 import { parseArgs } from "util";
 
 // =============================================================================
+// Log sanitisation
+// =============================================================================
+// SonarCloud rule tssecurity:S5145 (log injection) flags any log call whose
+// interpolated value can be tainted by network/IO data. Coerce-to-string +
+// strip-control-chars stops an attacker from smuggling CRLF + a fake log line
+// through e.g. a Slack API error string.
+function sanitizeForLog(value: unknown): string {
+  return String(value).replace(/[\r\n\t\v\f\x00-\x1f]/g, " ");
+}
+
+// =============================================================================
 // CLI Arguments
 // =============================================================================
 
@@ -94,7 +105,7 @@ async function postToSlack(message: string, blocks?: unknown[]): Promise<void> {
 
     const data = await response.json();
     if (!data.ok) {
-      console.error("Slack API error:", data.error);
+      console.error("Slack API error:", sanitizeForLog(data.error));
     }
   } catch (error) {
     console.error("Failed to post to Slack:", error);

@@ -38,6 +38,7 @@ engines:
       - "scripts/quality/alert_dispatch.py"
       - "scripts/quality/bump_rollout.py"
       - "scripts/quality/secrets_sync.py"
+      - "scripts/quality/bump_workflow_shas.py"
 exclude_paths:
   - "generated/**"
   - "tests/**"

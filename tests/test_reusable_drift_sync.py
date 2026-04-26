@@ -9,7 +9,6 @@ artifact-name step landed.
 
 from __future__ import absolute_import
 
-import re
 import unittest
 from pathlib import Path
 

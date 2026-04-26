@@ -1,7 +1,6 @@
 """Golden fixture tests for deterministic rendering (per design §A.9 + §B.3.7 + §B.3.16)."""
 from __future__ import absolute_import
 
-import json
 import sys
 import unittest
 from pathlib import Path

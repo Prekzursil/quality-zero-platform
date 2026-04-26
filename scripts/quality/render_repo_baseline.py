@@ -7,7 +7,7 @@ import argparse
 from pathlib import Path
 import re
 import sys
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import yaml  # type: ignore[import-untyped]
 

@@ -2,15 +2,9 @@
 
 from __future__ import absolute_import
 
-import os
-import runpy
-import sys
-import tempfile
 import unittest
 from argparse import Namespace
 from email.message import Message
-from pathlib import Path
-from typing import List
 from urllib.error import HTTPError
 from unittest.mock import patch
 
@@ -20,11 +14,8 @@ from unittest.mock import Mock
 from scripts.quality.check_codacy_zero import (
     CodacyQuery,
     CodacyRetryConfig,
-    CodacyStatusResult,
-    _build_payload,
     _query_codacy_candidate,
     _query_codacy_open_issues,
-    _write_codacy_report,
 )
 
 

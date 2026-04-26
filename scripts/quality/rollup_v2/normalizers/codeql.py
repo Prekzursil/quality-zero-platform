@@ -11,7 +11,6 @@ from typing import Any, Iterable
 
 from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer
 from scripts.quality.rollup_v2.normalizers._sarif import (
-    SarifTooLargeError,
     check_sarif_size,
     parse_sarif,
 )

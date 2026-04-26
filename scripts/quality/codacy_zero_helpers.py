@@ -7,7 +7,6 @@ from typing import Any, Dict, List, Tuple
 from scripts.quality import codacy_zero_support
 from scripts.quality.codacy_zero_support import (
     CodacyIssuePendingDeps,
-    CodacyPendingMessageDeps,
     CodacyTextDeps,
 )
 

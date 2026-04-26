@@ -17,14 +17,11 @@ from unittest.mock import patch
 
 import scripts.quality.check_codacy_zero as check_codacy_zero
 from scripts.quality import codacy_zero_support
-from unittest.mock import Mock
 from scripts.quality.check_codacy_zero import (
     CodacyQuery,
     CodacyRetryConfig,
     CodacyStatusResult,
     _build_payload,
-    _query_codacy_candidate,
-    _query_codacy_open_issues,
     _write_codacy_report,
 )
 

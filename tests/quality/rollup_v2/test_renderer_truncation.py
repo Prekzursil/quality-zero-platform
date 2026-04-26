@@ -11,10 +11,6 @@ if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from scripts.quality.rollup_v2.renderer import (
-    _ARTIFACT_FALLBACK_SENTENCE,
-    _MAX_CHARS,
-    _MAX_FINDINGS_BEFORE_COLLAPSE,
-    _MAX_VISIBLE_FILES,
     render_markdown,
 )
 from scripts.quality.rollup_v2.schema.corroborator import Corroborator

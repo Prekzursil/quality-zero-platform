@@ -5,7 +5,6 @@ objects, and a 50MB guard to reject oversized artifacts before parsing.
 """
 from __future__ import absolute_import
 
-import json
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 

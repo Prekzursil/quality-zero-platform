@@ -3,13 +3,8 @@
 from __future__ import absolute_import
 
 import argparse
-import os
-import runpy
-import sys
-import tempfile
 import unittest
 from argparse import Namespace
-from pathlib import Path
 from unittest.mock import patch
 
 from scripts.quality import check_sonar_zero

@@ -4,37 +4,22 @@
 from __future__ import absolute_import
 
 import contextlib
-import io
-import json
 import os
-import tempfile
 import unittest
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, List
 from unittest.mock import patch
 
 from scripts.quality import profile_coverage_normalization
 from scripts.quality.common import (
-    ReportSpec,
     _deep_merge,
-    _resolve_report_spec,
-    dedupe_strings,
     finalize_vendors,
-    infer_coverage_inputs,
-    merge_required_contexts,
     normalize_codex_environment,
     normalize_coverage,
     normalize_coverage_assert_mode,
-    normalize_coverage_inputs,
     normalize_deps,
     normalize_issue_policy,
     normalize_coverage_setup,
     normalize_java_setup,
-    normalize_required_contexts,
-    safe_output_path,
-    utc_timestamp,
-    write_report,
 )
 
 

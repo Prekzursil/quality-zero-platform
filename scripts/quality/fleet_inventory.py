@@ -37,6 +37,20 @@ PRIVATE_INCLUDE_SLUGS: FrozenSet[str] = frozenset(
     }
 )
 
+# The canonical list of fork-repo exceptions. The directive's fleet filter
+# specifies "all non-fork Prekzursil public repos + pbinfo-get-unsolved",
+# so ``pbinfo-get-unsolved`` MUST be included even though GitHub reports it
+# as a fork. ``event-link`` is included for the same operational reason —
+# the fleet has been actively governing it for the entire QZP v2 rollout
+# and the user has invested in its profile + workflows. Kept tiny and
+# explicit; adding a new fork-exception requires a code change + PR.
+FORK_INCLUDE_SLUGS: FrozenSet[str] = frozenset(
+    {
+        "Prekzursil/pbinfo-get-unsolved",
+        "Prekzursil/event-link",
+    }
+)
+
 
 @dataclass(frozen=True)
 class FleetDiff:
@@ -70,15 +84,16 @@ def _slug_from_github_repo(repo: Mapping[str, Any]) -> str | None:
 
 def _should_include_repo(repo: Mapping[str, Any]) -> bool:
     """Apply the fleet filter to one ``gh api`` repo record."""
-    if repo.get("fork"):
-        return False
-    if repo.get("is_template"):
-        return False
     slug = _slug_from_github_repo(repo)
     if slug is None:
         return False
-    private = bool(repo.get("private"))
+    if repo.get("is_template"):
+        return False
+    # Forks are excluded unless explicitly whitelisted.
+    if repo.get("fork") and slug not in FORK_INCLUDE_SLUGS:
+        return False
     # Private repos are excluded unless explicitly whitelisted.
+    private = bool(repo.get("private"))
     return not (private and slug not in PRIVATE_INCLUDE_SLUGS)
 
 

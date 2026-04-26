@@ -16,6 +16,7 @@ from typing import Any, List, Sequence, Tuple
 
 from scripts.quality.fleet_inventory import (
     ALERT_LABEL_NOT_PROFILED,
+    FORK_INCLUDE_SLUGS,
     FleetDiff,
     PRIVATE_INCLUDE_SLUGS,
     _build_arg_parser,
@@ -101,6 +102,53 @@ class BuildExpectedFleetTests(unittest.TestCase):
         """The exception list must be immutable to prevent silent edits."""
         self.assertIsInstance(PRIVATE_INCLUDE_SLUGS, frozenset)
         self.assertIn("Prekzursil/pbinfo-get-unsolved", PRIVATE_INCLUDE_SLUGS)
+
+    def test_fork_pbinfo_included_as_explicit_exception(self) -> None:
+        """``pbinfo-get-unsolved`` is included even when GitHub reports it as a fork.
+
+        Real-fleet bug surfaced 2026-04-27: GitHub now returns
+        ``fork: true`` on this repo (was the original detached-fork case),
+        so the fleet filter excluded it and the dry-run sweep reported it
+        as orphan-inventory. The directive's contract (§2 fleet filter:
+        "all non-fork Prekzursil public repos + pbinfo-get-unsolved")
+        explicitly includes this slug regardless of attributes.
+        """
+        repos = [_repo(name="pbinfo-get-unsolved", fork=True)]
+        self.assertEqual(
+            build_expected_fleet(repos),
+            ["Prekzursil/pbinfo-get-unsolved"],
+        )
+
+    def test_fork_event_link_included_as_explicit_exception(self) -> None:
+        """``event-link`` is included even when GitHub reports it as a fork.
+
+        The fleet has been actively governing event-link for the entire
+        QZP v2 rollout. Whatever caused GitHub to flag it as a fork is
+        operational drift, not a contract change — the slug stays in the
+        explicit fork allowlist.
+        """
+        repos = [_repo(name="event-link", fork=True)]
+        self.assertEqual(
+            build_expected_fleet(repos),
+            ["Prekzursil/event-link"],
+        )
+
+    def test_fork_include_frozen_set(self) -> None:
+        """The fork-exception list must be immutable to prevent silent edits."""
+        self.assertIsInstance(FORK_INCLUDE_SLUGS, frozenset)
+        self.assertIn("Prekzursil/pbinfo-get-unsolved", FORK_INCLUDE_SLUGS)
+        self.assertIn("Prekzursil/event-link", FORK_INCLUDE_SLUGS)
+
+    def test_template_excluded_even_when_fork_whitelisted(self) -> None:
+        """Templates always lose, even if fork-whitelisted.
+
+        Defends against future drift where a fork-allowlist entry also
+        becomes a template — templates are never governed.
+        """
+        repos = [
+            _repo(name="pbinfo-get-unsolved", fork=True, is_template=True),
+        ]
+        self.assertEqual(build_expected_fleet(repos), [])
 
 
 class LoadInventorySlugsTests(unittest.TestCase):

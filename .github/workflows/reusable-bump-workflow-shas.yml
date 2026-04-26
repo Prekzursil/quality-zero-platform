@@ -78,6 +78,9 @@ jobs:
         id: bump
         env:
           BUMP_TARGET_SHA: ${{ inputs.target_sha }}
+          # Platform package was checked out at ``./platform/``, so add
+          # that to PYTHONPATH so ``from scripts.quality...`` resolves.
+          PYTHONPATH: ${{ github.workspace }}/platform
         run: |
           python - <<'PY'
           import json
@@ -90,7 +93,6 @@ jobs:
           wf_dir = repo_root / ".github" / "workflows"
           if not wf_dir.is_dir():
               print("repo has no .github/workflows directory — nothing to bump")
-              return_code = 0
               with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
                   fh.write("bumped_total=0\n")
                   fh.write("changed_files=[]\n")

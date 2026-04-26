@@ -105,6 +105,49 @@ class ReusableBumpsWorkflowTests(unittest.TestCase):
         self.assertIn("dry_run", with_block)
         self.assertIn("matrix.slug", str(with_block.get("repo_slug", "")))
 
+    def test_stage_2_gated_on_stage_1_success(self) -> None:
+        """Stage 2 (full-fleet rollout) only runs when stage-1 finishes
+        SUCCESS. A failed staging matrix entry must NOT silently roll
+        out to the rest of the fleet."""
+        jobs = self.doc["jobs"]
+        self.assertIn("stage-2", jobs)
+        stage_2 = jobs["stage-2"]
+        # Stage 2 needs the plan + stage-1 results.
+        self.assertIn("plan", stage_2.get("needs", []))
+        self.assertIn("stage-1", stage_2.get("needs", []))
+        # Conditional must reference stage-1.result == 'success'.
+        cond = str(stage_2.get("if", ""))
+        self.assertIn("stage-1.result", cond)
+        self.assertIn("'success'", cond)
+        # Matrix over the rollout slugs.
+        matrix = stage_2.get("strategy", {}).get("matrix", {})
+        self.assertIn("slug", matrix)
+        # Same applier reusable workflow.
+        self.assertIn("reusable-bump-apply.yml", stage_2.get("uses", ""))
+
+    def test_rollback_opens_fleet_bump_fail_alert(self) -> None:
+        """Rollback job fires on stage-1 failure (and only when not
+        dry-running) to open ``alert:fleet-bump-fail`` on the platform
+        repo. The Python heredoc references ``alerts.AlertType.FLEET_BUMP_FAIL``."""
+        jobs = self.doc["jobs"]
+        self.assertIn("rollback", jobs)
+        rollback = jobs["rollback"]
+        cond = str(rollback.get("if", ""))
+        self.assertIn("stage-1.result", cond)
+        self.assertIn("'failure'", cond)
+        self.assertIn("!inputs.dry_run", cond)
+        # Permissions narrow: contents:read + issues:write only.
+        perms = rollback.get("permissions", {})
+        self.assertEqual(perms.get("contents"), "read")
+        self.assertEqual(perms.get("issues"), "write")
+        # The heredoc imports alerts and references FLEET_BUMP_FAIL.
+        rollback_text = "\n".join(
+            step.get("run", "") for step in rollback.get("steps", [])
+            if isinstance(step, dict)
+        )
+        self.assertIn("FLEET_BUMP_FAIL", rollback_text)
+        self.assertIn("from scripts.quality import alerts", rollback_text)
+
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

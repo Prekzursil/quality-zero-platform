@@ -143,3 +143,92 @@ jobs:
       dry_run: ${{ inputs.dry_run }}
     secrets:
       DRIFT_SYNC_PAT: ${{ secrets.DRIFT_SYNC_PAT }}
+
+  stage-2:
+    # Stage 2 rolls the recipe out to the remaining affected fleet
+    # (every repo whose stack is in ``affects_stacks`` minus the
+    # already-staged subset). Gated on stage-1 SUCCESS — if any
+    # staging-wave matrix entry failed, this job does NOT run and
+    # the rollback job below picks up instead.
+    needs: [plan, stage-1]
+    if: |
+      ${{
+        needs.plan.outputs.rollout != '[]'
+        && needs.plan.outputs.rollout != ''
+        && needs.stage-1.result == 'success'
+      }}
+    strategy:
+      fail-fast: false
+      matrix:
+        slug: ${{ fromJson(needs.plan.outputs.rollout) }}
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    uses: ./.github/workflows/reusable-bump-apply.yml
+    with:
+      repo_slug: ${{ matrix.slug }}
+      recipe_path: ${{ inputs.recipe_path }}
+      dry_run: ${{ inputs.dry_run }}
+    secrets:
+      DRIFT_SYNC_PAT: ${{ secrets.DRIFT_SYNC_PAT }}
+
+  rollback:
+    # Rollback fires when stage-1 fails (one or more staging repos
+    # couldn't apply the bump). Opens an ``alert:fleet-bump-fail``
+    # issue on the platform repo with a summary of which staging
+    # repos failed. The actual revert of the in-flight PRs is left
+    # to the operator (the staging PRs are isolated branches on
+    # consumer repos; merging them is gated on consumer-side review
+    # so a "rollback" of unmerged-PRs is mostly cosmetic).
+    needs: [plan, stage-1]
+    if: ${{ needs.stage-1.result == 'failure' && !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install platform dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Open fleet-bump-fail alert
+        env:
+          BUMP_RECIPE_PATH: ${{ inputs.recipe_path }}
+          BUMP_RECIPE_NAME: ${{ needs.plan.outputs.recipe_name }}
+          BUMP_STAGING: ${{ needs.plan.outputs.staging }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from scripts.quality import alerts
+
+          recipe_name = os.environ.get("BUMP_RECIPE_NAME", "").strip()
+          recipe_path = os.environ.get("BUMP_RECIPE_PATH", "").strip()
+          staging_json = os.environ.get("BUMP_STAGING", "[]").strip() or "[]"
+          try:
+              staging = json.loads(staging_json)
+          except json.JSONDecodeError:
+              staging = []
+
+          subject = recipe_name or recipe_path or "<unknown-recipe>"
+          body = (
+              f"Bump recipe **{recipe_name or recipe_path}** failed CI in "
+              f"its staging wave. Staging repos targeted by the recipe: "
+              f"{', '.join(f'`{s}`' for s in staging) or '_(none)_'}. "
+              f"Investigate the failed staging job(s), revert the recipe "
+              f"file commit if needed, and re-dispatch ``reusable-bumps.yml`` "
+              f"after the underlying issue is fixed."
+          )
+          alerts.open_alert_issue(
+              "Prekzursil/quality-zero-platform",
+              alert_type=alerts.AlertType.FLEET_BUMP_FAIL,
+              subject=subject,
+              body=body,
+          )
+          PY

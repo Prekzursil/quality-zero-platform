@@ -330,22 +330,63 @@ class CLITests(unittest.TestCase):
                 encoding="utf-8",
             )
 
+            # ``safe_output_path`` (Sonar S2083 defence in main()) resolves
+            # the --out-json argument against ``Path.cwd()`` and rejects
+            # anything that escapes that root. Chdir into tmp so the
+            # relative path resolves inside the workspace; restore cwd on
+            # the way out so the fixture cannot leak across tests.
             out_path = Path(tmp) / "result.json"
-            with patch(
-                "sys.argv",
-                [
-                    "apply_deterministic_patches.py",
-                    "--canonical-json", str(canonical_path),
-                    "--repo-dir", str(repo_dir),
-                    "--out-json", str(out_path),
-                ],
-            ):
-                exit_code = main()
+            original_cwd = os.getcwd()
+            try:
+                os.chdir(tmp)
+                with patch(
+                    "sys.argv",
+                    [
+                        "apply_deterministic_patches.py",
+                        "--canonical-json", str(canonical_path),
+                        "--repo-dir", str(repo_dir),
+                        "--out-json", "result.json",
+                    ],
+                ):
+                    exit_code = main()
+            finally:
+                os.chdir(original_cwd)
             self.assertEqual(exit_code, 0)
             self.assertTrue(out_path.exists())
             result = json.loads(out_path.read_text(encoding="utf-8"))
             self.assertEqual(result["applied_count"], 0)
             self.assertEqual(result["skipped_count"], 0)
+
+
+    def test_main_rejects_path_traversal_escape(self) -> None:
+        """``safe_output_path`` MUST reject --out-json values that escape cwd.
+
+        The Sonar S2083 fix relies on the fact that an attacker-supplied
+        ``--out-json=../../etc/passwd`` cannot reach the workspace. This
+        test exercises that rejection path so a future refactor that
+        accidentally drops ``safe_output_path`` is caught here.
+        """
+        from scripts.quality.rollup_v2.apply_deterministic_patches import main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            original_cwd = os.getcwd()
+            try:
+                os.chdir(tmp)
+                # Escape the workspace via leading ``..`` components.
+                with patch(
+                    "sys.argv",
+                    [
+                        "apply_deterministic_patches.py",
+                        "--canonical-json", "canonical.json",
+                        "--repo-dir", ".",
+                        "--out-json", "../../escape.json",
+                    ],
+                ):
+                    with self.assertRaises(ValueError) as ctx:
+                        main()
+                self.assertIn("escapes workspace root", str(ctx.exception))
+            finally:
+                os.chdir(original_cwd)
 
 
 if __name__ == "__main__":

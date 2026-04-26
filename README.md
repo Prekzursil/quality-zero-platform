@@ -1,7 +1,14 @@
 # quality-zero-platform
 
-`quality-zero-platform` is the personal-account control plane for hybrid ratchet plus strict-zero governance.
-It replaces the old queue/template baseline with reusable workflows, shared quality scripts, repo metadata, ruleset payload generation, provider-admin browser bootstrap helpers, GitHub-native admin or dashboard surfaces, aggregated PR rollups, and trusted-runner Codex remediation contracts.
+`quality-zero-platform` (QZP) is the personal-account control plane for hybrid ratchet plus strict-zero governance.
+It replaces the old queue/template baseline with reusable workflows, shared quality scripts, repo metadata, ruleset payload generation, provider-admin browser bootstrap helpers, GitHub-native admin/dashboard surfaces, aggregated PR rollups, and trusted-runner Codex remediation contracts.
+
+> [!IMPORTANT]
+> **Where to start:**
+> - **Adding a new repo to the fleet?** → [`docs/ONBOARDING.md`](docs/ONBOARDING.md)
+> - **Choosing gates / thresholds?** → [`docs/QUALITY-GATES.md`](docs/QUALITY-GATES.md)
+> - **Running fleet-wide operations?** → [`docs/OPERATOR-RUNBOOK.md`](docs/OPERATOR-RUNBOOK.md)
+> - **Full architecture reference?** → [`docs/QZP-V2-DESIGN.md`](docs/QZP-V2-DESIGN.md)
 
 ## What This Repo Owns
 
@@ -16,23 +23,9 @@ It replaces the old queue/template baseline with reusable workflows, shared qual
 
 ## Governed Repositories
 
-The current governed surface covers 13 repositories:
+The current governed surface (per [`inventory/repos.yml`](inventory/repos.yml)) covers 15 repositories. Run `yq '.repos[].slug' inventory/repos.yml` for the current list; this README intentionally does not duplicate it to avoid drift.
 
-- `Prekzursil/Airline-Reservations-System`
-- `Prekzursil/DevExtreme-Filter-Go-Language`
-- `Prekzursil/event-link`
-- `Prekzursil/momentstudio`
-- `Prekzursil/Personal-Finance-Management`
-- `Prekzursil/pbinfo-get-unsolved`
-- `Prekzursil/quality-zero-platform`
-- `Prekzursil/Reframe`
-- `Prekzursil/SWFOC-Mod-Menu`
-- `Prekzursil/Star-Wars-Galactic-Battlegrounds-Save-Game-Editor`
-- `Prekzursil/TanksFlashMobile`
-- `Prekzursil/WebCoder`
-- `Prekzursil/env-inspector`
-
-Phase-1 compatibility still preserves the established public check names for the original strict-zero cohort while `event-link`, `momentstudio`, and `quality-zero-platform` join the governed inventory.
+Phase-1 compatibility preserves the established public check names for the original strict-zero cohort while later cohorts (`event-link`, `momentstudio`, `quality-zero-platform`) join the governed inventory through the bootstrap flow described in [`docs/ONBOARDING.md`](docs/ONBOARDING.md).
 
 ## Control-Plane Flow
 
@@ -45,11 +38,27 @@ Phase-1 compatibility still preserves the established public check names for the
 
 ## Hybrid Ratchet
 
-The control plane now distinguishes onboarding and convergence:
+The control plane distinguishes onboarding and convergence:
 
 - PRs can use `issue_policy.mode: ratchet` so Sonar and Codacy enforce no-new-debt semantics while a repo still carries legacy backlog.
 - Protected-branch convergence stays strict once the repo is fully onboarded.
-- Coverage remains whole-project 100 by default, while QLTY still enforces patch coverage and total non-regression.
+- Coverage remains whole-project 100% by default, while QLTY still enforces patch coverage and total non-regression.
+
+See [`docs/QUALITY-GATES.md`](docs/QUALITY-GATES.md) for the full mode-and-severity matrix.
+
+## QZP v2 (Phase 1–5) Capabilities
+
+Beyond the original strict-zero gate flow, v2 adds:
+
+- **Schema v2 profiles** with explicit per-scanner severity, hybrid mode (`shadow` / `ratchet` / `absolute`), and stack inheritance — see [`profiles/stacks/`](profiles/stacks/) and [`profiles/repos/`](profiles/repos/).
+- **Codecov per-flag uploads** for multi-component repos (`event-link` runs separate `backend` and `ui` flags).
+- **Drift-sync templates** that regenerate consumer CI files from stack templates and open PRs when they drift; fleet-wide dispatcher in [`drift-sync-wave.yml`](.github/workflows/drift-sync-wave.yml).
+- **Severity rollup + break-glass labels** — PR rollup honors per-scanner severity; admins can apply `bypass:break-glass` or `skip:<scanner>` labels with audit logging.
+- **Known-issues registry** so Codex remediation prompts can include “don't refile this” context.
+- **Bootstrap workflow** — onboard a new repo with a starter profile + 3-green-shadow-runs gate before flipping `mode.phase` from `shadow` to `absolute|ratchet`. See [`reusable-bootstrap-repo.yml`](.github/workflows/reusable-bootstrap-repo.yml).
+- **Bumps recipe pipeline** — fleet-wide bumps (Node 20→24, Python minor versions, etc.) flow through staged dispatch with rollback, see [`reusable-bumps.yml`](.github/workflows/reusable-bumps.yml).
+- **Admin dashboard** at `https://prekzursil.github.io/quality-zero-platform/` — repo heatmap, coverage trend, drift status, bypass audit feed.
+- **Alerts subsystem** — every operationally relevant condition (drift, secret-missing, fleet-bump-fail, etc.) dispatches a labelled GitHub issue via [`alerts.py`](scripts/quality/alerts.py); cron sweep in [`scheduled-alerts.yml`](.github/workflows/scheduled-alerts.yml).
 
 ## Admin Dashboard
 

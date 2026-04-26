@@ -140,18 +140,15 @@ def main() -> int:
     repo_dir = Path(args.repo_dir)
 
     # Inline path-traversal sanitisation (Sonar pythonsecurity:S2083).
-    # Sonar's taint analyser doesn't follow ``safe_output_path()`` from
-    # ``scripts.quality.common`` inter-procedurally, so the validation
-    # is performed inline here using the explicit ``str().startswith()``
-    # pattern Sonar recognises as a containment check. Resolves the raw
-    # arg against ``Path.cwd()`` (Python's ``Path.__truediv__`` discards
-    # the left operand when the right operand is absolute, so this
-    # single expression handles both relative and absolute inputs), then
-    # rejects anything that escapes that root.
-    workspace_root = Path.cwd().resolve()
-    out_path = (workspace_root / Path(args.out_json)).resolve(strict=False)
-    workspace_root_str = str(workspace_root)
-    out_path_str = str(out_path)
+    # Uses the os.path.realpath + str.startswith pattern that SonarPython's
+    # taint analyser canonically recognises as breaking the taint chain.
+    # The previous pathlib-based check (PR #150) wasn't followed by Sonar's
+    # taint propagation through Path() conversions; staying in str/os.path
+    # land end-to-end makes the validation visible.
+    workspace_root_str = os.path.realpath(os.getcwd())
+    out_path_str = os.path.realpath(
+        os.path.join(os.getcwd(), args.out_json),
+    )
     if not out_path_str.startswith(workspace_root_str + os.sep):
         raise ValueError(
             f"--out-json escapes workspace root: {out_path_str}",
@@ -160,11 +157,12 @@ def main() -> int:
     canonical = json.loads(canonical_path.read_text(encoding="utf-8"))
     result = run_patcher(canonical, repo_dir)
 
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(
-        json.dumps(result, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    # File I/O via os/builtin open() — keeps taint flow on the sanitised
+    # string variable rather than crossing through pathlib (which Sonar's
+    # taint analyser appears to lose track of).
+    os.makedirs(os.path.dirname(out_path_str) or ".", exist_ok=True)
+    with open(out_path_str, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(result, indent=2) + "\n")
 
     return 0
 

@@ -77,6 +77,18 @@ class ReusableBumpWorkflowShasContract(unittest.TestCase):
                 self.assertNotIn("${{ secrets.", body)
                 self.assertNotIn("${{ github.", body)
 
+    def test_bump_step_sets_pythonpath_to_platform_checkout(self) -> None:
+        """Platform was checked out at ``platform/``; PYTHONPATH must add it
+        so ``from scripts.quality...`` resolves. First wave dispatch
+        (run 24965679041) failed 14/14 with ``ModuleNotFoundError: No
+        module named 'scripts'`` because this wiring was missing."""
+        steps = self.doc["jobs"]["bump"]["steps"]
+        bump_steps = [s for s in steps if s.get("id") == "bump"]
+        self.assertEqual(len(bump_steps), 1)
+        env = bump_steps[0].get("env", {}) or {}
+        self.assertIn("PYTHONPATH", env)
+        self.assertIn("platform", str(env["PYTHONPATH"]))
+
 
 class WaveDispatcherContract(unittest.TestCase):
     """Fleet-wide bump dispatcher invariants."""

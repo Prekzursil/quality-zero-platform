@@ -1,0 +1,174 @@
+name: Reusable Bump Workflow SHAs
+
+# QZP v2 Phase 5 follow-up — bump every reusable-workflow ``uses:``
+# pin in a single consumer repo to ``target_sha`` and open a PR.
+# Fan-out (``bump-workflow-shas-wave.yml``) loops the inventory and
+# calls this once per repo.
+#
+# Per-repo workflow because each consumer may have a different set
+# of caller workflow files; ``bump_workflow_shas.py`` walks
+# ``.github/workflows/`` per checkout and only rewrites the QZP
+# pins (skipping ``actions/checkout@v4`` and friends).
+
+permissions: {}
+
+on:
+  workflow_call:
+    inputs:
+      repo_slug:
+        type: string
+        required: true
+        description: "owner/name of the target consumer repo."
+      target_sha:
+        type: string
+        required: true
+        description: "40-char hex SHA every QZP reusable-workflow pin should be bumped to."
+      default_branch:
+        type: string
+        required: false
+        default: main
+      dry_run:
+        type: boolean
+        required: false
+        default: true
+        description: "When true, compute bumps but do not open a PR."
+    secrets:
+      DRIFT_SYNC_PAT:
+        required: false
+        description: "Fine-grained PAT with pull-requests:write on the target repo. Absent = dry-run only."
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: platform
+          persist-credentials: false
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.repo_slug }}
+          ref: ${{ inputs.default_branch }}
+          path: repo
+          token: ${{ secrets.DRIFT_SYNC_PAT || github.token }}
+          persist-credentials: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install platform dependencies
+        run: python -m pip install -r platform/requirements-dev.txt
+
+      - name: Compute artifact-safe slug
+        id: artifact_name
+        env:
+          REPO_SLUG: ${{ inputs.repo_slug }}
+        run: |
+          set -euo pipefail
+          slug="${REPO_SLUG:-unknown}"
+          safe="${slug//\//__}"
+          printf 'slug_safe=%s\n' "$safe" >> "$GITHUB_OUTPUT"
+
+      - name: Bump SHAs (dry-run)
+        id: bump
+        env:
+          BUMP_TARGET_SHA: ${{ inputs.target_sha }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from scripts.quality.bump_workflow_shas import bump_workflow_files
+
+          target = os.environ["BUMP_TARGET_SHA"].strip()
+          repo_root = Path(os.environ["GITHUB_WORKSPACE"]) / "repo"
+          wf_dir = repo_root / ".github" / "workflows"
+          if not wf_dir.is_dir():
+              print("repo has no .github/workflows directory — nothing to bump")
+              return_code = 0
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+                  fh.write("bumped_total=0\n")
+                  fh.write("changed_files=[]\n")
+              raise SystemExit(0)
+
+          files = {
+              p.name: p.read_text(encoding="utf-8")
+              for p in sorted(wf_dir.glob("*.yml"))
+          }
+          results = bump_workflow_files(files, target_sha=target)
+
+          changed = []
+          for name, r in results.items():
+              if r["bumped"]:
+                  (wf_dir / name).write_text(r["new_text"], encoding="utf-8")
+                  changed.append({"file": name, "bumps": r["bumped"]})
+
+          # Emit a JSON report as workflow artifact + step output.
+          report = {
+              "repo": os.environ.get("GITHUB_REPOSITORY", ""),
+              "target_sha": target,
+              "files": changed,
+              "bumped_total": sum(c["bumps"] for c in changed),
+          }
+          report_path = Path(os.environ["RUNNER_TEMP"]) / "sha-bump.json"
+          report_path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+          print(f"Wrote {report_path}")
+
+          out = os.environ.get("GITHUB_OUTPUT")
+          if out:
+              with open(out, "a", encoding="utf-8") as fh:
+                  fh.write(f"bumped_total={report['bumped_total']}\n")
+                  fh.write(f"changed_files={json.dumps([c['file'] for c in changed])}\n")
+
+          summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary_path:
+              with open(summary_path, "a", encoding="utf-8") as fh:
+                  fh.write(f"## Bump SHAs — {os.environ.get('GITHUB_REPOSITORY','?')}\n\n")
+                  fh.write(f"- Target SHA: `{target}`\n")
+                  fh.write(f"- Files changed: {len(changed)}\n")
+                  fh.write(f"- Total pins bumped: {report['bumped_total']}\n")
+                  for c in changed:
+                      fh.write(f"  - `{c['file']}` ({c['bumps']} pin(s))\n")
+          PY
+
+      - name: Upload bump report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sha-bump-${{ steps.artifact_name.outputs.slug_safe }}
+          path: ${{ runner.temp }}/sha-bump.json
+          if-no-files-found: ignore
+
+      - name: Open bump PR on consumer repo
+        if: ${{ !inputs.dry_run && steps.bump.outputs.bumped_total != '0' && env.DRIFT_SYNC_PAT_PRESENT == 'true' }}
+        env:
+          REPO_SLUG: ${{ inputs.repo_slug }}
+          DEFAULT_BRANCH: ${{ inputs.default_branch }}
+          TARGET_SHA: ${{ inputs.target_sha }}
+          BUMPED_TOTAL: ${{ steps.bump.outputs.bumped_total }}
+          GH_TOKEN: ${{ secrets.DRIFT_SYNC_PAT }}
+          DRIFT_SYNC_PAT_PRESENT: ${{ secrets.DRIFT_SYNC_PAT != '' }}
+        working-directory: repo
+        run: |
+          set -euo pipefail
+          short_sha="${TARGET_SHA:0:10}"
+          branch_name="qzp/bump-workflow-shas-${short_sha}"
+          git config user.email "platform-bot@quality-zero.local"
+          git config user.name "quality-zero-platform sha-bumper"
+          git checkout -b "$branch_name"
+          git add .github/workflows
+          git commit -m "fix(ci): bump QZP reusable-workflow SHAs to platform main ${short_sha}
+
+          ${BUMPED_TOTAL} pins bumped via reusable-bump-workflow-shas.yml.
+          Target: Prekzursil/quality-zero-platform@${TARGET_SHA}"
+          git push -u origin "$branch_name"
+          gh pr create \
+            --title "fix(ci): bump QZP reusable-workflow SHAs to platform main ${short_sha}" \
+            --body "Automated SHA bump from \`reusable-bump-workflow-shas.yml\`. ${BUMPED_TOTAL} pins moved to \`Prekzursil/quality-zero-platform@${TARGET_SHA}\`. Review the diff for any unexpected changes; the bumper only rewrites \`Prekzursil/quality-zero-platform/.github/workflows/<name>.yml@<old-sha>\` references." \
+            --label "qzp-bump-workflow-shas" \
+            --base "$DEFAULT_BRANCH" || true

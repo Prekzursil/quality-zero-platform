@@ -74,26 +74,51 @@ def infer_required_sources(raw_coverage: Mapping[str, Any] | None) -> List[str]:
     return dedupe_strings(inferred)
 
 
-def normalize_coverage_inputs(raw_inputs: Any) -> List[Dict[str, str]]:
-    """Normalize raw coverage input mappings into the shared schema."""
+def normalize_coverage_inputs(raw_inputs: Any) -> List[Dict[str, Any]]:
+    """Normalize raw coverage input mappings into the shared schema.
+
+    Always emits ``format``, ``name``, ``path``. Optional fields are
+    passed through ONLY when present on the raw input:
+
+    * ``flag``       — Phase 2 Codecov per-flag upload identifier.
+                       Required by reusable-codecov-analytics.yml.
+    * ``sources``    — list of source-root globs used by drift-sync
+                       templates (``codecov.yml.j2`` in particular).
+    * ``min_percent``— per-input coverage threshold override.
+
+    Filtering rule unchanged: drop non-dict entries and entries
+    without xml/lcov format or with empty name/path.
+    """
     if not isinstance(raw_inputs, list):
         return []
 
-    normalized_items: List[Dict[str, str]] = []
+    normalized_items: List[Dict[str, Any]] = []
     for item in raw_inputs:
         if not isinstance(item, dict):
             continue
-        normalized_item = {
+        normalized_item: Dict[str, Any] = {
             "format": str(item.get("format", "")).strip().lower(),
             "name": str(item.get("name", "")).strip(),
             "path": str(item.get("path", "")).strip(),
         }
         if (
-            normalized_item["format"] in {"xml", "lcov"}
-            and normalized_item["name"]
-            and normalized_item["path"]
+            normalized_item["format"] not in {"xml", "lcov"}
+            or not normalized_item["name"]
+            or not normalized_item["path"]
         ):
-            normalized_items.append(normalized_item)
+            continue
+        if "flag" in item:
+            normalized_item["flag"] = str(item["flag"]).strip()
+        if "sources" in item and isinstance(item["sources"], list):
+            normalized_item["sources"] = [
+                str(s).strip() for s in item["sources"] if str(s).strip()
+            ]
+        if "min_percent" in item:
+            try:
+                normalized_item["min_percent"] = float(item["min_percent"])
+            except (TypeError, ValueError):
+                pass
+        normalized_items.append(normalized_item)
     return normalized_items
 
 

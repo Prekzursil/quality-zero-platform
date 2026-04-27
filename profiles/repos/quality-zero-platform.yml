@@ -3,16 +3,17 @@ version: 2
 stack: python-tooling
 mode:
   phase: absolute
-# The platform's OWN CI self-tests against the same zero-gate scanners it
-# provides to consumer repos. But the platform has 838 Codacy / 1116
-# DeepSource / 110 Sonar issues accumulated before governance landed —
-# fixing them all is out of scope for the QZP v2 rollout. Set
-# ``issue_policy.mode: audit`` so those gates are INFORMATIONAL on the
-# platform itself; consumer repos stay on ``zero`` via the stack common
-# template. See docs/QZP-V2-DESIGN.md — this is a deliberate policy
-# divergence for the self-hosted case, not a softening of the product.
+# Self-governance contract: the platform MUST hold itself to the same
+# zero-issue standard it enforces on consumer repos. The previous
+# ``mode: audit`` exemption (motivated by 800+ pre-existing issues in
+# Codacy/DeepSource/QLTY) was a violation of that contract — it made
+# the gate report green while findings still existed, which broke
+# trust in every consumer-side gate that inherited from this profile's
+# semantics. Operator directive 2026-04-27: gates only go green when
+# the issue count is literally zero on every platform; no escape
+# hatches for the governing repo.
 issue_policy:
-  mode: audit
+  mode: zero
 scanners:
   # Every scanner is severity: block on the platform per Phase 5
   # self-governance contract. Only socket_project_report drops to info

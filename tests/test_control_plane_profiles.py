@@ -108,22 +108,23 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
         self.assertEqual(profile["codex_auth_lane"], "chatgpt-account")
         self.assertNotIn("OPENAI_API_KEY", profile["required_secrets"])
         self.assertIn("CODEX_AUTH_JSON", profile["conditional_secrets"])
-        # The platform's self-CI runs in ``audit`` mode so the 838 Codacy /
-        # 1116 DeepSource / 110 Sonar pre-governance findings don't block
-        # main. Consumer repos stay on the zero-policy default via the
-        # stack common template — the softening is scoped to the
-        # platform's own profile. See the comment at the top of
-        # ``profiles/repos/quality-zero-platform.yml`` for the rationale.
+        # Self-governance contract (operator directive 2026-04-27): the
+        # platform MUST hold itself to literal zero on every scanner. The
+        # previous ``mode: audit`` exemption was a violation of that
+        # contract — it made the gate report green while findings still
+        # existed. ``mode: zero`` removes the audit short-circuit in
+        # check_codacy_zero / check_deepsource_zero / etc. so the gate
+        # tells the truth about the issue count.
         self.assertEqual(
             profile["issue_policy"],
             {
-                "mode": "audit",
+                "mode": "zero",
                 # ``pr_behavior: absolute`` comes from the stack common
-                # template; the platform override only softens ``mode``
-                # so PR-time severity enforcement stays unchanged.
+                # template; the platform override now matches the same
+                # severity enforcement on every code-path.
                 "pr_behavior": "absolute",
                 "main_behavior": "absolute",
-                "baseline_ref": "main",
+                "baseline_ref": "",
             },
         )
 

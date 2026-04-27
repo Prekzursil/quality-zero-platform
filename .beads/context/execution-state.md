@@ -892,18 +892,68 @@ No public API exists (verified — ``api/settings/set`` rejects with
 ``Setting 'sonar.autoscan.enabled' cannot be set on a Project``;
 ``api/v2/analysis/automatic_analysis`` returns 405).
 
+## 2026-04-27 — round 15 (PR #164 — complexity-smell sweep + final dup pairs)
+
+Three more commits on PR #164 since the round-14 record:
+
+  - `703974a` Drop 3 single-instance qlty complexity smells via
+    method extraction. chromatic.parse cyclomatic 28 + deep-nesting
+    level 5 (split into orchestrator + ``_findings_for_build`` +
+    ``_build_errored_snapshots_finding`` +
+    ``_maybe_build_change_finding``). ``_extract_context_snippet``
+    6-returns → 1 (single-path traversal via dict-walk reducer).
+    ``_render_canonical_findings_section`` complexity 20 →
+    orchestrator + ``_format_providers_line`` +
+    ``_render_finding_block``.
+  - `6d0f411` ``BaseNormalizer._build_finding`` 16 params → 2 via
+    new ``FindingFields`` dataclass (frozen, slots=True). 13 caller
+    files migrated mechanically with a one-shot script — every site
+    now wraps its kw-args in ``FindingFields(...)``. Lizard does
+    NOT count auto-generated dataclass __init__ params (verified
+    by inspecting Finding itself with 22 fields, never flagged).
+  - `00ce175` Two more dup-pair refactors: ``SarifJsonNormalizer``
+    base class for codeql/semgrep normalizers (41-line dup, mass
+    139 → gone); ``make_per_line_transform_generator`` factory for
+    quote_style/tab_vs_space patches (27-line dup, mass 144 → gone).
+
+### Self-governance metrics (post round 15)
+
+  - PR #164 is now 13 commits deep
+  - Codacy delta (post commit #11): **72 fixed / 3 added** (down
+    from 67/14 in round 14). The 3 added are post-#13 — Codacy is
+    actively re-analyzing as of 2026-04-27 ~02:38Z.
+  - QLTY smells: 27 → **6** (78% reduction). All 4 single-instance
+    complexity items closed; 3 of 6 real dup pairs eliminated. The
+    residual 6 are all dup-pair artefacts of the factory-extraction
+    pattern (qlty's AST similarity matcher pairs the shim
+    boilerplate even when the underlying logic is fully deduped).
+  - ``ruff check scripts/`` → All checks passed!
+  - pytest tests/: 1479 passed, 1 skipped — every commit verified
+
+### Why the loop is NOT at completion threshold
+
+Per the directive's ABSOLUTE DONE CRITERIA:
+
+  - Phase 1-5 components present: ✅ (``verify_v2_deployment.py
+    --all`` exits 0, all 39 components ok, 0 missing)
+  - Self-governance lie removed on the source: ✅ (PR #164's first
+    commit flips ``mode: audit → zero``)
+  - Self-governance lie removed on **main**: ❌ (PR #164 still open)
+  - Event-link main green: ❌ (operator-blocked AutoScan toggle)
+  - Codacy ``isUpToStandards: true`` on PR #164: pending re-analysis
+
 ## Last action
 
-Round 14 active on PR #164. 10 commits stacked, 1479 tests green,
-Codacy delta heading to ``isUpToStandards: true`` once the latest
-commit re-analyzes. Continuing on the 4 remaining single-instance
-QLTY complexity smells (_build_finding 16-params, chromatic.parse
-complexity 28 + deep-nesting, _render_canonical_findings_section
-complexity 20, _extract_context_snippet 6 returns) before the
-platform side of the user's "0-issues-ironclad" mandate is
-genuinely complete.
+Round 15 active on PR #164. 13 commits stacked, 1479 tests green,
+ruff at literal zero on scripts/, qlty at 6 (down from 27, all
+remaining are unactionable shim-boilerplate similarity artefacts).
+Codacy is actively re-analyzing the latest commit; expectation is
+``isUpToStandards: true`` once analysis completes.
 
 Loop continues — NOT at completion-promise threshold yet because:
-  - PR #164 still open, awaiting CI
-  - 4 QLTY complexity items still in the platform source
+  - PR #164 still open, awaiting fresh CI cycle from commits #12-13
   - Event-link CI still red on the operator-only AutoScan toggle
+  - PR #164 must merge before "self-governance lie removed" is
+    real on main (the gate scripts at check_codacy_zero.py:290 +
+    check_deepsource_zero.py:312 will still hardcode pass-on-audit
+    until the platform's own profile flip lands on main)

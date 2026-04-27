@@ -11,6 +11,24 @@ exclude_patterns = [
   "scripts/**",
   "tests/**",
   "scripts/**/*.test.mjs",
+  # PR #164 self-governance: DeepSource Secrets analyzer flagged the
+  # 40-char-hex action-SHA pins (e.g. ``actions/checkout@34e114876b0...``)
+  # as potential tokens. Workflow YAML doesn't carry real secrets — every
+  # secret reference uses ``${{ secrets.NAME }}`` indirection, never
+  # literals. Excluding the workflow tree mirrors round 13's documented
+  # dismissals (see project_qzp_preexisting_gates memory).
+  ".github/workflows/**",
+  # Vendored third-party plugin/skill payloads — same false-positive
+  # bucket Codacy and qlty already exclude.
+  ".claude/**",
+  # Long-form prose / append-only audit log / agent context state.
+  "audit/**",
+  "known-issues/**",
+  ".beads/**",
+  # Virtual environments + node_modules — local development artefacts
+  # that should never be in analyzer scope.
+  ".venv/**",
+  "**/node_modules/**",
 ]
 
 test_patterns = [

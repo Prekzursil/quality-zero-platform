@@ -164,10 +164,8 @@ def _load_sonar_findings(
     open_issues = _load_open_issues(args, auth)
     quality_gate = _load_quality_gate(args, auth)
     findings: List[str] = []
-    ratchet_scoped = (
-        getattr(args, "policy_mode", "ratchet") == "ratchet"
-        and _is_ratchet_scoped(args)
-    )
+    is_ratchet = getattr(args, "policy_mode", "ratchet") == "ratchet"
+    ratchet_scoped = is_ratchet and _is_ratchet_scoped(args)
     if open_issues != 0 and not ratchet_scoped:
         findings.append(f"Sonar reports {open_issues} open issues (expected 0).")
     if quality_gate != "OK" and open_issues != 0:

@@ -10,6 +10,14 @@ engines:
     enabled: true
   prospector:
     enabled: true
+    # Prospector's dodgy tool flags ``alerts.py:SECRET_MISSING`` (the
+    # GitHub label slug ``"alert:secret-missing"``) as a possible
+    # hardcoded secret. Same false-positive bucket that ruff S105 /
+    # Bandit B105 are already suppressing inline. Codacy doesn't honor
+    # ``.prospector.yaml -> dodgy.ignore-paths`` so the exclusion has
+    # to live here at the engine level.
+    exclude_paths:
+      - "scripts/quality/alerts.py"
   pydocstyle:
     enabled: false   # enforced via ruff instead
   metric:

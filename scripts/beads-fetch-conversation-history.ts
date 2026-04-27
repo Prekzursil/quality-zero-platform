@@ -66,20 +66,24 @@ interface ConversationMessage {
   sessionId: string;
 }
 
+type TriggerKind =
+  | "correction"
+  | "disagreement"
+  | "clarification"
+  | "discovery"
+  | "decision"
+  | "misconception";
+
+type TriggerConfidence = "high" | "medium" | "low";
+
 interface LearningTrigger {
-  type:
-    | "correction"
-    | "disagreement"
-    | "clarification"
-    | "discovery"
-    | "decision"
-    | "misconception";
+  type: TriggerKind;
   userMessage: string;
   assistantContext?: string;
   sessionId: string;
   sessionSummary: string;
   timestamp: string;
-  confidence: "high" | "medium" | "low";
+  confidence: TriggerConfidence;
 }
 
 interface SessionIndex {
@@ -203,11 +207,13 @@ function extractTextContent(content: unknown): string {
 // Pattern table is iterated in priority order so that "correction" wins over
 // "disagreement", etc. Driven from a literal so the dispatcher stays branch-flat
 // and qlty's complexity / many-returns checks see one early-return per loop hit.
-const TRIGGER_PATTERN_TABLE: ReadonlyArray<{
+interface TriggerPatternEntry {
   patterns: readonly RegExp[];
-  type: LearningTrigger["type"];
-  confidence: "high" | "medium" | "low";
-}> = [
+  type: TriggerKind;
+  confidence: TriggerConfidence;
+}
+
+const TRIGGER_PATTERN_TABLE: ReadonlyArray<TriggerPatternEntry> = [
   { patterns: CORRECTION_PATTERNS, type: "correction", confidence: "high" },
   { patterns: DISAGREEMENT_PATTERNS, type: "disagreement", confidence: "medium" },
   { patterns: CLARIFICATION_PATTERNS, type: "clarification", confidence: "medium" },
@@ -215,9 +221,12 @@ const TRIGGER_PATTERN_TABLE: ReadonlyArray<{
   { patterns: DECISION_PATTERNS, type: "decision", confidence: "medium" },
 ];
 
-function detectTriggerType(
-  text: string
-): { type: LearningTrigger["type"]; confidence: "high" | "medium" | "low" } | null {
+interface TriggerDetection {
+  type: TriggerKind;
+  confidence: TriggerConfidence;
+}
+
+function detectTriggerType(text: string): TriggerDetection | null {
   for (const entry of TRIGGER_PATTERN_TABLE) {
     if (entry.patterns.some((p) => p.test(text))) {
       return { type: entry.type, confidence: entry.confidence };
@@ -268,7 +277,7 @@ function readUserTrigger(
     return null;
   }
   const textContent = extractTextContent(entry.message?.content || entry.data);
-  const trimmedContent = textContent ? textContent.replace(/\s+/g, " ").trim() : "";
+  const trimmedContent = textContent ? textContent.replaceAll(/\s+/g, " ").trim() : "";
   const eligible = (
     !!textContent
     && textContent.length >= 10

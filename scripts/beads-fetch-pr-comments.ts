@@ -247,7 +247,7 @@ function pushIfReviewerKnown(
     reviewer: c.user?.login || "unknown",
     reviewerType,
     body: c.body,
-    ...(filePath !== undefined ? { filePath } : {}),
+    ...(filePath === undefined ? {} : { filePath }),
     url: c.html_url,
     createdAt: c.created_at,
   });

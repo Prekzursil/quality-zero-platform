@@ -53,13 +53,16 @@ def dispatch_detected_triggers(
     results: List[Dict[str, Any]] = []
     for trigger in triggers:
         if dry_run:
-            results.append({
-                "number": 0,
-                "title": alerts.alert_issue_title(
-                    trigger.alert_type, trigger.subject,
-                ),
-                "created": False,
-            })
+            results.append(
+                {
+                    "number": 0,
+                    "title": alerts.alert_issue_title(
+                        trigger.alert_type,
+                        trigger.subject,
+                    ),
+                    "created": False,
+                }
+            )
             continue
         result = opener(
             platform_slug,
@@ -72,7 +75,9 @@ def dispatch_detected_triggers(
 
 
 def _profile_triggers(
-    profile_entry: Mapping[str, Any], *, today: dt.date,
+    profile_entry: Mapping[str, Any],
+    *,
+    today: dt.date,
 ) -> List[at.AlertTrigger]:
     """Run the per-profile detectors (regression, deadlines, flags)."""
     slug = str(profile_entry.get("slug", ""))
@@ -82,48 +87,72 @@ def _profile_triggers(
     declared = list(profile_entry.get("declared_flags") or [])
     reported = list(profile_entry.get("reported_flags") or [])
     triggers: List[at.AlertTrigger] = []
-    triggers.extend(at.detect_coverage_regression(
-        slug=slug, baseline_percent=baseline, current_percent=current,
-    ))
-    triggers.extend(at.detect_deadline_missed(
-        slug=slug, profile=profile, today=today,
-    ))
-    triggers.extend(at.detect_escalation(
-        slug=slug, profile=profile, today=today,
-    ))
-    triggers.extend(at.detect_flag_missing(
-        slug=slug, declared_flags=declared, reported_flags=reported,
-    ))
+    triggers.extend(
+        at.detect_coverage_regression(
+            slug=slug,
+            baseline_percent=baseline,
+            current_percent=current,
+        )
+    )
+    triggers.extend(
+        at.detect_deadline_missed(
+            slug=slug,
+            profile=profile,
+            today=today,
+        )
+    )
+    triggers.extend(
+        at.detect_escalation(
+            slug=slug,
+            profile=profile,
+            today=today,
+        )
+    )
+    triggers.extend(
+        at.detect_flag_missing(
+            slug=slug,
+            declared_flags=declared,
+            reported_flags=reported,
+        )
+    )
     return triggers
 
 
 def _bypass_issue_triggers(
-    issues: Iterable[Mapping[str, Any]], *, now: dt.datetime,
+    issues: Iterable[Mapping[str, Any]],
+    *,
+    now: dt.datetime,
 ) -> List[at.AlertTrigger]:
     """Run ``detect_bypass_stale`` over every tracking issue."""
     triggers: List[at.AlertTrigger] = []
     for issue in issues:
-        triggers.extend(at.detect_bypass_stale(
-            slug=str(issue.get("slug", "")),
-            issue_number=int(issue.get("issue_number", 0)),
-            opened_at=issue["opened_at"],
-            now=now,
-        ))
+        triggers.extend(
+            at.detect_bypass_stale(
+                slug=str(issue.get("slug", "")),
+                issue_number=int(issue.get("issue_number", 0)),
+                opened_at=issue["opened_at"],
+                now=now,
+            )
+        )
     return triggers
 
 
 def _drift_pr_triggers(
-    prs: Iterable[Mapping[str, Any]], *, now: dt.datetime,
+    prs: Iterable[Mapping[str, Any]],
+    *,
+    now: dt.datetime,
 ) -> List[at.AlertTrigger]:
     """Run ``detect_drift_stuck`` over every open drift-sync PR."""
     triggers: List[at.AlertTrigger] = []
     for pr in prs:
-        triggers.extend(at.detect_drift_stuck(
-            slug=str(pr.get("slug", "")),
-            pr_number=int(pr.get("pr_number", 0)),
-            opened_at=pr["opened_at"],
-            now=now,
-        ))
+        triggers.extend(
+            at.detect_drift_stuck(
+                slug=str(pr.get("slug", "")),
+                pr_number=int(pr.get("pr_number", 0)),
+                opened_at=pr["opened_at"],
+                now=now,
+            )
+        )
     return triggers
 
 
@@ -132,35 +161,50 @@ def build_triggers_from_fleet_state(
 ) -> List[at.AlertTrigger]:
     """Run every detector over the aggregated fleet state."""
     today: dt.date = state.get("today", dt.date.today())
-    now: dt.datetime = state.get("now", dt.datetime.now(dt.timezone.utc))
+    now: dt.datetime = state.get("now", dt.datetime.now(dt.UTC))
 
     triggers: List[at.AlertTrigger] = []
     for profile_entry in state.get("profiles", []):
         triggers.extend(_profile_triggers(profile_entry, today=today))
-    triggers.extend(_bypass_issue_triggers(
-        state.get("bypass_issues", []), now=now,
-    ))
-    triggers.extend(_drift_pr_triggers(
-        state.get("drift_prs", []), now=now,
-    ))
+    triggers.extend(
+        _bypass_issue_triggers(
+            state.get("bypass_issues", []),
+            now=now,
+        )
+    )
+    triggers.extend(
+        _drift_pr_triggers(
+            state.get("drift_prs", []),
+            now=now,
+        )
+    )
 
     recipe_name = str(state.get("recipe_name", ""))
     staging = list(state.get("staging_results", []))
     if recipe_name and staging:
-        triggers.extend(at.detect_fleet_bump_fail(
-            recipe_name=recipe_name, staging_results=staging,
-        ))
+        triggers.extend(
+            at.detect_fleet_bump_fail(
+                recipe_name=recipe_name,
+                staging_results=staging,
+            )
+        )
     return triggers
 
 
 if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
     import json
 
-    print(json.dumps({
-        "module": "alert_dispatch",
-        "detectors": 7,
-        "public_api": [
-            "dispatch_detected_triggers",
-            "build_triggers_from_fleet_state",
-        ],
-    }, indent=2, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "module": "alert_dispatch",
+                "detectors": 7,
+                "public_api": [
+                    "dispatch_detected_triggers",
+                    "build_triggers_from_fleet_state",
+                ],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )

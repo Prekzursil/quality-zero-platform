@@ -48,5 +48,16 @@ exclude_paths:
   - ".claude/**"  # Vendored third-party plugin/skill payloads — not platform code
   - "known-issues/**"  # YAML registry of false-positive playbooks; long-form prose
   - "audit/**"  # Append-only audit log JSONL files; not source code
+  # ``scripts/beads-*.ts`` are TEMPLATE scaffolding scripts (the source files
+  # themselves carry the comment "This is a template script ... replace with
+  # your actual service paths"). They are already in
+  # ``sonar.coverage.exclusions`` for the same reason: never imported by
+  # platform code, never executed in this repo's CI, only run as ``npx tsx``
+  # examples that downstream consumers fork and customise. Codacy was the
+  # only tool still scoring them — same false-positive bucket as the
+  # already-excluded ``.claude/**`` vendored copies.
+  - "scripts/beads-fetch-conversation-history.ts"
+  - "scripts/beads-fetch-pr-comments.ts"
+  - "scripts/beads-self-reflect.ts"
   - ".github/workflows/control-plane-admin.yml"
   - ".github/workflows/publish-admin-dashboard.yml"

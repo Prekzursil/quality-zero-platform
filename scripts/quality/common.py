@@ -6,7 +6,7 @@ import json
 import sys
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Mapping
 
@@ -32,7 +32,7 @@ class ReportSpec:
 
 def utc_timestamp() -> str:
     """Handle utc timestamp."""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def github_commit_status_payload(repo: str, sha: str, token: str) -> Dict[str, Any]:
@@ -70,11 +70,7 @@ def safe_output_path(raw: str, fallback: str, base: Path | None = None) -> Path:
     """Handle safe output path."""
     root = (base or Path.cwd()).resolve()
     candidate = Path((raw or "").strip() or fallback)
-    resolved = (
-        candidate.resolve(strict=False)
-        if candidate.is_absolute()
-        else (root / candidate).resolve(strict=False)
-    )
+    resolved = candidate.resolve(strict=False) if candidate.is_absolute() else (root / candidate).resolve(strict=False)
     return _ensure_within_root(resolved, root)
 
 
@@ -87,15 +83,11 @@ def _validate_report_spec_args(args: Any, kwargs: Any) -> ReportSpec | None:
     """Handle validate report spec args."""
     if args and isinstance(args[0], ReportSpec):
         if len(args) != 1 or kwargs:
-            _raise_write_report_type_error(
-                "write_report expects a ReportSpec or legacy keyword arguments"
-            )
+            _raise_write_report_type_error("write_report expects a ReportSpec or legacy keyword arguments")
         return args[0]
 
     if args:
-        _raise_write_report_type_error(
-            "write_report expects a ReportSpec or legacy keyword arguments"
-        )
+        _raise_write_report_type_error("write_report expects a ReportSpec or legacy keyword arguments")
     return None
 
 
@@ -104,15 +96,11 @@ def _pop_report_kwargs(kwargs: Dict[str, Any]) -> Dict[str, Any]:
     required = ("out_json", "out_md", "default_json", "default_md", "render_md")
     missing = [key for key in required if key not in kwargs]
     if missing:
-        _raise_write_report_type_error(
-            f"Missing required report parameter: {missing[0]}"
-        )
+        _raise_write_report_type_error(f"Missing required report parameter: {missing[0]}")
 
     values = {key: kwargs.pop(key) for key in required}
     if kwargs:
-        _raise_write_report_type_error(
-            f"Unexpected write_report parameters: {', '.join(sorted(kwargs))}"
-        )
+        _raise_write_report_type_error(f"Unexpected write_report parameters: {', '.join(sorted(kwargs))}")
     return values
 
 
@@ -179,9 +167,7 @@ def normalize_required_contexts(raw: Mapping[str, Any] | None) -> Dict[str, List
     return impl(raw)
 
 
-def merge_required_contexts(
-    base: Mapping[str, Any] | None, overlay: Mapping[str, Any] | None
-) -> Dict[str, List[str]]:
+def merge_required_contexts(base: Mapping[str, Any] | None, overlay: Mapping[str, Any] | None) -> Dict[str, List[str]]:
     """Handle merge required contexts."""
     from scripts.quality.profile_normalization import merge_required_contexts as impl
 
@@ -246,9 +232,7 @@ def normalize_deps(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
     return impl(raw)
 
 
-def normalize_codex_environment(
-    raw: Mapping[str, Any] | None, *, verify_command: str
-) -> Dict[str, Any]:
+def normalize_codex_environment(raw: Mapping[str, Any] | None, *, verify_command: str) -> Dict[str, Any]:
     """Handle normalize codex environment."""
     from scripts.quality.profile_normalization import (
         normalize_codex_environment as impl,
@@ -268,8 +252,6 @@ def _deep_merge(base: Any, overlay: Any) -> Any:
     if isinstance(base, dict) and isinstance(overlay, dict):
         merged = deepcopy(base)
         for key, value in overlay.items():
-            merged[key] = (
-                _deep_merge(merged[key], value) if key in merged else deepcopy(value)
-            )
+            merged[key] = _deep_merge(merged[key], value) if key in merged else deepcopy(value)
         return merged
     return deepcopy(overlay)

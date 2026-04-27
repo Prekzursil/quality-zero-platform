@@ -27,9 +27,7 @@ _ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 def _parse_args() -> argparse.Namespace:
     """Handle parse args."""
-    parser = argparse.ArgumentParser(
-        description="Run QLTY in fail-on-any-issue mode and emit a summary report."
-    )
+    parser = argparse.ArgumentParser(description="Run QLTY in fail-on-any-issue mode and emit a summary report.")
     parser.add_argument("--repo-dir", default=".")
     parser.add_argument("--out-json", default=DEFAULT_JSON)
     parser.add_argument("--out-md", default=DEFAULT_MD)
@@ -63,9 +61,7 @@ def _resolved_qlty_executable_path() -> str:
     """Handle resolved qlty executable path."""
     qlty_executable = shutil.which(_QLTY_EXECUTABLE)
     if not qlty_executable:
-        raise FileNotFoundError(
-            f"Unable to locate required executable: {_QLTY_EXECUTABLE}"
-        )
+        raise FileNotFoundError(f"Unable to locate required executable: {_QLTY_EXECUTABLE}")
     return qlty_executable
 
 
@@ -225,9 +221,7 @@ def _build_check_entry(
         has_findings = _smells_output_indicates_findings(output_tail)
     else:
         has_findings = False
-    if int(result.returncode) != 0 and name != "smells":
-        status = "fail"
-    elif name == "smells" and has_findings:
+    if int(result.returncode) != 0 and name != "smells" or name == "smells" and has_findings:
         status = "fail"
     return {
         "name": name,
@@ -238,14 +232,10 @@ def _build_check_entry(
     }
 
 
-def _build_payload(
-    checks: Iterable[Mapping[str, Any]], *, status: str, return_code: int
-) -> Dict[str, Any]:
+def _build_payload(checks: Iterable[Mapping[str, Any]], *, status: str, return_code: int) -> Dict[str, Any]:
     """Handle build payload."""
     check_list = [dict(check) for check in checks]
-    output_chunks = [
-        str(check.get("output_tail") or "").strip() for check in check_list
-    ]
+    output_chunks = [str(check.get("output_tail") or "").strip() for check in check_list]
     output_tail = "\n".join(chunk for chunk in output_chunks if chunk)
     return {
         "status": status,
@@ -291,7 +281,9 @@ def _run_checks(repo_dir: Path) -> Tuple[List[Dict[str, Any]], int]:
     ]
     for name, argv, result in checks:
         entry = _build_check_entry(
-            name, argv, result,
+            name,
+            argv,
+            result,
             smells_exclude_patterns=exclude_patterns if name == "smells" else None,
         )
         entries.append(entry)

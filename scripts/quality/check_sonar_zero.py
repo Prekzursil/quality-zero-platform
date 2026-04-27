@@ -48,6 +48,15 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--sha", default="")
     parser.add_argument("--branch", default="")
     parser.add_argument("--pull-request", default="")
+    parser.add_argument(
+        "--main-branch",
+        default="main",
+        help=(
+            "Repository default branch. When --branch matches this value, "
+            "the run is treated as absolute (not scoped) so ratchet mode "
+            "doesn't bypass the open-issue check on main."
+        ),
+    )
     parser.add_argument("--out-json", default="sonar-zero/sonar.json")
     parser.add_argument("--out-md", default="sonar-zero/sonar.md")
     return parser.parse_args()
@@ -149,7 +158,10 @@ def _load_sonar_findings(
     open_issues = _load_open_issues(args, auth)
     quality_gate = _load_quality_gate(args, auth)
     findings: List[str] = []
-    ratchet_scoped = getattr(args, "policy_mode", "ratchet") == "ratchet" and _is_scoped_analysis(args)
+    ratchet_scoped = (
+        getattr(args, "policy_mode", "ratchet") == "ratchet"
+        and _is_ratchet_scoped(args)
+    )
     if open_issues != 0 and not ratchet_scoped:
         findings.append(f"Sonar reports {open_issues} open issues (expected 0).")
     if quality_gate != "OK" and open_issues != 0:
@@ -158,13 +170,35 @@ def _load_sonar_findings(
 
 
 def _is_scoped_analysis(args: argparse.Namespace) -> bool:
-    """Return whether the Sonar query targets a branch or pull request."""
+    """Return whether the Sonar API call targets a branch or pull request.
+
+    This drives the API-shape branch (whether to wait for branch/PR
+    analysis to settle on the target SHA). It does NOT decide whether
+    ratchet should bypass the issue-count check — that's
+    ``_is_ratchet_scoped``.
+    """
     return bool(
         _preferred_text(
             getattr(args, "branch", ""),
             getattr(args, "pull_request", ""),
         )
     )
+
+
+def _is_ratchet_scoped(args: argparse.Namespace) -> bool:
+    """Return whether ratchet mode should bypass the open-issue check.
+
+    Ratchet mode lets PRs / feature branches keep the existing baseline
+    of issues (they only fail on NEW introductions). Main-branch runs
+    are excluded: a main run evaluates the absolute baseline state we
+    want to drive to zero. This matches
+    ``profile.issue_policy.main_behavior: absolute``.
+    """
+    if _preferred_text(getattr(args, "pull_request", "")):
+        return True
+    branch = _preferred_text(getattr(args, "branch", ""))
+    main_branch = _preferred_text(getattr(args, "main_branch", ""), "main")
+    return bool(branch) and branch != main_branch
 
 
 def _target_sha(args: argparse.Namespace) -> str:

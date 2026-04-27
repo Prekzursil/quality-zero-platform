@@ -98,23 +98,23 @@ def _extract_location(result: Dict[str, Any]) -> Tuple[str, int, int | None, int
 
 
 def _extract_context_snippet(result: Dict[str, Any]) -> str:
-    """Extract context snippet from SARIF location region."""
-    locations = result.get("locations", [])
-    if not locations or not isinstance(locations, list):
-        return ""
-    loc = locations[0]
-    if not isinstance(loc, dict):
-        return ""
-    phys = loc.get("physicalLocation", {})
-    if not isinstance(phys, dict):
-        return ""
-    region = phys.get("region", {})
-    if not isinstance(region, dict):
-        return ""
-    snippet = region.get("snippet", {})
-    if isinstance(snippet, dict):
-        return str(snippet.get("text", ""))
-    return ""
+    """Extract context snippet from SARIF location region (single-path traversal).
+
+    The previous shape of this function bailed out with six separate
+    early returns (one per ``isinstance`` guard along the chain
+    locations[0] → physicalLocation → region → snippet). Lizard flagged
+    that as a many-returns smell (count=6, threshold 4). The new
+    shape walks the chain once with a defaulting reducer and returns
+    in a single statement; the type checks are now pruning conditions
+    on each hop rather than control-flow exits.
+    """
+    locations = result.get("locations")
+    node: Any = (
+        locations[0] if isinstance(locations, list) and locations else {}
+    )
+    for key in ("physicalLocation", "region", "snippet"):
+        node = node.get(key, {}) if isinstance(node, dict) else {}
+    return str(node.get("text", "")) if isinstance(node, dict) else ""
 
 
 def _build_rule_index(run: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:

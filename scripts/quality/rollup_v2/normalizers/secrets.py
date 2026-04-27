@@ -4,7 +4,7 @@ from __future__ import absolute_import
 from pathlib import Path
 from typing import Any, Iterable
 
-from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer
+from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer, FindingDraft
 from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_SECURITY,
     Finding,
@@ -27,7 +27,7 @@ class SecretsNormalizer(BaseNormalizer):
             file_path = str(secret.get("file", ""))
             line = int(secret.get("line") or 1)
             rule_id = str(secret.get("rule_id", "hardcoded-secret"))
-            yield self._build_finding(
+            yield self._build_finding(FindingDraft(
                 finding_id=f"secret-{index:04d}",
                 file=file_path,
                 line=line,
@@ -40,4 +40,4 @@ class SecretsNormalizer(BaseNormalizer):
                 original_message=f"Secret of type {secret_type} detected",
                 context_snippet="",
                 cwe="CWE-798",
-            )
+            ))

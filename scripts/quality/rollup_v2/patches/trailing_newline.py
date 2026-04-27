@@ -14,7 +14,7 @@ CATEGORY = "trailing-newline"
 def generate(
     finding: Finding,
     source_file_content: str,
-    repo_root: Path,
+    _repo_root: Path,
 ) -> PatchResult | PatchDeclined | None:
     """Ensure file ends with exactly one newline."""
     if source_file_content.endswith("\n") and not source_file_content.endswith("\n\n"):

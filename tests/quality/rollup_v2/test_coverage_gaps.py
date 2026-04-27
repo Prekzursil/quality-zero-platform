@@ -147,92 +147,53 @@ class RendererGapTests(unittest.TestCase):
         self.assertEqual(_provider_label([{"p": 1}, {"p": 2}]), "2 providers")
 
 
+def _baseline_finding_kwargs() -> dict:
+    """Return the kwargs needed to build a minimal valid ``Finding``."""
+    return dict(
+        schema_version=SCHEMA_VERSION,
+        finding_id="t",
+        file="f",
+        line=1,
+        end_line=1,
+        column=None,
+        category="c",
+        category_group="quality",
+        severity="medium",
+        corroboration="single",
+        primary_message="m",
+        corroborators=(),
+        fix_hint=None,
+        patch=None,
+        patch_source="none",
+        patch_confidence=None,
+        context_snippet="",
+        source_file_hash="",
+        cwe=None,
+        autofixable=False,
+        tags=(),
+    )
+
+
 class FindingValidationGapTests(unittest.TestCase):
     """Cover finding.py validation error paths (lines 64, 68, 72)."""
 
+    def _assert_validation_failure(self, *, field: str, **invalid_kwargs) -> None:
+        kwargs = _baseline_finding_kwargs() | invalid_kwargs
+        with self.assertRaises(AssertionError) as ctx:
+            Finding(**kwargs)
+        self.assertIn(field, str(ctx.exception))
+
     def test_invalid_patch_source_raises(self) -> None:
         """Line 64-66."""
-        with self.assertRaises(AssertionError) as ctx:
-            Finding(
-                schema_version=SCHEMA_VERSION,
-                finding_id="t",
-                file="f",
-                line=1,
-                end_line=1,
-                column=None,
-                category="c",
-                category_group="quality",
-                severity="medium",
-                corroboration="single",
-                primary_message="m",
-                corroborators=(),
-                fix_hint=None,
-                patch=None,
-                patch_source="INVALID",
-                patch_confidence=None,
-                context_snippet="",
-                source_file_hash="",
-                cwe=None,
-                autofixable=False,
-                tags=(),
-            )
-        self.assertIn("patch_source", str(ctx.exception))
+        self._assert_validation_failure(field="patch_source", patch_source="INVALID")
 
     def test_invalid_corroboration_raises(self) -> None:
         """Line 68-70."""
-        with self.assertRaises(AssertionError) as ctx:
-            Finding(
-                schema_version=SCHEMA_VERSION,
-                finding_id="t",
-                file="f",
-                line=1,
-                end_line=1,
-                column=None,
-                category="c",
-                category_group="quality",
-                severity="medium",
-                corroboration="INVALID",
-                primary_message="m",
-                corroborators=(),
-                fix_hint=None,
-                patch=None,
-                patch_source="none",
-                patch_confidence=None,
-                context_snippet="",
-                source_file_hash="",
-                cwe=None,
-                autofixable=False,
-                tags=(),
-            )
-        self.assertIn("corroboration", str(ctx.exception))
+        self._assert_validation_failure(field="corroboration", corroboration="INVALID")
 
     def test_invalid_schema_version_raises(self) -> None:
         """Line 72-74."""
-        with self.assertRaises(AssertionError) as ctx:
-            Finding(
-                schema_version="wrong/99",
-                finding_id="t",
-                file="f",
-                line=1,
-                end_line=1,
-                column=None,
-                category="c",
-                category_group="quality",
-                severity="medium",
-                corroboration="single",
-                primary_message="m",
-                corroborators=(),
-                fix_hint=None,
-                patch=None,
-                patch_source="none",
-                patch_confidence=None,
-                context_snippet="",
-                source_file_hash="",
-                cwe=None,
-                autofixable=False,
-                tags=(),
-            )
-        self.assertIn("schema_version", str(ctx.exception))
+        self._assert_validation_failure(field="schema_version", schema_version="wrong/99")
 
 
 class DedupGapTests(unittest.TestCase):

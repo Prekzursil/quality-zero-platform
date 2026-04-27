@@ -17,7 +17,7 @@ _TRAILING_WS = re.compile(r"[ \t]+(?=\r?\n|$)")
 def generate(
     finding: Finding,
     source_file_content: str,
-    repo_root: Path,
+    _repo_root: Path,
 ) -> PatchResult | PatchDeclined | None:
     """Strip trailing whitespace from every line."""
     lines = source_file_content.splitlines(keepends=True)

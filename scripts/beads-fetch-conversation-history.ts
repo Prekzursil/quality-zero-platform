@@ -15,10 +15,10 @@
  *   npx tsx scripts/beads-fetch-conversation-history.ts --project /path/to/project
  */
 
-import { parseArgs } from "util";
-import { writeFileSync, readFileSync, readdirSync, existsSync, mkdirSync } from "fs";
-import { dirname, join, basename } from "path";
-import { homedir } from "os";
+import { parseArgs } from "node:util";
+import { writeFileSync, readFileSync, readdirSync, existsSync, mkdirSync } from "node:fs";
+import { dirname, join, basename } from "node:path";
+import { homedir } from "node:os";
 
 // =============================================================================
 // CLI Arguments
@@ -66,20 +66,24 @@ interface ConversationMessage {
   sessionId: string;
 }
 
+type TriggerKind =
+  | "correction"
+  | "disagreement"
+  | "clarification"
+  | "discovery"
+  | "decision"
+  | "misconception";
+
+type TriggerConfidence = "high" | "medium" | "low";
+
 interface LearningTrigger {
-  type:
-    | "correction"
-    | "disagreement"
-    | "clarification"
-    | "discovery"
-    | "decision"
-    | "misconception";
+  type: TriggerKind;
   userMessage: string;
   assistantContext?: string;
   sessionId: string;
   sessionSummary: string;
   timestamp: string;
-  confidence: "high" | "medium" | "low";
+  confidence: TriggerConfidence;
 }
 
 interface SessionIndex {
@@ -200,47 +204,98 @@ function extractTextContent(content: unknown): string {
   return "";
 }
 
-function detectTriggerType(
-  text: string
-): { type: LearningTrigger["type"]; confidence: "high" | "medium" | "low" } | null {
-  const lowerText = text.toLowerCase();
+// Pattern table is iterated in priority order so that "correction" wins over
+// "disagreement", etc. Driven from a literal so the dispatcher stays branch-flat
+// and qlty's complexity / many-returns checks see one early-return per loop hit.
+interface TriggerPatternEntry {
+  patterns: readonly RegExp[];
+  type: TriggerKind;
+  confidence: TriggerConfidence;
+}
 
-  // Check for corrections (high value)
-  for (const pattern of CORRECTION_PATTERNS) {
-    if (pattern.test(text)) {
-      return { type: "correction", confidence: "high" };
+const TRIGGER_PATTERN_TABLE: ReadonlyArray<TriggerPatternEntry> = [
+  { patterns: CORRECTION_PATTERNS, type: "correction", confidence: "high" },
+  { patterns: DISAGREEMENT_PATTERNS, type: "disagreement", confidence: "medium" },
+  { patterns: CLARIFICATION_PATTERNS, type: "clarification", confidence: "medium" },
+  { patterns: DISCOVERY_PATTERNS, type: "discovery", confidence: "high" },
+  { patterns: DECISION_PATTERNS, type: "decision", confidence: "medium" },
+];
+
+interface TriggerDetection {
+  type: TriggerKind;
+  confidence: TriggerConfidence;
+}
+
+function detectTriggerType(text: string): TriggerDetection | null {
+  for (const entry of TRIGGER_PATTERN_TABLE) {
+    if (entry.patterns.some((p) => p.test(text))) {
+      return { type: entry.type, confidence: entry.confidence };
     }
   }
-
-  // Check for disagreements
-  for (const pattern of DISAGREEMENT_PATTERNS) {
-    if (pattern.test(text)) {
-      return { type: "disagreement", confidence: "medium" };
-    }
-  }
-
-  // Check for clarifications
-  for (const pattern of CLARIFICATION_PATTERNS) {
-    if (pattern.test(text)) {
-      return { type: "clarification", confidence: "medium" };
-    }
-  }
-
-  // Check for discoveries
-  for (const pattern of DISCOVERY_PATTERNS) {
-    if (pattern.test(text)) {
-      return { type: "discovery", confidence: "high" };
-    }
-  }
-
-  // Check for decisions
-  for (const pattern of DECISION_PATTERNS) {
-    if (pattern.test(text)) {
-      return { type: "decision", confidence: "medium" };
-    }
-  }
-
   return null;
+}
+
+type ConversationEntry = {
+  type?: string;
+  userType?: string;
+  message?: { content?: unknown };
+  data?: unknown;
+  timestamp?: string;
+};
+
+function tryParseJsonLine(line: string): ConversationEntry | null {
+  try {
+    return JSON.parse(line) as ConversationEntry;
+  } catch {
+    return null;
+  }
+}
+
+function readAssistantText(entry: ConversationEntry): string | null {
+  if (entry.type !== "assistant" || !Array.isArray(entry.message?.content)) {
+    return null;
+  }
+  const items = entry.message.content as Array<{ type?: string; text?: string }>;
+  const textItem = items.find((c) => c.type === "text" && typeof c.text === "string");
+  return textItem?.text ? textItem.text.slice(0, 500) : null;
+}
+
+function readUserTrigger(
+  entry: ConversationEntry,
+  context: {
+    sessionId: string;
+    sessionSummary: string;
+    lastAssistantContent: string;
+    sinceDateMs: number;
+  }
+): LearningTrigger | null {
+  if (
+    entry.type !== "user"
+    || entry.userType !== "external"
+    || (entry.timestamp && new Date(entry.timestamp).getTime() < context.sinceDateMs)
+  ) {
+    return null;
+  }
+  const textContent = extractTextContent(entry.message?.content || entry.data);
+  const trimmedContent = textContent ? textContent.replaceAll(/\s+/g, " ").trim() : "";
+  const eligible = (
+    !!textContent
+    && textContent.length >= 10
+    && trimmedContent.length >= textContent.length * 0.5
+  );
+  const triggerDetection = eligible ? detectTriggerType(textContent) : null;
+  if (!triggerDetection) {
+    return null;
+  }
+  return {
+    type: triggerDetection.type,
+    userMessage: textContent.slice(0, 1000),
+    assistantContext: context.lastAssistantContent || undefined,
+    sessionId: context.sessionId,
+    sessionSummary: context.sessionSummary,
+    timestamp: entry.timestamp || new Date().toISOString(),
+    confidence: triggerDetection.confidence,
+  };
 }
 
 function parseConversationFile(
@@ -251,65 +306,30 @@ function parseConversationFile(
 ): LearningTrigger[] {
   const triggers: LearningTrigger[] = [];
   const content = readFileSync(filePath, "utf-8");
-  const lines = content.split("\n").filter(line => line.trim());
+  const lines = content.split("\n").filter((line) => line.trim());
 
   let lastAssistantContent = "";
 
   for (const line of lines) {
-    try {
-      const entry = JSON.parse(line);
-
-      // Track assistant messages for context
-      if (entry.type === "assistant" && entry.message?.content) {
-        const content = entry.message.content;
-        if (Array.isArray(content)) {
-          const textContent = content.find(
-            (c: { type: string; text?: string }) => c.type === "text" && c.text
-          );
-          if (textContent) {
-            lastAssistantContent = textContent.text.slice(0, 500);
-          }
-        }
-      }
-
-      // Analyze user messages
-      if (entry.type === "user" && entry.userType === "external") {
-        const timestamp = entry.timestamp;
-
-        // Skip if older than our date range
-        if (timestamp && new Date(timestamp).getTime() < sinceDateMs) {
-          continue;
-        }
-
-        const textContent = extractTextContent(entry.message?.content || entry.data);
-
-        if (!textContent || textContent.length < 10) {
-          continue;
-        }
-
-        // Skip messages that are mostly whitespace (formatted/structured text)
-        const trimmedContent = textContent.replace(/\s+/g, " ").trim();
-        if (trimmedContent.length < textContent.length * 0.5) {
-          continue;
-        }
-
-        const triggerDetection = detectTriggerType(textContent);
-
-        if (triggerDetection) {
-          triggers.push({
-            type: triggerDetection.type,
-            userMessage: textContent.slice(0, 1000),
-            assistantContext: lastAssistantContent || undefined,
-            sessionId,
-            sessionSummary,
-            timestamp: timestamp || new Date().toISOString(),
-            confidence: triggerDetection.confidence,
-          });
-        }
-      }
-    } catch {
-      // Skip malformed lines
+    const entry = tryParseJsonLine(line);
+    if (!entry) {
       continue;
+    }
+
+    const assistantText = readAssistantText(entry);
+    if (assistantText !== null) {
+      lastAssistantContent = assistantText;
+      continue;
+    }
+
+    const trigger = readUserTrigger(entry, {
+      sessionId,
+      sessionSummary,
+      lastAssistantContent,
+      sinceDateMs,
+    });
+    if (trigger) {
+      triggers.push(trigger);
     }
   }
 
@@ -323,7 +343,7 @@ function parseConversationFile(
 async function main() {
   console.log("BEADS Conversation History Fetcher\n");
 
-  const DAYS = parseInt(args.days || "7", 10);
+  const DAYS = Number.parseInt(args.days || "7", 10);
   const OUTPUT_PATH = args.output || ".beads/temp/conversation-history.json";
   const projectPath = args.project || process.cwd();
 

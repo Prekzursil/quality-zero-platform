@@ -29,7 +29,6 @@ def _make_finding(
     autofixable: bool = False,
     providers: Tuple[Tuple[str, str | None], ...] = (("Codacy", None),),
     fix_hint: str | None = None,
-    category_group: str = CATEGORY_GROUP_QUALITY,
 ) -> Finding:
     corroborators = tuple(
         Corroborator.from_provider(
@@ -48,7 +47,7 @@ def _make_finding(
         end_line=line,
         column=None,
         category=category,
-        category_group=category_group,
+        category_group=CATEGORY_GROUP_QUALITY,
         severity=severity,
         corroboration="multi" if len(providers) > 1 else "single",
         primary_message=f"Test message for {category}",

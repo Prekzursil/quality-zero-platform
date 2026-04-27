@@ -17,7 +17,7 @@ _INDENT = re.compile(r"^(\s*)")
 def generate(
     finding: Finding,
     source_file_content: str,
-    repo_root: Path,
+    _repo_root: Path,
 ) -> PatchResult | PatchDeclined | None:
     """Re-indent the target line to align with its context (4-space convention)."""
     lines = source_file_content.splitlines(keepends=True)

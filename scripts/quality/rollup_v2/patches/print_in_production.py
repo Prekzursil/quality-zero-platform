@@ -18,7 +18,7 @@ _HAS_LOGGING_IMPORT = re.compile(r"^\s*import\s+logging\b", re.MULTILINE)
 def generate(
     finding: Finding,
     source_file_content: str,
-    repo_root: Path,
+    _repo_root: Path,
 ) -> PatchResult | PatchDeclined | None:
     """Replace `print(...)` with `logging.info(...)` and add import if needed."""
     lines = source_file_content.splitlines(keepends=True)

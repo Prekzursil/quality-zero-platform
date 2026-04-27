@@ -19,7 +19,7 @@ _ASSERT_NO_MSG = re.compile(r"^(\s*)assert\s+(.+?)\s*$")
 def generate(
     finding: Finding,
     source_file_content: str,
-    repo_root: Path,
+    _repo_root: Path,
 ) -> PatchResult | PatchDeclined | None:
     """Replace `assert X, msg` with `if not X: raise AssertionError(msg)`."""
     lines = source_file_content.splitlines(keepends=True)

@@ -17,7 +17,7 @@ _DEF_OR_CLASS = re.compile(r"^(\s*)(def|class)\s+(\w+)")
 def generate(
     finding: Finding,
     source_file_content: str,
-    repo_root: Path,
+    _repo_root: Path,
 ) -> PatchResult | PatchDeclined | None:
     """Insert a TODO docstring as the first statement of a function/class."""
     lines = source_file_content.splitlines(keepends=True)

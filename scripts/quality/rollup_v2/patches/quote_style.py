@@ -1,10 +1,10 @@
 """Deterministic patch generator for `quote-style` category."""
 from __future__ import absolute_import
 
-import difflib
 import re
 from pathlib import Path
 
+from scripts.quality.rollup_v2.patches._per_line import apply_line_transform
 from scripts.quality.rollup_v2.schema.finding import Finding
 from scripts.quality.rollup_v2.schema.patch import PatchDeclined, PatchResult
 
@@ -32,27 +32,15 @@ def _replace_quotes(line: str) -> str:
 def generate(
     finding: Finding,
     source_file_content: str,
-    repo_root: Path,
+    _repo_root: Path,
 ) -> PatchResult | PatchDeclined | None:
     """Convert single-quoted strings to double-quoted."""
-    lines = source_file_content.splitlines(keepends=True)
-    patched_lines = [_replace_quotes(line) for line in lines]
-    if patched_lines == lines:
-        return PatchDeclined(
-            reason_code="ambiguous-fix",
-            reason_text="no single-quoted strings to convert",
-            suggested_tier="skip",
-        )
-    diff = "".join(difflib.unified_diff(
-        lines,
-        patched_lines,
-        fromfile=f"a/{finding.file}",
-        tofile=f"b/{finding.file}",
-    ))
-    return PatchResult(
-        unified_diff=diff,
+    return apply_line_transform(
+        finding=finding,
+        source_file_content=source_file_content,
+        transform_line=_replace_quotes,
         confidence="medium",
         category=CATEGORY,
         generator_version=GENERATOR_VERSION,
-        touches_files=frozenset({Path(finding.file)}),
+        decline_reason="no single-quoted strings to convert",
     )

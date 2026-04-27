@@ -27,6 +27,31 @@ class NormalizerResult:
     security_drops: Tuple[Dict[str, str], ...]
 
 
+@dataclass(frozen=True, slots=True)
+class FindingDraft:
+    """Per-result fields supplied by a normalizer; redacted by ``_build_finding``.
+
+    Bundled into one dataclass so :py:meth:`BaseNormalizer._build_finding` keeps
+    a small parameter count and qlty's "function with many parameters" smell
+    stays clean while still tracking every Finding field at the call site.
+    """
+    finding_id: str
+    file: str
+    line: int
+    category: str
+    category_group: CategoryGroup
+    severity: str
+    primary_message: str
+    rule_id: str
+    rule_url: str | None
+    original_message: str
+    context_snippet: str
+    end_line: int | None = None
+    column: int | None = None
+    fix_hint: str | None = None
+    cwe: str | None = None
+
+
 class BaseNormalizer(ABC):
     """Base class for all per-provider normalizers.
 
@@ -84,52 +109,34 @@ class BaseNormalizer(ABC):
             security_drops=tuple(drops),
         )
 
-    def _build_finding(
-        self,
-        *,
-        finding_id: str,
-        file: str,
-        line: int,
-        category: str,
-        category_group: CategoryGroup,
-        severity: str,
-        primary_message: str,
-        rule_id: str,
-        rule_url: str | None,
-        original_message: str,
-        context_snippet: str,
-        end_line: int | None = None,
-        column: int | None = None,
-        fix_hint: str | None = None,
-        cwe: str | None = None,
-    ) -> Finding:
+    def _build_finding(self, draft: FindingDraft) -> Finding:
         """Helper for subclasses to construct Findings with redaction applied."""
         corroborator = Corroborator.from_provider(
             provider=self.provider,
-            rule_id=rule_id,
-            rule_url=rule_url,
-            original_message=redact_secrets(original_message),
+            rule_id=draft.rule_id,
+            rule_url=draft.rule_url,
+            original_message=redact_secrets(draft.original_message),
         )
         return Finding(
             schema_version=SCHEMA_VERSION,
-            finding_id=finding_id,
-            file=file,
-            line=line,
-            end_line=end_line if end_line is not None else line,
-            column=column,
-            category=category,
-            category_group=category_group,
-            severity=severity,
+            finding_id=draft.finding_id,
+            file=draft.file,
+            line=draft.line,
+            end_line=draft.end_line if draft.end_line is not None else draft.line,
+            column=draft.column,
+            category=draft.category,
+            category_group=draft.category_group,
+            severity=draft.severity,
             corroboration="single",
-            primary_message=redact_secrets(primary_message),
+            primary_message=redact_secrets(draft.primary_message),
             corroborators=(corroborator,),
-            fix_hint=fix_hint,
+            fix_hint=draft.fix_hint,
             patch=None,
             patch_source="none",
             patch_confidence=None,
-            context_snippet=redact_secrets(context_snippet),
+            context_snippet=redact_secrets(draft.context_snippet),
             source_file_hash="",
-            cwe=cwe,
+            cwe=draft.cwe,
             autofixable=False,
             tags=(),
         )

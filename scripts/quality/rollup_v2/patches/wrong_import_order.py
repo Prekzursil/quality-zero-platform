@@ -91,7 +91,7 @@ def _build_sorted_block(import_lines: List[str]) -> List[str]:
 def generate(
     finding: Finding,
     source_file_content: str,
-    repo_root: Path,
+    _repo_root: Path,
 ) -> PatchResult | PatchDeclined | None:
     """Sort imports in isort-style order: future, stdlib, third-party, first-party."""
     lines = source_file_content.splitlines(keepends=True)

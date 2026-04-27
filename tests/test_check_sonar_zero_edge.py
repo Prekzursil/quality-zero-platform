@@ -15,84 +15,15 @@ from unittest.mock import patch
 
 from scripts.quality import check_sonar_zero
 from scripts.quality.check_sonar_zero import load_sonar_findings_with_retry
+from tests._sonar_zero_helpers import SonarZeroHelpersMixin, raise_runtime_error
 from typing import List
 
 
-def _raise_runtime_error(message: str) -> None:
-    """Raise one runtime error for callback tests."""
-    raise RuntimeError(message)
+_raise_runtime_error = raise_runtime_error
 
 
-
-
-class SonarZeroEdgeTests(unittest.TestCase):
+class SonarZeroEdgeTests(SonarZeroHelpersMixin, unittest.TestCase):
     """SonarZeroEdgeTests."""
-
-    def _assert_sonar_request_round_trip(self, scenario: dict) -> None:
-        """Assert one Sonar request sequence and query parameter shape."""
-        captured_urls: List[str] = []
-        responses = list(scenario["responses"])
-
-        def fake_request(url: str, auth_header: str):
-            """Handle fake request."""
-            captured_urls.append(url)
-            return responses.pop(0)
-
-        with patch(
-            "scripts.quality.check_sonar_zero._request_json", side_effect=fake_request
-        ):
-            self.assertEqual(
-                check_sonar_zero._load_open_issues(scenario["args"], "auth"),
-                scenario["expected_open_issues"],
-            )
-            self.assertEqual(
-                check_sonar_zero._load_quality_gate(scenario["args"], "auth"),
-                scenario["expected_quality_gate"],
-            )
-        self.assertIn(scenario["expected_query"], captured_urls[0])
-        self.assertIn(scenario["expected_query"], captured_urls[1])
-
-
-    def _assert_revision_lookup(self, scenario: dict) -> None:
-        """Assert one scoped revision lookup and pending-message scenario."""
-        with patch.object(
-            check_sonar_zero, "_request_json", return_value=scenario["payload"]
-        ):
-            self.assertEqual(
-                scenario["revision_loader"](scenario["args"], "auth"),
-                scenario["expected_revision"],
-            )
-            self.assertEqual(
-                check_sonar_zero._scoped_analysis_pending_message(
-                    scenario["args"], "auth"
-                ),
-                scenario["expected_pending_message"],
-            )
-
-
-    def _assert_main_result(self, scenario: dict) -> None:
-        """Exercise one Sonar main-path scenario."""
-        with patch.object(
-            check_sonar_zero, "_parse_args", return_value=scenario["args"]
-        ), patch.object(
-            check_sonar_zero,
-            "write_report",
-            return_value=scenario.get("write_report_result", 0),
-        ) as write_report_mock, patch.object(
-            check_sonar_zero,
-            "load_sonar_findings_with_retry",
-            return_value=scenario.get("load_result"),
-            side_effect=scenario.get("load_side_effect"),
-        ):
-            self.assertEqual(check_sonar_zero.main(), scenario["expected_code"])
-        payload = write_report_mock.call_args.args[0]
-        expected_findings = scenario.get("expected_findings")
-        if expected_findings is not None:
-            self.assertEqual(payload["findings"], expected_findings)
-        expected_status = scenario.get("expected_status")
-        if expected_status is not None:
-            self.assertEqual(payload["status"], expected_status)
-
 
     def test_retry_waits_for_scoped_revision_to_match_target_sha(self) -> None:
         """Cover retry waits for scoped revision to match target sha."""

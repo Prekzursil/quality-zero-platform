@@ -4,7 +4,7 @@ from __future__ import absolute_import
 import sys
 import unittest
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
@@ -16,103 +16,112 @@ from scripts.quality.rollup_v2.schema.finding import SCHEMA_VERSION, Finding
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "renderer"
 
 
+_DEFAULT_FILES = (
+    "src/api/auth.py",
+    "src/core/models.py",
+    "src/utils/helpers.py",
+    "tests/test_auth.py",
+    "config/settings.py",
+)
+_UNICODE_FILES = ("src/caf\u00e9.py", "src/\u65e5\u672c\u8a9e/app.py", "src/api/auth.py")
+_CATEGORIES = (
+    "unused-import", "broad-except", "hardcoded-secret",
+    "missing-docstring", "too-complex", "dead-code",
+    "unused-variable", "line-too-long",
+)
+_SEVERITIES = ("critical", "high", "medium", "low", "info")
+_PROVIDERS = ("QLTY", "SonarCloud", "Codacy", "DeepSource", "DeepScan")
+_PATCH_SOURCES = ("deterministic", "none", "llm")
+
+
+def _patch_text_for(line: int, file: str, idx: int, patch_source: str) -> str | None:
+    if patch_source == "none":
+        return None
+    return (
+        f"--- a/{file}\n"
+        f"+++ b/{file}\n"
+        f"@@ -{line},1 +{line},1 @@\n"
+        f"-old line {idx}\n"
+        f"+new line {idx}"
+    )
+
+
+def _patch_confidence_for(patch_source: str) -> str | None:
+    if patch_source == "deterministic":
+        return "high"
+    if patch_source == "llm":
+        return "medium"
+    return None
+
+
+def _make_corroborator(
+    provider: str, rule_id: str, idx: int, category: str, *, unicode: bool,
+) -> Corroborator:
+    return Corroborator.from_provider(
+        provider=provider,
+        rule_id=rule_id,
+        rule_url=(
+            f"https://rules.example.com/{category}"
+            if idx % 3 == 0
+            else None
+        ),
+        original_message=(
+            f"\u65e5\u672c\u8a9e message for finding {idx}"
+            if unicode and idx % 2 == 0
+            else f"Original message for finding {idx}"
+        ),
+    )
+
+
+def _make_one_finding(idx: int, files: Tuple[str, ...], *, unicode: bool) -> Finding:
+    file = files[idx % len(files)]
+    category = _CATEGORIES[idx % len(_CATEGORIES)]
+    severity = _SEVERITIES[idx % len(_SEVERITIES)]
+    provider = _PROVIDERS[idx % len(_PROVIDERS)]
+    patch_source = _PATCH_SOURCES[idx % len(_PATCH_SOURCES)]
+    line = 10 + (idx * 3) % 100
+
+    corr = _make_corroborator(
+        provider, f"rule-{idx:03d}", idx, category, unicode=unicode,
+    )
+    msg = (
+        f"\u65e5\u672c\u8a9e: finding {idx}"
+        if unicode and idx % 2 == 0
+        else f"Finding {idx}: {category} detected in {file}"
+    )
+    return Finding(
+        schema_version=SCHEMA_VERSION,
+        finding_id=f"qzp-{idx + 1:04d}",
+        file=file,
+        line=line,
+        end_line=line,
+        column=None,
+        category=category,
+        category_group=(
+            "security" if category == "hardcoded-secret" else "quality"
+        ),
+        severity=severity,
+        corroboration="single",
+        primary_message=msg,
+        corroborators=(corr,),
+        fix_hint=f"Fix hint for finding {idx}" if idx % 4 == 0 else None,
+        patch=_patch_text_for(line, file, idx, patch_source),
+        patch_source=patch_source,
+        patch_confidence=_patch_confidence_for(patch_source),
+        context_snippet=f"context line {idx}",
+        source_file_hash="",
+        cwe=(
+            f"CWE-{100 + idx}" if category == "hardcoded-secret" else None
+        ),
+        autofixable=(patch_source != "none"),
+        tags=(),
+    )
+
+
 def _build_findings(count: int, *, unicode: bool = False) -> List[Finding]:
     """Build deterministic findings for golden fixture tests."""
-    files = [
-        "src/api/auth.py",
-        "src/core/models.py",
-        "src/utils/helpers.py",
-        "tests/test_auth.py",
-        "config/settings.py",
-    ]
-    if unicode:
-        files = ["src/caf\u00e9.py", "src/\u65e5\u672c\u8a9e/app.py", "src/api/auth.py"]
-
-    categories = [
-        "unused-import", "broad-except", "hardcoded-secret",
-        "missing-docstring", "too-complex", "dead-code",
-        "unused-variable", "line-too-long",
-    ]
-    severities = ["critical", "high", "medium", "low", "info"]
-    providers = ["QLTY", "SonarCloud", "Codacy", "DeepSource", "DeepScan"]
-    patch_sources = ["deterministic", "none", "llm"]
-
-    findings: List[Finding] = []
-    for i in range(count):
-        f_idx = i % len(files)
-        c_idx = i % len(categories)
-        s_idx = i % len(severities)
-        p_idx = i % len(providers)
-        ps_idx = i % len(patch_sources)
-        line = 10 + (i * 3) % 100
-
-        corr = Corroborator.from_provider(
-            provider=providers[p_idx],
-            rule_id=f"rule-{i:03d}",
-            rule_url=(
-                f"https://rules.example.com/{categories[c_idx]}"
-                if i % 3 == 0
-                else None
-            ),
-            original_message=(
-                f"\u65e5\u672c\u8a9e message for finding {i}"
-                if unicode and i % 2 == 0
-                else f"Original message for finding {i}"
-            ),
-        )
-
-        patch_source = patch_sources[ps_idx]
-        patch_text = (
-            f"--- a/{files[f_idx]}\n"
-            f"+++ b/{files[f_idx]}\n"
-            f"@@ -{line},1 +{line},1 @@\n"
-            f"-old line {i}\n"
-            f"+new line {i}"
-            if patch_source != "none"
-            else None
-        )
-
-        msg = (
-            f"\u65e5\u672c\u8a9e: finding {i}"
-            if unicode and i % 2 == 0
-            else f"Finding {i}: {categories[c_idx]} detected in {files[f_idx]}"
-        )
-
-        finding = Finding(
-            schema_version=SCHEMA_VERSION,
-            finding_id=f"qzp-{i + 1:04d}",
-            file=files[f_idx],
-            line=line,
-            end_line=line,
-            column=None,
-            category=categories[c_idx],
-            category_group=(
-                "security" if categories[c_idx] == "hardcoded-secret" else "quality"
-            ),
-            severity=severities[s_idx],
-            corroboration="single",
-            primary_message=msg,
-            corroborators=(corr,),
-            fix_hint=f"Fix hint for finding {i}" if i % 4 == 0 else None,
-            patch=patch_text,
-            patch_source=patch_source,
-            patch_confidence=(
-                "high"
-                if patch_source == "deterministic"
-                else ("medium" if patch_source == "llm" else None)
-            ),
-            context_snippet=f"context line {i}",
-            source_file_hash="",
-            cwe=(
-                f"CWE-{100 + i}"
-                if categories[c_idx] == "hardcoded-secret"
-                else None
-            ),
-            autofixable=(patch_source != "none"),
-            tags=(),
-        )
-        findings.append(finding)
-    return findings
+    files = _UNICODE_FILES if unicode else _DEFAULT_FILES
+    return [_make_one_finding(i, files, unicode=unicode) for i in range(count)]
 
 
 def _build_payload(findings: List[Finding]) -> Dict[str, Any]:

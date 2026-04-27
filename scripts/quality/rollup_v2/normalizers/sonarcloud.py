@@ -4,7 +4,7 @@ from __future__ import absolute_import
 from pathlib import Path
 from typing import Any, Iterable
 
-from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer
+from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer, FindingDraft
 from scripts.quality.rollup_v2.taxonomy import lookup
 from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_QUALITY,
@@ -51,7 +51,7 @@ class SonarCloudNormalizer(BaseNormalizer):
             )
             component = str(issue.get("component", ""))
             file_path = _extract_file_from_component(component)
-            yield self._build_finding(
+            yield self._build_finding(FindingDraft(
                 finding_id=f"sonar-{index:04d}",
                 file=file_path,
                 line=int(issue.get("line") or 1),
@@ -63,4 +63,4 @@ class SonarCloudNormalizer(BaseNormalizer):
                 rule_url=None,
                 original_message=str(issue.get("message", "")),
                 context_snippet="",
-            )
+            ))

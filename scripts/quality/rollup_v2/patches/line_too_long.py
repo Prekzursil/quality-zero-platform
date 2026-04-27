@@ -16,7 +16,7 @@ MAX_LINE_LENGTH = 100
 def generate(
     finding: Finding,
     source_file_content: str,
-    repo_root: Path,
+    _repo_root: Path,
 ) -> PatchResult | PatchDeclined | None:
     """Wrap lines exceeding 100 columns using textwrap."""
     lines = source_file_content.splitlines(keepends=True)

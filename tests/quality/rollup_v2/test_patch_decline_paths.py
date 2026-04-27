@@ -45,12 +45,15 @@ def _make_finding(category: str, file: str, line: int, **kw) -> Finding:
 
 
 def _run(module, finding, source):
+    """Run a patch generator with positional args so the call works regardless
+    of whether the third parameter is spelled ``repo_root`` or ``_repo_root``.
+    """
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp).resolve()
         fdir = root / Path(finding.file).parent
         fdir.mkdir(parents=True, exist_ok=True)
         (root / finding.file).write_text(source, encoding="utf-8")
-        return module.generate(finding, source_file_content=source, repo_root=root)
+        return module.generate(finding, source, root)
 
 
 class OutOfRangeDeclineTests(unittest.TestCase):

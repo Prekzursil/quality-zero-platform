@@ -28,15 +28,11 @@ from scripts.quality.common import (
 )
 
 
-@contextlib.contextmanager
-def _temporary_cwd(target: Path):
-    """Handle temporary cwd."""
-    previous = Path.cwd()
-    os.chdir(target)
-    try:
-        yield
-    finally:
-        os.chdir(previous)
+from tests._quality_common_helpers import (
+    inferred_coverage as _inferred_coverage_helper,
+    normalized_explicit_coverage as _explicit_coverage_helper,
+    temporary_cwd as _temporary_cwd,
+)
 
 
 class QualityCommonTests(unittest.TestCase):
@@ -44,52 +40,11 @@ class QualityCommonTests(unittest.TestCase):
 
     @staticmethod
     def _normalized_explicit_coverage() -> dict:
-        """Handle normalized explicit coverage."""
-        return normalize_coverage(
-            {
-                "runner": " ",
-                "shell": "",
-                "command": "  qlty check  ",
-                "inputs": [
-                    {"format": "xml", "name": "coverage", "path": "coverage.xml"}
-                ],
-                "require_sources": [" source-a ", "source-a", "source-b"],
-                "min_percent": "98.5",
-                "assert_mode": {"default": "", "python": " warn "},
-                "evidence_note": "  note  ",
-                "setup": {
-                    "python": " 3.11 ",
-                    "node": " 20 ",
-                    "go": " 1.22 ",
-                    "dotnet": " 8 ",
-                    "rust": "yes",
-                    "system_packages": [" git ", "curl", "git"],
-                    "java": {"distribution": " temurin ", "version": " 21 "},
-                },
-            }
-        )
+        return _explicit_coverage_helper()
 
     @staticmethod
     def _inferred_coverage() -> dict:
-        """Handle inferred coverage."""
-        return normalize_coverage(
-            {
-                "command": (
-                    "python -m pytest --cov=scripts --cov=scripts.quality.assert_coverage_100 "
-                    "--cov=scripts.quality.check_sentry_zero && "
-                    "gcovr --filter '.*/src/.*' && "
-                    "npm --prefix airline-gui test -- --coverage --watch=false"
-                ),
-                "inputs": [
-                    {"format": "xml", "name": "coverage", "path": "coverage.xml"},
-                    {
-                        "format": "lcov",
-                        "name": "frontend",
-                        "path": "airline-gui/coverage/lcov.info",
-                    },
-                ],
-            }
-        )
+        return _inferred_coverage_helper()
 
     def test_resolve_report_spec_supports_report_spec_and_validates_legacy_kwargs(
         self,

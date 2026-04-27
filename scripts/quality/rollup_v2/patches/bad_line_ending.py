@@ -14,7 +14,7 @@ CATEGORY = "bad-line-ending"
 def generate(
     finding: Finding,
     source_file_content: str,
-    repo_root: Path,
+    _repo_root: Path,
 ) -> PatchResult | PatchDeclined | None:
     r"""Convert \\r\\n line endings to \\n."""
     if "\r\n" not in source_file_content:

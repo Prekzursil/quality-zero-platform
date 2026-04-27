@@ -92,7 +92,7 @@ class DispatcherTests(unittest.TestCase):
             generator_version="1.0",
             touches_files=frozenset({Path("src/app.py")}),
         )
-        fake_gen = SimpleNamespace(generate=lambda finding, *, source_file_content, repo_root: expected)
+        fake_gen = SimpleNamespace(generate=lambda _finding, _source, _root:expected)
 
         with patch.dict(patches.GENERATORS, {"broad-except": fake_gen}):
             f = _make_finding(category="broad-except")
@@ -116,7 +116,7 @@ class DispatcherTests(unittest.TestCase):
             reason_text="Cannot determine fix",
             suggested_tier="llm-fallback",
         )
-        fake_gen = SimpleNamespace(generate=lambda finding, *, source_file_content, repo_root: declined)
+        fake_gen = SimpleNamespace(generate=lambda _finding, _source, _root:declined)
 
         with patch.dict(patches.GENERATORS, {"broad-except": fake_gen}):
             f = _make_finding(category="broad-except")

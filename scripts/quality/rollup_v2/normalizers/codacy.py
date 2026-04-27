@@ -4,7 +4,7 @@ from __future__ import absolute_import
 from pathlib import Path
 from typing import Any, Iterable
 
-from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer
+from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer, FindingDraft
 from scripts.quality.rollup_v2.taxonomy import lookup
 from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_QUALITY,
@@ -37,7 +37,7 @@ class CodacyNormalizer(BaseNormalizer):
                 if category in _SECURITY_CATEGORY_HINTS
                 else CATEGORY_GROUP_QUALITY
             )
-            yield self._build_finding(
+            yield self._build_finding(FindingDraft(
                 finding_id=f"codacy-{index:04d}",
                 file=str(issue.get("filename", "")),
                 line=int(issue.get("line") or 1),
@@ -49,4 +49,4 @@ class CodacyNormalizer(BaseNormalizer):
                 rule_url=issue.get("patternUrl"),
                 original_message=str(issue.get("message", "")),
                 context_snippet="",
-            )
+            ))

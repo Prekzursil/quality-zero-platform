@@ -868,8 +868,8 @@ def _build_test_token_shape() -> str:
 class RedactSecretsTests(unittest.TestCase):
     # --- positive tests: each pattern must be redacted
     def test_named_assignment_api_key(self):
-        out = redact_secrets('FOO_API_KEY = "sk-EXAMPLE_KEY_1"')
-        self.assertNotIn("sk-EXAMPLE_KEY_1", out)
+        out = redact_secrets('FOO_API_KEY = "EXAMPLE_KEY_1"')
+        self.assertNotIn("EXAMPLE_KEY_1", out)
         self.assertIn(REDACTED, out)
 
     def test_named_assignment_lowercase(self):
@@ -940,7 +940,7 @@ class RedactSecretsTests(unittest.TestCase):
 
     # --- idempotency
     def test_idempotent_on_redacted_output(self):
-        original = 'FOO_API_KEY = "sk-EXAMPLE_KEY_2"'
+        original = 'FOO_API_KEY = "EXAMPLE_KEY_2"'
         once = redact_secrets(original)
         twice = redact_secrets(once)
         self.assertEqual(once, twice)
@@ -1631,11 +1631,11 @@ class _DemoNormalizer(BaseNormalizer):
                 category="broad-except",
                 category_group=CATEGORY_GROUP_QUALITY,
                 severity="medium",
-                primary_message='FOO_KEY = "sk-EXAMPLE_REDACTED" was here',
+                primary_message='FOO_KEY = "EXAMPLE_REDACTED" was here',
                 rule_id="Pylint_W0703",
                 rule_url=None,
                 original_message="broad-except",
-                context_snippet='API_KEY = "sk-EXAMPLE_REDACTED"',
+                context_snippet='API_KEY = "EXAMPLE_REDACTED"',
             )
         ]
 
@@ -1655,13 +1655,13 @@ class BaseNormalizerTests(unittest.TestCase):
         self.assertIsInstance(result, NormalizerResult)
         self.assertEqual(len(result.findings), 1)
         finding = result.findings[0]
-        self.assertNotIn("sk-EXAMPLE_REDACTED", finding.context_snippet)
+        self.assertNotIn("EXAMPLE_REDACTED", finding.context_snippet)
         self.assertIn("<REDACTED>", finding.context_snippet)
 
     def test_finalize_redacts_primary_message(self):
         norm = _DemoNormalizer()
         result = norm.run(artifact=None, repo_root=self.root)
-        self.assertNotIn("sk-EXAMPLE_REDACTED", result.findings[0].primary_message)
+        self.assertNotIn("EXAMPLE_REDACTED", result.findings[0].primary_message)
 
     def test_path_escape_produces_normalizer_error_not_finding(self):
         class _EscapeNormalizer(_DemoNormalizer):
@@ -1915,7 +1915,7 @@ class _LeakyNormalizer(BaseNormalizer):
                 category="broad-except",
                 category_group=CATEGORY_GROUP_QUALITY,
                 severity="medium",
-                primary_message='leaked API_KEY = "sk-EXAMPLE_KEY_3"',
+                primary_message='leaked API_KEY = "EXAMPLE_KEY_3"',
                 rule_id="Pylint_W0703",
                 rule_url=None,
                 # IMPLEMENTER: build the test token at runtime via the helper
@@ -1943,7 +1943,7 @@ class IntegrationRedactionTests(unittest.TestCase):
             # to .run()).
             leaky_token = _build_test_token_shape()   # implementer: pass the SAME value into _LeakyNormalizer
             for secret in (
-                "sk-EXAMPLE_KEY_3",
+                "EXAMPLE_KEY_3",
                 leaky_token,
                 "verylongsecretvaluegoeshereabcdef",
             ):

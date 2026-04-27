@@ -19,7 +19,7 @@ _EXCEPT_PATTERN = re.compile(
 def generate(
     finding: Finding,
     source_file_content: str,
-    repo_root: Path,
+    _repo_root: Path,
 ) -> PatchResult | PatchDeclined | None:
     """Rewrite `except Exception` / bare except / `except BaseException` to a narrower tuple."""
     lines = source_file_content.splitlines(keepends=True)

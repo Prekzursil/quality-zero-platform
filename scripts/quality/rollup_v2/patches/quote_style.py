@@ -32,7 +32,7 @@ def _replace_quotes(line: str) -> str:
 def generate(
     finding: Finding,
     source_file_content: str,
-    repo_root: Path,
+    _repo_root: Path,
 ) -> PatchResult | PatchDeclined | None:
     """Convert single-quoted strings to double-quoted."""
     return apply_line_transform(

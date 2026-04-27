@@ -102,4 +102,6 @@ def dispatch(
     gen = GENERATORS.get(finding.category)
     if gen is None:
         return None
-    return gen.generate(finding, source_file_content=source_file_content, repo_root=repo_root)  # type: ignore[union-attr]
+    # Pass positionally so the dispatch works regardless of whether the
+    # generator spells the third parameter ``repo_root`` or ``_repo_root``.
+    return gen.generate(finding, source_file_content, repo_root)  # type: ignore[union-attr]

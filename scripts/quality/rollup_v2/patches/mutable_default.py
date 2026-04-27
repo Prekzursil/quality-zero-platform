@@ -20,7 +20,7 @@ _MUTABLE_DEFAULT = re.compile(
 def generate(
     finding: Finding,
     source_file_content: str,
-    repo_root: Path,
+    _repo_root: Path,
 ) -> PatchResult | PatchDeclined | None:
     """Replace mutable default `def f(x=[])` with `def f(x=None)` + guard."""
     lines = source_file_content.splitlines(keepends=True)

@@ -14,7 +14,7 @@ CATEGORY = "dead-code"
 def generate(
     finding: Finding,
     source_file_content: str,
-    repo_root: Path,
+    _repo_root: Path,
 ) -> PatchResult | PatchDeclined | None:
     """Remove unreachable code blocks after return/raise/break/continue."""
     lines = source_file_content.splitlines(keepends=True)

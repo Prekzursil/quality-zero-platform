@@ -30,7 +30,7 @@ def _fix_spacing(line: str) -> str:
 def generate(
     finding: Finding,
     source_file_content: str,
-    repo_root: Path,
+    _repo_root: Path,
 ) -> PatchResult | PatchDeclined | None:
     """Apply PEP 8 spacing conventions."""
     lines = source_file_content.splitlines(keepends=True)

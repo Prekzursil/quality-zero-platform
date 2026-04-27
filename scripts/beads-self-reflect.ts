@@ -17,7 +17,7 @@
  * The imports below are placeholders - replace with your actual service paths.
  */
 
-import { parseArgs } from "util";
+import { parseArgs } from "node:util";
 
 // =============================================================================
 // Log sanitisation
@@ -80,7 +80,7 @@ Environment Variables:
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
 const SLACK_CHANNEL = process.env.SLACK_CHANNEL_AGENTS || "#dev-agents";
 
-const DAYS = parseInt(args.days || "7", 10);
+const DAYS = Number.parseInt(args.days || "7", 10);
 const NO_SLACK = args["no-slack"] || false;
 const VERBOSE = args.verbose || false;
 

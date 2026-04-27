@@ -46,13 +46,19 @@ def _make_finding(category: str, file: str, line: int, **kwargs) -> Finding:
 
 
 def _run_generator(module, finding, source):
-    """Run a patch generator in a temp directory."""
+    """Run a patch generator in a temp directory.
+
+    Use positional args so the harness works regardless of whether the
+    generator spells the third parameter ``repo_root`` or ``_repo_root``
+    (the underscore-prefix convention for protocol-required-but-unused
+    parameters introduced to silence ``python:S1172``).
+    """
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp).resolve()
         fdir = root / Path(finding.file).parent
         fdir.mkdir(parents=True, exist_ok=True)
         (root / finding.file).write_text(source, encoding="utf-8")
-        return module.generate(finding, source_file_content=source, repo_root=root)
+        return module.generate(finding, source, root)
 
 
 class UnusedImportHappyPathTest(unittest.TestCase):

@@ -15,10 +15,10 @@
  *   npx tsx scripts/beads-fetch-conversation-history.ts --project /path/to/project
  */
 
-import { parseArgs } from "util";
-import { writeFileSync, readFileSync, readdirSync, existsSync, mkdirSync } from "fs";
-import { dirname, join, basename } from "path";
-import { homedir } from "os";
+import { parseArgs } from "node:util";
+import { writeFileSync, readFileSync, readdirSync, existsSync, mkdirSync } from "node:fs";
+import { dirname, join, basename } from "node:path";
+import { homedir } from "node:os";
 
 // =============================================================================
 // CLI Arguments
@@ -334,7 +334,7 @@ function parseConversationFile(
 async function main() {
   console.log("BEADS Conversation History Fetcher\n");
 
-  const DAYS = parseInt(args.days || "7", 10);
+  const DAYS = Number.parseInt(args.days || "7", 10);
   const OUTPUT_PATH = args.output || ".beads/temp/conversation-history.json";
   const projectPath = args.project || process.cwd();
 

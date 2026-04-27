@@ -17,7 +17,7 @@ _BARE_RAISE = re.compile(r"^(\s*)raise\s*$")
 def generate(
     finding: Finding,
     source_file_content: str,
-    repo_root: Path,
+    _repo_root: Path,
 ) -> PatchResult | PatchDeclined | None:
     """Replace standalone `raise` outside except blocks with `raise RuntimeError(...)`."""
     lines = source_file_content.splitlines(keepends=True)

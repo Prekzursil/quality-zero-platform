@@ -37,9 +37,9 @@ def make_decline_generator(
     )
 
     def generate(
-        finding: Finding,
-        source_file_content: str,
-        repo_root: Path,
+        _finding: Finding,
+        _source_file_content: str,
+        _repo_root: Path,
     ) -> PatchResult | PatchDeclined | None:
         return declined
 

@@ -21,7 +21,7 @@ _SECRET_ASSIGN = re.compile(
 def generate(
     finding: Finding,
     source_file_content: str,
-    repo_root: Path,
+    _repo_root: Path,
 ) -> PatchResult | PatchDeclined | None:
     """Replace hardcoded secret with os.environ placeholder."""
     lines = source_file_content.splitlines(keepends=True)

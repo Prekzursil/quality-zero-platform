@@ -11,9 +11,9 @@
  *   npx tsx scripts/beads-fetch-pr-comments.ts --output ./comments.json
  */
 
-import { parseArgs } from "util";
-import { writeFileSync, mkdirSync, existsSync } from "fs";
-import { dirname } from "path";
+import { parseArgs } from "node:util";
+import { writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { dirname } from "node:path";
 
 // =============================================================================
 // Log sanitisation
@@ -110,7 +110,7 @@ const KNOWN_REVIEWERS = {
   copilot: ["github-actions[bot]", "copilot[bot]"],
 } as const;
 
-const DAYS = parseInt(args.days || "7", 10);
+const DAYS = Number.parseInt(args.days || "7", 10);
 const OUTPUT_PATH = args.output || ".beads/temp/pr-comments.json";
 
 // =============================================================================
@@ -123,8 +123,8 @@ async function getGitHubToken(): Promise<string> {
   }
 
   // Try to get from gh CLI
-  const { exec } = await import("child_process");
-  const { promisify } = await import("util");
+  const { exec } = await import("node:child_process");
+  const { promisify } = await import("node:util");
   const execAsync = promisify(exec);
 
   try {
@@ -144,8 +144,8 @@ async function getRepoInfo(): Promise<{ owner: string; repo: string }> {
   }
 
   // Try to get from git remote
-  const { exec } = await import("child_process");
-  const { promisify } = await import("util");
+  const { exec } = await import("node:child_process");
+  const { promisify } = await import("node:util");
   const execAsync = promisify(exec);
 
   try {

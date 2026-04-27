@@ -93,7 +93,7 @@ def make_line_removal_generator(
     def generate(
         finding: Finding,
         source_file_content: str,
-        repo_root: Path,
+        _repo_root: Path,
     ) -> PatchResult | PatchDeclined | None:
         return apply_line_removal(
             finding=finding,

@@ -25,7 +25,7 @@ def _replace_leading_tabs(line: str) -> str:
 def generate(
     finding: Finding,
     source_file_content: str,
-    repo_root: Path,
+    _repo_root: Path,
 ) -> PatchResult | PatchDeclined | None:
     """Convert leading tabs to 4 spaces."""
     return apply_line_transform(

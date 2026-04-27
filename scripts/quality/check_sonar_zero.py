@@ -20,7 +20,13 @@ from scripts.quality.common import utc_timestamp, write_report
 from scripts.security_helpers import load_json_https
 
 SONAR_API_BASE = "https://sonarcloud.io"
-SCOPED_ANALYSIS_RETRY_ATTEMPTS = 72
+# Bumped from 72 to 144 (12-minute retry budget) because the
+# SonarCloud Scan workflow + Sonar's PR-scope indexing can take up to
+# ~5 minutes combined. The previous 6-minute budget was a tight race
+# and PRs were occasionally hitting HTTP 404 from sonarcloud.io
+# /api/issues/search?pullRequest=<n> when the gate queried before
+# Sonar finished uploading + indexing the analysis. See QZP issue #169.
+SCOPED_ANALYSIS_RETRY_ATTEMPTS = 144
 
 
 def _mapping_or_empty(value: Any) -> Dict[str, Any]:

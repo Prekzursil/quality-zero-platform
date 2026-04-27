@@ -27,6 +27,38 @@ class NormalizerResult:
     security_drops: Tuple[Dict[str, str], ...]
 
 
+@dataclass(frozen=True, slots=True)
+class FindingFields:
+    """Per-finding inputs to ``BaseNormalizer._build_finding``.
+
+    Bundles what used to be 14+ keyword args on ``_build_finding`` so
+    Lizard's ``many_parameters`` smell no longer fires (threshold 10).
+    Field semantics match the legacy kw-args one-for-one — see the
+    docstring of ``_build_finding`` for the redaction + corroborator
+    contract this dataclass feeds.
+
+    Optional fields default to ``None`` so most call sites can omit
+    them; ``end_line`` defaults to ``None`` and the helper falls back
+    to ``line`` (preserving the prior ``end_line=line if None`` shape).
+    """
+
+    finding_id: str
+    file: str
+    line: int
+    category: str
+    category_group: CategoryGroup
+    severity: str
+    primary_message: str
+    rule_id: str
+    original_message: str
+    rule_url: str | None = None
+    context_snippet: str = ""
+    end_line: int | None = None
+    column: int | None = None
+    fix_hint: str | None = None
+    cwe: str | None = None
+
+
 class BaseNormalizer(ABC):
     """Base class for all per-provider normalizers.
 
@@ -84,52 +116,40 @@ class BaseNormalizer(ABC):
             security_drops=tuple(drops),
         )
 
-    def _build_finding(
-        self,
-        *,
-        finding_id: str,
-        file: str,
-        line: int,
-        category: str,
-        category_group: CategoryGroup,
-        severity: str,
-        primary_message: str,
-        rule_id: str,
-        rule_url: str | None,
-        original_message: str,
-        context_snippet: str,
-        end_line: int | None = None,
-        column: int | None = None,
-        fix_hint: str | None = None,
-        cwe: str | None = None,
-    ) -> Finding:
-        """Helper for subclasses to construct Findings with redaction applied."""
+    def _build_finding(self, fields: FindingFields) -> Finding:
+        """Construct a Finding from per-finding inputs (with redaction applied).
+
+        Subclasses should construct a ``FindingFields`` and pass it in.
+        Redaction is applied to ``original_message``, ``primary_message``,
+        and ``context_snippet`` automatically; ``end_line`` defaults to
+        ``line`` when not set explicitly.
+        """
         corroborator = Corroborator.from_provider(
             provider=self.provider,
-            rule_id=rule_id,
-            rule_url=rule_url,
-            original_message=redact_secrets(original_message),
+            rule_id=fields.rule_id,
+            rule_url=fields.rule_url,
+            original_message=redact_secrets(fields.original_message),
         )
         return Finding(
             schema_version=SCHEMA_VERSION,
-            finding_id=finding_id,
-            file=file,
-            line=line,
-            end_line=end_line if end_line is not None else line,
-            column=column,
-            category=category,
-            category_group=category_group,
-            severity=severity,
+            finding_id=fields.finding_id,
+            file=fields.file,
+            line=fields.line,
+            end_line=fields.end_line if fields.end_line is not None else fields.line,
+            column=fields.column,
+            category=fields.category,
+            category_group=fields.category_group,
+            severity=fields.severity,
             corroboration="single",
-            primary_message=redact_secrets(primary_message),
+            primary_message=redact_secrets(fields.primary_message),
             corroborators=(corroborator,),
-            fix_hint=fix_hint,
+            fix_hint=fields.fix_hint,
             patch=None,
             patch_source="none",
             patch_confidence=None,
-            context_snippet=redact_secrets(context_snippet),
+            context_snippet=redact_secrets(fields.context_snippet),
             source_file_hash="",
-            cwe=cwe,
+            cwe=fields.cwe,
             autofixable=False,
             tags=(),
         )

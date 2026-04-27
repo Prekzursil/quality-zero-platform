@@ -9,7 +9,7 @@ from __future__ import absolute_import
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping
 
-from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer
+from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer, FindingFields
 from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_QUALITY,
     Finding,
@@ -69,7 +69,7 @@ class ChromaticNormalizer(BaseNormalizer):
         self, *, index: int, err_count: int, web_url: Any
     ) -> Finding:
         """Build the single 'errored snapshots' finding for one build."""
-        return self._build_finding(
+        return self._build_finding(FindingFields(
             finding_id=f"chromatic-err-{index:04d}",
             file="(chromatic)",
             line=1,
@@ -81,7 +81,7 @@ class ChromaticNormalizer(BaseNormalizer):
             rule_url=web_url,
             original_message=f"errCount={err_count}",
             context_snippet="",
-        )
+        ))
 
     def _maybe_build_change_finding(
         self, *, change: Any, index: int, default_url: Any
@@ -97,7 +97,7 @@ class ChromaticNormalizer(BaseNormalizer):
         story = str(change.get("story", "unknown"))
         change_url = change.get("changeUrl")
         severity = "high" if status == "REJECTED" else "medium"
-        return self._build_finding(
+        return self._build_finding(FindingFields(
             finding_id=f"chromatic-{index:04d}",
             file="(chromatic)",
             line=1,
@@ -109,4 +109,4 @@ class ChromaticNormalizer(BaseNormalizer):
             rule_url=change_url or default_url,
             original_message=f"{component}/{story}: {status}",
             context_snippet="",
-        )
+        ))

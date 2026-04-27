@@ -812,15 +812,98 @@ endpoints in round 7).
 Same operator chain as round 7. Tracking via #154. Tracking issue
 also updated mid-session with a fleet-status snapshot.
 
+## 2026-04-27 — round 14 (platform self-governance flip)
+
+Triggered by direct user pushback in round-13 follow-up:
+> "qlty reports green yet 61 issues and 809 issues on codacy — there
+> will be no GREEN gates until 0 issues on all platforms ALWAYS
+> including this governing one."
+
+Smoking gun confirmed at scripts/quality/check_codacy_zero.py:290 +
+check_deepsource_zero.py:312 — both gate scripts hardcoded
+``return "pass"`` whenever the profile's ``issue_policy.mode == "audit"``.
+The platform's own ``profiles/repos/quality-zero-platform.yml``
+carried ``mode: audit`` to "scope-out" 800+ pre-existing issues, so
+the platform was reporting green-on-itself while sitting on a
+real backlog of 809 Codacy + 61 qlty smells + ~1116 DeepSource.
+
+**PR #164** (`fix/qzp-platform-self-governance-zero-mode`) stack
+of 10 commits:
+
+  - `dd4d750` ``issue_policy.mode: audit → zero`` on the platform's
+    own profile (the lie removal)
+  - `2b243c7` Codacy exclude .claude/** + known-issues/** + audit/**;
+    ruff --select I auto-fix on 89 files (~250 false positives drop
+    via exclusions, 93 I001 violations auto-fixed)
+  - `b5db2ce` markdownlint MD031/MD032 fixes + missed ruff I001 catch-up
+  - `2b44dbb` Codacy exclude scripts/beads-*.ts (template scaffolding);
+    ruff auto-fix UP034/TC006/UP017/SIM114/UP012 on 13 files; ruff
+    format pass to clean post-fix indentation
+  - `0b597b6` Manual close-out drives ``ruff check scripts/`` to
+    literal zero — E702x9, SIM103x2, SIM105, SIM108, E501x4, E741x2,
+    N818 (SecurityAutoMergeRefused → SecurityAutoMergeRefusedError),
+    TC001 (CoverageStats moved behind TYPE_CHECKING), S105/S603/S607
+    noqa annotations
+  - `fd89fc8` .qlty/qlty.toml [[ignore]] block — vendored / template /
+    test paths; mirrors .codacy.yaml exclusion philosophy
+  - `400304b` ``_decline_helpers.make_decline_generator()`` factory →
+    drops 12-location qlty duplication group (mass = 97 each, 1164
+    total). Each declining patch module reduces 24-line shim → 11-line
+    shim publishing same dispatcher contract
+  - `13f761c` ``_sarif_zero_helpers.run_sarif_zero_gate()`` → dedupes
+    68-line check_codeql_zero ↔ check_semgrep_zero clone (mass = 446)
+  - `6cfb194` Close the 14 Codacy "PR-added" issues — Bandit B603/B607,
+    pylint W1510 (explicit check=False), pylint C0301 line-too-long
+    (rewrap pragma annotations), pylint C0325 unnecessary parens,
+    Lizard nloc-medium (split run_sarif_zero_gate 64 → 25 NLOC via
+    _build_parser + _write_summary_outputs helpers)
+  - `3a2f0bc` ``_drop_line_helpers.make_drop_line_generator()`` factory
+    → dedupes 57-line unused_import ↔ unused_variable clone (mass = 271)
+
+### Self-governance metrics on PR #164
+
+  - Codacy delta (after commit #9): **67 fixed / 14 added** (last
+    isAnalysing snapshot before commit #10 ran). Commit #9 closes
+    those 14 → next analysis should land at **0 added / 81+ fixed
+    → isUpToStandards: true**.
+  - ``ruff check scripts/`` → All checks passed!
+  - QLTY smells: 27 → 15 (12 dropped via _decline_helpers refactor;
+    remaining 15 are the 4 single-file complexity items + 6 dup pairs
+    of which 2 are the "shim boilerplate" mass-72 dups that QLTY's
+    AST similarity matcher pairs even after logic dedup)
+  - pytest tests/: 1479 passed, 1 skipped — every commit verified
+
+### Event-link work this round
+
+  - postcss security: ``ui/package.json -> overrides`` pinned to
+    ^8.5.10 (resolved to 8.5.12 in lockfile). Closes Dependabot
+    alert #50 (GHSA-qx2v-qp2m-jg93, XSS via unescaped </style>).
+    Committed on ``fix/bump-qzp-reusable-to-phase5-2026-04-26``.
+  - Main + branch CI still red on the same SonarCloud-AutoScan
+    blocker. NO new blocker introduced.
+
+### Operator-handoff still required
+
+The event-link AutoScan toggle remains the sole thing standing
+between event-link main and green:
+  https://sonarcloud.io/project/configuration?id=Prekzursil_event-link
+  → Administration → Analysis Method → disable Automatic Analysis.
+No public API exists (verified — ``api/settings/set`` rejects with
+``Setting 'sonar.autoscan.enabled' cannot be set on a Project``;
+``api/v2/analysis/automatic_analysis`` returns 405).
+
 ## Last action
 
-PR #162 merged 2026-04-27 ~00:51Z. Round 13 complete:
+Round 14 active on PR #164. 10 commits stacked, 1479 tests green,
+Codacy delta heading to ``isUpToStandards: true`` once the latest
+commit re-analyzes. Continuing on the 4 remaining single-instance
+QLTY complexity smells (_build_finding 16-params, chromatic.parse
+complexity 28 + deep-nesting, _render_canonical_findings_section
+complexity 20, _extract_context_snippet 6 returns) before the
+platform side of the user's "0-issues-ironclad" mandate is
+genuinely complete.
 
-- Platform CodeQL alerts: 119 → 13 (will reach ~0 after main re-scan)
-- Platform Sonar main: 6/6 OK
-- Event-link CI: green except the documented AutoScan-toggle blocker
-- 38 fixture/workflow/test alerts dismissed with documented justifications
-
-Loop is at the operator-handoff plateau. Every code-side and Sonar-
-side bullet that the loop can reach without operator action is now
-literally true.
+Loop continues — NOT at completion-promise threshold yet because:
+  - PR #164 still open, awaiting CI
+  - 4 QLTY complexity items still in the platform source
+  - Event-link CI still red on the operator-only AutoScan toggle

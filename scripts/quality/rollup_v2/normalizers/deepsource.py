@@ -4,7 +4,7 @@ from __future__ import absolute_import
 from pathlib import Path
 from typing import Any, Iterable
 
-from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer
+from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer, FindingFields
 from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_QUALITY,
     CATEGORY_GROUP_SECURITY,
@@ -43,7 +43,7 @@ class DeepSourceNormalizer(BaseNormalizer):
             file_path = str(location.get("path", ""))
             line = int(begin.get("line") or 1)
             title = str(issue.get("title", ""))
-            yield self._build_finding(
+            yield self._build_finding(FindingFields(
                 finding_id=f"deepsource-{index:04d}",
                 file=file_path,
                 line=line,
@@ -55,4 +55,4 @@ class DeepSourceNormalizer(BaseNormalizer):
                 rule_url=None,
                 original_message=title,
                 context_snippet="",
-            )
+            ))

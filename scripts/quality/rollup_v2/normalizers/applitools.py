@@ -8,7 +8,7 @@ from __future__ import absolute_import
 from pathlib import Path
 from typing import Any, Iterable
 
-from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer
+from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer, FindingFields
 from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_QUALITY,
     Finding,
@@ -45,7 +45,7 @@ class ApplitoolsNormalizer(BaseNormalizer):
 
             severity = "high" if status == "failed" else "medium"
 
-            yield self._build_finding(
+            yield self._build_finding(FindingFields(
                 finding_id=f"applitools-{index:04d}",
                 file="(applitools)",
                 line=1,
@@ -60,5 +60,5 @@ class ApplitoolsNormalizer(BaseNormalizer):
                 rule_url=result_url,
                 original_message=f"{test_name}: {status}",
                 context_snippet="",
-            )
+            ))
             index += 1

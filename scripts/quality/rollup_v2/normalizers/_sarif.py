@@ -8,7 +8,7 @@ from __future__ import absolute_import
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer
+from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer, FindingFields
 from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_QUALITY,
     CATEGORY_GROUP_SECURITY,
@@ -220,7 +220,7 @@ def parse_sarif(
             rule_url = _extract_rule_url(rule_meta)
             context_snippet = _extract_context_snippet(result)
 
-            finding = normalizer._build_finding(
+            finding = normalizer._build_finding(FindingFields(
                 finding_id=f"{provider.lower()}-{index:04d}",
                 file=file_path,
                 line=line,
@@ -235,7 +235,7 @@ def parse_sarif(
                 original_message=message,
                 context_snippet=context_snippet,
                 cwe=cwe,
-            )
+            ))
             findings.append(finding)
             index += 1
 

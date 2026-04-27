@@ -4,7 +4,7 @@ from __future__ import absolute_import
 from pathlib import Path
 from typing import Any, Iterable
 
-from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer
+from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer, FindingFields
 from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_QUALITY,
     Finding,
@@ -40,7 +40,7 @@ class SentryNormalizer(BaseNormalizer):
                 severity = _LEVEL_MAP.get(level, "medium")
                 metadata = issue.get("metadata") or {}
                 filename = str(metadata.get("filename", ""))
-                yield self._build_finding(
+                yield self._build_finding(FindingFields(
                     finding_id=f"sentry-{index:04d}",
                     file=filename,
                     line=1,
@@ -52,5 +52,5 @@ class SentryNormalizer(BaseNormalizer):
                     rule_url=None,
                     original_message=title,
                     context_snippet="",
-                )
+                ))
                 index += 1

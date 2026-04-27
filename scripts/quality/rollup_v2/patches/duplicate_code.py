@@ -1,23 +1,11 @@
 """Declining patch generator for `duplicate-code` category."""
+
 from __future__ import absolute_import
 
-from pathlib import Path
-
-from scripts.quality.rollup_v2.schema.finding import Finding
-from scripts.quality.rollup_v2.schema.patch import PatchDeclined, PatchResult
+from scripts.quality.rollup_v2.patches._decline_helpers import make_decline_generator
 
 GENERATOR_VERSION = "duplicate_code/1.0.0"
 CATEGORY = "duplicate-code"
-
-
-def generate(
-    finding: Finding,
-    source_file_content: str,
-    repo_root: Path,
-) -> PatchResult | PatchDeclined | None:
-    """Duplicate code extraction is a multi-file refactor; defer to LLM."""
-    return PatchDeclined(
-        reason_code="ambiguous-fix",
-        reason_text="duplicate code extraction is a multi-file-capable refactor",
-        suggested_tier="llm-fallback",
-    )
+generate = make_decline_generator(
+    reason_text="duplicate code extraction is a multi-file-capable refactor",
+)

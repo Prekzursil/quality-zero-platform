@@ -12,11 +12,39 @@ coverage:
 
     packages="$(go list ./... | grep -vE "/ent($|/)")"
 
-    go test $packages -coverprofile=coverage/go-coverage.out -covermode=count
+    rm -f coverage/go-coverage.out coverage_part.out
+
+    first=1
+
+    for pkg in $packages; do
+
+      go test "$pkg" -coverprofile=coverage_part.out -covermode=count || true
+
+      if [ -f coverage_part.out ]; then
+
+        if [ "$first" -eq 1 ]; then cp coverage_part.out coverage/go-coverage.out; first=0;
+
+        else tail -n +2 coverage_part.out >> coverage/go-coverage.out; fi
+
+        rm -f coverage_part.out
+
+      fi
+
+    done
+
+    cp coverage/go-coverage.out coverage.out
 
     go install github.com/boumenot/gocover-cobertura@latest
 
     "$(go env GOPATH)/bin/gocover-cobertura" < coverage/go-coverage.out > coverage/go-coverage.xml
+
+    if [ -f scripts/quality/gocover_to_sonar_generic.py ]; then
+
+      MODULE="$(go list -m)"
+
+      python3 scripts/quality/gocover_to_sonar_generic.py --in coverage/go-coverage.out --module "$MODULE" --out coverage-sonar.xml
+
+    fi
 
     '
   inputs:

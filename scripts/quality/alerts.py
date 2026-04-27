@@ -75,9 +75,11 @@ class AlertType(enum.Enum):
     FLEET_BUMP_FAIL = "alert:fleet-bump-fail"
     REPO_NOT_PROFILED = "alert:repo-not-profiled"
     FLAG_MISSING = "alert:flag-missing"
-    # ruff S105 false positive — this is the GitHub label slug for the
-    # ``secret-missing`` alert, NOT a hardcoded credential.
-    SECRET_MISSING = "alert:secret-missing"  # noqa: S105
+    # ruff S105 / Bandit B105 / Prospector dodgy false positive — this is
+    # the GitHub label slug for the ``secret-missing`` alert, NOT a
+    # hardcoded credential. All three scanners pattern-match on the
+    # word ``secret`` in the literal.
+    SECRET_MISSING = "alert:secret-missing"  # noqa: S105  # nosec B105  # dodgy: hardcoded-secret-key
 
     @property
     def label(self) -> str:

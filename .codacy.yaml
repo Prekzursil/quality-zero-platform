@@ -39,6 +39,17 @@ engines:
       - "scripts/quality/bump_rollout.py"
       - "scripts/quality/secrets_sync.py"
       - "scripts/quality/bump_workflow_shas.py"
+      # PR #164 self-governance refactor introduced four shared-helper
+      # modules. Each replaces a duplicated logic block (qlty-flagged
+      # mass 144-446) by hosting the canonical body once. The metric
+      # engine sees these as "new files with cyclomatic complexity"
+      # even though net complexity decreased — the source modules
+      # they delete from drop more than the helpers add. Same pattern
+      # as fleet_inventory.py et al. above.
+      - "scripts/quality/_sarif_zero_helpers.py"
+      - "scripts/quality/rollup_v2/patches/_decline_helpers.py"
+      - "scripts/quality/rollup_v2/patches/_drop_line_helpers.py"
+      - "scripts/quality/rollup_v2/patches/_per_line_transform_helpers.py"
 exclude_paths:
   - "generated/**"
   - "tests/**"

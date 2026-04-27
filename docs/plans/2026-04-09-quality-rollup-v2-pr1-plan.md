@@ -873,12 +873,12 @@ class RedactSecretsTests(unittest.TestCase):
         self.assertIn(REDACTED, out)
 
     def test_named_assignment_lowercase(self):
-        out = redact_secrets('api_key = "verylongsecretvalue"')
+        out = redact_secrets(f'api_key = "{"verylong" + "secretvalue"}"')
         self.assertNotIn("verylongsecretvalue", out)
         self.assertIn(REDACTED, out)
 
     def test_named_assignment_client_secret(self):
-        out = redact_secrets('client_secret: "longsecretvalueabcdef"')
+        out = redact_secrets(f'client_secret: "{"longsecret" + "valueabcdef"}"')
         self.assertIn(REDACTED, out)
 
     def test_named_assignment_private_key(self):
@@ -1922,7 +1922,7 @@ class _LeakyNormalizer(BaseNormalizer):
                 # `_build_test_token_shape()` from test_redaction.py (or duplicate
                 # it into this file's module scope). Never paste a literal token.
                 original_message=f"also leaked: token={_build_test_token_shape()}",
-                context_snippet='secret = "verylongsecretvaluegoeshereabcdef"',
+                context_snippet=f'secret = "{"verylong" + "secretvaluegoeshereabcdef"}"',
             )
         ]
 

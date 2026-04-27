@@ -460,7 +460,9 @@ async function main() {
   console.log("\nNext: Run '/self-reflect' to analyze with Claude Code");
 }
 
-main().catch(error => {
-  console.error("Error:", error.message);
+try {
+  await main();
+} catch (error) {
+  console.error("Error:", error instanceof Error ? error.message : error);
   process.exit(1);
-});
+}

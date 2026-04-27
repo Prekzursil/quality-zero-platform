@@ -153,7 +153,7 @@ def _render_by_file_view(
             lines.append(_render_finding_body(f))
 
     if collapse_after is not None and len(grouped) > collapse_after:
-        lines.append("</details>\n")
+        lines.append(_DETAILS_CLOSE)
 
     return "\n".join(lines)
 
@@ -221,15 +221,15 @@ def _render_alternate_views(findings: Sequence[Finding]) -> str:
 
     sections.append("<details><summary>View by provider</summary>\n")
     sections.append(_render_by_provider_view(findings))
-    sections.append("</details>\n")
+    sections.append(_DETAILS_CLOSE)
 
     sections.append("<details><summary>View by severity</summary>\n")
     sections.append(_render_by_severity_view(findings))
-    sections.append("</details>\n")
+    sections.append(_DETAILS_CLOSE)
 
     sections.append("<details><summary>Autofixable only</summary>\n")
     sections.append(_render_autofixable_view(findings))
-    sections.append("</details>\n")
+    sections.append(_DETAILS_CLOSE)
 
     return "\n".join(sections)
 

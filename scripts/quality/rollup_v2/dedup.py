@@ -2,7 +2,7 @@
 from __future__ import absolute_import
 
 from dataclasses import replace
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, cast
 
 from scripts.quality.rollup_v2.severity import max_severity
 from scripts.quality.rollup_v2.schema.finding import (
@@ -39,12 +39,16 @@ def merge_corroborators(findings: List[Finding]) -> Finding:
     primary = _pick_primary_by_provider_priority(findings)
     severity = max_severity([f.severity for f in findings])
     all_corroborators = tuple(c for f in findings for c in f.corroborators)
-    return replace(
+    # ``dataclasses.replace`` is typed as returning ``DataclassInstance`` (a
+    # protocol covering any frozen dataclass), so Sonar python:S5886 flags
+    # the ``-> Finding`` return type as a downcast. The cast is a no-op at
+    # runtime since ``primary`` is concretely a Finding.
+    return cast(Finding, replace(
         primary,
         severity=severity,
         corroboration="multi" if len(findings) >= 2 else "single",
         corroborators=all_corroborators,
-    )
+    ))
 
 
 def _pick_primary_by_provider_priority(findings: List[Finding]) -> Finding:

@@ -4,16 +4,14 @@ from __future__ import absolute_import
 
 import re
 from pathlib import Path
-from typing import List, Optional, Set, TYPE_CHECKING, Tuple
+from typing import List, Optional, Set, Tuple
 
 from scripts.quality.coverage_paths import (
     _coverage_source_candidates,
     _normalize_source_path,
     _should_track_coverage_source,
 )
-
-if TYPE_CHECKING:  # pragma: no cover
-    from scripts.quality.assert_coverage_100 import CoverageStats
+from scripts.quality.coverage_types import CoverageStats
 
 _XML_LINES_VALID_RE = re.compile(r'lines-valid="(\d+(?:\.\d+)?)"')
 _XML_LINES_COVERED_RE = re.compile(r'lines-covered="(\d+(?:\.\d+)?)"')
@@ -52,10 +50,8 @@ def coverage_sources_from_lcov(path: Path) -> Set[str]:
     }
 
 
-def parse_coverage_xml(name: str, path: Path) -> "CoverageStats":
+def parse_coverage_xml(name: str, path: Path) -> CoverageStats:
     """Handle parse coverage xml."""
-    from scripts.quality.assert_coverage_100 import CoverageStats
-
     text = path.read_text(encoding="utf-8")
     if counts := _parse_xml_totals(text):
         total, covered, branch_total, branch_covered = counts
@@ -125,10 +121,8 @@ def _iter_included_lcov_lines(path: Path) -> List[str]:
     return included_lines
 
 
-def parse_lcov(name: str, path: Path) -> "CoverageStats":
+def parse_lcov(name: str, path: Path) -> CoverageStats:
     """Handle parse lcov."""
-    from scripts.quality.assert_coverage_100 import CoverageStats
-
     counters = {
         "total": 0,
         "covered": 0,

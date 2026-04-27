@@ -2,12 +2,10 @@
 
 from __future__ import absolute_import
 
-from typing import List, Set, TYPE_CHECKING, Tuple
+from typing import List, Set, Tuple
 
 from scripts.quality.coverage_paths import _normalize_source_path
-
-if TYPE_CHECKING:  # pragma: no cover
-    from scripts.quality.assert_coverage_100 import CoverageStats
+from scripts.quality.coverage_types import CoverageStats
 
 
 def _matches_required_source(source_path: str, required_source: str) -> bool:

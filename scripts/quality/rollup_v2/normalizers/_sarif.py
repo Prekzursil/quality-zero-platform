@@ -2,11 +2,19 @@
 
 Provides `parse_sarif()` for converting SARIF results into canonical Finding
 objects, and a 50MB guard to reject oversized artifacts before parsing.
+
+Also exposes ``SarifJsonNormalizer`` — a base class for any normalizer
+whose only per-tool variation is the ``provider`` name. CodeQLNormalizer
+and SemgrepNormalizer both subclass this directly; the shared
+``parse(...)`` body handles dict/str/bytes artifact shapes plus the
+50MB size guard. This collapses what used to be a 41-line clone
+between codeql.py and semgrep.py.
 """
 from __future__ import absolute_import
 
+import json
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Iterable, List, Tuple
 
 from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer, FindingFields
 from scripts.quality.rollup_v2.schema.finding import (
@@ -18,6 +26,34 @@ from scripts.quality.rollup_v2.schema.finding import (
 from scripts.quality.rollup_v2.taxonomy import lookup
 
 MAX_SARIF_BYTES: int = 50 * 1024 * 1024  # 50 MB
+
+
+class SarifJsonNormalizer(BaseNormalizer):
+    """Shared base for SARIF-JSON normalizers (CodeQL, Semgrep, ...).
+
+    Subclasses set ``provider`` to the display name used in taxonomy
+    lookups and corroboration records. The ``parse`` body handles the
+    dict / str / bytes artifact dispatch + the 50MB size guard +
+    delegation into ``parse_sarif``; subclasses don't override it.
+    """
+
+    def parse(self, artifact: Any, repo_root: Path) -> Iterable[Finding]:
+        """Parse a SARIF artifact.
+
+        Accepts:
+          * ``dict``   — already-parsed SARIF JSON
+          * ``str``    — raw SARIF JSON text (size-checked)
+          * ``bytes``  — raw SARIF JSON bytes (size-checked)
+        Anything else returns an empty iterable.
+        """
+        if isinstance(artifact, (str, bytes)):
+            check_sarif_size(artifact)
+            data = json.loads(artifact)
+        elif isinstance(artifact, dict):
+            data = artifact
+        else:
+            return []
+        return parse_sarif(data, self.provider, repo_root, self)
 
 
 class SarifTooLargeError(ValueError):

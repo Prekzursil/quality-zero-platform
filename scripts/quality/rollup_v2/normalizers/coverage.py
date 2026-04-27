@@ -4,7 +4,7 @@ from __future__ import absolute_import
 from pathlib import Path
 from typing import Any, Iterable
 
-from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer
+from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer, FindingDraft
 from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_QUALITY,
     Finding,
@@ -41,7 +41,7 @@ class CoverageNormalizer(BaseNormalizer):
             if percent >= 100.0:
                 continue
             name = str(component.get("name", f"module-{index}"))
-            yield self._build_finding(
+            yield self._build_finding(FindingDraft(
                 finding_id=f"coverage-{index:04d}",
                 file=name,
                 line=1,
@@ -53,4 +53,4 @@ class CoverageNormalizer(BaseNormalizer):
                 rule_url=None,
                 original_message=f"Module {name} has {percent:.1f}% coverage",
                 context_snippet="",
-            )
+            ))

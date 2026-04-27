@@ -200,6 +200,114 @@ function identifyReviewer(
 // Main
 // =============================================================================
 
+interface GHSearchResult {
+  items: Array<{ number: number }>;
+}
+
+interface GHPullRequest {
+  number: number;
+  title: string;
+}
+
+interface GHReviewComment {
+  id: number;
+  user: { login: string } | null;
+  body: string;
+  path: string;
+  html_url: string;
+  created_at: string;
+}
+
+interface GHIssueComment {
+  id: number;
+  user: { login: string } | null;
+  body: string;
+  html_url: string;
+  created_at: string;
+}
+
+function pushIfReviewerKnown(
+  buf: PrComment[],
+  byReviewerType: Record<string, number>,
+  base: { prNumber: number; prTitle: string },
+  c: GHReviewComment | GHIssueComment,
+  filePath?: string,
+): boolean {
+  if (!c.body || c.body.length < 50) {
+    return false;
+  }
+  const reviewerType = identifyReviewer(c.user?.login || "unknown");
+  if (reviewerType === "unknown") {
+    return false;
+  }
+  byReviewerType[reviewerType] = (byReviewerType[reviewerType] || 0) + 1;
+  buf.push({
+    prNumber: base.prNumber,
+    prTitle: base.prTitle,
+    reviewer: c.user?.login || "unknown",
+    reviewerType,
+    body: c.body,
+    ...(filePath !== undefined ? { filePath } : {}),
+    url: c.html_url,
+    createdAt: c.created_at,
+  });
+  return true;
+}
+
+async function collectCommentsForPr(
+  owner: string,
+  repo: string,
+  prNumber: number,
+  token: string,
+  out: PrComment[],
+  byReviewerType: Record<string, number>,
+): Promise<number> {
+  const pr = await githubFetch<GHPullRequest>(
+    `/repos/${owner}/${repo}/pulls/${prNumber}`,
+    token,
+  );
+  const reviewComments = await githubFetch<GHReviewComment[]>(
+    `/repos/${owner}/${repo}/pulls/${prNumber}/comments`,
+    token,
+  );
+  const issueComments = await githubFetch<GHIssueComment[]>(
+    `/repos/${owner}/${repo}/issues/${prNumber}/comments`,
+    token,
+  );
+  const base = { prNumber, prTitle: pr.title };
+  let count = 0;
+  for (const c of reviewComments) {
+    if (pushIfReviewerKnown(out, byReviewerType, base, c, c.path)) {
+      count += 1;
+    }
+  }
+  for (const c of issueComments) {
+    if (pushIfReviewerKnown(out, byReviewerType, base, c)) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+async function searchMergedPrs(
+  owner: string,
+  repo: string,
+  sinceDate: string,
+  untilDate: string,
+  token: string,
+): Promise<GHSearchResult> {
+  console.log("Searching for merged PRs...");
+  const query = encodeURIComponent(
+    `repo:${owner}/${repo} is:pr is:merged merged:${sinceDate}..${untilDate}`,
+  );
+  const result = await githubFetch<GHSearchResult>(
+    `/search/issues?q=${query}&sort=updated&order=desc&per_page=100`,
+    token,
+  );
+  console.log(`Found ${sanitizeForLog(result.items.length)} merged PRs\n`);
+  return result;
+}
+
 async function main() {
   console.log("BEADS PR Comment Fetcher\n");
 
@@ -217,106 +325,21 @@ async function main() {
   const sinceDate = since.toISOString().split("T")[0];
   const untilDate = until.toISOString().split("T")[0];
 
-  // GitHub API response types
-  interface GHSearchResult {
-    items: Array<{ number: number }>;
-  }
-
-  interface GHPullRequest {
-    number: number;
-    title: string;
-  }
-
-  interface GHReviewComment {
-    id: number;
-    user: { login: string } | null;
-    body: string;
-    path: string;
-    html_url: string;
-    created_at: string;
-  }
-
-  interface GHIssueComment {
-    id: number;
-    user: { login: string } | null;
-    body: string;
-    html_url: string;
-    created_at: string;
-  }
-
-  // Search for merged PRs
-  console.log("Searching for merged PRs...");
-  const query = encodeURIComponent(
-    `repo:${owner}/${repo} is:pr is:merged merged:${sinceDate}..${untilDate}`
-  );
-
-  const searchResults = await githubFetch<GHSearchResult>(
-    `/search/issues?q=${query}&sort=updated&order=desc&per_page=100`,
-    token
-  );
-
-  console.log(`Found ${sanitizeForLog(searchResults.items.length)} merged PRs\n`);
+  const searchResults = await searchMergedPrs(owner, repo, sinceDate, untilDate, token);
 
   const allComments: PrComment[] = [];
   const byReviewerType: Record<string, number> = {};
 
   for (const item of searchResults.items) {
-    const prNumber = item.number;
-    process.stdout.write(`PR #${prNumber}: `);
-
-    // Fetch PR details
-    const pr = await githubFetch<GHPullRequest>(`/repos/${owner}/${repo}/pulls/${prNumber}`, token);
-
-    // Fetch review comments
-    const reviewComments = await githubFetch<GHReviewComment[]>(
-      `/repos/${owner}/${repo}/pulls/${prNumber}/comments`,
-      token
+    process.stdout.write(`PR #${item.number}: `);
+    const count = await collectCommentsForPr(
+      owner,
+      repo,
+      item.number,
+      token,
+      allComments,
+      byReviewerType,
     );
-
-    // Fetch issue comments
-    const issueComments = await githubFetch<GHIssueComment[]>(
-      `/repos/${owner}/${repo}/issues/${prNumber}/comments`,
-      token
-    );
-
-    let count = 0;
-    for (const c of reviewComments) {
-      if (!c.body || c.body.length < 50) continue;
-      const reviewerType = identifyReviewer(c.user?.login || "unknown");
-      if (reviewerType === "unknown") continue;
-
-      byReviewerType[reviewerType] = (byReviewerType[reviewerType] || 0) + 1;
-      allComments.push({
-        prNumber,
-        prTitle: pr.title,
-        reviewer: c.user?.login || "unknown",
-        reviewerType,
-        body: c.body,
-        filePath: c.path,
-        url: c.html_url,
-        createdAt: c.created_at,
-      });
-      count++;
-    }
-
-    for (const c of issueComments) {
-      if (!c.body || c.body.length < 50) continue;
-      const reviewerType = identifyReviewer(c.user?.login || "unknown");
-      if (reviewerType === "unknown") continue;
-
-      byReviewerType[reviewerType] = (byReviewerType[reviewerType] || 0) + 1;
-      allComments.push({
-        prNumber,
-        prTitle: pr.title,
-        reviewer: c.user?.login || "unknown",
-        reviewerType,
-        body: c.body,
-        url: c.html_url,
-        createdAt: c.created_at,
-      });
-      count++;
-    }
-
     console.log(`${count} comments`);
   }
 

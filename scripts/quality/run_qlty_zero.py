@@ -281,7 +281,16 @@ def _write_payload(payload: Mapping[str, Any], *, out_json: str, out_md: str) ->
 
 
 def _run_checks(repo_dir: Path) -> Tuple[List[Dict[str, Any]], int]:
-    """Handle run checks."""
+    """Run ``qlty check`` and ``qlty smells``; return entries + propagated rc.
+
+    The gate fails if either lane fails. ``qlty smells`` exits 0 even when
+    findings are present (it is a report tool), so we synthesize a non-zero
+    return code from the entry status. Earlier versions of this function
+    silently exempted smell findings from the propagation step — the gate
+    therefore stayed green even with duplication or complexity findings,
+    which is exactly the kind of "config opt-out" that the platform's
+    no-opt-out policy forbids.
+    """
     entries: List[Dict[str, Any]] = []
     final_return_code = 0
     exclude_patterns = _load_smells_exclude_patterns(repo_dir)
@@ -295,7 +304,7 @@ def _run_checks(repo_dir: Path) -> Tuple[List[Dict[str, Any]], int]:
             smells_exclude_patterns=exclude_patterns if name == "smells" else None,
         )
         entries.append(entry)
-        if final_return_code == 0 and entry["status"] != "pass" and name != "smells":
+        if final_return_code == 0 and entry["status"] != "pass":
             final_return_code = int(result.returncode) or 1
     return entries, final_return_code
 

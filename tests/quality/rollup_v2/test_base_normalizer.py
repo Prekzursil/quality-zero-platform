@@ -9,7 +9,11 @@ from pathlib import Path
 if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer, NormalizerResult
+from scripts.quality.rollup_v2.normalizers._base import (
+    BaseNormalizer,
+    FindingDraft,
+    NormalizerResult,
+)
 from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_QUALITY,
 )
@@ -21,7 +25,7 @@ class _DemoNormalizer(BaseNormalizer):
     def parse(self, artifact, repo_root):
         # Pretend to parse an artifact and yield one Finding
         return [
-            self._build_finding(
+            self._build_finding(FindingDraft(
                 finding_id="demo-1",
                 file="a.py",
                 line=1,
@@ -33,7 +37,7 @@ class _DemoNormalizer(BaseNormalizer):
                 rule_url=None,
                 original_message="broad-except",
                 context_snippet='API_KEY = "sk-thirtytwocharsecretvalue"',
-            )
+            ))
         ]
 
 
@@ -64,7 +68,7 @@ class BaseNormalizerTests(unittest.TestCase):
         class _EscapeNormalizer(_DemoNormalizer):
             def parse(self, artifact, repo_root):
                 return [
-                    self._build_finding(
+                    self._build_finding(FindingDraft(
                         finding_id="x",
                         file="../../etc/passwd",
                         line=1,
@@ -76,7 +80,7 @@ class BaseNormalizerTests(unittest.TestCase):
                         rule_url=None,
                         original_message="m",
                         context_snippet="",
-                    )
+                    ))
                 ]
         norm = _EscapeNormalizer()
         result = norm.run(artifact=None, repo_root=self.root)

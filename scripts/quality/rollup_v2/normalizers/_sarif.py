@@ -1,14 +1,18 @@
 """Shared SARIF 2.1.0 normalizer utilities (per design §9.1 §9.2 §A.2.5).
 
 Provides `parse_sarif()` for converting SARIF results into canonical Finding
-objects, and a 50MB guard to reject oversized artifacts before parsing.
+objects, a 50MB guard to reject oversized artifacts before parsing, and a
+``SarifBackedNormalizer`` base class so per-provider SARIF normalizers (CodeQL,
+Semgrep) only need to declare ``provider`` instead of duplicating the same
+artifact-dispatch ``parse()`` implementation.
 """
 from __future__ import absolute_import
 
+import json
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Iterable, List, Tuple
 
-from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer
+from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer, FindingDraft
 from scripts.quality.rollup_v2.taxonomy import lookup
 from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_QUALITY,
@@ -99,22 +103,15 @@ def _extract_location(result: Dict[str, Any]) -> Tuple[str, int, int | None, int
 
 def _extract_context_snippet(result: Dict[str, Any]) -> str:
     """Extract context snippet from SARIF location region."""
-    locations = result.get("locations", [])
-    if not locations or not isinstance(locations, list):
+    locations = result.get("locations") or []
+    if not isinstance(locations, list) or not locations:
         return ""
-    loc = locations[0]
-    if not isinstance(loc, dict):
-        return ""
-    phys = loc.get("physicalLocation", {})
-    if not isinstance(phys, dict):
-        return ""
-    region = phys.get("region", {})
-    if not isinstance(region, dict):
-        return ""
-    snippet = region.get("snippet", {})
-    if isinstance(snippet, dict):
-        return str(snippet.get("text", ""))
-    return ""
+    cursor: Any = locations[0]
+    for key in ("physicalLocation", "region", "snippet"):
+        if not isinstance(cursor, dict):
+            return ""
+        cursor = cursor.get(key, {})
+    return str(cursor.get("text", "")) if isinstance(cursor, dict) else ""
 
 
 def _build_rule_index(run: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
@@ -220,7 +217,7 @@ def parse_sarif(
             rule_url = _extract_rule_url(rule_meta)
             context_snippet = _extract_context_snippet(result)
 
-            finding = normalizer._build_finding(
+            finding = normalizer._build_finding(FindingDraft(
                 finding_id=f"{provider.lower()}-{index:04d}",
                 file=file_path,
                 line=line,
@@ -235,8 +232,27 @@ def parse_sarif(
                 original_message=message,
                 context_snippet=context_snippet,
                 cwe=cwe,
-            )
+            ))
             findings.append(finding)
             index += 1
 
     return findings
+
+
+class SarifBackedNormalizer(BaseNormalizer):
+    """Common ``parse()`` for normalizers whose artifact is SARIF 2.1.0.
+
+    Subclasses only need to set ``provider``. The ``parse`` implementation
+    accepts a ``dict`` (already-parsed SARIF JSON), ``str`` (raw JSON text),
+    or ``bytes`` (raw JSON bytes); other types yield no findings.
+    """
+
+    def parse(self, artifact: Any, repo_root: Path) -> Iterable[Finding]:
+        if isinstance(artifact, (str, bytes)):
+            check_sarif_size(artifact)
+            data = json.loads(artifact)
+        elif isinstance(artifact, dict):
+            data = artifact
+        else:
+            return []
+        return parse_sarif(data, self.provider, repo_root, self)

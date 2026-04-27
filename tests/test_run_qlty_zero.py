@@ -142,8 +142,10 @@ class RunQltyZeroTests(unittest.TestCase):
             )
         )
 
-        # Smells are non-blocking (b2fc326), so only check failures affect exit code
-        self.assertEqual(result, 0)
+        # Smells now block the gate: a non-zero qlty-smells return code propagates
+        # to the platform's QLTY Zero gate. The earlier non-blocking exemption
+        # (b2fc326) was a config opt-out that hid duplication/complexity findings.
+        self.assertEqual(result, 1)
         self.assertEqual(len(call_args), 2)
         self.assertEqual(
             call_args[0].args[0],
@@ -182,11 +184,12 @@ class RunQltyZeroTests(unittest.TestCase):
             )
         )
 
-        # Smells are non-blocking (b2fc326), so check=pass + smells=fail => overall pass
-        self.assertEqual(result, 0)
+        # Smells failures block the gate: check=pass + smells=fail => overall fail.
+        # The earlier non-blocking exemption (b2fc326) was a config opt-out.
+        self.assertEqual(result, 1)
         payload = json.loads(json_text)
-        self.assertEqual(payload["status"], "pass")
-        self.assertEqual(payload["return_code"], 0)
+        self.assertEqual(payload["status"], "fail")
+        self.assertEqual(payload["return_code"], 1)
         self.assertEqual(
             payload["commands"],
             [
@@ -288,7 +291,14 @@ class RunQltyZeroTests(unittest.TestCase):
     def test_smells_output_marks_run_as_failed_even_when_cli_exit_code_is_zero(
         self,
     ) -> None:
-        """Smells findings are recorded but non-blocking per b2fc326."""
+        """Smells findings block the gate even when ``qlty smells`` exits 0.
+
+        ``qlty smells`` is a report tool — it exits 0 even with findings — so the
+        gate has to derive the failure from the report content. Earlier
+        non-blocking behavior (b2fc326) was a config opt-out that hid
+        duplication and complexity findings; this test now asserts the
+        fail-on-findings semantics.
+        """
         completed_check = type(
             "Completed", (), {"returncode": 0, "stdout": "clean\n", "stderr": ""}
         )()
@@ -302,12 +312,12 @@ class RunQltyZeroTests(unittest.TestCase):
             )
         )
 
-        # Smells are non-blocking: overall result is pass even when smells entry is fail
-        self.assertEqual(result, 0)
+        # Smells findings → overall fail, even with a 0 CLI exit code from qlty
+        self.assertEqual(result, 1)
         payload = json.loads(json_text)
-        self.assertEqual(payload["status"], "pass")
-        self.assertEqual(payload["return_code"], 0)
-        # Individual smells entry still records "fail" for visibility
+        self.assertEqual(payload["status"], "fail")
+        self.assertEqual(payload["return_code"], 1)
+        # Individual smells entry records "fail" for visibility
         self.assertEqual(payload["checks"][1]["status"], "fail")
         self.assertIn("one smell", payload["checks"][1]["output_tail"])
 

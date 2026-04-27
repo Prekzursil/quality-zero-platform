@@ -1,10 +1,10 @@
 """Deterministic patch generator for `tab-vs-space` category."""
 from __future__ import absolute_import
 
-import difflib
 import re
 from pathlib import Path
 
+from scripts.quality.rollup_v2.patches._per_line import apply_line_transform
 from scripts.quality.rollup_v2.schema.finding import Finding
 from scripts.quality.rollup_v2.schema.patch import PatchDeclined, PatchResult
 
@@ -28,24 +28,12 @@ def generate(
     repo_root: Path,
 ) -> PatchResult | PatchDeclined | None:
     """Convert leading tabs to 4 spaces."""
-    lines = source_file_content.splitlines(keepends=True)
-    patched_lines = [_replace_leading_tabs(line) for line in lines]
-    if patched_lines == lines:
-        return PatchDeclined(
-            reason_code="ambiguous-fix",
-            reason_text="no leading tabs found",
-            suggested_tier="skip",
-        )
-    diff = "".join(difflib.unified_diff(
-        lines,
-        patched_lines,
-        fromfile=f"a/{finding.file}",
-        tofile=f"b/{finding.file}",
-    ))
-    return PatchResult(
-        unified_diff=diff,
+    return apply_line_transform(
+        finding=finding,
+        source_file_content=source_file_content,
+        transform_line=_replace_leading_tabs,
         confidence="high",
         category=CATEGORY,
         generator_version=GENERATOR_VERSION,
-        touches_files=frozenset({Path(finding.file)}),
+        decline_reason="no leading tabs found",
     )

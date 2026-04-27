@@ -28,6 +28,42 @@ class _StubNormalizer(BaseNormalizer):
         return []
 
 
+def _make_sarif_result(
+    *,
+    rule_id: str,
+    level: str = "warning",
+    text: str = "msg",
+    uri: str = "src/app.py",
+    start_line: int = 1,
+    end_line: int | None = None,
+    start_column: int | None = None,
+) -> Dict[str, Any]:
+    """Build a single SARIF ``result`` dict for fixture reuse across tests.
+
+    Centralising this here removes the 15-line and 8-line duplication blocks
+    qlty's smells gate previously flagged in ``test_parses_single_result``,
+    ``test_end_line_extraction``, and the ``test_finding_id_format`` setup.
+    """
+    region: Dict[str, Any] = {"startLine": start_line}
+    if end_line is not None:
+        region["endLine"] = end_line
+    if start_column is not None:
+        region["startColumn"] = start_column
+    return {
+        "ruleId": rule_id,
+        "level": level,
+        "message": {"text": text},
+        "locations": [
+            {
+                "physicalLocation": {
+                    "artifactLocation": {"uri": uri},
+                    "region": region,
+                }
+            }
+        ],
+    }
+
+
 def _minimal_sarif(results: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
     """Build a minimal valid SARIF 2.1.0 envelope."""
     return {
@@ -85,19 +121,13 @@ class ParseSarifTests(unittest.TestCase):
 
     def test_parses_single_result(self):
         sarif = _minimal_sarif(results=[
-            {
-                "ruleId": "test-rule-1",
-                "level": "error",
-                "message": {"text": "Something is wrong"},
-                "locations": [
-                    {
-                        "physicalLocation": {
-                            "artifactLocation": {"uri": "src/app.py"},
-                            "region": {"startLine": 5, "startColumn": 10},
-                        }
-                    }
-                ],
-            }
+            _make_sarif_result(
+                rule_id="test-rule-1",
+                level="error",
+                text="Something is wrong",
+                start_line=5,
+                start_column=10,
+            ),
         ])
         findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
         self.assertEqual(len(findings), 1)
@@ -250,12 +280,9 @@ class ParseSarifTests(unittest.TestCase):
 
     def test_end_line_extraction(self):
         sarif = _minimal_sarif(results=[
-            {
-                "ruleId": "end-line-test",
-                "level": "warning",
-                "message": {"text": "msg"},
-                "locations": [{"physicalLocation": {"artifactLocation": {"uri": "src/app.py"}, "region": {"startLine": 5, "endLine": 10}}}],
-            }
+            _make_sarif_result(
+                rule_id="end-line-test", start_line=5, end_line=10,
+            ),
         ])
         findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
         self.assertEqual(findings[0].end_line, 10)

@@ -1,23 +1,13 @@
 """Declining patch generator for `cyclic-import` category."""
 from __future__ import absolute_import
 
-from pathlib import Path
-
-from scripts.quality.rollup_v2.schema.finding import Finding
-from scripts.quality.rollup_v2.schema.patch import PatchDeclined, PatchResult
+from scripts.quality.rollup_v2.patches._declining import make_decline_generator
 
 GENERATOR_VERSION = "cyclic_import/1.0.0"
 CATEGORY = "cyclic-import"
 
-
-def generate(
-    finding: Finding,
-    source_file_content: str,
-    repo_root: Path,
-) -> PatchResult | PatchDeclined | None:
-    """Cyclic imports require cross-file restructuring; human-only."""
-    return PatchDeclined(
-        reason_code="cross-file-change",
-        reason_text="cyclic import resolution requires cross-file restructuring",
-        suggested_tier="human-only",
-    )
+generate = make_decline_generator(
+    reason_code="cross-file-change",
+    reason_text="cyclic import resolution requires cross-file restructuring",
+    suggested_tier="human-only",
+)

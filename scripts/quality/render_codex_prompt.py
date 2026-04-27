@@ -139,59 +139,53 @@ def _render_known_issues_section(
     return "\n".join(lines).rstrip() + "\n"
 
 
-def _render_canonical_findings_section(findings: List[Dict[str, Any]]) -> str:
-    """Render structured canonical findings for the remediation prompt.
+def _format_providers_line(corroborators: List[Dict[str, Any]]) -> str:
+    """Build the human-readable provider list with optional agreement count."""
+    provider_names = [c.get("provider", "") for c in corroborators if c.get("provider")]
+    provider_str = ", ".join(provider_names) if provider_names else "1 provider"
+    if len(provider_names) > 1:
+        return f"{provider_str} ({len(provider_names)} agree)"
+    return provider_str
 
-    Groups findings by file, then renders each finding with severity,
-    message, fix_hint, providers, and suggested patch when available.
-    Returns an empty string if there are no findings.
-    """
+
+def _render_finding_block(finding: Dict[str, Any], file_path: str) -> List[str]:
+    """Render a single finding into Markdown bullet lines."""
+    category = finding.get("category", "unknown")
+    line_num = finding.get("line", "?")
+    severity = finding.get("severity", "unknown")
+    message = finding.get("primary_message", "")
+    fix_hint = finding.get("fix_hint")
+    patch_diff = finding.get("patch")
+    providers_line = _format_providers_line(finding.get("corroborators", []))
+
+    out: List[str] = [
+        f"#### Finding: {category} (line {line_num} in {file_path})",
+        f"- **Severity**: {severity}",
+        f"- **Message**: {message}",
+    ]
+    if fix_hint:
+        out.append(f"- **Fix hint**: {fix_hint}")
+    out.append(f"- **Providers**: {providers_line}")
+    if patch_diff:
+        out.extend(("- **Suggested patch**:", "```diff", patch_diff.rstrip(), "```"))
+    out.append("")
+    return out
+
+
+def _render_canonical_findings_section(findings: List[Dict[str, Any]]) -> str:
+    """Render structured canonical findings for the remediation prompt."""
     if not findings:
         return ""
 
-    # Group by file
     by_file: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for f in findings:
         by_file[f.get("file", "<unknown>")].append(f)
 
-    lines: List[str] = [
-        "## Findings requiring attention",
-        "",
-    ]
-
+    lines: List[str] = ["## Findings requiring attention", ""]
     for file_path in sorted(by_file):
-        lines.append(f"### File: {file_path}")
-        lines.append("")
+        lines.extend((f"### File: {file_path}", ""))
         for finding in by_file[file_path]:
-            category = finding.get("category", "unknown")
-            line_num = finding.get("line", "?")
-            severity = finding.get("severity", "unknown")
-            message = finding.get("primary_message", "")
-            fix_hint = finding.get("fix_hint")
-            patch_diff = finding.get("patch")
-            corroborators = finding.get("corroborators", [])
-
-            provider_names = [c.get("provider", "") for c in corroborators if c.get("provider")]
-            provider_str = ", ".join(provider_names) if provider_names else "1 provider"
-            count_str = f"{len(provider_names)} agree" if len(provider_names) > 1 else ""
-            providers_line = (
-                f"{provider_str} ({count_str})" if count_str else provider_str
-            )
-
-            lines.append(
-                f"#### Finding: {category} (line {line_num} in {file_path})"
-            )
-            lines.append(f"- **Severity**: {severity}")
-            lines.append(f"- **Message**: {message}")
-            if fix_hint:
-                lines.append(f"- **Fix hint**: {fix_hint}")
-            lines.append(f"- **Providers**: {providers_line}")
-            if patch_diff:
-                lines.append("- **Suggested patch**:")
-                lines.append("```diff")
-                lines.append(patch_diff.rstrip())
-                lines.append("```")
-            lines.append("")
+            lines.extend(_render_finding_block(finding, file_path))
 
     return "\n".join(lines)
 

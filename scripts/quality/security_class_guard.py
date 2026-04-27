@@ -108,17 +108,13 @@ def is_security_finding(finding: Mapping[str, Any]) -> bool:
     """Return True when ``finding`` is security-class per any recognised signal."""
     if not isinstance(finding, Mapping):
         return False
-    if bool(finding.get("is_security")):
-        return True
-    scanner = _scanner_name(finding)
-    if scanner in SECURITY_SCANNERS:
-        return True
     category = str(finding.get("category", "")).strip().lower()
-    if category in {"security", "vulnerability", "secret"}:
-        return True
-    if _has_security_tag(finding):
-        return True
-    return False
+    return any((
+        bool(finding.get("is_security")),
+        _scanner_name(finding) in SECURITY_SCANNERS,
+        category in {"security", "vulnerability", "secret"},
+        _has_security_tag(finding),
+    ))
 
 
 def filter_auto_merge_candidates(

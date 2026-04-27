@@ -209,56 +209,105 @@ class DefensiveProfileShapeTests(unittest.TestCase):
         self.assertEqual(len(triggers), 1)
 
 
-class DetectBypassStaleTests(unittest.TestCase):
-    """``detect_bypass_stale`` fires when break-glass tracking issue > 7 days."""
-
-    def test_stale_issue_fires(self) -> None:
-        """Opened 8 days ago, still open → alert fires."""
-        triggers = at.detect_bypass_stale(
-            slug="org/repo",
-            issue_number=42,
-            opened_at=dt.datetime(2026, 4, 15, tzinfo=dt.timezone.utc),
-            now=dt.datetime(2026, 4, 23, tzinfo=dt.timezone.utc),
-        )
-        self.assertEqual(len(triggers), 1)
-        self.assertEqual(triggers[0].alert_type, alerts.AlertType.BYPASS_STALE)
-        self.assertEqual(triggers[0].subject, "org/repo#42")
-
-    def test_fresh_issue_does_not_fire(self) -> None:
-        """Opened 3 days ago → no alert (under 7-day threshold)."""
-        triggers = at.detect_bypass_stale(
-            slug="org/repo",
-            issue_number=42,
-            opened_at=dt.datetime(2026, 4, 20, tzinfo=dt.timezone.utc),
-            now=dt.datetime(2026, 4, 23, tzinfo=dt.timezone.utc),
-        )
-        self.assertEqual(triggers, [])
+_NOW = dt.datetime(2026, 4, 23, tzinfo=dt.timezone.utc)
 
 
-class DetectDriftStuckTests(unittest.TestCase):
-    """``detect_drift_stuck`` fires when a drift-sync PR has been open > 3 days."""
+def _utc(year: int, month: int, day: int) -> dt.datetime:
+    """Convenience builder for UTC ``dt.datetime`` fixtures."""
+    return dt.datetime(year, month, day, tzinfo=dt.timezone.utc)
 
-    def test_old_pr_fires(self) -> None:
-        """PR open 4 days → alert fires."""
-        triggers = at.detect_drift_stuck(
-            slug="org/repo",
-            pr_number=99,
-            opened_at=dt.datetime(2026, 4, 19, tzinfo=dt.timezone.utc),
-            now=dt.datetime(2026, 4, 23, tzinfo=dt.timezone.utc),
-        )
-        self.assertEqual(len(triggers), 1)
-        self.assertEqual(triggers[0].alert_type, alerts.AlertType.DRIFT_STUCK)
-        self.assertEqual(triggers[0].subject, "org/repo#99")
 
-    def test_fresh_pr_does_not_fire(self) -> None:
-        """PR open 1 day → no alert."""
-        triggers = at.detect_drift_stuck(
-            slug="org/repo",
-            pr_number=99,
-            opened_at=dt.datetime(2026, 4, 22, tzinfo=dt.timezone.utc),
-            now=dt.datetime(2026, 4, 23, tzinfo=dt.timezone.utc),
-        )
-        self.assertEqual(triggers, [])
+class _AgeDetectorScenario:
+    """Per-row data for ``AgeBasedDetectorTableTests``."""
+
+    def __init__(
+        self,
+        *,
+        detector,
+        id_kwarg: str,
+        id_value: int,
+        opened_at: dt.datetime,
+        expected,
+    ):
+        self.detector = detector
+        self.id_kwarg = id_kwarg
+        self.id_value = id_value
+        self.opened_at = opened_at
+        self.expected = expected
+
+
+class AgeBasedDetectorTableTests(unittest.TestCase):
+    """``detect_bypass_stale`` / ``detect_drift_stuck`` shape-driven tests.
+
+    Both detectors share the same call shape — ``(slug, *id_kwarg, opened_at,
+    now)`` — so we iterate scenarios in one parametric table to remove the
+    duplicated test bodies that qlty's smells gate previously flagged.
+    """
+
+    SCENARIOS = (
+        (
+            "bypass-stale-fires",
+            _AgeDetectorScenario(
+                detector=at.detect_bypass_stale,
+                id_kwarg="issue_number",
+                id_value=42,
+                opened_at=_utc(2026, 4, 15),
+                expected={
+                    "alert_type": alerts.AlertType.BYPASS_STALE,
+                    "subject": "org/repo#42",
+                },
+            ),
+        ),
+        (
+            "bypass-stale-fresh-noop",
+            _AgeDetectorScenario(
+                detector=at.detect_bypass_stale,
+                id_kwarg="issue_number",
+                id_value=42,
+                opened_at=_utc(2026, 4, 20),
+                expected=None,
+            ),
+        ),
+        (
+            "drift-stuck-fires",
+            _AgeDetectorScenario(
+                detector=at.detect_drift_stuck,
+                id_kwarg="pr_number",
+                id_value=99,
+                opened_at=_utc(2026, 4, 19),
+                expected={
+                    "alert_type": alerts.AlertType.DRIFT_STUCK,
+                    "subject": "org/repo#99",
+                },
+            ),
+        ),
+        (
+            "drift-stuck-fresh-noop",
+            _AgeDetectorScenario(
+                detector=at.detect_drift_stuck,
+                id_kwarg="pr_number",
+                id_value=99,
+                opened_at=_utc(2026, 4, 22),
+                expected=None,
+            ),
+        ),
+    )
+
+    def test_age_based_detectors(self) -> None:
+        for name, scenario in self.SCENARIOS:
+            with self.subTest(scenario=name):
+                triggers = scenario.detector(
+                    slug="org/repo",
+                    opened_at=scenario.opened_at,
+                    now=_NOW,
+                    **{scenario.id_kwarg: scenario.id_value},
+                )
+                if scenario.expected is None:
+                    self.assertEqual(triggers, [])
+                    continue
+                self.assertEqual(len(triggers), 1)
+                self.assertEqual(triggers[0].alert_type, scenario.expected["alert_type"])
+                self.assertEqual(triggers[0].subject, scenario.expected["subject"])
 
 
 class DetectFleetBumpFailTests(unittest.TestCase):

@@ -260,32 +260,30 @@ class RenderCodexPromptTests(unittest.TestCase):
 class RenderCanonicalFindingsSectionTests(unittest.TestCase):
     """Tests for the canonical findings section renderer."""
 
-    def _make_finding(
-        self,
-        *,
-        finding_id: str = "f1",
-        file: str = "example.py",
-        line: int = 42,
-        category: str = "broad-except",
-        severity: str = "high",
-        primary_message: str = "Catch a more specific exception",
-        fix_hint: str | None = "Narrow the exception type",
-        patch_diff: str | None = None,
-        patch_source: str = "none",
-        corroborators: list | None = None,
-    ) -> dict:
-        return {
-            "finding_id": finding_id,
-            "file": file,
-            "line": line,
-            "category": category,
-            "severity": severity,
-            "primary_message": primary_message,
-            "fix_hint": fix_hint,
-            "patch": patch_diff,
-            "patch_source": patch_source,
-            "corroborators": corroborators or [],
+    def _make_finding(self, **overrides: object) -> dict:
+        """Build a finding-shaped dict; pass kwargs to override defaults.
+
+        ``patch_diff`` is accepted as an alias for the ``patch`` key so the
+        existing test callers don't need updating.
+        """
+        finding = {
+            "finding_id": "f1",
+            "file": "example.py",
+            "line": 42,
+            "category": "broad-except",
+            "severity": "high",
+            "primary_message": "Catch a more specific exception",
+            "fix_hint": "Narrow the exception type",
+            "patch": None,
+            "patch_source": "none",
+            "corroborators": [],
         }
+        if "patch_diff" in overrides:
+            finding["patch"] = overrides.pop("patch_diff")
+        finding.update(overrides)
+        if finding.get("corroborators") is None:
+            finding["corroborators"] = []
+        return finding
 
     def test_renders_finding_with_all_fields(self) -> None:
         """A finding with fix_hint, corroborators, and patch renders fully."""

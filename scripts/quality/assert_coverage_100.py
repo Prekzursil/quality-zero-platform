@@ -61,31 +61,13 @@ def _normalized_branch_min_percent(raw_value: Any) -> float | None:
     return max(0.0, min(100.0, float(raw_value)))
 
 
-@dataclass
-class CoverageStats:
-    """Summarize line and branch coverage for one named report input."""
-
-    name: str
-    path: str
-    covered: int
-    total: int
-    branch_covered: int = 0
-    branch_total: int = 0
-
-    @property
-    def percent(self) -> float:
-        """Handle percent."""
-        if self.total <= 0:
-            return 100.0
-        return (self.covered / self.total) * 100.0
-
-    @property
-    def branch_percent(self) -> float:
-        """Handle branch percent."""
-        if self.branch_total <= 0:
-            return 100.0
-        return (self.branch_covered / self.branch_total) * 100.0
-
+# ``CoverageStats`` lives in ``coverage_types`` so that ``coverage_parsers``
+# and ``coverage_findings`` can import it without going through this
+# module — the prior arrangement formed a cycle that CodeQL's
+# ``py/unsafe-cyclic-import`` rule (correctly) flagged 12 times. Re-exported
+# here for backwards compatibility with callers that already import
+# ``from scripts.quality.assert_coverage_100 import CoverageStats``.
+from scripts.quality.coverage_types import CoverageStats  # noqa: E402, F401
 
 @dataclass(frozen=True)
 class CoverageEvaluationRequest:

@@ -71,11 +71,12 @@ def apply_single_patch(diff: str, repo_dir: Path) -> Dict[str, Any]:
         # just wrote ourselves, so there is no untrusted-input shell injection
         # surface here. Annotated rather than rewritten as ``shutil.which``
         # because the platform's CI image always has git on PATH.
-        check_result = subprocess.run(  # noqa: S603
-            ["git", "apply", "--check", str(tmp_path)],  # noqa: S607
+        check_result = subprocess.run(  # noqa: S603  # nosec B603
+            ["git", "apply", "--check", str(tmp_path)],  # noqa: S607  # nosec B607
             cwd=repo_dir,
             capture_output=True,
             text=True,
+            check=False,
         )
         if check_result.returncode != 0:
             return {
@@ -85,11 +86,12 @@ def apply_single_patch(diff: str, repo_dir: Path) -> Dict[str, Any]:
             }
 
         # Apply for real (same safety reasoning as the dry-run above).
-        apply_result = subprocess.run(  # noqa: S603
-            ["git", "apply", str(tmp_path)],  # noqa: S607
+        apply_result = subprocess.run(  # noqa: S603  # nosec B603
+            ["git", "apply", str(tmp_path)],  # noqa: S607  # nosec B607
             cwd=repo_dir,
             capture_output=True,
             text=True,
+            check=False,
         )
         if apply_result.returncode != 0:
             return {

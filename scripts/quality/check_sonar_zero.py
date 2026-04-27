@@ -39,7 +39,9 @@ def _preferred_text(*values: Any) -> str:
 
 def _parse_args() -> argparse.Namespace:
     """Parse command-line arguments for the Sonar zero gate."""
-    parser = argparse.ArgumentParser(description=("Assert SonarCloud has zero open issues and a passing quality gate."))
+    parser = argparse.ArgumentParser(
+        description="Assert SonarCloud has zero open issues and a passing quality gate.",
+    )
     parser.add_argument("--project-key", required=True)
     parser.add_argument("--token", default="")
     parser.add_argument("--policy-mode", default="ratchet")

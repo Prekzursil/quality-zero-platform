@@ -5,7 +5,7 @@ import traceback
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple, final
+from typing import Any, Dict, Iterable, List, Tuple, cast, final
 
 from scripts.quality.rollup_v2.path_safety import (
     PathEscapedRootError,
@@ -154,9 +154,13 @@ class BaseNormalizer(ABC):
             )
             for c in finding.corroborators
         )
-        return replace(
+        # ``dataclasses.replace`` is typed as returning ``DataclassInstance``
+        # (a protocol covering any frozen dataclass), so Sonar python:S5886
+        # flags the ``-> Finding`` return type as a downcast. The cast is a
+        # no-op at runtime since ``finding`` is concretely a Finding.
+        return cast(Finding, replace(
             finding,
             primary_message=redact_secrets(finding.primary_message),
             context_snippet=redact_secrets(finding.context_snippet),
             corroborators=redacted_corroborators,
-        )
+        ))

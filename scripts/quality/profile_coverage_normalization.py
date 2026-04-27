@@ -74,6 +74,42 @@ def infer_required_sources(raw_coverage: Mapping[str, Any] | None) -> List[str]:
     return dedupe_strings(inferred)
 
 
+def _add_optional_input_fields(item: Mapping[str, Any], dest: Dict[str, Any]) -> None:
+    """Copy optional ``flag``/``sources``/``min_percent`` from ``item``."""
+    if "flag" in item:
+        dest["flag"] = str(item["flag"]).strip()
+    if "sources" in item and isinstance(item["sources"], list):
+        dest["sources"] = [
+            str(s).strip() for s in item["sources"] if str(s).strip()
+        ]
+    if "min_percent" in item:
+        try:
+            dest["min_percent"] = float(item["min_percent"])
+        except (TypeError, ValueError):
+            # Drop the field on parse error so downstream consumers fall
+            # back to the schema default rather than a malformed value.
+            pass
+
+
+def _normalize_one_input(item: Any) -> Dict[str, Any] | None:
+    """Return one normalized coverage input, or ``None`` to drop the row."""
+    if not isinstance(item, dict):
+        return None
+    normalized: Dict[str, Any] = {
+        "format": str(item.get("format", "")).strip().lower(),
+        "name": str(item.get("name", "")).strip(),
+        "path": str(item.get("path", "")).strip(),
+    }
+    if (
+        normalized["format"] not in {"xml", "lcov"}
+        or not normalized["name"]
+        or not normalized["path"]
+    ):
+        return None
+    _add_optional_input_fields(item, normalized)
+    return normalized
+
+
 def normalize_coverage_inputs(raw_inputs: Any) -> List[Dict[str, Any]]:
     """Normalize raw coverage input mappings into the shared schema.
 
@@ -91,36 +127,11 @@ def normalize_coverage_inputs(raw_inputs: Any) -> List[Dict[str, Any]]:
     """
     if not isinstance(raw_inputs, list):
         return []
-
     normalized_items: List[Dict[str, Any]] = []
     for item in raw_inputs:
-        if not isinstance(item, dict):
-            continue
-        normalized_item: Dict[str, Any] = {
-            "format": str(item.get("format", "")).strip().lower(),
-            "name": str(item.get("name", "")).strip(),
-            "path": str(item.get("path", "")).strip(),
-        }
-        if (
-            normalized_item["format"] not in {"xml", "lcov"}
-            or not normalized_item["name"]
-            or not normalized_item["path"]
-        ):
-            continue
-        if "flag" in item:
-            normalized_item["flag"] = str(item["flag"]).strip()
-        if "sources" in item and isinstance(item["sources"], list):
-            normalized_item["sources"] = [
-                str(s).strip() for s in item["sources"] if str(s).strip()
-            ]
-        if "min_percent" in item:
-            try:
-                normalized_item["min_percent"] = float(item["min_percent"])
-            except (TypeError, ValueError):
-                # Drop the field on parse error so downstream consumers fall
-                # back to the schema default rather than a malformed value.
-                pass
-        normalized_items.append(normalized_item)
+        normalized = _normalize_one_input(item)
+        if normalized is not None:
+            normalized_items.append(normalized)
     return normalized_items
 
 

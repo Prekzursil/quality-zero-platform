@@ -26,16 +26,14 @@ import { dirname } from "node:path";
 // through e.g. a PR title. Objects go through JSON.stringify so we don't
 // emit the useless "[object Object]" placeholder.
 function sanitizeForLog(value: unknown): string {
-  let stringified: string;
-  if (value === null || value === undefined) {
-    stringified = String(value);
-  } else if (typeof value === "object") {
-    stringified = JSON.stringify(value);
-  } else {
-    // Primitives: number, string, boolean, bigint, symbol all have a
-    // meaningful String() representation that is not "[object Object]".
-    stringified = String(value);
-  }
+  // Objects go through JSON.stringify so we never emit the useless
+  // "[object Object]" placeholder. Non-objects (null, undefined, and
+  // primitives) coerce via a template literal — this gives Sonar's
+  // typescript:S6551 analyser the type-narrowing it needs to prove the
+  // ``String()`` default-stringification path is unreachable.
+  const stringified = (typeof value === "object" && value !== null)
+    ? JSON.stringify(value)
+    : `${value as string | number | boolean | bigint | symbol | null | undefined}`;
   return stringified.replaceAll(/[\x00-\x1f]/g, " ");
 }
 
@@ -386,7 +384,9 @@ async function main() {
   console.log("\nNext: Run '/self-reflect' to analyze with Claude Code");
 }
 
-main().catch(error => {
-  console.error("Error:", error.message);
+try {
+  await main();
+} catch (error) {
+  console.error("Error:", error instanceof Error ? error.message : error);
   process.exit(1);
-});
+}

@@ -225,9 +225,12 @@ def _build_check_entry(
         has_findings = _smells_output_indicates_findings(output_tail)
     else:
         has_findings = False
-    if int(result.returncode) != 0 and name != "smells":
-        status = "fail"
-    elif name == "smells" and has_findings:
+    # Combine the two fail conditions into a single test so Sonar's
+    # python:S1871 doesn't flag the duplicate ``status = "fail"`` branches
+    # — both routes ultimately mean "this lane failed".
+    failed_check = int(result.returncode) != 0 and name != "smells"
+    failed_smells = name == "smells" and has_findings
+    if failed_check or failed_smells:
         status = "fail"
     return {
         "name": name,

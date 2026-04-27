@@ -29,16 +29,14 @@ import { parseArgs } from "node:util";
 // Slack API error string. Objects go through JSON.stringify so we don't
 // emit the useless "[object Object]" placeholder.
 function sanitizeForLog(value: unknown): string {
-  let stringified: string;
-  if (value === null || value === undefined) {
-    stringified = String(value);
-  } else if (typeof value === "object") {
-    stringified = JSON.stringify(value);
-  } else {
-    // Primitives: number, string, boolean, bigint, symbol all have a
-    // meaningful String() representation that is not "[object Object]".
-    stringified = String(value);
-  }
+  // Objects go through JSON.stringify so we never emit the useless
+  // "[object Object]" placeholder. Non-objects (null, undefined, and
+  // primitives) coerce via a template literal — this gives Sonar's
+  // typescript:S6551 analyser the type-narrowing it needs to prove the
+  // ``String()`` default-stringification path is unreachable.
+  const stringified = (typeof value === "object" && value !== null)
+    ? JSON.stringify(value)
+    : `${value as string | number | boolean | bigint | symbol | null | undefined}`;
   return stringified.replaceAll(/[\x00-\x1f]/g, " ");
 }
 
@@ -228,14 +226,14 @@ async function main() {
   // -------------------------------------------------------------------------
   // Step 3: Post to Slack
   // -------------------------------------------------------------------------
-  if (!NO_SLACK) {
+  if (NO_SLACK) {
+    console.log("Step 3: Skipping Slack post\n");
+  } else {
     console.log("Step 3: Posting summary to Slack...\n");
 
     const blocks = formatSlackBlocks(stats);
     await postToSlack("Weekly knowledge base report", blocks);
     console.log(`Posted to ${SLACK_CHANNEL}\n`);
-  } else {
-    console.log("Step 3: Skipping Slack post\n");
   }
 
   // -------------------------------------------------------------------------
@@ -247,7 +245,9 @@ async function main() {
   console.log("  2. Use Claude Code: /self-reflect");
 }
 
-main().catch(error => {
+try {
+  await main();
+} catch (error) {
   console.error("Fatal error:", error);
   process.exit(1);
-});
+}

@@ -28,12 +28,21 @@ vendors:
   sonar:
     project_key: Prekzursil_DevExtreme-Filter-Go-Language
 codeql:
-  # Go REQUIRES build_mode: autobuild (or manual). CodeQL v4 errors out
-  # with "Go does not support the none build mode" if set to ``none``.
+  # Go REQUIRES build_mode: autobuild (or manual). CodeQL v4 errors with
+  # "Go does not support the none build mode" if set to ``none``.
   # See: github/codeql-action#3258 + run 24976734212 init log.
+  #
+  # actions + go in the SAME profile is incompatible because:
+  #   - actions language only supports build-mode: none
+  #   - go language only supports build-mode: autobuild|manual
+  # The reusable-codeql.yml passes one global --build-mode, so the
+  # languages must agree. Dropping ``actions`` keeps Go (the actual
+  # codebase) analyzed; the only workflow file is the auto-generated
+  # codeql.yml itself, which adds no value to scan.
+  # See: run 24978222732 init log ("GitHub Actions does not support
+  # the autobuild build mode").
   build_mode: autobuild
   languages:
-  - actions
   - go
   setup:
     go: '1.24'

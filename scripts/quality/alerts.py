@@ -75,7 +75,7 @@ class AlertType(enum.Enum):
     FLEET_BUMP_FAIL = "alert:fleet-bump-fail"
     REPO_NOT_PROFILED = "alert:repo-not-profiled"
     FLAG_MISSING = "alert:flag-missing"
-    SECRET_MISSING = "alert:secret-missing"
+    SECRET_MISSING = "alert:secret-missing"  # noqa: S105 — alert-id constant, not a credential
 
     @property
     def label(self) -> str:

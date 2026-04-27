@@ -152,7 +152,7 @@ def _find_import_block(lines: List[str]) -> Optional[Tuple[int, int]]:
 
 def _build_sorted_block(import_lines: List[str]) -> List[str]:
     """Sort import lines by group and build a block with group separators."""
-    sorted_imports = sorted(import_lines, key=lambda l: (_classify_import(l), l.strip()))
+    sorted_imports = sorted(import_lines, key=lambda imp: (_classify_import(imp), imp.strip()))
     grouped: List[str] = []
     prev_group = -1
     for imp in sorted_imports:

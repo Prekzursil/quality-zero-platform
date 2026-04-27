@@ -43,7 +43,7 @@ def generate(
     while end_index < len(lines):
         line = lines[end_index]
         stripped = line.strip()
-        if stripped == "":  # pragma: no cover -- blank line within dead block; tested but branch depends on exact whitespace
+        if stripped == "":  # noqa: E501  # pragma: no cover -- blank line within dead block; tested but branch depends on exact whitespace
             end_index += 1
             continue
         line_indent = len(line) - len(line.lstrip())
@@ -52,7 +52,7 @@ def generate(
         else:
             break
 
-    if end_index == target_index:  # pragma: no cover -- defensive; requires target line to have lower indent than itself
+    if end_index == target_index:  # noqa: E501  # pragma: no cover -- defensive; requires target line to have lower indent than itself
         return PatchDeclined(
             reason_code="ambiguous-fix",
             reason_text="could not identify unreachable block",

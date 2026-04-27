@@ -64,9 +64,15 @@ def apply_single_patch(diff: str, repo_dir: Path) -> Dict[str, Any]:
         tmp_path = Path(tmp.name)
 
     try:
-        # Dry-run first
-        check_result = subprocess.run(
-            ["git", "apply", "--check", str(tmp_path)],
+        # Dry-run first.
+        # ruff S603/S607: ``git`` is a known-safe binary and we deliberately
+        # rely on PATH lookup so consumers can pin a custom git via env. The
+        # only argument to ``git apply`` is the path to the patch file we
+        # just wrote ourselves, so there is no untrusted-input shell injection
+        # surface here. Annotated rather than rewritten as ``shutil.which``
+        # because the platform's CI image always has git on PATH.
+        check_result = subprocess.run(  # noqa: S603
+            ["git", "apply", "--check", str(tmp_path)],  # noqa: S607
             cwd=repo_dir,
             capture_output=True,
             text=True,
@@ -78,9 +84,9 @@ def apply_single_patch(diff: str, repo_dir: Path) -> Dict[str, Any]:
                 "reason": check_result.stderr.strip() or "git apply --check failed",
             }
 
-        # Apply for real
-        apply_result = subprocess.run(
-            ["git", "apply", str(tmp_path)],
+        # Apply for real (same safety reasoning as the dry-run above).
+        apply_result = subprocess.run(  # noqa: S603
+            ["git", "apply", str(tmp_path)],  # noqa: S607
             cwd=repo_dir,
             capture_output=True,
             text=True,

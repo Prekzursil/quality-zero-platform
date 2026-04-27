@@ -126,7 +126,7 @@ def _run_codex_exec(
     # shell=False, validated tokens as plain arguments, and prompt content
     # flowing only through stdin.
     # nosemgrep
-    return subprocess.run(  # nosec B603
+    return subprocess.run(  # nosec B603  # noqa: S603 — see safety reasoning above
         argv,
         executable=executable_path,
         input=prompt_text,

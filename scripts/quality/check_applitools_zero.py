@@ -59,7 +59,10 @@ def main(argv: List[str] | None = None) -> int:
 
     if args.out_md:
         status = "PASS" if passed else "FAIL"
-        md = f"# Applitools Zero\n\n**Status:** {status}\n**Total:** {total}\n**Unresolved:** {unresolved}\n**Failed:** {failed}\n"
+        md = (
+            f"# Applitools Zero\n\n**Status:** {status}\n**Total:** {total}\n"
+            f"**Unresolved:** {unresolved}\n**Failed:** {failed}\n"
+        )
         out_md = Path(args.out_md)
         out_md.parent.mkdir(parents=True, exist_ok=True)
         out_md.write_text(md, encoding="utf-8")

@@ -2,10 +2,16 @@
 
 from __future__ import absolute_import
 
-from typing import List, Set, Tuple
+from typing import TYPE_CHECKING, List, Set, Tuple
 
 from scripts.quality.coverage_paths import _normalize_source_path
-from scripts.quality.coverage_types import CoverageStats
+
+if TYPE_CHECKING:
+    # ``CoverageStats`` is referenced only inside string-forward-refs
+    # (``List["CoverageStats"]``) so we don't need it at runtime; gating
+    # it behind TYPE_CHECKING satisfies ruff TC001 without breaking the
+    # cyclic-import fix that introduced ``coverage_types`` (see PR #162).
+    from scripts.quality.coverage_types import CoverageStats  # noqa: F401
 
 
 def _matches_required_source(source_path: str, required_source: str) -> bool:

@@ -42,7 +42,11 @@ def _parse_args() -> argparse.Namespace:
 
 def _coverage_mode(coverage: Dict[str, Any], event_name: str) -> str:
     """Handle coverage mode."""
-    assert_mode = cast("Dict[str, Any]", coverage.get("assert_mode", {}))
+    # ``"Dict[str, Any]"`` is a string forward-reference passed to typing.cast
+    # — it must remain a string literal at the call site for type-checkers to
+    # resolve it. Sonar S1192 flags the literal repeating; suppressed here
+    # because extracting it to a constant breaks the forward-ref contract.
+    assert_mode = cast("Dict[str, Any]", coverage.get("assert_mode", {}))  # NOSONAR python:S1192
     if event_name in assert_mode:
         return str(assert_mode[event_name])
     return str(assert_mode.get("default", "enforce"))

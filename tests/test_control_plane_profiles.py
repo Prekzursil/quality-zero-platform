@@ -78,8 +78,26 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
             'grep -vE "/ent($|/)"',
             profiles["devextreme"]["coverage"]["command"],
         )
+        # Coverage runs per-package (not a single ``go test $packages ...``)
+        # so each package's profile is written without ``-coverpkg``-style
+        # cross-instrumentation that leaves OTHER packages' statements at
+        # 0 hits in the merged profile.  Build per-package profiles and
+        # concatenate.
         self.assertIn(
-            "go test $packages -coverprofile=coverage/go-coverage.out -covermode=count",
+            'go test "$pkg" -coverprofile=coverage_part.out -covermode=count',
+            profiles["devextreme"]["coverage"]["command"],
+        )
+        self.assertIn(
+            "tail -n +2 coverage_part.out >> coverage/go-coverage.out",
+            profiles["devextreme"]["coverage"]["command"],
+        )
+        # Sonar Generic Coverage XML is generated alongside the cobertura
+        # XML so SonarCloud's Go Cover sensor's silent path-resolution
+        # drop is bypassed.  See
+        # ``scripts/quality/gocover_to_sonar_generic.py`` in the consumer
+        # repo for the conversion logic.
+        self.assertIn(
+            "gocover_to_sonar_generic.py",
             profiles["devextreme"]["coverage"]["command"],
         )
         self.assertEqual(profiles["env_inspector"]["coverage"]["min_percent"], 100.0)

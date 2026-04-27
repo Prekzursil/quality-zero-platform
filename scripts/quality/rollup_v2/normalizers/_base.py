@@ -27,7 +27,7 @@ class NormalizerResult:
     security_drops: Tuple[Dict[str, str], ...]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True)  # pylint: disable=too-many-instance-attributes
 class FindingFields:
     """Per-finding inputs to ``BaseNormalizer._build_finding``.
 

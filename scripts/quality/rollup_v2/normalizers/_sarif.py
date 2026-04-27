@@ -46,7 +46,12 @@ class SarifJsonNormalizer(BaseNormalizer):
           * ``bytes``  — raw SARIF JSON bytes (size-checked)
         Anything else returns an empty iterable.
         """
-        if isinstance(artifact, (str, bytes)):
+        # noqa: UP038 — pyproject keeps ``UP006/UP007/UP045`` ignored to
+        # preserve typing.List etc. for the codacy-compat shim. UP038's
+        # ``isinstance(x, X | Y)`` form belongs to the same PEP-604 family
+        # we're holding back project-wide; using the tuple form here keeps
+        # the convention consistent.
+        if isinstance(artifact, (str, bytes)):  # noqa: UP038
             check_sarif_size(artifact)
             data = json.loads(artifact)
         elif isinstance(artifact, dict):

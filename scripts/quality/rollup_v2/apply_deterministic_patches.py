@@ -84,35 +84,39 @@ def apply_single_patch(diff: str, repo_dir: Path) -> Dict[str, Any]:
         # Dry-run first. The first arg is an absolute path resolved via
         # shutil.which (no PATH lookup at subprocess time → no BAN-B607).
         # The only data argument is tmp_path which we wrote ourselves.
-        check_result = subprocess.run(  # noqa: S603  # nosec B603
-            [git_path, "apply", "--check", str(tmp_path)],
-            cwd=repo_dir,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if check_result.returncode != 0:
+        # Use check=True so PYL-W1510 (ignored non-zero exit) doesn't
+        # fire; the CalledProcessError carries returncode + stderr that
+        # we surface in the skipped-finding payload.
+        try:
+            subprocess.run(  # noqa: S603  # nosec B603
+                [git_path, "apply", "--check", str(tmp_path)],
+                cwd=repo_dir,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except subprocess.CalledProcessError as check_exc:
             return {
                 "applied": False,
                 "skipped": True,
-                "reason": check_result.stderr.strip() or "git apply --check failed",
+                "reason": (check_exc.stderr or "git apply --check failed").strip(),
             }
 
         # Apply for real (same safety reasoning as the dry-run above).
-        apply_result = subprocess.run(  # noqa: S603  # nosec B603
-            [git_path, "apply", str(tmp_path)],
-            cwd=repo_dir,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if apply_result.returncode != 0:
+        try:
+            subprocess.run(  # noqa: S603  # nosec B603
+                [git_path, "apply", str(tmp_path)],
+                cwd=repo_dir,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except subprocess.CalledProcessError as apply_exc:
             return {
                 "applied": False,
                 "skipped": True,
-                "reason": apply_result.stderr.strip() or "git apply failed",
+                "reason": (apply_exc.stderr or "git apply failed").strip(),
             }
-
         return {"applied": True, "skipped": False}
     finally:
         tmp_path.unlink(missing_ok=True)

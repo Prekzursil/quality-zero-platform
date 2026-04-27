@@ -185,7 +185,9 @@ class ApplyPatchTests(unittest.TestCase):
 
         diff = "--- a/x.py\n+++ b/x.py\n@@ -1 +1 @@\n-old\n+new\n"
 
-        # Mock subprocess.run so --check succeeds (rc=0) but actual apply fails (rc=1)
+        # Mock subprocess.run so --check succeeds (rc=0) but actual apply
+        # raises CalledProcessError (rc=1) — mirrors the new check=True
+        # contract added to drop PYL-W1510.
         call_count = [0]
         original_run = subprocess.run
 
@@ -194,8 +196,9 @@ class ApplyPatchTests(unittest.TestCase):
                 call_count[0] += 1
                 if "--check" in cmd:
                     return subprocess.CompletedProcess(cmd, 0, "", "")
-                else:
-                    return subprocess.CompletedProcess(cmd, 1, "", "apply failed race condition")
+                raise subprocess.CalledProcessError(
+                    1, cmd, output="", stderr="apply failed race condition"
+                )
             return original_run(cmd, **kwargs)
 
         with patch("subprocess.run", side_effect=mock_run):

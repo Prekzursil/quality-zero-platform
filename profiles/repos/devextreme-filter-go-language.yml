@@ -28,7 +28,10 @@ vendors:
   sonar:
     project_key: Prekzursil_DevExtreme-Filter-Go-Language
 codeql:
-  build_mode: none
+  # Go REQUIRES build_mode: autobuild (or manual). CodeQL v4 errors out
+  # with "Go does not support the none build mode" if set to ``none``.
+  # See: github/codeql-action#3258 + run 24976734212 init log.
+  build_mode: autobuild
   languages:
   - actions
   - go

@@ -1631,11 +1631,11 @@ class _DemoNormalizer(BaseNormalizer):
                 category="broad-except",
                 category_group=CATEGORY_GROUP_QUALITY,
                 severity="medium",
-                primary_message='FOO_KEY = "sk-thirtytwocharsecretvalue" was here',
+                primary_message='FOO_KEY = "sk-EXAMPLE_REDACTED" was here',
                 rule_id="Pylint_W0703",
                 rule_url=None,
                 original_message="broad-except",
-                context_snippet='API_KEY = "sk-thirtytwocharsecretvalue"',
+                context_snippet='API_KEY = "sk-EXAMPLE_REDACTED"',
             )
         ]
 
@@ -1655,13 +1655,13 @@ class BaseNormalizerTests(unittest.TestCase):
         self.assertIsInstance(result, NormalizerResult)
         self.assertEqual(len(result.findings), 1)
         finding = result.findings[0]
-        self.assertNotIn("sk-thirtytwocharsecretvalue", finding.context_snippet)
+        self.assertNotIn("sk-EXAMPLE_REDACTED", finding.context_snippet)
         self.assertIn("<REDACTED>", finding.context_snippet)
 
     def test_finalize_redacts_primary_message(self):
         norm = _DemoNormalizer()
         result = norm.run(artifact=None, repo_root=self.root)
-        self.assertNotIn("sk-thirtytwocharsecretvalue", result.findings[0].primary_message)
+        self.assertNotIn("sk-EXAMPLE_REDACTED", result.findings[0].primary_message)
 
     def test_path_escape_produces_normalizer_error_not_finding(self):
         class _EscapeNormalizer(_DemoNormalizer):

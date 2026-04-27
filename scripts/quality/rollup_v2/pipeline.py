@@ -10,6 +10,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Dict, List
 
+from scripts.quality.rollup_v2 import patches as patch_dispatcher
 from scripts.quality.rollup_v2.dedup import assign_stable_ids, dedup
 from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer, NormalizerResult
 from scripts.quality.rollup_v2.normalizers.applitools import ApplitoolsNormalizer
@@ -25,7 +26,6 @@ from scripts.quality.rollup_v2.normalizers.secrets import SecretsNormalizer
 from scripts.quality.rollup_v2.normalizers.semgrep import SemgrepNormalizer
 from scripts.quality.rollup_v2.normalizers.sentry import SentryNormalizer
 from scripts.quality.rollup_v2.normalizers.sonarcloud import SonarCloudNormalizer
-from scripts.quality.rollup_v2 import patches as patch_dispatcher
 from scripts.quality.rollup_v2.renderer import render_markdown
 from scripts.quality.rollup_v2.schema.finding import Finding
 from scripts.quality.rollup_v2.schema.patch import PatchResult

@@ -4,9 +4,9 @@ import unittest
 from pathlib import Path
 from typing import List, Set
 
-from scripts.quality.control_plane import active_required_contexts, load_inventory, load_repo_profile, validate_profile
-
 from tests.control_plane_support import ControlPlaneAssertions
+
+from scripts.quality.control_plane import active_required_contexts, load_inventory, load_repo_profile, validate_profile
 
 ROOT = Path(__file__).resolve().parents[1]
 

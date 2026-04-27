@@ -44,7 +44,7 @@ codex --version
 
 ```bash
 # Add to your shell profile (~/.zshrc or ~/.bashrc):
-export OPENAI_API_KEY="sk-your-key-here"
+export OPENAI_API_KEY="<your-openai-key>"
 
 # Get a key at: https://platform.openai.com/api-keys
 # Requires a funded OpenAI account with API access.
@@ -116,7 +116,7 @@ gemini
 
 ```bash
 # Add to your shell profile (~/.zshrc or ~/.bashrc):
-export GEMINI_API_KEY="AIza-your-key-here"
+export GEMINI_API_KEY="<your-gemini-key>"
 
 # Get a key at: https://aistudio.google.com/app/apikey
 # Note: The free API key tier is more limited than Google login:

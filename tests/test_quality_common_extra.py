@@ -16,9 +16,9 @@ from scripts.quality.common import (
     normalize_codex_environment,
     normalize_coverage,
     normalize_coverage_assert_mode,
+    normalize_coverage_setup,
     normalize_deps,
     normalize_issue_policy,
-    normalize_coverage_setup,
     normalize_java_setup,
 )
 

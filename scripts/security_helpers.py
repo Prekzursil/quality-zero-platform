@@ -2,12 +2,12 @@
 
 from __future__ import absolute_import
 
-from dataclasses import dataclass
-from http.client import HTTPConnection, HTTPS_PORT
 import ipaddress
 import json
 import ssl
-from typing import Any, cast, Dict, List, Mapping, Set, Tuple
+from dataclasses import dataclass
+from http.client import HTTPS_PORT, HTTPConnection
+from typing import Any, Dict, List, Mapping, Set, Tuple, cast
 from urllib.error import HTTPError
 from urllib.parse import ParseResult, urlparse, urlunparse
 
@@ -76,14 +76,10 @@ def _validate_exact_hostname(hostname: str, allowed_hosts: Set[str] | None) -> N
         raise ValueError(f"URL host is not in allowlist: {hostname}")
 
 
-def _validate_hostname_suffixes(
-    hostname: str, allowed_host_suffixes: Set[str] | None
-) -> None:
+def _validate_hostname_suffixes(hostname: str, allowed_host_suffixes: Set[str] | None) -> None:
     """Handle validate hostname suffixes."""
     suffixes = _normalized_allowlist(allowed_host_suffixes)
-    if suffixes and not any(
-        hostname == suffix or hostname.endswith(f".{suffix}") for suffix in suffixes
-    ):
+    if suffixes and not any(hostname == suffix or hostname.endswith(f".{suffix}") for suffix in suffixes):
         raise ValueError(f"URL host is not in suffix allowlist: {hostname}")
 
 
@@ -168,7 +164,7 @@ def _require_request_hostname(parsed: ParseResult) -> str:
     """Handle require request hostname."""
     if not parsed.hostname:
         raise ValueError(f"Request URL is missing a hostname: {urlunparse(parsed)!r}")
-    return cast(str, parsed.hostname)
+    return cast("str", parsed.hostname)
 
 
 def _build_tls_context() -> ssl.SSLContext:
@@ -189,9 +185,7 @@ class _ValidatedTLSConnection(HTTPConnection):
     def connect(self) -> None:
         """Handle connect."""
         super().connect()
-        self.sock = _build_tls_context().wrap_socket(
-            self.sock, server_hostname=self.host
-        )
+        self.sock = _build_tls_context().wrap_socket(self.sock, server_hostname=self.host)
 
 
 def _prepare_https_request(
@@ -205,9 +199,7 @@ def _prepare_https_request(
     data = kwargs.pop("data", None)
     timeout = int(kwargs.pop("timeout", 30))
     if kwargs:
-        raise TypeError(
-            f"Unexpected {function_name} parameters: {', '.join(sorted(kwargs))}"
-        )
+        raise TypeError(f"Unexpected {function_name} parameters: {', '.join(sorted(kwargs))}")
     safe_url = normalize_https_url(
         raw_url,
         allowed_hosts=allowed_hosts,
@@ -221,9 +213,7 @@ def _prepare_https_request(
     }
 
 
-def _read_json_response(
-    parsed: ParseResult, *args: Any, **kwargs: Any
-) -> Tuple[Any, Dict[str, str]]:
+def _read_json_response(parsed: ParseResult, *args: Any, **kwargs: Any) -> Tuple[Any, Dict[str, str]]:
     """Handle read json response."""
     if args:
         raise TypeError("_read_json_response expects keyword arguments only")
@@ -232,9 +222,7 @@ def _read_json_response(
     data = kwargs.pop("data", None)
     timeout = int(kwargs.pop("timeout"))
     if kwargs:
-        raise TypeError(
-            f"Unexpected _read_json_response parameters: {', '.join(sorted(kwargs))}"
-        )
+        raise TypeError(f"Unexpected _read_json_response parameters: {', '.join(sorted(kwargs))}")
     request = _build_request(parsed, headers=headers, method=method, data=data)
     hostname = _require_request_hostname(parsed)
     connection = _ValidatedTLSConnection(
@@ -252,9 +240,7 @@ def _read_json_response(
         )
         response = connection.getresponse()
         payload_bytes = response.read()
-        response_headers = {
-            key.lower(): value for key, value in response.headers.items()
-        }
+        response_headers = {key.lower(): value for key, value in response.headers.items()}
         if response.status >= 400:
             raise HTTPError(
                 request.full_url,
@@ -271,9 +257,7 @@ def _read_json_response(
     return payload, response_headers
 
 
-def _read_bytes_response(
-    parsed: ParseResult, *args: Any, **kwargs: Any
-) -> Tuple[bytes, Dict[str, str]]:
+def _read_bytes_response(parsed: ParseResult, *args: Any, **kwargs: Any) -> Tuple[bytes, Dict[str, str]]:
     """Handle read bytes response."""
     if args:
         raise TypeError("_read_bytes_response expects keyword arguments only")
@@ -282,9 +266,7 @@ def _read_bytes_response(
     data = kwargs.pop("data", None)
     timeout = int(kwargs.pop("timeout"))
     if kwargs:
-        raise TypeError(
-            f"Unexpected _read_bytes_response parameters: {', '.join(sorted(kwargs))}"
-        )
+        raise TypeError(f"Unexpected _read_bytes_response parameters: {', '.join(sorted(kwargs))}")
     request = _build_request(parsed, headers=headers, method=method, data=data)
     hostname = _require_request_hostname(parsed)
     connection = _ValidatedTLSConnection(
@@ -302,9 +284,7 @@ def _read_bytes_response(
         )
         response = connection.getresponse()
         payload_bytes = response.read()
-        response_headers = {
-            key.lower(): value for key, value in response.headers.items()
-        }
+        response_headers = {key.lower(): value for key, value in response.headers.items()}
         if response.status >= 400:
             raise HTTPError(
                 request.full_url,
@@ -320,30 +300,22 @@ def _read_bytes_response(
     return payload_bytes, response_headers
 
 
-def load_json_https(
-    raw_url: str, *args: Any, **kwargs: Any
-) -> Tuple[Any, Dict[str, str]]:
+def load_json_https(raw_url: str, *args: Any, **kwargs: Any) -> Tuple[Any, Dict[str, str]]:
     """Handle load json https."""
     if args:
         raise TypeError("load_json_https expects keyword arguments only")
-    parsed, request_kwargs = _prepare_https_request(
-        raw_url, function_name="load_json_https", kwargs=kwargs
-    )
+    parsed, request_kwargs = _prepare_https_request(raw_url, function_name="load_json_https", kwargs=kwargs)
     return _read_json_response(
         parsed,
         **request_kwargs,
     )
 
 
-def load_bytes_https(
-    raw_url: str, *args: Any, **kwargs: Any
-) -> Tuple[bytes, Dict[str, str]]:
+def load_bytes_https(raw_url: str, *args: Any, **kwargs: Any) -> Tuple[bytes, Dict[str, str]]:
     """Handle load bytes https."""
     if args:
         raise TypeError("load_bytes_https expects keyword arguments only")
-    parsed, request_kwargs = _prepare_https_request(
-        raw_url, function_name="load_bytes_https", kwargs=kwargs
-    )
+    parsed, request_kwargs = _prepare_https_request(raw_url, function_name="load_bytes_https", kwargs=kwargs)
     return _read_bytes_response(
         parsed,
         **request_kwargs,

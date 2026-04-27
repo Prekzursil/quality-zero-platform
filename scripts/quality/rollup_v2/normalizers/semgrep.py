@@ -1,40 +1,17 @@
 """Semgrep SARIF normalizer (per design §9.1).
 
-Delegates to the shared SARIF parser in ``_sarif.py``, applying Semgrep-specific
-taxonomy mapping via ``taxonomy.lookup("Semgrep", rule_id)``.
+Subclasses ``SarifJsonNormalizer`` (defined in ``_sarif.py``) — the
+shared base does all the dict/str/bytes artifact dispatch + 50MB size
+guard. Semgrep-specific taxonomy mapping fires inside ``parse_sarif``
+via ``taxonomy.lookup("Semgrep", rule_id)``.
 """
+
 from __future__ import absolute_import
 
-import json
-from pathlib import Path
-from typing import Any, Iterable
-
-from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer
-from scripts.quality.rollup_v2.normalizers._sarif import (
-    check_sarif_size,
-    parse_sarif,
-)
-from scripts.quality.rollup_v2.schema.finding import Finding
+from scripts.quality.rollup_v2.normalizers._sarif import SarifJsonNormalizer
 
 
-class SemgrepNormalizer(BaseNormalizer):
+class SemgrepNormalizer(SarifJsonNormalizer):
     """Normalize Semgrep SARIF output into canonical findings."""
 
     provider = "Semgrep"
-
-    def parse(self, artifact: Any, repo_root: Path) -> Iterable[Finding]:
-        """Parse a Semgrep SARIF artifact.
-
-        ``artifact`` may be:
-        - A ``dict`` (already-parsed SARIF JSON)
-        - A ``str`` (raw SARIF JSON text)
-        - A ``bytes`` (raw SARIF JSON bytes)
-        """
-        if isinstance(artifact, (str, bytes)):
-            check_sarif_size(artifact)
-            data = json.loads(artifact)
-        elif isinstance(artifact, dict):
-            data = artifact
-        else:
-            return []
-        return parse_sarif(data, self.provider, repo_root, self)

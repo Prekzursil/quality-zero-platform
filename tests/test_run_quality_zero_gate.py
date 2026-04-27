@@ -2,14 +2,14 @@
 
 from __future__ import absolute_import
 
-import json
 import importlib
+import json
+import runpy
+import sys
 import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
-import runpy
-import sys
 from typing import List
 from unittest.mock import patch
 

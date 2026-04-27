@@ -1,10 +1,11 @@
 """Deterministic patch generator for `wrong-import-order` category."""
+
 from __future__ import absolute_import
-from typing import List, Optional, Tuple
 
 import difflib
 import re
 from pathlib import Path
+from typing import List, Optional, Tuple
 
 from scripts.quality.rollup_v2.schema.finding import Finding
 from scripts.quality.rollup_v2.schema.patch import PatchDeclined, PatchResult
@@ -15,22 +16,99 @@ CATEGORY = "wrong-import-order"
 _IMPORT_LINE = re.compile(r"^\s*(import\s+\S+|from\s+\S+\s+import\s+.+)")
 
 # Known stdlib top-level modules (subset for classification)
-_STDLIB_PREFIXES = frozenset({
-    "abc", "argparse", "ast", "asyncio", "base64", "bisect", "builtins",
-    "calendar", "codecs", "collections", "configparser", "contextlib", "copy",
-    "csv", "dataclasses", "datetime", "decimal", "difflib", "email", "enum",
-    "errno", "fnmatch", "fractions", "functools", "gc", "getpass",
-    "glob", "gzip", "hashlib", "heapq", "hmac", "html", "http", "importlib",
-    "inspect", "io", "itertools", "json", "keyword", "linecache", "locale",
-    "logging", "math", "mimetypes", "multiprocessing", "numbers", "operator",
-    "os", "pathlib", "platform", "pprint", "profile", "queue",
-    "random", "re", "secrets", "select", "shlex", "shutil", "signal",
-    "socket", "sqlite3", "ssl", "stat", "string", "struct", "subprocess",
-    "sys", "sysconfig", "tempfile", "textwrap", "threading", "time",
-    "timeit", "trace", "traceback", "types", "typing", "unicodedata",
-    "unittest", "urllib", "uuid", "warnings", "weakref", "xml", "zipfile",
-    "zipimport", "zlib", "__future__",
-})
+_STDLIB_PREFIXES = frozenset(
+    {
+        "abc",
+        "argparse",
+        "ast",
+        "asyncio",
+        "base64",
+        "bisect",
+        "builtins",
+        "calendar",
+        "codecs",
+        "collections",
+        "configparser",
+        "contextlib",
+        "copy",
+        "csv",
+        "dataclasses",
+        "datetime",
+        "decimal",
+        "difflib",
+        "email",
+        "enum",
+        "errno",
+        "fnmatch",
+        "fractions",
+        "functools",
+        "gc",
+        "getpass",
+        "glob",
+        "gzip",
+        "hashlib",
+        "heapq",
+        "hmac",
+        "html",
+        "http",
+        "importlib",
+        "inspect",
+        "io",
+        "itertools",
+        "json",
+        "keyword",
+        "linecache",
+        "locale",
+        "logging",
+        "math",
+        "mimetypes",
+        "multiprocessing",
+        "numbers",
+        "operator",
+        "os",
+        "pathlib",
+        "platform",
+        "pprint",
+        "profile",
+        "queue",
+        "random",
+        "re",
+        "secrets",
+        "select",
+        "shlex",
+        "shutil",
+        "signal",
+        "socket",
+        "sqlite3",
+        "ssl",
+        "stat",
+        "string",
+        "struct",
+        "subprocess",
+        "sys",
+        "sysconfig",
+        "tempfile",
+        "textwrap",
+        "threading",
+        "time",
+        "timeit",
+        "trace",
+        "traceback",
+        "types",
+        "typing",
+        "unicodedata",
+        "unittest",
+        "urllib",
+        "uuid",
+        "warnings",
+        "weakref",
+        "xml",
+        "zipfile",
+        "zipimport",
+        "zlib",
+        "__future__",
+    }
+)
 
 
 def _classify_import(line: str) -> int:
@@ -63,9 +141,7 @@ def _find_import_block(lines: List[str]) -> Optional[Tuple[int, int]]:
             if import_start is None:
                 import_start = i
             import_end = i + 1
-        elif stripped == "" and import_start is not None:
-            continue
-        elif stripped.startswith("#") and import_start is None:  # pragma: no cover -- leading comments before imports
+        elif stripped == "" and import_start is not None or stripped.startswith("#") and import_start is None:
             continue
         elif import_start is not None:
             break
@@ -76,7 +152,7 @@ def _find_import_block(lines: List[str]) -> Optional[Tuple[int, int]]:
 
 def _build_sorted_block(import_lines: List[str]) -> List[str]:
     """Sort import lines by group and build a block with group separators."""
-    sorted_imports = sorted(import_lines, key=lambda l: (_classify_import(l), l.strip()))
+    sorted_imports = sorted(import_lines, key=lambda imp: (_classify_import(imp), imp.strip()))
     grouped: List[str] = []
     prev_group = -1
     for imp in sorted_imports:
@@ -116,12 +192,14 @@ def generate(
             suggested_tier="skip",
         )
 
-    diff = "".join(difflib.unified_diff(
-        lines,
-        patched_lines,
-        fromfile=f"a/{finding.file}",
-        tofile=f"b/{finding.file}",
-    ))
+    diff = "".join(
+        difflib.unified_diff(
+            lines,
+            patched_lines,
+            fromfile=f"a/{finding.file}",
+            tofile=f"b/{finding.file}",
+        )
+    )
     return PatchResult(
         unified_diff=diff,
         confidence="medium",

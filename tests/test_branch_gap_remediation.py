@@ -10,22 +10,23 @@ from argparse import Namespace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, Tuple, cast
-from urllib.parse import urlparse
 from unittest.mock import patch
+from urllib.parse import urlparse
 
 from scripts import security_helpers
 from scripts.quality import (
     check_codacy_zero,
     check_deepscan_zero,
     check_required_checks,
-)
-from scripts.quality import check_sonar_zero, control_plane_admin, control_plane_vendors
-from scripts.quality import (
+    check_sonar_zero,
+    control_plane_admin,
+    control_plane_vendors,
     export_profile,
     post_pr_quality_comment,
     profile_coverage_normalization,
+    run_codex_exec,
+    run_quality_zero_gate,
 )
-from scripts.quality import run_codex_exec, run_quality_zero_gate
 from scripts.quality.coverage_paths import _coverage_source_candidates
 
 

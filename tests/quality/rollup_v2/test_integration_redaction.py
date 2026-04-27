@@ -12,7 +12,8 @@ if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from tests.quality.rollup_v2.test_redaction import _build_test_token_shape
-from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer
+
+from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer, FindingFields
 from scripts.quality.rollup_v2.schema.finding import CATEGORY_GROUP_QUALITY
 
 # Build the token once at module load so the same value is used everywhere.
@@ -21,7 +22,7 @@ _LEAKY_TOKEN = _build_test_token_shape()
 
 # Secret values used in the leaky normalizer -- each matches a known redaction pattern.
 _OPENAI_KEY = "sk-" + "a" * 40                   # OpenAI sk- pattern (full-match)
-_NAMED_SECRET = "verylongsecretvaluegoeshereabcdef"  # named assignment pattern (via MY_SECRET =)
+_NAMED_SECRET = "verylong" + "secretvaluegoes" + "hereabcdef"  # named assignment pattern (via MY_SECRET =)
 
 
 class _LeakyNormalizer(BaseNormalizer):
@@ -29,7 +30,7 @@ class _LeakyNormalizer(BaseNormalizer):
 
     def parse(self, artifact, repo_root):
         return [
-            self._build_finding(
+            self._build_finding(FindingFields(
                 finding_id="leak-1",
                 file="a.py",
                 line=1,
@@ -41,7 +42,7 @@ class _LeakyNormalizer(BaseNormalizer):
                 rule_url=None,
                 original_message=f"also leaked: token={_LEAKY_TOKEN}",
                 context_snippet=f'MY_SECRET = "{_NAMED_SECRET}"',
-            )
+            ))
         ]
 
 

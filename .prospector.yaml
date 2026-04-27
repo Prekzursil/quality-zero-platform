@@ -26,3 +26,12 @@ mccabe:
 pycodestyle:
   options:
     max-line-length: 120
+
+dodgy:
+  # ``alerts.py:SECRET_MISSING`` is the GitHub label slug for the
+  # ``alert:secret-missing`` notification, not a hardcoded credential.
+  # dodgy's ``hardcoded-secret-key`` checker pattern-matches on the
+  # word ``secret`` in the literal. Same false-positive bucket that
+  # ruff S105 / Bandit B105 are already suppressing inline.
+  ignore-paths:
+    - "scripts/quality/alerts.py"

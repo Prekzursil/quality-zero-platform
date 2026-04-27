@@ -15,8 +15,8 @@ from typing import Any, Dict, Iterable, List, Mapping, Tuple
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.quality.common import utc_timestamp, write_report
 from scripts.quality import sonar_zero_support
+from scripts.quality.common import utc_timestamp, write_report
 from scripts.security_helpers import load_json_https
 
 SONAR_API_BASE = "https://sonarcloud.io"
@@ -40,9 +40,7 @@ def _preferred_text(*values: Any) -> str:
 def _parse_args() -> argparse.Namespace:
     """Parse command-line arguments for the Sonar zero gate."""
     parser = argparse.ArgumentParser(
-        description=(
-            "Assert SonarCloud has zero open issues and a passing quality gate."
-        )
+        description="Assert SonarCloud has zero open issues and a passing quality gate.",
     )
     parser.add_argument("--project-key", required=True)
     parser.add_argument("--token", default="")
@@ -57,7 +55,7 @@ def _parse_args() -> argparse.Namespace:
 
 def _auth_header(token: str) -> str:
     """Build the basic-auth header SonarCloud expects for token auth."""
-    return "Basic " + base64.b64encode(f"{token}:".encode("utf-8")).decode("ascii")
+    return "Basic " + base64.b64encode(f"{token}:".encode()).decode("ascii")
 
 
 def _request_json(url: str, auth_header: str) -> Dict[str, Any]:
@@ -136,8 +134,7 @@ def _load_quality_gate(args: argparse.Namespace, auth: str) -> str:
         pull_request=args.pull_request,
     )
     gate_payload = _request_json(
-        f"{SONAR_API_BASE}/api/qualitygates/project_status?"
-        f"{urllib.parse.urlencode(gate_query)}",
+        f"{SONAR_API_BASE}/api/qualitygates/project_status?{urllib.parse.urlencode(gate_query)}",
         auth,
     )
     project_status = _mapping_or_empty(gate_payload.get("projectStatus"))
@@ -152,9 +149,7 @@ def _load_sonar_findings(
     open_issues = _load_open_issues(args, auth)
     quality_gate = _load_quality_gate(args, auth)
     findings: List[str] = []
-    ratchet_scoped = getattr(
-        args, "policy_mode", "ratchet"
-    ) == "ratchet" and _is_scoped_analysis(args)
+    ratchet_scoped = getattr(args, "policy_mode", "ratchet") == "ratchet" and _is_scoped_analysis(args)
     if open_issues != 0 and not ratchet_scoped:
         findings.append(f"Sonar reports {open_issues} open issues (expected 0).")
     if quality_gate != "OK" and open_issues != 0:
@@ -359,10 +354,7 @@ def load_sonar_findings_with_retry(
 ) -> Tuple[int, str, List[str]]:
     """Load Sonar findings, retrying while a scoped analysis is still settling."""
     if len(args) != 2:
-        raise TypeError(
-            "load_sonar_findings_with_retry expects argparse namespace "
-            "and auth header"
-        )
+        raise TypeError("load_sonar_findings_with_retry expects argparse namespace and auth header")
     namespace, auth = args
     retry_settings = _resolve_retry_settings(kwargs)
     return sonar_zero_support.load_sonar_findings_with_retry(

@@ -3,8 +3,9 @@
 from __future__ import absolute_import
 
 import unittest
-from urllib.parse import urlparse
+from typing import Dict
 from unittest.mock import MagicMock, patch
+from urllib.parse import urlparse
 
 from scripts import security_helpers
 from scripts.security_helpers import (
@@ -13,7 +14,6 @@ from scripts.security_helpers import (
     load_json_https,
     normalize_https_url,
 )
-from typing import Dict
 
 
 class _FakeHttpResponse:

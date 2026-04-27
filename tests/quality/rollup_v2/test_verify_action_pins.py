@@ -10,9 +10,9 @@ if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from scripts.quality.rollup_v2.verify_action_pins import (
+    main,
     scan_workflow,
     scan_workflows_dir,
-    main,
 )
 
 

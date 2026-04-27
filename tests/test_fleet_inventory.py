@@ -17,8 +17,8 @@ from typing import Any, List, Sequence, Tuple
 from scripts.quality.fleet_inventory import (
     ALERT_LABEL_NOT_PROFILED,
     FORK_INCLUDE_SLUGS,
-    FleetDiff,
     PRIVATE_INCLUDE_SLUGS,
+    FleetDiff,
     _build_arg_parser,
     alert_issue_title,
     build_expected_fleet,
@@ -29,10 +29,12 @@ from scripts.quality.fleet_inventory import (
     find_existing_alert_issue,
     format_diff_report,
     load_inventory_slugs,
-    main as fleet_inventory_main,
     merge_repo_lists,
     open_alert_issue_for_unprofiled_repo,
     run_inventory_sweep,
+)
+from scripts.quality.fleet_inventory import (
+    main as fleet_inventory_main,
 )
 
 
@@ -837,9 +839,10 @@ class CoverageClosureTests(unittest.TestCase):
 
     def test_main_json_output_prints_json(self) -> None:
         """``--json`` flips the output format."""
-        import scripts.quality.fleet_inventory as module_under_test
-        from contextlib import redirect_stdout
         import io
+        from contextlib import redirect_stdout
+
+        import scripts.quality.fleet_inventory as module_under_test
 
         original_fetch_user = module_under_test.fetch_user_repos
         original_fetch_auth = module_under_test.fetch_authenticated_repos
@@ -879,9 +882,10 @@ class CoverageClosureTests(unittest.TestCase):
 
     def test_main_gh_failure_exit_two(self) -> None:
         """A subprocess.CalledProcessError from the sweep surfaces as exit 2."""
-        import scripts.quality.fleet_inventory as module_under_test
-        from contextlib import redirect_stdout
         import io
+        from contextlib import redirect_stdout
+
+        import scripts.quality.fleet_inventory as module_under_test
 
         original_fetch_user = module_under_test.fetch_user_repos
 

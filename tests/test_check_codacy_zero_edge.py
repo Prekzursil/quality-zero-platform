@@ -5,12 +5,11 @@ from __future__ import absolute_import
 import unittest
 from argparse import Namespace
 from email.message import Message
+from unittest.mock import Mock, patch
 from urllib.error import HTTPError
-from unittest.mock import patch
 
 import scripts.quality.check_codacy_zero as check_codacy_zero
 from scripts.quality import codacy_zero_support
-from unittest.mock import Mock
 from scripts.quality.check_codacy_zero import (
     CodacyQuery,
     CodacyRetryConfig,

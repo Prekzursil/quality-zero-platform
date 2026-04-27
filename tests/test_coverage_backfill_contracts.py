@@ -6,6 +6,8 @@ import unittest
 from typing import List
 from unittest.mock import Mock, patch
 
+from tests.test_coverage_backfill import build_valid_contract_profile
+
 from scripts import security_helpers
 from scripts.quality import (
     profile_contract_validation,
@@ -13,7 +15,6 @@ from scripts.quality import (
     profile_normalization,
     profile_shape,
 )
-from tests.test_coverage_backfill import build_valid_contract_profile
 
 
 def _invalid_contract_profile() -> dict:

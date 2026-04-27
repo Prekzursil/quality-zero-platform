@@ -8,12 +8,11 @@ Checks: accepted == total AND errored == 0. Exits 0 on pass, 1 on fail.
 """
 from __future__ import absolute_import
 
-from typing import List, Tuple
-
 import argparse
 import json
 import sys
 from pathlib import Path
+from typing import List, Tuple
 
 
 def _check_chromatic(data: dict) -> Tuple[bool, int, int, int]:
@@ -64,7 +63,10 @@ def main(argv: List[str] | None = None) -> int:
 
     if args.out_md:
         status = "PASS" if passed else "FAIL"
-        md = f"# Chromatic Zero\n\n**Status:** {status}\n**Total:** {total}\n**Accepted:** {accepted}\n**Errored:** {errored}\n"
+        md = (
+            f"# Chromatic Zero\n\n**Status:** {status}\n**Total:** {total}\n"
+            f"**Accepted:** {accepted}\n**Errored:** {errored}\n"
+        )
         out_md = Path(args.out_md)
         out_md.parent.mkdir(parents=True, exist_ok=True)
         out_md.write_text(md, encoding="utf-8")

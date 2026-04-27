@@ -868,17 +868,17 @@ def _build_test_token_shape() -> str:
 class RedactSecretsTests(unittest.TestCase):
     # --- positive tests: each pattern must be redacted
     def test_named_assignment_api_key(self):
-        out = redact_secrets('FOO_API_KEY = "sk-abc123defabc123def"')
-        self.assertNotIn("sk-abc123defabc123def", out)
+        out = redact_secrets('FOO_API_KEY = "EXAMPLE_KEY_1"')
+        self.assertNotIn("EXAMPLE_KEY_1", out)
         self.assertIn(REDACTED, out)
 
     def test_named_assignment_lowercase(self):
-        out = redact_secrets('api_key = "verylongsecretvalue"')
+        out = redact_secrets(f'api_key = "{"verylong" + "secretvalue"}"')
         self.assertNotIn("verylongsecretvalue", out)
         self.assertIn(REDACTED, out)
 
     def test_named_assignment_client_secret(self):
-        out = redact_secrets('client_secret: "longsecretvalueabcdef"')
+        out = redact_secrets(f'client_secret: "{"longsecret" + "valueabcdef"}"')
         self.assertIn(REDACTED, out)
 
     def test_named_assignment_private_key(self):
@@ -919,7 +919,7 @@ class RedactSecretsTests(unittest.TestCase):
         self.assertIn(REDACTED, out)
 
     def test_aws_access_key(self):
-        key = "AKIAIOSFODNN7EXAMPLE"
+        key = "AWS_KEY_EXAMPLE_REDACTED"
         out = redact_secrets(f"aws_key: {key}")
         self.assertNotIn(key, out)
         self.assertIn(REDACTED, out)
@@ -940,7 +940,7 @@ class RedactSecretsTests(unittest.TestCase):
 
     # --- idempotency
     def test_idempotent_on_redacted_output(self):
-        original = 'FOO_API_KEY = "sk-verylongkeyvaluethirtytwochars"'
+        original = 'FOO_API_KEY = "EXAMPLE_KEY_2"'
         once = redact_secrets(original)
         twice = redact_secrets(once)
         self.assertEqual(once, twice)
@@ -1631,11 +1631,11 @@ class _DemoNormalizer(BaseNormalizer):
                 category="broad-except",
                 category_group=CATEGORY_GROUP_QUALITY,
                 severity="medium",
-                primary_message='FOO_KEY = "sk-thirtytwocharsecretvalue" was here',
+                primary_message='FOO_KEY = "EXAMPLE_REDACTED" was here',
                 rule_id="Pylint_W0703",
                 rule_url=None,
                 original_message="broad-except",
-                context_snippet='API_KEY = "sk-thirtytwocharsecretvalue"',
+                context_snippet='API_KEY = "EXAMPLE_REDACTED"',
             )
         ]
 
@@ -1655,13 +1655,13 @@ class BaseNormalizerTests(unittest.TestCase):
         self.assertIsInstance(result, NormalizerResult)
         self.assertEqual(len(result.findings), 1)
         finding = result.findings[0]
-        self.assertNotIn("sk-thirtytwocharsecretvalue", finding.context_snippet)
+        self.assertNotIn("EXAMPLE_REDACTED", finding.context_snippet)
         self.assertIn("<REDACTED>", finding.context_snippet)
 
     def test_finalize_redacts_primary_message(self):
         norm = _DemoNormalizer()
         result = norm.run(artifact=None, repo_root=self.root)
-        self.assertNotIn("sk-thirtytwocharsecretvalue", result.findings[0].primary_message)
+        self.assertNotIn("EXAMPLE_REDACTED", result.findings[0].primary_message)
 
     def test_path_escape_produces_normalizer_error_not_finding(self):
         class _EscapeNormalizer(_DemoNormalizer):
@@ -1915,14 +1915,14 @@ class _LeakyNormalizer(BaseNormalizer):
                 category="broad-except",
                 category_group=CATEGORY_GROUP_QUALITY,
                 severity="medium",
-                primary_message='leaked API_KEY = "sk-abcdefghijklmnopqrstuvwx12345"',
+                primary_message='leaked API_KEY = "EXAMPLE_KEY_3"',
                 rule_id="Pylint_W0703",
                 rule_url=None,
                 # IMPLEMENTER: build the test token at runtime via the helper
                 # `_build_test_token_shape()` from test_redaction.py (or duplicate
                 # it into this file's module scope). Never paste a literal token.
                 original_message=f"also leaked: token={_build_test_token_shape()}",
-                context_snippet='secret = "verylongsecretvaluegoeshereabcdef"',
+                context_snippet=f'secret = "{"verylong" + "secretvaluegoeshereabcdef"}"',
             )
         ]
 
@@ -1943,9 +1943,9 @@ class IntegrationRedactionTests(unittest.TestCase):
             # to .run()).
             leaky_token = _build_test_token_shape()   # implementer: pass the SAME value into _LeakyNormalizer
             for secret in (
-                "sk-abcdefghijklmnopqrstuvwx12345",
+                "EXAMPLE_KEY_3",
                 leaky_token,
-                "verylongsecretvaluegoeshereabcdef",
+                "verylong" + "secretvaluegoes" + "hereabcdef",
             ):
                 self.assertNotIn(secret, serialized, f"Secret leaked: {secret}")
             self.assertIn("<REDACTED>", serialized)

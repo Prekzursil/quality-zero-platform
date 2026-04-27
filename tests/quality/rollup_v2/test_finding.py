@@ -10,10 +10,10 @@ if str(Path(__file__).resolve().parents[3]) not in sys.path:
 
 from scripts.quality.rollup_v2.schema.corroborator import Corroborator
 from scripts.quality.rollup_v2.schema.finding import (
-    SCHEMA_VERSION,
-    CATEGORY_GROUP_SECURITY,
     CATEGORY_GROUP_QUALITY,
+    CATEGORY_GROUP_SECURITY,
     CATEGORY_GROUP_STYLE,
+    SCHEMA_VERSION,
     Finding,
 )
 

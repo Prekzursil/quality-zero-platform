@@ -5,9 +5,9 @@ from __future__ import absolute_import
 
 import argparse
 import json
+import sys
 from collections import defaultdict
 from pathlib import Path
-import sys
 from typing import Any, Dict, Iterable, List, cast
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
@@ -20,20 +20,15 @@ from scripts.quality.control_plane import (
 )
 from scripts.quality.known_issues import load_known_issues, qrv2_prompt_entries
 
-
 _KNOWN_ISSUES_ROOT = Path(__file__).resolve().parents[2] / "known-issues"
 
 
 def _parse_args() -> argparse.Namespace:
     """Handle parse args."""
-    parser = argparse.ArgumentParser(
-        description="Render Codex remediation/backlog prompts from a repo profile."
-    )
+    parser = argparse.ArgumentParser(description="Render Codex remediation/backlog prompts from a repo profile.")
     parser.add_argument("--inventory", default="")
     parser.add_argument("--repo-slug", required=True)
-    parser.add_argument(
-        "--lane", choices=("remediation", "backlog"), default="remediation"
-    )
+    parser.add_argument("--lane", choices=("remediation", "backlog"), default="remediation")
     parser.add_argument("--event-name", default="pull_request")
     parser.add_argument("--failure-context", default="")
     parser.add_argument("--artifact", action="append", default=[])
@@ -62,15 +57,9 @@ def _repo_contract_lines(profile: dict) -> List[str]:
         f"- Codex auth lane: `{profile.get('codex_auth_lane', 'chatgpt-account')}`",
         f"- Provider UI mode: `{provider_ui_mode}`",
         f"- Codex environment mode: `{codex_environment.get('mode', 'automatic')}`",
-        (
-            "- Codex environment verify command: "
-            f"`{codex_environment.get('verify_command', profile['verify_command'])}`"
-        ),
+        (f"- Codex environment verify command: `{codex_environment.get('verify_command', profile['verify_command'])}`"),
         f"- Codex auth file: `{codex_auth_file}`",
-        (
-            "- Codex environment network profile: "
-            f"`{codex_environment.get('network_profile', 'unrestricted')}`"
-        ),
+        (f"- Codex environment network profile: `{codex_environment.get('network_profile', 'unrestricted')}`"),
         f"- Codex environment methods: `{codex_environment.get('methods', 'all')}`",
         f"- Codex runner labels: `{runner_labels}`",
         f"- Default branch: `{profile['default_branch']}`",
@@ -139,59 +128,67 @@ def _render_known_issues_section(
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _format_providers_line(corroborators: List[Dict[str, Any]]) -> str:
+    """Render the corroborator provider list as a single Markdown bullet value."""
+    provider_names = [c.get("provider", "") for c in corroborators if c.get("provider")]
+    provider_str = ", ".join(provider_names) if provider_names else "1 provider"
+    if len(provider_names) > 1:
+        return f"{provider_str} ({len(provider_names)} agree)"
+    return provider_str
+
+
+def _render_finding_block(finding: Dict[str, Any], *, file_path: str) -> List[str]:
+    """Render one finding's Markdown bullets — heading, severity, message, etc."""
+    category = finding.get("category", "unknown")
+    line_num = finding.get("line", "?")
+    severity = finding.get("severity", "unknown")
+    message = finding.get("primary_message", "")
+    fix_hint = finding.get("fix_hint")
+    patch_diff = finding.get("patch")
+    corroborators = finding.get("corroborators", [])
+
+    block: List[str] = [
+        f"#### Finding: {category} (line {line_num} in {file_path})",
+        f"- **Severity**: {severity}",
+        f"- **Message**: {message}",
+    ]
+    if fix_hint:
+        block.append(f"- **Fix hint**: {fix_hint}")
+    block.append(f"- **Providers**: {_format_providers_line(corroborators)}")
+    if patch_diff:
+        block.extend(
+            [
+                "- **Suggested patch**:",
+                "```diff",
+                patch_diff.rstrip(),
+                "```",
+            ]
+        )
+    block.append("")
+    return block
+
+
 def _render_canonical_findings_section(findings: List[Dict[str, Any]]) -> str:
     """Render structured canonical findings for the remediation prompt.
 
-    Groups findings by file, then renders each finding with severity,
-    message, fix_hint, providers, and suggested patch when available.
-    Returns an empty string if there are no findings.
+    Groups findings by file, then delegates each per-finding render to
+    ``_render_finding_block``. Returns an empty string if there are no
+    findings. Previously ~50 lines with cyclomatic complexity 20; the
+    extraction drops the orchestrator to a flat group-and-loop shape.
     """
     if not findings:
         return ""
 
-    # Group by file
     by_file: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for f in findings:
         by_file[f.get("file", "<unknown>")].append(f)
 
-    lines: List[str] = [
-        "## Findings requiring attention",
-        "",
-    ]
-
+    lines: List[str] = ["## Findings requiring attention", ""]
     for file_path in sorted(by_file):
         lines.append(f"### File: {file_path}")
         lines.append("")
         for finding in by_file[file_path]:
-            category = finding.get("category", "unknown")
-            line_num = finding.get("line", "?")
-            severity = finding.get("severity", "unknown")
-            message = finding.get("primary_message", "")
-            fix_hint = finding.get("fix_hint")
-            patch_diff = finding.get("patch")
-            corroborators = finding.get("corroborators", [])
-
-            provider_names = [c.get("provider", "") for c in corroborators if c.get("provider")]
-            provider_str = ", ".join(provider_names) if provider_names else "1 provider"
-            count_str = f"{len(provider_names)} agree" if len(provider_names) > 1 else ""
-            providers_line = (
-                f"{provider_str} ({count_str})" if count_str else provider_str
-            )
-
-            lines.append(
-                f"#### Finding: {category} (line {line_num} in {file_path})"
-            )
-            lines.append(f"- **Severity**: {severity}")
-            lines.append(f"- **Message**: {message}")
-            if fix_hint:
-                lines.append(f"- **Fix hint**: {fix_hint}")
-            lines.append(f"- **Providers**: {providers_line}")
-            if patch_diff:
-                lines.append("- **Suggested patch**:")
-                lines.append("```diff")
-                lines.append(patch_diff.rstrip())
-                lines.append("```")
-            lines.append("")
+            lines.extend(_render_finding_block(finding, file_path=file_path))
 
     return "\n".join(lines)
 
@@ -199,9 +196,7 @@ def _render_canonical_findings_section(findings: List[Dict[str, Any]]) -> str:
 def _render_prompt(*args: object, **kwargs: object) -> str:
     """Handle render prompt."""
     if len(args) != 1:
-        raise TypeError(
-            "_render_prompt expects a single profile mapping positional argument"
-        )
+        raise TypeError("_render_prompt expects a single profile mapping positional argument")
     profile = args[0]
     if not isinstance(profile, dict):
         raise TypeError("_render_prompt expects profile to be a mapping")
@@ -214,11 +209,9 @@ def _render_prompt(*args: object, **kwargs: object) -> str:
         raise TypeError(f"Missing required prompt field: {exc.args[0]}") from exc
     if not isinstance(artifacts_value, Iterable):
         raise TypeError("_render_prompt expects artifacts to be iterable")
-    artifacts = list(cast(Iterable[object], artifacts_value))
+    artifacts = list(cast("Iterable[object]", artifacts_value))
     if kwargs:
-        raise TypeError(
-            f"Unexpected _render_prompt parameters: {', '.join(sorted(kwargs))}"
-        )
+        raise TypeError(f"Unexpected _render_prompt parameters: {', '.join(sorted(kwargs))}")
     headline = "PR failure remediation" if lane == "remediation" else "backlog sweep"
     sections = [
         f"# Codex {headline}",
@@ -227,10 +220,7 @@ def _render_prompt(*args: object, **kwargs: object) -> str:
         f"Lane: {lane}",
         f"Failure context: {failure_context or 'n/a'}",
         "",
-        (
-            "Treat missing external statuses as policy drift, provider drift, "
-            "or secret drift before changing code."
-        ),
+        ("Treat missing external statuses as policy drift, provider drift, or secret drift before changing code."),
         (
             "Never push to the default branch. Use "
             "`codex/fix/<context>/<shortsha>` for remediation and "
@@ -269,9 +259,7 @@ def main() -> int:
         canonical_path = Path(args.canonical_json)
         if canonical_path.is_file():
             canonical = json.loads(canonical_path.read_text(encoding="utf-8"))
-            findings_section = _render_canonical_findings_section(
-                canonical.get("findings", [])
-            )
+            findings_section = _render_canonical_findings_section(canonical.get("findings", []))
             if findings_section:
                 prompt = prompt.rstrip("\n") + "\n\n" + findings_section
     if args.output:

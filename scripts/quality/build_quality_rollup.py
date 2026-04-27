@@ -21,12 +21,12 @@ from typing import Any, Dict, List, Mapping
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.quality.common import utc_timestamp, write_report
 from scripts.quality.check_required_checks import (
     _collect_contexts,
     _evaluate_observed_context,
     _resolve_observed_context,
 )
+from scripts.quality.common import utc_timestamp, write_report
 from scripts.quality.severity_rollup import (
     classify_lanes,
     failing_lanes_to_gate_output,

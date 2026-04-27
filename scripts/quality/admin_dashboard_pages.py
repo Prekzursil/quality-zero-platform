@@ -109,13 +109,11 @@ def render_drift_page(
         slug = html.escape(str(entry.get("slug", "")))
         status = html.escape(str(entry.get("status", "")))
         pr_url = str(entry.get("pr_url", ""))
-        if pr_url:
-            pr_cell = (
-                f"<a href=\"{html.escape(pr_url)}\">"
-                f"{html.escape(pr_url)}</a>"
-            )
-        else:
-            pr_cell = "&mdash;"
+        pr_cell = (
+            f'<a href="{html.escape(pr_url)}">{html.escape(pr_url)}</a>'
+            if pr_url
+            else "&mdash;"
+        )
         rows.append(
             f"      <tr><td>{slug}</td><td>{status}</td><td>{pr_cell}</td></tr>",
         )

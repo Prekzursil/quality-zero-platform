@@ -2,8 +2,9 @@
 
 from __future__ import absolute_import
 
-from copy import deepcopy
 import re
+from contextlib import suppress
+from copy import deepcopy
 from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
 from scripts.quality.string_helpers import dedupe_strings
@@ -113,13 +114,13 @@ def normalize_coverage_inputs(raw_inputs: Any) -> List[Dict[str, Any]]:
             normalized_item["sources"] = [
                 str(s).strip() for s in item["sources"] if str(s).strip()
             ]
+        # Drop the field on parse error so downstream consumers fall back
+        # to the schema default rather than a malformed value. ``suppress``
+        # is the contextlib idiom for "try this, ignore failure" without
+        # the empty-except-pass anti-pattern.
         if "min_percent" in item:
-            try:
+            with suppress(TypeError, ValueError):
                 normalized_item["min_percent"] = float(item["min_percent"])
-            except (TypeError, ValueError):
-                # Drop the field on parse error so downstream consumers fall
-                # back to the schema default rather than a malformed value.
-                pass
         normalized_items.append(normalized_item)
     return normalized_items
 

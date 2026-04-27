@@ -1,13 +1,8 @@
 """Patch generator dispatcher (per design §A.1.4)."""
 from __future__ import absolute_import
 
-from typing import Dict
-
 from pathlib import Path
-
-from scripts.quality.rollup_v2.path_safety import PathEscapedRootError, validate_finding_file
-from scripts.quality.rollup_v2.schema.finding import Finding
-from scripts.quality.rollup_v2.schema.patch import PatchDeclined, PatchResult
+from typing import Dict
 
 from scripts.quality.rollup_v2.patches import (
     assert_in_production,
@@ -42,6 +37,9 @@ from scripts.quality.rollup_v2.patches import (
     weak_crypto,
     wrong_import_order,
 )
+from scripts.quality.rollup_v2.path_safety import PathEscapedRootError, validate_finding_file
+from scripts.quality.rollup_v2.schema.finding import Finding
+from scripts.quality.rollup_v2.schema.patch import PatchDeclined, PatchResult
 
 # Populated by Phase 9 tasks. 31 entries: 30 from §5.1 + 1 coverage-gap (Task 9.31).
 GENERATORS: Dict[str, object] = {

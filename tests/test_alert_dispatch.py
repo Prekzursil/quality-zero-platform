@@ -11,9 +11,8 @@ import datetime as dt
 import unittest
 from unittest.mock import MagicMock
 
-from scripts.quality import alert_dispatch
+from scripts.quality import alert_dispatch, alerts
 from scripts.quality import alert_triggers as at
-from scripts.quality import alerts
 
 
 class DispatchDetectedTriggersTests(unittest.TestCase):

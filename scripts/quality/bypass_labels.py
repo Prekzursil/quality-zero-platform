@@ -23,7 +23,7 @@ import json
 import re
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
@@ -86,12 +86,7 @@ def extract_incident_id(pr_body: str) -> Optional[str]:
 
 def _utc_iso_now() -> str:
     """Current UTC timestamp in ISO-8601 with ``Z`` suffix."""
-    return (
-        datetime.now(timezone.utc)
-        .replace(microsecond=0)
-        .isoformat()
-        .replace("+00:00", "Z")
-    )
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def _build_audit_record(
@@ -119,7 +114,10 @@ def _build_audit_record(
 
 
 def _build_tracking_issue(
-    pr_slug: str, pr_number: int, actor: str, incident: str,
+    pr_slug: str,
+    pr_number: int,
+    actor: str,
+    incident: str,
 ) -> tuple:
     """Return ``(title, body)`` for the post-merge tracking issue."""
     title = f"break-glass follow-up: {pr_slug}#{pr_number} (Incident: {incident})"
@@ -151,7 +149,12 @@ def evaluate_break_glass(
             "line in the PR body (e.g. ``Incident: INC-1234``)."
         )
     record = _build_audit_record(
-        BREAK_GLASS_LABEL, pr_slug, pr_number, head_sha, actor, incident,
+        BREAK_GLASS_LABEL,
+        pr_slug,
+        pr_number,
+        head_sha,
+        actor,
+        incident,
     )
     title, body = _build_tracking_issue(pr_slug, pr_number, actor, incident)
     return BypassDecision(
@@ -181,7 +184,12 @@ def evaluate_skip(
     """
     _ = pr_body  # unused; see docstring
     record = _build_audit_record(
-        SKIP_LABEL, pr_slug, pr_number, head_sha, actor, incident=None,
+        SKIP_LABEL,
+        pr_slug,
+        pr_number,
+        head_sha,
+        actor,
+        incident=None,
     )
     return BypassDecision(
         label=SKIP_LABEL,
@@ -209,8 +217,7 @@ def append_jsonl(audit_path: Path, record: Mapping[str, Any]) -> None:
 if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
     if len(sys.argv) < 6:
         print(
-            "usage: bypass_labels.py <label> <pr_slug> <pr_number> "
-            "<head_sha> <actor> <audit_dir>",
+            "usage: bypass_labels.py <label> <pr_slug> <pr_number> <head_sha> <actor> <audit_dir>",
             file=sys.stderr,
         )
         raise SystemExit(2)
@@ -227,9 +234,13 @@ if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
         raise SystemExit(2)
     if _decision.audit_record is not None:
         append_jsonl(Path(_audit_dir) / _filename, _decision.audit_record)
-    print(json.dumps({
-        "label": _decision.label,
-        "allowed": _decision.allowed,
-        "incident": _decision.incident,
-        "tracking_issue_title": _decision.tracking_issue_title,
-    }))
+    print(
+        json.dumps(
+            {
+                "label": _decision.label,
+                "allowed": _decision.allowed,
+                "incident": _decision.incident,
+                "tracking_issue_title": _decision.tracking_issue_title,
+            }
+        )
+    )

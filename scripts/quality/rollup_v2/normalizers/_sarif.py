@@ -2,22 +2,63 @@
 
 Provides `parse_sarif()` for converting SARIF results into canonical Finding
 objects, and a 50MB guard to reject oversized artifacts before parsing.
+
+Also exposes ``SarifJsonNormalizer`` — a base class for any normalizer
+whose only per-tool variation is the ``provider`` name. CodeQLNormalizer
+and SemgrepNormalizer both subclass this directly; the shared
+``parse(...)`` body handles dict/str/bytes artifact shapes plus the
+50MB size guard. This collapses what used to be a 41-line clone
+between codeql.py and semgrep.py.
 """
 from __future__ import absolute_import
 
+import json
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Iterable, List, Tuple
 
-from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer
-from scripts.quality.rollup_v2.taxonomy import lookup
+from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer, FindingFields
 from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_QUALITY,
     CATEGORY_GROUP_SECURITY,
     CategoryGroup,
     Finding,
 )
+from scripts.quality.rollup_v2.taxonomy import lookup
 
 MAX_SARIF_BYTES: int = 50 * 1024 * 1024  # 50 MB
+
+
+class SarifJsonNormalizer(BaseNormalizer):
+    """Shared base for SARIF-JSON normalizers (CodeQL, Semgrep, ...).
+
+    Subclasses set ``provider`` to the display name used in taxonomy
+    lookups and corroboration records. The ``parse`` body handles the
+    dict / str / bytes artifact dispatch + the 50MB size guard +
+    delegation into ``parse_sarif``; subclasses don't override it.
+    """
+
+    def parse(self, artifact: Any, repo_root: Path) -> Iterable[Finding]:
+        """Parse a SARIF artifact.
+
+        Accepts:
+          * ``dict``   — already-parsed SARIF JSON
+          * ``str``    — raw SARIF JSON text (size-checked)
+          * ``bytes``  — raw SARIF JSON bytes (size-checked)
+        Anything else returns an empty iterable.
+        """
+        # noqa: UP038 — pyproject keeps ``UP006/UP007/UP045`` ignored to
+        # preserve typing.List etc. for the codacy-compat shim. UP038's
+        # ``isinstance(x, X | Y)`` form belongs to the same PEP-604 family
+        # we're holding back project-wide; using the tuple form here keeps
+        # the convention consistent.
+        if isinstance(artifact, (str, bytes)):  # noqa: UP038
+            check_sarif_size(artifact)
+            data = json.loads(artifact)
+        elif isinstance(artifact, dict):
+            data = artifact
+        else:
+            return []
+        return parse_sarif(data, self.provider, repo_root, self)
 
 
 class SarifTooLargeError(ValueError):
@@ -98,23 +139,23 @@ def _extract_location(result: Dict[str, Any]) -> Tuple[str, int, int | None, int
 
 
 def _extract_context_snippet(result: Dict[str, Any]) -> str:
-    """Extract context snippet from SARIF location region."""
-    locations = result.get("locations", [])
-    if not locations or not isinstance(locations, list):
-        return ""
-    loc = locations[0]
-    if not isinstance(loc, dict):
-        return ""
-    phys = loc.get("physicalLocation", {})
-    if not isinstance(phys, dict):
-        return ""
-    region = phys.get("region", {})
-    if not isinstance(region, dict):
-        return ""
-    snippet = region.get("snippet", {})
-    if isinstance(snippet, dict):
-        return str(snippet.get("text", ""))
-    return ""
+    """Extract context snippet from SARIF location region (single-path traversal).
+
+    The previous shape of this function bailed out with six separate
+    early returns (one per ``isinstance`` guard along the chain
+    locations[0] → physicalLocation → region → snippet). Lizard flagged
+    that as a many-returns smell (count=6, threshold 4). The new
+    shape walks the chain once with a defaulting reducer and returns
+    in a single statement; the type checks are now pruning conditions
+    on each hop rather than control-flow exits.
+    """
+    locations = result.get("locations")
+    node: Any = (
+        locations[0] if isinstance(locations, list) and locations else {}
+    )
+    for key in ("physicalLocation", "region", "snippet"):
+        node = node.get(key, {}) if isinstance(node, dict) else {}
+    return str(node.get("text", "")) if isinstance(node, dict) else ""
 
 
 def _build_rule_index(run: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
@@ -220,7 +261,7 @@ def parse_sarif(
             rule_url = _extract_rule_url(rule_meta)
             context_snippet = _extract_context_snippet(result)
 
-            finding = normalizer._build_finding(
+            finding = normalizer._build_finding(FindingFields(
                 finding_id=f"{provider.lower()}-{index:04d}",
                 file=file_path,
                 line=line,
@@ -235,7 +276,7 @@ def parse_sarif(
                 original_message=message,
                 context_snippet=context_snippet,
                 cwe=cwe,
-            )
+            ))
             findings.append(finding)
             index += 1
 

@@ -12,7 +12,6 @@ from pathlib import Path
 
 import yaml  # type: ignore[import-untyped]
 
-
 _BASE = Path(__file__).resolve().parents[1] / ".github" / "workflows"
 _PER_REPO = _BASE / "reusable-bump-workflow-shas.yml"
 _WAVE = _BASE / "bump-workflow-shas-wave.yml"

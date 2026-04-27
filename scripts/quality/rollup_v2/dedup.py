@@ -4,12 +4,12 @@ from __future__ import absolute_import
 from dataclasses import replace
 from typing import Dict, Iterable, List
 
-from scripts.quality.rollup_v2.severity import max_severity
 from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_QUALITY,
     CATEGORY_GROUP_SECURITY,
     Finding,
 )
+from scripts.quality.rollup_v2.severity import max_severity
 
 
 def dedup(findings: Iterable[Finding]) -> List[Finding]:

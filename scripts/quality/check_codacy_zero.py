@@ -4,7 +4,13 @@
 # skipcq: PY-W2000 - retained for Codacy compatibility.
 from __future__ import absolute_import
 
-import argparse, json, os, sys, time, urllib.error, urllib.parse
+import argparse
+import json
+import os
+import sys
+import time
+import urllib.error
+import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Sequence, Tuple
@@ -12,9 +18,8 @@ from typing import Any, Callable, Dict, List, Mapping, Sequence, Tuple
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from scripts.quality import codacy_zero_helpers, codacy_zero_support
 from scripts.quality.common import utc_timestamp, write_report
-from scripts.quality import codacy_zero_support
-from scripts.quality import codacy_zero_helpers
 from scripts.security_helpers import load_json_https
 
 TOTAL_KEYS = {"total", "totalItems", "total_items", "count", "hits", "open_issues", "issuesCount"}
@@ -27,13 +32,23 @@ SCOPED_ANALYSIS_RETRY_ATTEMPTS = 180  # PR analysis can lag several minutes behi
 @dataclass(frozen=True)
 class CodacyStatusResult:
     """Describe one resolved Codacy gate result."""
-    status: str; findings: List[str]; open_issues: int | None; pull_request: str
+
+    status: str
+    findings: List[str]
+    open_issues: int | None
+    pull_request: str
 
 
 @dataclass(frozen=True)
 class CodacyQuery:
     """Describe the repository and optional PR scope for one Codacy query."""
-    provider: str; owner: str; repo: str; pull_request: str = ""; sha: str = ""
+
+    provider: str
+    owner: str
+    repo: str
+    pull_request: str = ""
+    sha: str = ""
+
 
 CodacyPendingFn = Callable[[CodacyQuery, str], str | None]
 
@@ -41,8 +56,11 @@ CodacyPendingFn = Callable[[CodacyQuery, str], str | None]
 @dataclass(frozen=True)
 class CodacyRetryConfig:
     """Describe the retry settings for one Codacy zero-gate lookup."""
-    provider_candidates: Tuple[str, ...]; attempts: int
-    pending_fn: CodacyPendingFn; sleep_seconds: float
+
+    provider_candidates: Tuple[str, ...]
+    attempts: int
+    pending_fn: CodacyPendingFn
+    sleep_seconds: float
 
 
 def _mapping_or_empty(value: Any) -> Dict[str, Any]:

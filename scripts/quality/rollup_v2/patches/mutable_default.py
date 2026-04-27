@@ -51,7 +51,10 @@ def generate(
     # Reconstruct the rest of the line after the match
     rest_of_line = target_line[match.end():]
     new_def_line += rest_of_line
-    if not new_def_line.endswith("\n"):  # pragma: no cover -- source lines always end with newline from splitlines(keepends=True)
+    # pragma: no cover note — source lines always end with a newline because
+    # splitlines(keepends=True) is the only way they enter this function, so
+    # this branch is defensive-only.
+    if not new_def_line.endswith("\n"):  # pragma: no cover
         new_def_line += "\n"
 
     # Determine the body indent (one level deeper than function def indent)
@@ -61,7 +64,12 @@ def generate(
     # Find the first body line to insert the guard before it
     body_start = target_index + 1
     # Skip the colon line if the def line doesn't end with ':'
-    while body_start < len(lines) and lines[body_start].strip() == "":  # pragma: no cover -- blank lines between def and body are rare
+    # pragma: no cover note — blank lines between ``def`` and the first
+    # body line are rare in the source corpus, so this loop body is
+    # exercised by the synthetic test cases only.
+    while (
+        body_start < len(lines) and lines[body_start].strip() == ""
+    ):  # pragma: no cover
         body_start += 1
 
     guard_line = f"{body_indent}{param_name} = {mutable_literal} if {param_name} is None else {param_name}\n"

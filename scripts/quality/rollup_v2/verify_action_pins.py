@@ -12,12 +12,11 @@ Usage:
 """
 from __future__ import absolute_import
 
-from typing import Dict, List
-
 import argparse
 import re
 import sys
 from pathlib import Path
+from typing import Dict, List
 
 # First-party / GitHub-maintained action owners exempt from SHA pinning.
 # actions/* = GitHub first-party (checkout, setup-python, upload-artifact, etc.)

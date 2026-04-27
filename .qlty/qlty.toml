@@ -21,3 +21,36 @@ threshold = 20
 
 [smells.file_complexity]
 threshold = 80
+
+# ============================================================================
+# Scope exclusions — keep qlty pointed at platform source code only.
+# ============================================================================
+# Mirrors the same scope policy as ``.codacy.yaml`` exclude_paths so the two
+# scanners agree on what "platform source" means. Without these, qlty was
+# flagging the vendored ``.claude/`` plugin payloads, the template
+# ``scripts/beads-*.ts`` files, and pure-test duplication as "smells" —
+# none of which are platform code we own or intend to refactor here.
+
+[[ignore]]
+file_patterns = [
+  # Vendored third-party plugin/skill payloads. Includes the canonical
+  # twins of scripts/beads-*.ts which would otherwise drive a flood of
+  # cross-tree "identical code" duplication smells (mass > 1700).
+  ".claude/**",
+  # Template scaffolding scripts (the source files self-document as
+  # "This is a template script ... replace with your actual service
+  # paths"). Already excluded from .codacy.yaml + sonar coverage scope.
+  "scripts/beads-fetch-conversation-history.ts",
+  "scripts/beads-fetch-pr-comments.ts",
+  "scripts/beads-self-reflect.ts",
+  # Test code is excluded from issue scoring on every other scanner;
+  # qlty was pairing the parametrised test_quality_common*.py and
+  # test_run_coverage_gate*.py modules and counting the legitimate
+  # parametrisation as duplication.
+  "tests/**",
+  # Append-only audit log JSONL files, false-positive playbook
+  # registries, agent context state — not source code.
+  "audit/**",
+  "known-issues/**",
+  ".beads/**",
+]

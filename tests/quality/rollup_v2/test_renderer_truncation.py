@@ -1,11 +1,10 @@
 """Tests for renderer high-volume truncation + footer (per design §A.1.2 + §B.3.9 + §B.3.15 + §B.3.8)."""
 from __future__ import absolute_import
 
-from typing import List
-
 import sys
 import unittest
 from pathlib import Path
+from typing import List
 
 if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))

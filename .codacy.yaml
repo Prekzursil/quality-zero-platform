@@ -45,5 +45,8 @@ exclude_paths:
   - "profiles/**"
   - "docs/**"  # QZP v2 design doc + other long-form prose; not production code
   - ".beads/**"  # Agent context state files — long-form prose, not prod code
+  - ".claude/**"  # Vendored third-party plugin/skill payloads — not platform code
+  - "known-issues/**"  # YAML registry of false-positive playbooks; long-form prose
+  - "audit/**"  # Append-only audit log JSONL files; not source code
   - ".github/workflows/control-plane-admin.yml"
   - ".github/workflows/publish-admin-dashboard.yml"

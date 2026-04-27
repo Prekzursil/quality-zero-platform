@@ -5,9 +5,9 @@ from __future__ import absolute_import
 
 import argparse
 import json
+import sys
 from collections import defaultdict
 from pathlib import Path
-import sys
 from typing import Any, Dict, Iterable, List, cast
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
@@ -19,7 +19,6 @@ from scripts.quality.control_plane import (
     load_repo_profile,
 )
 from scripts.quality.known_issues import load_known_issues, qrv2_prompt_entries
-
 
 _KNOWN_ISSUES_ROOT = Path(__file__).resolve().parents[2] / "known-issues"
 

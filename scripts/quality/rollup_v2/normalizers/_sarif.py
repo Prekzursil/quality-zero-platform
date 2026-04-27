@@ -9,13 +9,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer
-from scripts.quality.rollup_v2.taxonomy import lookup
 from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_QUALITY,
     CATEGORY_GROUP_SECURITY,
     CategoryGroup,
     Finding,
 )
+from scripts.quality.rollup_v2.taxonomy import lookup
 
 MAX_SARIF_BYTES: int = 50 * 1024 * 1024  # 50 MB
 

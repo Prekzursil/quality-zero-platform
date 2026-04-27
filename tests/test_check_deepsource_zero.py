@@ -8,13 +8,14 @@ from argparse import Namespace
 from contextlib import ExitStack
 from unittest.mock import patch
 
-from scripts.quality import check_deepsource_zero
-from scripts.quality.deepsource_html import human_count_to_int
 from tests.script_entrypoint_support import (
     assert_in_process_entrypoint_failure,
     assert_main_reports_provider_failure,
     run_script_entrypoint_failure,
 )
+
+from scripts.quality import check_deepsource_zero
+from scripts.quality.deepsource_html import human_count_to_int
 
 
 class DeepSourceVisibleZeroTests(unittest.TestCase):

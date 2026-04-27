@@ -2,8 +2,8 @@
 
 from __future__ import absolute_import
 
-from copy import deepcopy
 import re
+from copy import deepcopy
 from typing import Any, Dict, List, Mapping, Sequence, Tuple
 
 from scripts.quality.string_helpers import dedupe_strings

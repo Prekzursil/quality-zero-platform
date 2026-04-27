@@ -15,34 +15,65 @@ import yaml  # type: ignore[import-untyped]
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from scripts.quality import profile_contract_validation
 from scripts.quality.common import (
     _deep_merge as common_deep_merge,
+)
+from scripts.quality.common import (
     dedupe_strings,
 )
 from scripts.quality.control_plane_vendors import (
     finalize_vendors,
     normalize_visual_lane,
 )
-from scripts.quality import profile_contract_validation
+from scripts.quality.profile_normalization import (
+    infer_coverage_inputs as common_infer_coverage_inputs,
+)
+from scripts.quality.profile_normalization import (
+    merge_required_contexts as common_merge_required_contexts,
+)
 from scripts.quality.profile_normalization import (
     normalize_codeql as common_normalize_codeql,
-    normalize_deps as common_normalize_deps,
-    normalize_dependabot as common_normalize_dependabot,
-    infer_coverage_inputs as common_infer_coverage_inputs,
-    merge_required_contexts as common_merge_required_contexts,
+)
+from scripts.quality.profile_normalization import (
     normalize_codex_environment as common_normalize_codex_environment,
+)
+from scripts.quality.profile_normalization import (
     normalize_coverage as common_normalize_coverage,
+)
+from scripts.quality.profile_normalization import (
     normalize_coverage_assert_mode as common_normalize_coverage_assert_mode,
+)
+from scripts.quality.profile_normalization import (
     normalize_coverage_inputs as common_normalize_coverage_inputs,
+)
+from scripts.quality.profile_normalization import (
+    normalize_dependabot as common_normalize_dependabot,
+)
+from scripts.quality.profile_normalization import (
+    normalize_deps as common_normalize_deps,
+)
+from scripts.quality.profile_normalization import (
     normalize_issue_policy as common_normalize_issue_policy,
+)
+from scripts.quality.profile_normalization import (
     normalize_java_setup as common_normalize_java_setup,
+)
+from scripts.quality.profile_normalization import (
     normalize_mode as common_normalize_mode,
+)
+from scripts.quality.profile_normalization import (
     normalize_overrides as common_normalize_overrides,
+)
+from scripts.quality.profile_normalization import (
     normalize_profile_version as common_normalize_profile_version,
+)
+from scripts.quality.profile_normalization import (
     normalize_required_contexts as common_normalize_required_contexts,
+)
+from scripts.quality.profile_normalization import (
     normalize_scanners as common_normalize_scanners,
 )
-
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_INVENTORY_PATH = ROOT / "inventory" / "repos.yml"

@@ -4,10 +4,10 @@ from __future__ import absolute_import
 
 import importlib
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
-import sys
 from typing import Any, Sequence, Tuple
 from unittest.mock import patch
 

@@ -11,11 +11,11 @@ import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
+from typing import List
 from unittest.mock import patch
 
 from scripts.quality import check_sonar_zero
 from scripts.quality.check_sonar_zero import load_sonar_findings_with_retry
-from typing import List
 
 
 def _raise_runtime_error(message: str) -> None:

@@ -9,8 +9,8 @@ import os
 import subprocess  # nosec B404
 import sys
 import zipfile
-from io import BytesIO
 from contextlib import contextmanager
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, cast
 

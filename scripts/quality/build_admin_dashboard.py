@@ -4,9 +4,9 @@
 from __future__ import absolute_import
 
 import argparse
-import shutil
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Sequence, Set

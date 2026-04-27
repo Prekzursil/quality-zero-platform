@@ -8,12 +8,11 @@ Exits 0 if zero findings, 1 otherwise.
 """
 from __future__ import absolute_import
 
-from typing import List
-
 import argparse
 import json
 import sys
 from pathlib import Path
+from typing import List
 
 
 def _count_sarif_results(data: dict) -> int:

@@ -8,22 +8,22 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Any, cast, Dict, List
+from typing import Any, Dict, List, cast
 from unittest.mock import patch
 
 from scripts.quality import profile_shape
 from scripts.quality.control_plane import (
     InventoryOverrides,
     _apply_inventory_overrides,
-    _load_yaml,
     _infer_coverage_inputs,
     _load_stack,
+    _load_yaml,
     _merge_required_contexts,
     _normalize_codex_environment,
     _normalize_coverage,
     _normalize_coverage_assert_mode,
-    _normalize_coverage_setup,
     _normalize_coverage_inputs,
+    _normalize_coverage_setup,
     _normalize_issue_policy,
     _normalize_java_setup,
     _normalize_required_contexts,
@@ -35,7 +35,6 @@ from scripts.quality.control_plane import (
     repo_root,
     validate_profile,
 )
-
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTROL_PLANE_PATH = ROOT / "scripts" / "quality" / "control_plane.py"

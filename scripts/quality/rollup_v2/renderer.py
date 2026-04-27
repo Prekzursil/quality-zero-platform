@@ -5,8 +5,8 @@ from collections import defaultdict
 from typing import Any, Dict, List, Sequence, Tuple
 
 from scripts.quality.rollup_v2.redaction import redact_secrets
-from scripts.quality.rollup_v2.severity import SEVERITY_ORDER
 from scripts.quality.rollup_v2.schema.finding import Finding
+from scripts.quality.rollup_v2.severity import SEVERITY_ORDER
 
 # --- Truncation thresholds (§A.1.2 + §B.3.9 + §B.3.15) ---
 _MAX_VISIBLE_FILES: int = 20

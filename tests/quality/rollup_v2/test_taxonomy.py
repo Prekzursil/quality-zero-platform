@@ -8,7 +8,7 @@ from pathlib import Path
 if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from scripts.quality.rollup_v2.taxonomy import lookup, load_all_taxonomies
+from scripts.quality.rollup_v2.taxonomy import load_all_taxonomies, lookup
 
 
 class TaxonomyTests(unittest.TestCase):

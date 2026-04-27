@@ -15,8 +15,8 @@ from typing import Any, Dict, Iterable, List, Mapping, Tuple
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.quality.common import utc_timestamp, write_report
 from scripts.quality import sonar_zero_support
+from scripts.quality.common import utc_timestamp, write_report
 from scripts.security_helpers import load_json_https
 
 SONAR_API_BASE = "https://sonarcloud.io"

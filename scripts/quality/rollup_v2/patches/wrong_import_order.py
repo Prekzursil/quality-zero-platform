@@ -1,10 +1,10 @@
 """Deterministic patch generator for `wrong-import-order` category."""
 from __future__ import absolute_import
-from typing import List, Optional, Tuple
 
 import difflib
 import re
 from pathlib import Path
+from typing import List, Optional, Tuple
 
 from scripts.quality.rollup_v2.schema.finding import Finding
 from scripts.quality.rollup_v2.schema.patch import PatchDeclined, PatchResult

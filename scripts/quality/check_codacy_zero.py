@@ -4,7 +4,13 @@
 # skipcq: PY-W2000 - retained for Codacy compatibility.
 from __future__ import absolute_import
 
-import argparse, json, os, sys, time, urllib.error, urllib.parse
+import argparse
+import json
+import os
+import sys
+import time
+import urllib.error
+import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Sequence, Tuple
@@ -12,9 +18,8 @@ from typing import Any, Callable, Dict, List, Mapping, Sequence, Tuple
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from scripts.quality import codacy_zero_helpers, codacy_zero_support
 from scripts.quality.common import utc_timestamp, write_report
-from scripts.quality import codacy_zero_support
-from scripts.quality import codacy_zero_helpers
 from scripts.security_helpers import load_json_https
 
 TOTAL_KEYS = {"total", "totalItems", "total_items", "count", "hits", "open_issues", "issuesCount"}

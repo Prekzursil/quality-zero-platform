@@ -12,6 +12,8 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
+from tests.control_plane_support import ROOT, ControlPlaneAssertions
+
 from scripts.quality import export_profile as export_profile_module
 from scripts.quality.control_plane import (
     active_required_contexts,
@@ -19,7 +21,6 @@ from scripts.quality.control_plane import (
     load_repo_profile,
     validate_profile,
 )
-from tests.control_plane_support import ControlPlaneAssertions, ROOT
 
 
 class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):

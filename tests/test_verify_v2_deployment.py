@@ -11,7 +11,6 @@ from unittest.mock import patch
 
 from scripts.quality import verify_v2_deployment as vv
 
-
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 

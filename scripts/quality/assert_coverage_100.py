@@ -69,6 +69,7 @@ def _normalized_branch_min_percent(raw_value: Any) -> float | None:
 # ``from scripts.quality.assert_coverage_100 import CoverageStats``.
 from scripts.quality.coverage_types import CoverageStats  # noqa: E402, F401
 
+
 @dataclass(frozen=True)
 class CoverageEvaluationRequest:
     """Describe the thresholds and source expectations for a coverage run."""

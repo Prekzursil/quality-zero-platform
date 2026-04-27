@@ -5,8 +5,8 @@ from __future__ import absolute_import
 
 import argparse
 import json
-from pathlib import Path, PurePosixPath
 import sys
+from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:

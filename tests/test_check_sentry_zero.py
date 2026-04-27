@@ -13,8 +13,8 @@ from email.message import Message
 from importlib.machinery import ModuleSpec
 from pathlib import Path
 from typing import cast
-from urllib.error import HTTPError
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 from scripts.quality import check_sentry_zero as sentry_module
 

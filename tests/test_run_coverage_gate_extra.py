@@ -14,10 +14,7 @@ from pathlib import Path
 from typing import List
 from unittest.mock import patch
 
-
 from scripts.quality import run_coverage_gate
-
-
 
 
 class RunCoverageGateExtraTests(unittest.TestCase):

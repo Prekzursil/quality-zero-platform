@@ -11,6 +11,10 @@ exclude_patterns = [
   "scripts/**",
   "tests/**",
   "scripts/**/*.test.mjs",
+  ".claude/**",
+  ".beads/**",
+  "audit/**",
+  "known-issues/**",
 ]
 
 test_patterns = [

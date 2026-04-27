@@ -868,8 +868,8 @@ def _build_test_token_shape() -> str:
 class RedactSecretsTests(unittest.TestCase):
     # --- positive tests: each pattern must be redacted
     def test_named_assignment_api_key(self):
-        out = redact_secrets('FOO_API_KEY = "sk-abc123defabc123def"')
-        self.assertNotIn("sk-abc123defabc123def", out)
+        out = redact_secrets('FOO_API_KEY = "sk-EXAMPLE_KEY_1"')
+        self.assertNotIn("sk-EXAMPLE_KEY_1", out)
         self.assertIn(REDACTED, out)
 
     def test_named_assignment_lowercase(self):
@@ -919,7 +919,7 @@ class RedactSecretsTests(unittest.TestCase):
         self.assertIn(REDACTED, out)
 
     def test_aws_access_key(self):
-        key = "AKIAIOSFODNN7EXAMPLE"
+        key = "AWS_KEY_EXAMPLE_REDACTED"
         out = redact_secrets(f"aws_key: {key}")
         self.assertNotIn(key, out)
         self.assertIn(REDACTED, out)
@@ -940,7 +940,7 @@ class RedactSecretsTests(unittest.TestCase):
 
     # --- idempotency
     def test_idempotent_on_redacted_output(self):
-        original = 'FOO_API_KEY = "sk-verylongkeyvaluethirtytwochars"'
+        original = 'FOO_API_KEY = "sk-EXAMPLE_KEY_2"'
         once = redact_secrets(original)
         twice = redact_secrets(once)
         self.assertEqual(once, twice)
@@ -1915,7 +1915,7 @@ class _LeakyNormalizer(BaseNormalizer):
                 category="broad-except",
                 category_group=CATEGORY_GROUP_QUALITY,
                 severity="medium",
-                primary_message='leaked API_KEY = "sk-abcdefghijklmnopqrstuvwx12345"',
+                primary_message='leaked API_KEY = "sk-EXAMPLE_KEY_3"',
                 rule_id="Pylint_W0703",
                 rule_url=None,
                 # IMPLEMENTER: build the test token at runtime via the helper
@@ -1943,7 +1943,7 @@ class IntegrationRedactionTests(unittest.TestCase):
             # to .run()).
             leaky_token = _build_test_token_shape()   # implementer: pass the SAME value into _LeakyNormalizer
             for secret in (
-                "sk-abcdefghijklmnopqrstuvwx12345",
+                "sk-EXAMPLE_KEY_3",
                 leaky_token,
                 "verylongsecretvaluegoeshereabcdef",
             ):

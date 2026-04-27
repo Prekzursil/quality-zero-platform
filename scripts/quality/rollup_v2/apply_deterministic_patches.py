@@ -10,10 +10,25 @@ from __future__ import absolute_import
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List
+
+
+def _resolve_git_path() -> str:
+    """Resolve the absolute path to ``git`` so ``subprocess.run`` doesn't
+    rely on PATH lookup. Drops the BAN-B607 / S607 partial-executable-path
+    finding without changing behavior — the only effect is that subprocess
+    invokes the binary by its absolute path.
+    """
+    resolved = shutil.which("git")
+    if resolved is None:
+        raise RuntimeError(
+            "git binary not found on PATH; install git or set up the runner image"
+        )
+    return resolved
 
 
 def parse_args() -> argparse.Namespace:
@@ -63,16 +78,14 @@ def apply_single_patch(diff: str, repo_dir: Path) -> Dict[str, Any]:
         tmp.write(diff)
         tmp_path = Path(tmp.name)
 
+    git_path = _resolve_git_path()
+
     try:
-        # Dry-run first.
-        # ruff S603/S607: ``git`` is a known-safe binary and we deliberately
-        # rely on PATH lookup so consumers can pin a custom git via env. The
-        # only argument to ``git apply`` is the path to the patch file we
-        # just wrote ourselves, so there is no untrusted-input shell injection
-        # surface here. Annotated rather than rewritten as ``shutil.which``
-        # because the platform's CI image always has git on PATH.
-        check_result = subprocess.run(  # noqa: S603  # nosec B603 B607
-            ["git", "apply", "--check", str(tmp_path)],  # noqa: S607
+        # Dry-run first. The first arg is an absolute path resolved via
+        # shutil.which (no PATH lookup at subprocess time → no BAN-B607).
+        # The only data argument is tmp_path which we wrote ourselves.
+        check_result = subprocess.run(  # noqa: S603  # nosec B603
+            [git_path, "apply", "--check", str(tmp_path)],
             cwd=repo_dir,
             capture_output=True,
             text=True,
@@ -86,8 +99,8 @@ def apply_single_patch(diff: str, repo_dir: Path) -> Dict[str, Any]:
             }
 
         # Apply for real (same safety reasoning as the dry-run above).
-        apply_result = subprocess.run(  # noqa: S603  # nosec B603 B607
-            ["git", "apply", str(tmp_path)],  # noqa: S607
+        apply_result = subprocess.run(  # noqa: S603  # nosec B603
+            [git_path, "apply", str(tmp_path)],
             cwd=repo_dir,
             capture_output=True,
             text=True,

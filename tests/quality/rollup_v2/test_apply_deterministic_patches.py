@@ -389,5 +389,34 @@ class CLITests(unittest.TestCase):
                 os.chdir(original_cwd)
 
 
+class ResolveGitPathTests(unittest.TestCase):
+    """Cover both branches of ``_resolve_git_path`` (BAN-B607 mitigation)."""
+
+    def test_returns_resolved_path_when_git_on_path(self) -> None:
+        """Return the absolute path when shutil.which finds git."""
+        from scripts.quality.rollup_v2.apply_deterministic_patches import (
+            _resolve_git_path,
+        )
+
+        with patch(
+            "scripts.quality.rollup_v2.apply_deterministic_patches.shutil.which",
+            return_value="/usr/bin/git",
+        ):
+            self.assertEqual(_resolve_git_path(), "/usr/bin/git")
+
+    def test_raises_runtime_error_when_git_missing(self) -> None:
+        """Raise RuntimeError when shutil.which returns None."""
+        from scripts.quality.rollup_v2.apply_deterministic_patches import (
+            _resolve_git_path,
+        )
+
+        with patch(
+            "scripts.quality.rollup_v2.apply_deterministic_patches.shutil.which",
+            return_value=None,
+        ), self.assertRaises(RuntimeError) as ctx:
+            _resolve_git_path()
+        self.assertIn("git binary not found", str(ctx.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

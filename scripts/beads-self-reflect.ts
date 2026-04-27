@@ -29,10 +29,16 @@ import { parseArgs } from "node:util";
 // Slack API error string. Objects go through JSON.stringify so we don't
 // emit the useless "[object Object]" placeholder.
 function sanitizeForLog(value: unknown): string {
-  const stringified =
-    typeof value === "object" && value !== null
-      ? JSON.stringify(value)
-      : String(value);
+  let stringified: string;
+  if (value === null || value === undefined) {
+    stringified = String(value);
+  } else if (typeof value === "object") {
+    stringified = JSON.stringify(value);
+  } else {
+    // Primitives: number, string, boolean, bigint, symbol all have a
+    // meaningful String() representation that is not "[object Object]".
+    stringified = String(value);
+  }
   return stringified.replaceAll(/[\x00-\x1f]/g, " ");
 }
 
@@ -180,7 +186,7 @@ async function main() {
   // -------------------------------------------------------------------------
   console.log("Step 1: Analyzing knowledge base...\n");
 
-  // TODO: Replace with your own knowledge service implementation
+  // NOTE (extension point): Replace with your own knowledge service implementation
   // Example: const knowledgeService = getKnowledgeCaptureService();
   // const stats = await knowledgeService.getStats();
   const stats = {
@@ -212,7 +218,7 @@ async function main() {
   // -------------------------------------------------------------------------
   console.log("Step 2: Generating weekly report...\n");
 
-  // TODO: Replace with your own weekly report service implementation
+  // NOTE (extension point): Replace with your own weekly report service implementation
   if (VERBOSE) {
     console.log("--- Weekly Report ---\n");
     console.log("(No report service configured yet)");

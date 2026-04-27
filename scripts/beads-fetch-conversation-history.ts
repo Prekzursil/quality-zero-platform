@@ -16,8 +16,8 @@
  */
 
 import { parseArgs } from "node:util";
-import { writeFileSync, readFileSync, readdirSync, existsSync, mkdirSync } from "node:fs";
-import { dirname, join, basename } from "node:path";
+import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 
 // =============================================================================
@@ -181,7 +181,7 @@ const DECISION_PATTERNS = [
 // =============================================================================
 
 function encodeProjectPath(projectPath: string): string {
-  return projectPath.replace(/\//g, "-");
+  return projectPath.replaceAll("/", "-");
 }
 
 function getClaudeProjectsDir(): string {

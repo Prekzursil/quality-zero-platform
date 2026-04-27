@@ -18,6 +18,10 @@ full inventory scan.
 
 from __future__ import absolute_import
 
+# Newline constant used by the body builders so the duplicate "\n" literal
+# Sonar's python:S1192 rule flagged at line 93 stays at zero.
+_NL = "\n"
+
 import html
 import json
 import sys
@@ -86,14 +90,15 @@ def render_coverage_trend_page(
             str(cov or ""),
         )
         tbl_rows.append(f"      <tr><td>{slug}</td><td>{cov_text}</td></tr>")
-    body = (
-        "    <table>\n"
-        "      <thead><tr><th>Repo</th><th>Coverage %</th></tr></thead>\n"
-        "      <tbody>\n"
-        + "\n".join(tbl_rows) + "\n"
-        "      </tbody>\n"
-        "    </table>\n"
-    )
+    body = _NL.join((
+        "    <table>",
+        "      <thead><tr><th>Repo</th><th>Coverage %</th></tr></thead>",
+        "      <tbody>",
+        _NL.join(tbl_rows),
+        "      </tbody>",
+        "    </table>",
+        "",
+    ))
     return _wrap_html("Coverage trend", body)
 
 

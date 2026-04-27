@@ -72,7 +72,6 @@ class E2ESmokeTest(unittest.TestCase):
             result = run_pipeline(
                 artifacts=artifacts,
                 repo_root=repo_root,
-                output_dir=output_dir,
             )
 
             # Write outputs (simulating __main__.py behavior)
@@ -119,7 +118,6 @@ class E2ESmokeTest(unittest.TestCase):
             result = run_pipeline(
                 artifacts={},
                 repo_root=repo_root,
-                output_dir=output_dir,
             )
 
             self.assertEqual(result.findings, [])

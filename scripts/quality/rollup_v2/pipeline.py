@@ -184,9 +184,12 @@ def _finding_to_dict(f: Finding) -> Dict[str, Any]:
 def run_pipeline(
     artifacts: Dict[str, Any],
     repo_root: Path,
-    output_dir: Path,
 ) -> PipelineResult:
     """Run the full quality rollup v2 pipeline.
+
+    The caller is responsible for persisting the resulting ``PipelineResult``
+    to whatever output directory it cares about; the pipeline itself is
+    pure-functional and never touches the filesystem.
 
     Steps:
     1. Normalize each artifact via registered normalizers

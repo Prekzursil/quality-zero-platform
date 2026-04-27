@@ -43,7 +43,7 @@ class LaneReservationTests(unittest.TestCase):
             output_dir.mkdir()
 
             result = run_pipeline(
-                artifacts={}, repo_root=repo_root, output_dir=output_dir
+                artifacts={}, repo_root=repo_root
             )
             summaries = result.canonical_payload["provider_summaries"]
             not_configured = [s for s in summaries if s.get("status") == "not-configured"]
@@ -64,7 +64,7 @@ class LaneReservationTests(unittest.TestCase):
             # it should not also generate a not-configured placeholder.
             # Reserved lanes use provider labels like "Semgrep Zero", not raw providers.
             result = run_pipeline(
-                artifacts={}, repo_root=repo_root, output_dir=output_dir
+                artifacts={}, repo_root=repo_root
             )
             providers = [s["provider"] for s in result.canonical_payload["provider_summaries"]]
             # Check no duplicates
@@ -80,7 +80,7 @@ class LaneReservationTests(unittest.TestCase):
             output_dir.mkdir()
 
             result = run_pipeline(
-                artifacts={}, repo_root=repo_root, output_dir=output_dir
+                artifacts={}, repo_root=repo_root
             )
             # The markdown should mention providers (the empty state shows "0 findings across N providers")
             self.assertIn("providers", result.markdown)

@@ -13,7 +13,10 @@ from tests.quality.rollup_v2.patch_harness import PatchGeneratorGoldenTests  # n
 
 class HarnessLoaderTest(unittest.TestCase):
     def test_harness_class_exists(self):
-        self.assertIsNotNone(PatchGeneratorGoldenTests)
+        # The class is imported at module load; the assertion proves the
+        # symbol is exported (catches accidental rename) rather than the
+        # tautological "is not None" check Sonar python:S5914 flagged.
+        self.assertTrue(issubclass(PatchGeneratorGoldenTests, unittest.TestCase))
 
     def test_harness_has_dynamically_attached_methods(self):
         """At least the broad_except smoke fixture should be attached."""

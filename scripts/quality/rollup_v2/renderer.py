@@ -13,6 +13,11 @@ _MAX_VISIBLE_FILES: int = 20
 _MAX_FINDINGS_BEFORE_COLLAPSE: int = 200
 _MAX_CHARS: int = 60_000
 
+# Closing ``</details>`` literal for the collapsible-section blocks. Pulled to
+# a constant so SonarCloud rule python:S1192 (duplicate string literal) stays
+# at zero.
+_DETAILS_CLOSE = "</details>\n"
+
 # --- Severity emoji mapping ---
 _SEVERITY_EMOJI: Dict[str, str] = {
     "critical": "\U0001f534",  # red circle

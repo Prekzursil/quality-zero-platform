@@ -77,7 +77,7 @@ enabled = true
 # scripts/** so there's no Python source for it to analyze. Removing the
 # analyzers removes the failure source cleanly.
 [[analyzers]]
-name = "secret-scanning"
+name = "secrets"
 enabled = false
 
 [[analyzers]]

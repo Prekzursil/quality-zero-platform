@@ -1,21 +1,47 @@
 version = 1
 
-# Keep this file explicit so provider-side analysis re-reads repo scope changes.
+# Force DeepSource to re-read scope. The ``tests/`` and ``scripts/``
+# trees are owned by the platform's own gates (check_deepsource_zero etc.)
+# and analyzed by tools other than DeepSource. Keep both leading-slash
+# and ``**`` glob variants so DeepSource's matcher catches recursive
+# subdirectories regardless of its glob anchor behaviour.
 
 exclude_patterns = [
   "build/**",
+  "**/build/**",
   "generated/**",
+  "**/generated/**",
   "htmlcov/**",
+  "**/htmlcov/**",
   "docs/**",
+  "**/docs/**",
   "profiles/**",
+  "**/profiles/**",
   "scripts/**",
+  "**/scripts/**",
   "tests/**",
+  "**/tests/**",
   "scripts/**/*.test.mjs",
+  "**/*.test.mjs",
+  "templates/**",
+  "**/templates/**",
+  ".github/**",
+  ".vscode/**",
+  ".idea/**",
+  "vendor/**",
+  "node_modules/**",
+  "__pycache__/**",
+  "**/__pycache__/**",
+  "*.lock",
+  "*.json",
+  "*.md",
 ]
 
 test_patterns = [
   "tests/**",
+  "**/tests/**",
   "scripts/**/*.test.mjs",
+  "**/*.test.mjs",
 ]
 
 [[analyzers]]

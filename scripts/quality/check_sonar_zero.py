@@ -15,12 +15,18 @@ from typing import Any, Dict, Iterable, List, Mapping, Tuple
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.quality.common import utc_timestamp, write_report
 from scripts.quality import sonar_zero_support
+from scripts.quality.common import utc_timestamp, write_report
 from scripts.security_helpers import load_json_https
 
 SONAR_API_BASE = "https://sonarcloud.io"
-SCOPED_ANALYSIS_RETRY_ATTEMPTS = 72
+# Bumped from 72 to 144 (12-minute retry budget) because the
+# SonarCloud Scan workflow + Sonar's PR-scope indexing can take up to
+# ~5 minutes combined. The previous 6-minute budget was a tight race
+# and PRs were occasionally hitting HTTP 404 from sonarcloud.io
+# /api/issues/search?pullRequest=<n> when the gate queried before
+# Sonar finished uploading + indexing the analysis. See QZP issue #169.
+SCOPED_ANALYSIS_RETRY_ATTEMPTS = 144
 
 
 def _mapping_or_empty(value: Any) -> Dict[str, Any]:
@@ -40,9 +46,7 @@ def _preferred_text(*values: Any) -> str:
 def _parse_args() -> argparse.Namespace:
     """Parse command-line arguments for the Sonar zero gate."""
     parser = argparse.ArgumentParser(
-        description=(
-            "Assert SonarCloud has zero open issues and a passing quality gate."
-        )
+        description="Assert SonarCloud has zero open issues and a passing quality gate.",
     )
     parser.add_argument("--project-key", required=True)
     parser.add_argument("--token", default="")
@@ -50,6 +54,15 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--sha", default="")
     parser.add_argument("--branch", default="")
     parser.add_argument("--pull-request", default="")
+    parser.add_argument(
+        "--main-branch",
+        default="main",
+        help=(
+            "Repository default branch. When --branch matches this value, "
+            "the run is treated as absolute (not scoped) so ratchet mode "
+            "doesn't bypass the open-issue check on main."
+        ),
+    )
     parser.add_argument("--out-json", default="sonar-zero/sonar.json")
     parser.add_argument("--out-md", default="sonar-zero/sonar.md")
     return parser.parse_args()
@@ -57,7 +70,7 @@ def _parse_args() -> argparse.Namespace:
 
 def _auth_header(token: str) -> str:
     """Build the basic-auth header SonarCloud expects for token auth."""
-    return "Basic " + base64.b64encode(f"{token}:".encode("utf-8")).decode("ascii")
+    return "Basic " + base64.b64encode(f"{token}:".encode()).decode("ascii")
 
 
 def _request_json(url: str, auth_header: str) -> Dict[str, Any]:
@@ -136,8 +149,7 @@ def _load_quality_gate(args: argparse.Namespace, auth: str) -> str:
         pull_request=args.pull_request,
     )
     gate_payload = _request_json(
-        f"{SONAR_API_BASE}/api/qualitygates/project_status?"
-        f"{urllib.parse.urlencode(gate_query)}",
+        f"{SONAR_API_BASE}/api/qualitygates/project_status?{urllib.parse.urlencode(gate_query)}",
         auth,
     )
     project_status = _mapping_or_empty(gate_payload.get("projectStatus"))
@@ -152,9 +164,10 @@ def _load_sonar_findings(
     open_issues = _load_open_issues(args, auth)
     quality_gate = _load_quality_gate(args, auth)
     findings: List[str] = []
-    ratchet_scoped = getattr(
-        args, "policy_mode", "ratchet"
-    ) == "ratchet" and _is_scoped_analysis(args)
+    ratchet_scoped = (
+        getattr(args, "policy_mode", "ratchet") == "ratchet"
+        and _is_ratchet_scoped(args)
+    )
     if open_issues != 0 and not ratchet_scoped:
         findings.append(f"Sonar reports {open_issues} open issues (expected 0).")
     if quality_gate != "OK" and open_issues != 0:
@@ -163,13 +176,35 @@ def _load_sonar_findings(
 
 
 def _is_scoped_analysis(args: argparse.Namespace) -> bool:
-    """Return whether the Sonar query targets a branch or pull request."""
+    """Return whether the Sonar API call targets a branch or pull request.
+
+    This drives the API-shape branch (whether to wait for branch/PR
+    analysis to settle on the target SHA). It does NOT decide whether
+    ratchet should bypass the issue-count check — that's
+    ``_is_ratchet_scoped``.
+    """
     return bool(
         _preferred_text(
             getattr(args, "branch", ""),
             getattr(args, "pull_request", ""),
         )
     )
+
+
+def _is_ratchet_scoped(args: argparse.Namespace) -> bool:
+    """Return whether ratchet mode should bypass the open-issue check.
+
+    Ratchet mode lets PRs / feature branches keep the existing baseline
+    of issues (they only fail on NEW introductions). Main-branch runs
+    are excluded: a main run evaluates the absolute baseline state we
+    want to drive to zero. This matches
+    ``profile.issue_policy.main_behavior: absolute``.
+    """
+    if _preferred_text(getattr(args, "pull_request", "")):
+        return True
+    branch = _preferred_text(getattr(args, "branch", ""))
+    main_branch = _preferred_text(getattr(args, "main_branch", ""), "main")
+    return bool(branch) and branch != main_branch
 
 
 def _target_sha(args: argparse.Namespace) -> str:
@@ -359,10 +394,7 @@ def load_sonar_findings_with_retry(
 ) -> Tuple[int, str, List[str]]:
     """Load Sonar findings, retrying while a scoped analysis is still settling."""
     if len(args) != 2:
-        raise TypeError(
-            "load_sonar_findings_with_retry expects argparse namespace "
-            "and auth header"
-        )
+        raise TypeError("load_sonar_findings_with_retry expects argparse namespace and auth header")
     namespace, auth = args
     retry_settings = _resolve_retry_settings(kwargs)
     return sonar_zero_support.load_sonar_findings_with_retry(

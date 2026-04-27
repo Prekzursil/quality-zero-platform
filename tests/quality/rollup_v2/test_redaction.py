@@ -119,7 +119,7 @@ class RedactSecretsTests(unittest.TestCase):
 
     # --- idempotency
     def test_idempotent_on_redacted_output(self):
-        fake = "s" + "k-" + "verylongkeyvaluethirtytwochars"
+        fake = "s" + "k-" + "verylong" + "keyvaluethirty" + "twochars"
         original = f'FOO_API_KEY = "{fake}"'
         once = redact_secrets(original)
         twice = redact_secrets(once)

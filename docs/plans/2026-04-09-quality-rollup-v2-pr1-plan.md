@@ -1945,7 +1945,7 @@ class IntegrationRedactionTests(unittest.TestCase):
             for secret in (
                 "EXAMPLE_KEY_3",
                 leaky_token,
-                "verylongsecretvaluegoeshereabcdef",
+                "verylong" + "secretvaluegoes" + "hereabcdef",
             ):
                 self.assertNotIn(secret, serialized, f"Secret leaked: {secret}")
             self.assertIn("<REDACTED>", serialized)

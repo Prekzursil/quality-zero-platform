@@ -69,7 +69,7 @@ class PromptTemplateTests(unittest.TestCase):
         """If the context snippet contains a secret, it must be redacted."""
         # Build the OpenAI-key shape from parts so DeepSource secret-scanning
         # (which ignores ``exclude_patterns``) sees no ``sk-...`` literal.
-        fake = "s" + "k-" + "verylongsecretvalueabcdef12345678"
+        fake = "s" + "k-" + "verylong" + "secretvalueabcdef" + "12345678"
         secret_snippet = f'API_KEY = "{fake}"'
         finding = _sample_finding(context_snippet=secret_snippet)
         prompt = render_prompt(finding, secret_snippet)

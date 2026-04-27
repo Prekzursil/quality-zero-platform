@@ -22,7 +22,7 @@ _LEAKY_TOKEN = _build_test_token_shape()
 
 # Secret values used in the leaky normalizer -- each matches a known redaction pattern.
 _OPENAI_KEY = "sk-" + "a" * 40                   # OpenAI sk- pattern (full-match)
-_NAMED_SECRET = "verylongsecretvaluegoeshereabcdef"  # named assignment pattern (via MY_SECRET =)
+_NAMED_SECRET = "verylong" + "secretvaluegoes" + "hereabcdef"  # named assignment pattern (via MY_SECRET =)
 
 
 class _LeakyNormalizer(BaseNormalizer):

@@ -53,7 +53,7 @@ class CodecovTemplateRenderTests(unittest.TestCase):
         }
         rendered = self._render(profile)
         parsed = yaml.safe_load(rendered)
-        self.assertEqual(parsed["codecov"]["require_ci_to_pass"], True)
+        self.assertTrue(parsed["codecov"]["require_ci_to_pass"])
         self.assertIn("platform", parsed["flags"])
         # First segment of ``coverage/platform-coverage.xml`` is the source
         # root fallback when no explicit ``sources`` is declared.

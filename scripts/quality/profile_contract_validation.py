@@ -155,7 +155,7 @@ def _matches_required_context(actual_context: str, expected_context: str) -> boo
 
 
 def _contains_required_context(
-    contexts: Union[List[str], Set[str]],
+    contexts: List[str] | Set[str],
     expected_context: str,
 ) -> bool:
     """Return whether any available context matches the expected status check."""

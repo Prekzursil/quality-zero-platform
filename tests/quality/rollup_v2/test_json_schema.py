@@ -162,7 +162,7 @@ class JsonSchemaTests(unittest.TestCase):
                 }
             }
             result = run_pipeline(
-                artifacts=artifacts, repo_root=repo_root, output_dir=output_dir
+                artifacts=artifacts, repo_root=repo_root
             )
             for finding_dict in result.canonical_payload.get("findings", []):
                 jsonschema.validate(instance=finding_dict, schema=schema)

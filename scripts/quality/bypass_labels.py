@@ -48,7 +48,8 @@ SKIP_LABEL = "quality-zero:skip"
 # ``pagerduty/INC-1234`` are accepted. Whitespace either side of the
 # colon is tolerated.
 _INCIDENT_RE = re.compile(
-    r"^\s*Incident\s*:\s*([A-Za-z0-9_./-]+)\s*$",
+    # IGNORECASE → drop A-Z so the character class has no duplicate ranges.
+    r"^\s*Incident\s*:\s*([a-z0-9_./-]+)\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
 

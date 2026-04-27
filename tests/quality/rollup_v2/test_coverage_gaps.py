@@ -71,7 +71,6 @@ class PipelineGapTests(unittest.TestCase):
             result = run_pipeline(
                 artifacts={"unknown_provider": {"data": "whatever"}},
                 repo_root=repo_root,
-                output_dir=output_dir,
             )
             self.assertEqual(result.findings, [])
 

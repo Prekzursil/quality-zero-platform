@@ -109,7 +109,7 @@ class RunPipelineTests(unittest.TestCase):
         from scripts.quality.rollup_v2.pipeline import run_pipeline
 
         result = run_pipeline(
-            artifacts={}, repo_root=self.repo_root, output_dir=self.output_dir
+            artifacts={}, repo_root=self.repo_root
         )
         self.assertEqual(result.findings, [])
         self.assertEqual(result.normalizer_errors, [])
@@ -133,8 +133,7 @@ class RunPipelineTests(unittest.TestCase):
         }
         result = run_pipeline(
             artifacts=artifacts,
-            repo_root=self.repo_root,
-            output_dir=self.output_dir,
+            repo_root=self.repo_root
         )
         self.assertGreaterEqual(len(result.findings), 1)
         self.assertEqual(result.normalizer_errors, [])
@@ -157,8 +156,7 @@ class RunPipelineTests(unittest.TestCase):
         }
         result = run_pipeline(
             artifacts=artifacts,
-            repo_root=self.repo_root,
-            output_dir=self.output_dir,
+            repo_root=self.repo_root
         )
         self.assertIn("provider_summaries", result.canonical_payload)
         summaries = result.canonical_payload["provider_summaries"]
@@ -226,8 +224,7 @@ class ProviderSummaryBranchTests(unittest.TestCase):
             )
             result = run_pipeline(
                 artifacts={"qlty": {"issues": []}},
-                repo_root=repo_root,
-                output_dir=output_dir,
+                repo_root=repo_root
             )
         tmp.cleanup()
 
@@ -256,8 +253,7 @@ class ProviderSummaryBranchTests(unittest.TestCase):
         ):
             result = run_pipeline(
                 artifacts={},
-                repo_root=repo_root,
-                output_dir=output_dir,
+                repo_root=repo_root
             )
         tmp.cleanup()
 
@@ -289,8 +285,7 @@ class PipelineErrorBoundaryTests(unittest.TestCase):
         }
         result = run_pipeline(
             artifacts=artifacts,
-            repo_root=self.repo_root,
-            output_dir=self.output_dir,
+            repo_root=self.repo_root
         )
         # Rollup is still produced
         self.assertIsNotNone(result.markdown)
@@ -320,8 +315,7 @@ class PipelineErrorBoundaryTests(unittest.TestCase):
         }
         result = run_pipeline(
             artifacts=artifacts,
-            repo_root=self.repo_root,
-            output_dir=self.output_dir,
+            repo_root=self.repo_root
         )
         # Valid findings from qlty are still processed
         self.assertGreaterEqual(len(result.findings), 1)

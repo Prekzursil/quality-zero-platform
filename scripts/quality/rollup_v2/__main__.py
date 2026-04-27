@@ -93,7 +93,6 @@ def main() -> int:
     result = run_pipeline(
         artifacts=artifacts,
         repo_root=repo_root,
-        output_dir=output_dir,
     )
 
     # Write outputs

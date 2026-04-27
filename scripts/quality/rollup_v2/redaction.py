@@ -31,16 +31,16 @@ _FULL_MATCH_PATTERNS: Final[Tuple[re.Pattern[str], ...]] = (
     re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}\b"),
     # AWS access key IDs
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
-    # Authorization: Bearer
-    re.compile(r"(?i)(authorization\s*:\s*bearer\s+)([A-Za-z0-9._\-]{16,})"),
+    # Authorization: Bearer  (case-insensitive flag makes A-Z redundant with a-z)
+    re.compile(r"(?i)(authorization\s*:\s*bearer\s+)([a-z0-9._-]{16,})"),
     # Slack bot/user/app/legacy tokens
-    re.compile(r"\bxox[baprs]-[0-9]+-[0-9]+-[A-Za-z0-9]{20,}\b"),
+    re.compile(r"\bxox[baprs]-\d+-\d+-[A-Za-z0-9]{20,}\b"),
     # Stripe live/test keys
     re.compile(r"\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{24,}\b"),
     # GCP service account: JSON-escaped PEM private_key field
     re.compile(r'"private_key"\s*:\s*"[^"]{16,}"'),
-    # Azure SAS: sig=<urlsafe-base64>
-    re.compile(r"(?i)([?&]sig=)([A-Za-z0-9%+/=\-_]{20,})"),
+    # Azure SAS: sig=<urlsafe-base64>  (IGNORECASE → drop A-Z duplicate)
+    re.compile(r"(?i)([?&]sig=)([a-z0-9%+/=_-]{20,})"),
 )
 
 REDACTED: Final[str] = "<REDACTED>"

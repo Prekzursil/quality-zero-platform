@@ -30,6 +30,24 @@ from scripts.quality.coverage_support import (
     parse_lcov,
 )
 
+# Re-export coverage_support's private helpers as part of this module's
+# public API. Tests import them via this module rather than reaching into
+# coverage_support directly, which keeps the test surface stable when
+# coverage_support's internals get refactored. (CodeQL flags these as
+# "unused global variable" because nothing in this module references them
+# locally, but they are intentionally exposed.)
+__all__ = [
+    "_coverage_threshold_findings",
+    "_find_missing_required_sources",
+    "_is_tests_only_report",
+    "_matches_required_source",
+    "_normalize_source_path",
+    "_required_source_findings",
+    "coverage_sources_from_lcov",
+    "coverage_sources_from_xml",
+    "parse_coverage_xml",
+    "parse_lcov",
+]
 _find_missing_required_sources = coverage_support._find_missing_required_sources
 _is_tests_only_report = coverage_support._is_tests_only_report
 _matches_required_source = coverage_support._matches_required_source

@@ -22,11 +22,11 @@ class ChromaticNormalizer(BaseNormalizer):
 
     def parse(self, artifact: Any, repo_root: Path) -> Iterable[Finding]:
         if not isinstance(artifact, dict):
-            return []
+            return  # generator early-exit (StopIteration); return value would be discarded
 
         builds = artifact.get("builds", [])
         if not isinstance(builds, list):
-            return []
+            return
 
         index = 0
         for build in builds:

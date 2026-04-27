@@ -151,12 +151,12 @@ jobs:
     # staging-wave matrix entry failed, this job does NOT run and
     # the rollback job below picks up instead.
     needs: [plan, stage-1]
-    if: |
-      ${{
-        needs.plan.outputs.rollout != '[]'
-        && needs.plan.outputs.rollout != ''
-        && needs.stage-1.result == 'success'
-      }}
+    # NOTE: ``if:`` value MUST be a plain expression (or a folded scalar
+    # that produces a single-line expression). A ``|`` literal block
+    # turns the body into a non-empty string which is always truthy, so
+    # the condition silently evaluates to true regardless of the actual
+    # check (CodeQL ``actions/if-expression-always-true/high``).
+    if: needs.plan.outputs.rollout != '[]' && needs.plan.outputs.rollout != '' && needs.stage-1.result == 'success'
     strategy:
       fail-fast: false
       matrix:

@@ -28,8 +28,7 @@ def _check_chromatic(data: dict) -> Tuple[bool, int, int, int]:
     changed = int(summary.get("changed", 0))
     rejected = int(summary.get("rejected", 0))
 
-    passed = (accepted + unchanged == total and errored == 0 and rejected == 0) if (unchanged := int(summary.get("unchanged", 0))) >= 0 else False
-    # Simpler: pass when no regressions
+    # Pass when no regressions of any kind (errored, rejected, changed all zero).
     passed = errored == 0 and rejected == 0 and changed == 0
 
     return (passed, total, accepted, errored)

@@ -1,13 +1,11 @@
 """Tests for pipeline orchestrator (per design §4.2 + §A.3.5)."""
 from __future__ import absolute_import
 
-import json
 import sys
 import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 if str(Path(__file__).resolve().parents[3]) not in sys.path:
@@ -138,7 +136,7 @@ class RunPipelineTests(unittest.TestCase):
             repo_root=self.repo_root,
             output_dir=self.output_dir,
         )
-        self.assertTrue(len(result.findings) >= 1)
+        self.assertGreaterEqual(len(result.findings), 1)
         self.assertEqual(result.normalizer_errors, [])
 
     def test_pipeline_builds_provider_summaries(self) -> None:
@@ -164,7 +162,7 @@ class RunPipelineTests(unittest.TestCase):
         )
         self.assertIn("provider_summaries", result.canonical_payload)
         summaries = result.canonical_payload["provider_summaries"]
-        self.assertTrue(len(summaries) >= 1)
+        self.assertGreaterEqual(len(summaries), 1)
 
 
 class ProviderSummaryBranchTests(unittest.TestCase):
@@ -296,7 +294,7 @@ class PipelineErrorBoundaryTests(unittest.TestCase):
         )
         # Rollup is still produced
         self.assertIsNotNone(result.markdown)
-        self.assertTrue(len(result.normalizer_errors) >= 1)
+        self.assertGreaterEqual(len(result.normalizer_errors), 1)
         # Banner present in markdown
         self.assertIn("Normalizer errors", result.markdown)
 
@@ -326,9 +324,9 @@ class PipelineErrorBoundaryTests(unittest.TestCase):
             output_dir=self.output_dir,
         )
         # Valid findings from qlty are still processed
-        self.assertTrue(len(result.findings) >= 1)
+        self.assertGreaterEqual(len(result.findings), 1)
         # Codacy error captured
-        self.assertTrue(len(result.normalizer_errors) >= 1)
+        self.assertGreaterEqual(len(result.normalizer_errors), 1)
 
 
 if __name__ == "__main__":

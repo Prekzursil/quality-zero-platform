@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import List
 from unittest.mock import patch
 
-from scripts.quality.common import DEFAULT_COVERAGE_JSON, DEFAULT_COVERAGE_MD
 
 from scripts.quality import run_coverage_gate
 

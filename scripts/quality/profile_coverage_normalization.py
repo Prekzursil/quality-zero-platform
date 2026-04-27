@@ -117,6 +117,8 @@ def normalize_coverage_inputs(raw_inputs: Any) -> List[Dict[str, Any]]:
             try:
                 normalized_item["min_percent"] = float(item["min_percent"])
             except (TypeError, ValueError):
+                # Drop the field on parse error so downstream consumers fall
+                # back to the schema default rather than a malformed value.
                 pass
         normalized_items.append(normalized_item)
     return normalized_items

@@ -226,7 +226,7 @@ if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
         load_coverage_rows(Path(_args.coverage_json)) if _args.coverage_json else []
     )
     _coverage_path = (_out / "coverage.html").resolve()
-    _ensure_path_within_workspace = _coverage_path.relative_to(_out.resolve())
+    _coverage_path.relative_to(_out.resolve())
     _coverage_path.write_text(
         render_coverage_trend_page(rows=_cov_rows), encoding="utf-8",
     )
@@ -235,7 +235,7 @@ if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
         load_drift_entries(Path(_args.drift_jsonl)) if _args.drift_jsonl else []
     )
     _drift_path = (_out / "drift.html").resolve()
-    _ensure_path_within_workspace = _drift_path.relative_to(_out.resolve())
+    _drift_path.relative_to(_out.resolve())
     _drift_path.write_text(
         render_drift_page(entries=_drift_rows), encoding="utf-8",
     )
@@ -244,7 +244,7 @@ if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
         load_audit_jsonl(Path(_args.audit_jsonl)) if _args.audit_jsonl else []
     )
     _audit_path = (_out / "audit.html").resolve()
-    _ensure_path_within_workspace = _audit_path.relative_to(_out.resolve())
+    _audit_path.relative_to(_out.resolve())
     _audit_path.write_text(
         render_audit_page(entries=_audit_rows), encoding="utf-8",
     )

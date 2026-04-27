@@ -14,7 +14,6 @@ from scripts.quality.rollup_v2.renderer import render_markdown
 from scripts.quality.rollup_v2.schema.corroborator import Corroborator
 from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_QUALITY,
-    CATEGORY_GROUP_SECURITY,
     SCHEMA_VERSION,
     Finding,
 )

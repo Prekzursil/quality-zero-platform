@@ -12,8 +12,6 @@ if str(Path(__file__).resolve().parents[3]) not in sys.path:
 from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer, NormalizerResult
 from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_QUALITY,
-    SCHEMA_VERSION,
-    Finding,
 )
 
 

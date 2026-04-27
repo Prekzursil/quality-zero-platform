@@ -43,7 +43,6 @@ class DependabotNormalizer(BaseNormalizer):
             package_name = str(package_info.get("name", "unknown"))
 
             manifest_path = str(dependency.get("manifest_path", ""))
-            cve_id = advisory.get("cve_id")
             cwes = advisory.get("cwes") or []
             cwe = str(cwes[0].get("cwe_id", "")) if cwes else None
 

@@ -7,7 +7,7 @@ import argparse
 from pathlib import Path
 import re
 import sys
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import yaml  # type: ignore[import-untyped]
 
@@ -163,15 +163,19 @@ def render_security_policy(profile: Dict[str, Any]) -> str:
             "",
             "## Reporting a Vulnerability",
             "",
-            "Please do **not** open public GitHub issues"
-            " for undisclosed security findings.",
+            (
+                "Please do **not** open public GitHub issues"
+                + " for undisclosed security findings."
+            ),
             "",
             "Use GitHub Private Vulnerability Reporting for this repository:",
             f"<https://github.com/{slug}/security/advisories/new>",
             "",
-            "If private advisory reporting is unavailable,"
-            " contact the maintainer privately"
-            " on GitHub (`@Prekzursil`).",
+            (
+                "If private advisory reporting is unavailable,"
+                + " contact the maintainer privately"
+                + " on GitHub (`@Prekzursil`)."
+            ),
             "",
             "When reporting, include:",
             "",
@@ -185,9 +189,11 @@ def render_security_policy(profile: Dict[str, Any]) -> str:
             "",
             "- Initial acknowledgment: best effort within 3 business days.",
             "- Triage update: best effort within 7 business days.",
-            "- Coordinated disclosure is expected;"
-            " please allow time to investigate"
-            " and patch before public disclosure.",
+            (
+                "- Coordinated disclosure is expected;"
+                + " please allow time to investigate"
+                + " and patch before public disclosure."
+            ),
             "",
         ]
     )

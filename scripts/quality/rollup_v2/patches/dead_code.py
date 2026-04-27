@@ -2,7 +2,6 @@
 from __future__ import absolute_import
 
 import difflib
-import re
 from pathlib import Path
 
 from scripts.quality.rollup_v2.schema.finding import Finding
@@ -10,9 +9,6 @@ from scripts.quality.rollup_v2.schema.patch import PatchDeclined, PatchResult
 
 GENERATOR_VERSION = "dead_code/1.0.0"
 CATEGORY = "dead-code"
-
-# Matches lines after an unconditional return/raise/break/continue
-_UNREACHABLE_PREAMBLE = re.compile(r"^\s*(return\b|raise\b|break\b|continue\b)")
 
 
 def generate(

@@ -22,12 +22,12 @@ class ApplitoolsNormalizer(BaseNormalizer):
 
     def parse(self, artifact: Any, repo_root: Path) -> Iterable[Finding]:
         if not isinstance(artifact, dict):
-            return []
+            return  # generator early-exit (StopIteration); return value would be discarded
 
         batch_url = artifact.get("batchUrl")
         results = artifact.get("results", [])
         if not isinstance(results, list):
-            return []
+            return
 
         index = 0
         for result in results:

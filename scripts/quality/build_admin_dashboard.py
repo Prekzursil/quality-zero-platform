@@ -15,7 +15,6 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.quality.admin_dashboard_pages import (
-    PRIVATE_SLUG_PLACEHOLDER,
     redact_private_repos,
 )
 from scripts.quality.common import utc_timestamp

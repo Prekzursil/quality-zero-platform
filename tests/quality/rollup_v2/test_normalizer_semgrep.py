@@ -10,7 +10,6 @@ from pathlib import Path
 if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from scripts.quality.rollup_v2.normalizers._sarif import SarifTooLargeError
 from scripts.quality.rollup_v2.normalizers.semgrep import SemgrepNormalizer
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "normalizers" / "semgrep_sample.sarif.json"

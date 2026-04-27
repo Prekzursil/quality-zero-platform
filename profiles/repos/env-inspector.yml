@@ -14,9 +14,18 @@ issue_policy:
 coverage:
   command: "mkdir -p coverage\nmkdir -p .tmp\nexport TMPDIR=\"$PWD/.tmp\"\npython\
     \ -m pip install --upgrade pip\nif [ -f requirements.txt ]; then python -m pip\
-    \ install -r requirements.txt; fi\npython -m pip install pytest pytest-cov\npython\
-    \ -m pytest -q -s \\\n  --cov=env_inspector \\\n  --cov=env_inspector_core \\\n\
-    \  --cov=env_inspector_gui \\\n  --cov-branch \\\n  --cov-report=xml:coverage/python-coverage.xml\n"
+    \ install -r requirements.txt; fi\n# ``defusedxml`` is the XXE-safe XML parser\
+    \ used by\n# ``scripts/cobertura_to_sonar_generic.py`` (Semgrep\n# ``python.lang.security.use-defused-xmltree``).\
+    \  Tests for the\n# converter import it; install here so pytest collection\n#\
+    \ doesn't fail with ModuleNotFoundError.\npython -m pip install pytest pytest-cov\
+    \ defusedxml\n# ``--cov=.`` (repo root) so coverage.xml has a single\n# ``<source>``\
+    \ element. ``.coveragerc`` controls scope via\n# ``omit`` and ``[report] exclude_lines``.\
+    \ Per-package style produced\n# multiple ``<source>`` roots Sonar couldn't disambiguate.\n\
+    python -m pytest -q -s --cov=. --cov-branch \\\n  --cov-report=xml:coverage/python-coverage.xml\n\
+    # Mirror the cobertura XML to ``coverage.xml`` at the repo root so\n# the converter\
+    \ + Sonar's reportPaths defaults find it.\ncp coverage/python-coverage.xml coverage.xml\n\
+    if [ -f scripts/cobertura_to_sonar_generic.py ]; then\n  python scripts/cobertura_to_sonar_generic.py\
+    \ \\\n    --in coverage.xml \\\n    --out coverage-sonar.xml\nfi\n"
   inputs:
   - format: xml
     name: python

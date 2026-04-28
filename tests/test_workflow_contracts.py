@@ -327,11 +327,22 @@ class WorkflowContractTests(unittest.TestCase):
         ]:
             self.assertIn(expected, template_text)
 
-    def test_semgrep_lane_uses_supported_cli_invocation(self) -> None:
-        """Keep Semgrep on the supported CLI invocation shape."""
+    def test_semgrep_lane_hard_blocks_on_findings(self) -> None:
+        """Semgrep must hard-block on findings.
+
+        ``semgrep ci`` (the bare form) exits 0 even when blocking-rule
+        findings were uploaded to Semgrep Cloud Platform — the gate
+        passes green while findings sit on the dashboard. ``--error``
+        forces non-zero exit on any finding (code OR supply-chain),
+        and ``--strict`` additionally fails on rule-loading warnings
+        (catches silent-skip on stale rule sets). This contract locks
+        in the strict-zero requirement at the workflow level so a
+        future refactor can't re-introduce the silent-pass invocation.
+        """
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
-        self.assertIn('run(["semgrep", "ci"], cwd=repo_dir)', text)
-        self.assertNotIn('run(["semgrep", "ci", "--error"], cwd=repo_dir)', text)
+        self.assertIn('"semgrep", "ci", "--error", "--strict"', text)
+        # The bare "ci" form (without --error) is the silent-pass bug; reject it.
+        self.assertNotIn('run(["semgrep", "ci"], cwd=repo_dir)', text)
 
     def test_reusable_workflows_do_not_inline_inputs_inside_run_blocks(self) -> None:
         """Reject direct GitHub expression interpolation inside reusable workflow shell blocks."""

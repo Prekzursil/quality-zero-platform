@@ -2,7 +2,7 @@
 from __future__ import absolute_import
 
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Dict, Iterable
 
 from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer, FindingDraft
 from scripts.quality.rollup_v2.schema.finding import (
@@ -19,6 +19,35 @@ _SEVERITY_MAP = {
 }
 
 
+def _dependabot_finding_draft(index: int, alert: Dict[str, Any]) -> FindingDraft:
+    """Convert one Dependabot alert payload into the canonical FindingDraft."""
+    advisory = alert.get("security_advisory") or {}
+    vulnerability = alert.get("security_vulnerability") or {}
+    dependency = alert.get("dependency") or {}
+    package_info = vulnerability.get("package") or {}
+    cwes = advisory.get("cwes") or []
+    summary = str(advisory.get("summary", ""))
+    package_name = str(package_info.get("name", "unknown"))
+    cwe_id = str(cwes[0].get("cwe_id", "")) if cwes else ""
+    return FindingDraft(
+        finding_id=f"deps-{index:04d}",
+        file=str(dependency.get("manifest_path", "")),
+        line=1,
+        category="vulnerable-dependency",
+        category_group=CATEGORY_GROUP_SECURITY,
+        severity=_SEVERITY_MAP.get(
+            str(vulnerability.get("severity", "medium")).lower(),
+            "medium",
+        ),
+        primary_message=f"{package_name}: {summary}",
+        rule_id=str(advisory.get("ghsa_id", "")),
+        rule_url=None,
+        original_message=summary,
+        context_snippet="",
+        cwe=cwe_id or None,
+    )
+
+
 class DependabotNormalizer(BaseNormalizer):
     """Normalize Dependabot alert artifacts into canonical Findings.
 
@@ -29,34 +58,5 @@ class DependabotNormalizer(BaseNormalizer):
     provider = "Dependabot"
 
     def parse(self, artifact: Any, repo_root: Path) -> Iterable[Finding]:
-        alerts = (artifact or {}).get("alerts", [])
-        for index, alert in enumerate(alerts):
-            advisory = alert.get("security_advisory") or {}
-            vulnerability = alert.get("security_vulnerability") or {}
-            dependency = alert.get("dependency") or {}
-
-            summary = str(advisory.get("summary", ""))
-            raw_severity = str(vulnerability.get("severity", "medium")).lower()
-            severity = _SEVERITY_MAP.get(raw_severity, "medium")
-
-            package_info = vulnerability.get("package") or {}
-            package_name = str(package_info.get("name", "unknown"))
-
-            manifest_path = str(dependency.get("manifest_path", ""))
-            cwes = advisory.get("cwes") or []
-            cwe = str(cwes[0].get("cwe_id", "")) if cwes else None
-
-            yield self._build_finding(FindingDraft(
-                finding_id=f"deps-{index:04d}",
-                file=manifest_path,
-                line=1,
-                category="vulnerable-dependency",
-                category_group=CATEGORY_GROUP_SECURITY,
-                severity=severity,
-                primary_message=f"{package_name}: {summary}",
-                rule_id=str(advisory.get("ghsa_id", "")),
-                rule_url=None,
-                original_message=summary,
-                context_snippet="",
-                cwe=cwe if cwe else None,
-            ))
+        for index, alert in enumerate((artifact or {}).get("alerts", [])):
+            yield self._build_finding(_dependabot_finding_draft(index, alert))

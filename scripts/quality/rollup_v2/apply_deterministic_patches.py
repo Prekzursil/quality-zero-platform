@@ -10,7 +10,7 @@ from __future__ import absolute_import
 import argparse
 import json
 import os
-import subprocess
+import subprocess  # nosec B404
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List
@@ -64,12 +64,16 @@ def apply_single_patch(diff: str, repo_dir: Path) -> Dict[str, Any]:
         tmp_path = Path(tmp.name)
 
     try:
-        # Dry-run first
-        check_result = subprocess.run(
+        # Dry-run first.
+        # Safe by construction: shell=False (list argv), git is a trusted
+        # tool on PATH, args derived from the validated tmp_path. nosec/noqa
+        # silence Bandit B603/B607 + Ruff S603/S607 on this site.
+        check_result = subprocess.run(  # noqa: S603,S607  # nosec B603,B607
             ["git", "apply", "--check", str(tmp_path)],
             cwd=repo_dir,
             capture_output=True,
             text=True,
+            check=False,
         )
         if check_result.returncode != 0:
             return {
@@ -78,12 +82,13 @@ def apply_single_patch(diff: str, repo_dir: Path) -> Dict[str, Any]:
                 "reason": check_result.stderr.strip() or "git apply --check failed",
             }
 
-        # Apply for real
-        apply_result = subprocess.run(
+        # Apply for real (same safety analysis as the dry-run above).
+        apply_result = subprocess.run(  # noqa: S603,S607  # nosec B603,B607
             ["git", "apply", str(tmp_path)],
             cwd=repo_dir,
             capture_output=True,
             text=True,
+            check=False,
         )
         if apply_result.returncode != 0:
             return {

@@ -27,19 +27,19 @@ import {
 // =============================================================================
 
 test('ensureManagedStatePath returns absolute path under the state root', () => {
-  const root = path.resolve('/tmp/state');
+  const root = path.resolve('/qzp-fixture/state');
   const target = path.join(root, 'profile');
   const got = ensureManagedStatePath(target, root);
   assert.equal(got, path.resolve(target));
 });
 
 test('ensureManagedStatePath rejects sibling escape', () => {
-  const root = path.resolve('/tmp/state');
-  assert.throws(() => ensureManagedStatePath('/tmp/elsewhere', root), /managed state root/);
+  const root = path.resolve('/qzp-fixture/state');
+  assert.throws(() => ensureManagedStatePath('/qzp-fixture/elsewhere', root), /managed state root/);
 });
 
 test('ensureManagedStatePath rejects parent traversal', () => {
-  const root = path.resolve('/tmp/state');
+  const root = path.resolve('/qzp-fixture/state');
   assert.throws(
     () => ensureManagedStatePath(path.join(root, '..', 'evil'), root),
     /managed state root/
@@ -89,19 +89,19 @@ test('loadPlaywrightChromium throws when QUALITY_ZERO_PROVIDER_UI_RUNNER_DIR is 
 // =============================================================================
 
 test('isCliEntrypoint matches when argv[1] resolves to the import URL', () => {
-  const target = path.resolve('/tmp/some-script.mjs');
+  const target = path.resolve('/qzp-fixture/some-script.mjs');
   const url = pathToFileURL(target).href;
   assert.equal(isCliEntrypoint(url, ['node', target]), true);
 });
 
 test('isCliEntrypoint rejects when argv[1] is a different file', () => {
-  const target = path.resolve('/tmp/script.mjs');
-  const otherUrl = pathToFileURL(path.resolve('/tmp/other.mjs')).href;
+  const target = path.resolve('/qzp-fixture/script.mjs');
+  const otherUrl = pathToFileURL(path.resolve('/qzp-fixture/other.mjs')).href;
   assert.equal(isCliEntrypoint(otherUrl, ['node', target]), false);
 });
 
 test('isCliEntrypoint returns false when argv[1] is missing', () => {
-  const url = pathToFileURL(path.resolve('/tmp/script.mjs')).href;
+  const url = pathToFileURL(path.resolve('/qzp-fixture/script.mjs')).href;
   assert.equal(isCliEntrypoint(url, ['node']), false);
 });
 
@@ -124,14 +124,14 @@ test('promptForManualLogin writes guidance and waits for Enter', async () => {
 
   await promptForManualLogin(
     { label: 'Codecov', targetUrl: 'https://example.com', loginHint: 'Press something.' },
-    '/tmp/profile',
+    '/qzp-fixture/profile',
     { readline: readlineModule, input: inputStream, output: outputStream }
   );
 
   assert.equal(closed, true);
   assert.match(writes.join(''), /Manual login handoff for Codecov/);
   assert.match(writes.join(''), /https:\/\/example\.com/);
-  assert.match(writes.join(''), /\/tmp\/profile/);
+  assert.match(writes.join(''), /\/qzp-fixture\/profile/);
   assert.match(writes.join(''), /Press something/);
   assert.match(questionAsked, /press Enter to continue/);
 });
@@ -148,7 +148,7 @@ test('launchContextWithFallback uses msedge channel on win32', async () => {
       return { ctx: 'edge' };
     }
   };
-  const ctx = await launchContextWithFallback(chromium, '/tmp/profile', { headless: true }, 'win32');
+  const ctx = await launchContextWithFallback(chromium, '/qzp-fixture/profile', { headless: true }, 'win32');
   assert.deepEqual(ctx, { ctx: 'edge' });
   assert.equal(calls[0].options.channel, 'msedge');
   assert.equal(calls[0].options.headless, true);
@@ -162,7 +162,7 @@ test('launchContextWithFallback skips channel on non-win32', async () => {
       return { ctx: 'chromium' };
     }
   };
-  await launchContextWithFallback(chromium, '/tmp/profile', { headless: true }, 'linux');
+  await launchContextWithFallback(chromium, '/qzp-fixture/profile', { headless: true }, 'linux');
   assert.equal(calls[0].options.channel, undefined);
 });
 
@@ -177,7 +177,7 @@ test('launchContextWithFallback retries without channel on win32 launch failure'
       return { ctx: 'fallback-chromium' };
     }
   };
-  const ctx = await launchContextWithFallback(chromium, '/tmp/profile', { headless: true }, 'win32');
+  const ctx = await launchContextWithFallback(chromium, '/qzp-fixture/profile', { headless: true }, 'win32');
   assert.deepEqual(ctx, { ctx: 'fallback-chromium' });
   assert.equal(calls.length, 2);
   assert.equal(calls[0].options.channel, 'msedge');
@@ -189,7 +189,7 @@ test('launchContextWithFallback re-throws on non-win32 launch failure', async ()
     launchPersistentContext: () => { throw new Error('boom'); }
   };
   await assert.rejects(
-    launchContextWithFallback(chromium, '/tmp/profile', { headless: true }, 'linux'),
+    launchContextWithFallback(chromium, '/qzp-fixture/profile', { headless: true }, 'linux'),
     /boom/
   );
 });
@@ -203,8 +203,8 @@ function _stubArgs() {
     provider: 'chromatic',
     repo: 'org/repo',
     owner: 'org',
-    profileDir: path.resolve('/tmp/state/profile'),
-    stateRoot: path.resolve('/tmp/state'),
+    profileDir: path.resolve('/qzp-fixture/state/profile'),
+    stateRoot: path.resolve('/qzp-fixture/state'),
     headless: undefined,
     slowMoMs: 0,
     timeoutMs: 1000
@@ -246,7 +246,7 @@ test('launchPersistentContext walks the launch path and skips manual prompt when
   assert.equal(result.headless, true);
   assert.equal(result.title, 'Test Title');
   assert.equal(result.finalUrl, 'https://final.example.com');
-  assert.deepEqual(calls.map((c) => c.dir ?? c), [path.resolve('/tmp/state/profile')]);
+  assert.deepEqual(calls.map((c) => c.dir ?? c), [path.resolve('/qzp-fixture/state/profile')]);
 });
 
 test('launchPersistentContext invokes manual prompt when requested', async () => {
@@ -602,15 +602,15 @@ test('loadPlaywrightChromium reads runner dir env and resolves chromium via inje
   const stubChromium = { tag: 'stub-chromium' };
   const stubPlaywright = { chromium: stubChromium };
   const got = await loadPlaywrightChromium({
-    runnerDir: '/tmp/runner',
+    runnerDir: '/qzp-fixture/runner',
     createRequire: () => ({
       resolve: (id) => {
         assert.equal(id, 'playwright');
-        return '/tmp/runner/node_modules/playwright/index.js';
+        return '/qzp-fixture/runner/node_modules/playwright/index.js';
       }
     }),
     importModule: (href) => {
-      assert.match(href, /\/tmp\/runner\/node_modules\/playwright\/index\.js$/);
+      assert.match(href, /\/qzp-fixture\/runner\/node_modules\/playwright\/index\.js$/);
       return stubPlaywright;
     }
   });

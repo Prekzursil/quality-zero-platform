@@ -180,19 +180,32 @@ def open_secret_missing_alerts(
     return results
 
 
+def _build_payload_from_args(args: argparse.Namespace) -> Dict[str, Any]:
+    """Dedupe each *_secret/*_var argv list and build the report payload."""
+    return _build_payload(
+        required_secrets=dedupe_strings(args.required_secret or []),
+        conditional_secrets=dedupe_strings(args.conditional_secret or []),
+        required_vars=dedupe_strings(args.required_var or []),
+        conditional_vars=dedupe_strings(args.conditional_var or []),
+    )
+
+
+def _maybe_open_missing_alerts(args: argparse.Namespace, payload: Dict[str, Any]) -> None:
+    """Fire alert:secret-missing for each missing secret if --open-alerts is set."""
+    if not (args.open_alerts and payload["missing_secrets"]):
+        return
+    open_secret_missing_alerts(
+        platform_slug=args.platform_slug,
+        target_repo_slug=args.target_repo_slug or args.platform_slug,
+        missing_secrets=payload["missing_secrets"],
+        dry_run=args.dry_run_alerts,
+    )
+
+
 def main() -> int:
     """Handle main."""
     args = _parse_args()
-    required_secrets = dedupe_strings(args.required_secret or [])
-    conditional_secrets = dedupe_strings(args.conditional_secret or [])
-    required_vars = dedupe_strings(args.required_var or [])
-    conditional_vars = dedupe_strings(args.conditional_var or [])
-    payload = _build_payload(
-        required_secrets=required_secrets,
-        conditional_secrets=conditional_secrets,
-        required_vars=required_vars,
-        conditional_vars=conditional_vars,
-    )
+    payload = _build_payload_from_args(args)
     return_code = write_report(
         payload,
         out_json=args.out_json,
@@ -203,13 +216,7 @@ def main() -> int:
     )
     if return_code != 0:
         return return_code
-    if args.open_alerts and payload["missing_secrets"]:
-        open_secret_missing_alerts(
-            platform_slug=args.platform_slug,
-            target_repo_slug=args.target_repo_slug or args.platform_slug,
-            missing_secrets=payload["missing_secrets"],
-            dry_run=args.dry_run_alerts,
-        )
+    _maybe_open_missing_alerts(args, payload)
     return 0 if payload["status"] == "pass" else 1
 
 

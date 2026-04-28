@@ -92,7 +92,7 @@ export function isCliEntrypoint(importMetaUrl, argv = process.argv) {
  * @param {string} profileDir
  * @returns {Promise<void>}
  */
-export async function promptForManualLogin(target, profileDir, deps = _internals) {
+export function promptForManualLogin(target, profileDir, deps = _internals) {
   return _promptForManualLoginInner(target, profileDir, deps.readline, deps.input, deps.output);
 }
 

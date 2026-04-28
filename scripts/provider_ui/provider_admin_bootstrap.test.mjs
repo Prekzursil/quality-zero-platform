@@ -117,7 +117,7 @@ test('promptForManualLogin writes guidance and waits for Enter', async () => {
   let closed = false;
   const readlineModule = {
     createInterface: () => ({
-      question: async (prompt) => { questionAsked = prompt; return ''; },
+      question: (prompt) => { questionAsked = prompt; return ''; },
       close: () => { closed = true; }
     })
   };
@@ -143,7 +143,7 @@ test('promptForManualLogin writes guidance and waits for Enter', async () => {
 test('launchContextWithFallback uses msedge channel on win32', async () => {
   const calls = [];
   const chromium = {
-    launchPersistentContext: async (dir, options) => {
+    launchPersistentContext: (dir, options) => {
       calls.push({ dir, options });
       return { ctx: 'edge' };
     }
@@ -157,7 +157,7 @@ test('launchContextWithFallback uses msedge channel on win32', async () => {
 test('launchContextWithFallback skips channel on non-win32', async () => {
   const calls = [];
   const chromium = {
-    launchPersistentContext: async (dir, options) => {
+    launchPersistentContext: (dir, options) => {
       calls.push({ dir, options });
       return { ctx: 'chromium' };
     }
@@ -169,7 +169,7 @@ test('launchContextWithFallback skips channel on non-win32', async () => {
 test('launchContextWithFallback retries without channel on win32 launch failure', async () => {
   const calls = [];
   const chromium = {
-    launchPersistentContext: async (dir, options) => {
+    launchPersistentContext: (dir, options) => {
       calls.push({ options });
       if (options.channel === 'msedge') {
         throw new Error('edge missing');
@@ -186,7 +186,7 @@ test('launchContextWithFallback retries without channel on win32 launch failure'
 
 test('launchContextWithFallback re-throws on non-win32 launch failure', async () => {
   const chromium = {
-    launchPersistentContext: async () => { throw new Error('boom'); }
+    launchPersistentContext: () => { throw new Error('boom'); }
   };
   await assert.rejects(
     launchContextWithFallback(chromium, '/tmp/profile', { headless: true }, 'linux'),
@@ -213,18 +213,18 @@ function _stubArgs() {
 
 function _stubBrowserContext() {
   const page = {
-    setDefaultTimeout: () => {},
-    goto: async () => {},
-    title: async () => 'Test Title',
+    setDefaultTimeout: () => undefined,
+    goto: () => undefined,
+    title: () => 'Test Title',
     url: () => 'https://final.example.com'
   };
   return {
     pages: () => [page],
-    newPage: async () => page,
-    on: () => {},
-    once: () => {},
-    off: () => {},
-    close: async () => {}
+    newPage: () => page,
+    on: () => undefined,
+    once: () => undefined,
+    off: () => undefined,
+    close: () => undefined
   };
 }
 
@@ -235,12 +235,12 @@ test('launchPersistentContext walks the launch path and skips manual prompt when
     _stubArgs(),
     { headlessDefault: true, includeManualPrompt: false },
     {
-      loadPlaywrightChromium: async () => ({ tag: 'chromium' }),
-      launchContextWithFallback: async (chromium, dir, opts) => {
+      loadPlaywrightChromium: () => ({ tag: 'chromium' }),
+      launchContextWithFallback: (chromium, dir, opts) => {
         calls.push({ dir, headless: opts.headless });
         return ctx;
       },
-      promptForManualLogin: async () => { calls.push('prompt'); }
+      promptForManualLogin: () => { calls.push('prompt'); }
     }
   );
   assert.equal(result.headless, true);
@@ -256,9 +256,9 @@ test('launchPersistentContext invokes manual prompt when requested', async () =>
     _stubArgs(),
     { headlessDefault: false, includeManualPrompt: true },
     {
-      loadPlaywrightChromium: async () => ({}),
-      launchContextWithFallback: async () => ctx,
-      promptForManualLogin: async () => { prompted = true; }
+      loadPlaywrightChromium: () => ({}),
+      launchContextWithFallback: () => ctx,
+      promptForManualLogin: () => { prompted = true; }
     }
   );
   assert.equal(prompted, true);
@@ -266,23 +266,23 @@ test('launchPersistentContext invokes manual prompt when requested', async () =>
 
 test('launchPersistentContext creates a new page when context.pages() is empty', async () => {
   const page = {
-    setDefaultTimeout: () => {},
-    goto: async () => {},
-    title: async () => 'New Page',
+    setDefaultTimeout: () => undefined,
+    goto: () => undefined,
+    title: () => 'New Page',
     url: () => 'https://new.example.com'
   };
   const ctx = {
     pages: () => [],
-    newPage: async () => page,
-    on: () => {}, once: () => {}, off: () => {}, close: async () => {}
+    newPage: () => page,
+    on: () => undefined, once: () => undefined, off: () => undefined, close: () => undefined
   };
   const result = await launchPersistentContext(
     _stubArgs(),
     { headlessDefault: false, includeManualPrompt: false },
     {
-      loadPlaywrightChromium: async () => ({}),
-      launchContextWithFallback: async () => ctx,
-      promptForManualLogin: async () => {}
+      loadPlaywrightChromium: () => ({}),
+      launchContextWithFallback: () => ctx,
+      promptForManualLogin: () => undefined
     }
   );
   assert.equal(result.title, 'New Page');
@@ -360,7 +360,7 @@ test('waitForKeepOpenExit resolves on SIGTERM', async () => {
 // bootstrap / openOrInspect
 // =============================================================================
 
-function _bootstrapStubResult(close = async () => {}) {
+function _bootstrapStubResult(close = () => undefined) {
   return {
     target: { key: 'codecov', label: 'Codecov', repoSlug: 'org/repo', targetUrl: 'https://x' },
     finalUrl: 'https://final',
@@ -375,9 +375,9 @@ test('bootstrap closes the context when keepOpen is false', async () => {
   await bootstrap(
     { keepOpen: false },
     {
-      launchPersistentContext: async () => _bootstrapStubResult(async () => { closed += 1; }),
-      printResult: () => {},
-      waitForKeepOpenExit: async () => {}
+      launchPersistentContext: () => _bootstrapStubResult(async () => { closed += 1; }),
+      printResult: () => undefined,
+      waitForKeepOpenExit: () => undefined
     }
   );
   assert.equal(closed, 1);
@@ -389,9 +389,9 @@ test('bootstrap waits for keep-open exit when requested', async () => {
   await bootstrap(
     { keepOpen: true },
     {
-      launchPersistentContext: async () => _bootstrapStubResult(async () => { closed += 1; }),
-      printResult: () => {},
-      waitForKeepOpenExit: async () => { waited = true; }
+      launchPersistentContext: () => _bootstrapStubResult(async () => { closed += 1; }),
+      printResult: () => undefined,
+      waitForKeepOpenExit: () => { waited = true; }
     }
   );
   assert.equal(waited, true);
@@ -404,9 +404,9 @@ test('openOrInspect uses inspect_complete prefix in inspect mode', async () => {
     { keepOpen: false },
     { inspectOnly: true },
     {
-      launchPersistentContext: async () => _bootstrapStubResult(),
+      launchPersistentContext: () => _bootstrapStubResult(),
       printResult: (prefix) => prefixes.push(prefix),
-      waitForKeepOpenExit: async () => {}
+      waitForKeepOpenExit: () => undefined
     }
   );
   assert.deepEqual(prefixes, ['inspect_complete']);
@@ -418,9 +418,9 @@ test('openOrInspect uses open_complete prefix when not inspect-only', async () =
     { keepOpen: false },
     { inspectOnly: false },
     {
-      launchPersistentContext: async () => _bootstrapStubResult(),
+      launchPersistentContext: () => _bootstrapStubResult(),
       printResult: (prefix) => prefixes.push(prefix),
-      waitForKeepOpenExit: async () => {}
+      waitForKeepOpenExit: () => undefined
     }
   );
   assert.deepEqual(prefixes, ['open_complete']);
@@ -432,9 +432,9 @@ test('openOrInspect waits for keep-open exit when requested', async () => {
     { keepOpen: true },
     { inspectOnly: false },
     {
-      launchPersistentContext: async () => _bootstrapStubResult(),
-      printResult: () => {},
-      waitForKeepOpenExit: async () => { waited = true; }
+      launchPersistentContext: () => _bootstrapStubResult(),
+      printResult: () => undefined,
+      waitForKeepOpenExit: () => { waited = true; }
     }
   );
   assert.equal(waited, true);
@@ -450,10 +450,10 @@ test('runCommand dispatches list to listProviders hook', async () => {
     { command: 'list' },
     {
       listProviders: (args) => { calls.push(['list', args]); },
-      normalizeProvider: () => {},
-      bootstrap: () => {},
-      openOrInspect: () => {},
-      log: () => {},
+      normalizeProvider: () => undefined,
+      bootstrap: () => undefined,
+      openOrInspect: () => undefined,
+      log: () => undefined,
       renderHelp: () => 'help'
     }
   );
@@ -465,11 +465,11 @@ test('runCommand dispatches open to openOrInspect with inspectOnly=false', async
   await runCommand(
     { command: 'open', provider: 'Sonar' },
     {
-      listProviders: () => {},
+      listProviders: () => undefined,
       normalizeProvider: (p) => { calls.push(['normalize', p]); return p.toLowerCase(); },
       bootstrap: () => { calls.push(['bootstrap']); },
       openOrInspect: (_args, opts) => { calls.push(['open', opts.inspectOnly]); },
-      log: () => {},
+      log: () => undefined,
       renderHelp: () => 'help'
     }
   );
@@ -481,11 +481,11 @@ test('runCommand dispatches inspect to openOrInspect with inspectOnly=true', asy
   await runCommand(
     { command: 'inspect', provider: 'Codacy' },
     {
-      listProviders: () => {},
+      listProviders: () => undefined,
       normalizeProvider: (p) => p.toLowerCase(),
-      bootstrap: () => {},
+      bootstrap: () => undefined,
       openOrInspect: (_args, opts) => { calls.push(['inspect', opts.inspectOnly]); },
-      log: () => {},
+      log: () => undefined,
       renderHelp: () => 'help'
     }
   );
@@ -497,10 +497,10 @@ async function _runCommandHelpScenario(command) {
   await runCommand(
     { command },
     {
-      listProviders: () => {},
-      normalizeProvider: () => {},
-      bootstrap: () => {},
-      openOrInspect: () => {},
+      listProviders: () => undefined,
+      normalizeProvider: () => undefined,
+      bootstrap: () => undefined,
+      openOrInspect: () => undefined,
       log: (m) => messages.push(m),
       renderHelp: () => 'help text'
     }
@@ -526,7 +526,7 @@ test('main parses argv and forwards to runCommand', async () => {
     ['list'],
     {
       parseArgs: (argv) => { calls.push(['parse', argv]); return { command: 'list' }; },
-      runCommand: async (args) => { calls.push(['run', args]); }
+      runCommand: (args) => { calls.push(['run', args]); }
     }
   );
   assert.deepEqual(calls, [['parse', ['list']], ['run', { command: 'list' }]]);
@@ -565,8 +565,8 @@ test('runCliIfEntrypoint short-circuits when not the CLI entrypoint', async () =
   let mainCalled = false;
   const ran = await runCliIfEntrypoint('file:///not-the-script.mjs', {
     isCliEntrypoint: () => false,
-    main: async () => { mainCalled = true; },
-    reportCliError: () => {}
+    main: () => { mainCalled = true; },
+    reportCliError: () => undefined
   });
   assert.equal(ran, false);
   assert.equal(mainCalled, false);
@@ -576,8 +576,8 @@ test('runCliIfEntrypoint runs main when called as CLI', async () => {
   let mainCalled = false;
   const ran = await runCliIfEntrypoint('file:///cli.mjs', {
     isCliEntrypoint: () => true,
-    main: async () => { mainCalled = true; },
-    reportCliError: () => {}
+    main: () => { mainCalled = true; },
+    reportCliError: () => undefined
   });
   assert.equal(ran, true);
   assert.equal(mainCalled, true);
@@ -587,7 +587,7 @@ test('runCliIfEntrypoint forwards errors to reportCliError', async () => {
   const errors = [];
   const ran = await runCliIfEntrypoint('file:///cli.mjs', {
     isCliEntrypoint: () => true,
-    main: async () => { throw new Error('boom from main'); },
+    main: () => { throw new Error('boom from main'); },
     reportCliError: (e) => errors.push(e.message)
   });
   assert.equal(ran, true);
@@ -609,7 +609,7 @@ test('loadPlaywrightChromium reads runner dir env and resolves chromium via inje
         return '/tmp/runner/node_modules/playwright/index.js';
       }
     }),
-    importModule: async (href) => {
+    importModule: (href) => {
       assert.match(href, /\/tmp\/runner\/node_modules\/playwright\/index\.js$/);
       return stubPlaywright;
     }
@@ -632,9 +632,9 @@ test('runCommand bootstrap branch invokes normalize then bootstrap hooks in orde
     {
       listProviders: () => order.push('list'),
       normalizeProvider: (p) => { order.push(`normalize:${p}`); return p; },
-      bootstrap: async (a) => { order.push(`bootstrap:${a.provider}`); },
+      bootstrap: (a) => { order.push(`bootstrap:${a.provider}`); },
       openOrInspect: () => order.push('openOrInspect'),
-      log: () => {},
+      log: () => undefined,
       renderHelp: () => 'help'
     }
   );

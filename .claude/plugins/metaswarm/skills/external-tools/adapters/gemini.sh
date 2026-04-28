@@ -149,8 +149,11 @@ cmd_implement() {
 
   # Handle errors
   if [[ "$exit_code" -ne 0 ]]; then
-    local error_type
-    error_type="$(classify_error "$exit_code" "$stderr_file")"
+    # ``classify_error`` is invoked for its side effect (writing a
+    # diagnostic line to stderr); the return value isn't fed into the
+    # error JSON below, so capturing into ``local error_type`` was dead
+    # code that Codacy shellcheck_SC2034 flagged.
+    classify_error "$exit_code" "$stderr_file" >/dev/null
 
     local result
     result="$(emit_error \

@@ -23,14 +23,17 @@ LOG_DIR="${HOME}/.claude/sessions"
 #         XT_ATTEMPT, XT_TIMEOUT, XT_CONTEXT_DIR
 # ---------------------------------------------------------------------------
 parse_args() {
-  # Defaults
-  XT_WORKTREE=""
-  XT_PROMPT_FILE=""
-  XT_RUBRIC_FILE=""
-  XT_SPEC_FILE=""
-  XT_ATTEMPT="1"
-  XT_TIMEOUT="300"
-  XT_CONTEXT_DIR=""
+  # Defaults — the XT_* vars are read by the sourcing adapter (codex.sh,
+  # gemini.sh) after parse_args returns, so we export them so shellcheck
+  # SC2034 stops flagging them as unused. Same idiom as bash's standard
+  # documented-cross-script convention.
+  export XT_WORKTREE=""
+  export XT_PROMPT_FILE=""
+  export XT_RUBRIC_FILE=""
+  export XT_SPEC_FILE=""
+  export XT_ATTEMPT="1"
+  export XT_TIMEOUT="300"
+  export XT_CONTEXT_DIR=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -371,11 +374,10 @@ extract_cost_codex() {
     return 0
   fi
 
-  # Codex JSONL may contain usage lines with input_tokens and output_tokens
-  local input_tokens=0
-  local output_tokens=0
-
-  # Sum up all usage entries from the JSONL stream
+  # Sum up all usage entries from the JSONL stream. ``input_tokens`` /
+  # ``output_tokens`` are derived inside the jq expression below and
+  # surfaced as JSON keys; no local copies are needed (Codacy
+  # shellcheck_SC2034 was flagging the prior placeholder declarations).
   local usage
   usage="$(jq -s '
     [ .[] | select(.usage != null) | .usage ] |

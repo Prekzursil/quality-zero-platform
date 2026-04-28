@@ -3,12 +3,31 @@ from __future__ import absolute_import
 
 import difflib
 from pathlib import Path
+from typing import List
 
 from scripts.quality.rollup_v2.schema.finding import Finding
 from scripts.quality.rollup_v2.schema.patch import PatchDeclined, PatchResult
 
 GENERATOR_VERSION = "dead_code/1.0.0"
 CATEGORY = "dead-code"
+
+
+def _scan_dead_block_end(lines: List[str], target_index: int, target_indent: int) -> int:
+    """Walk forward from ``target_index`` while lines are blank or indented at
+    least as deep as ``target_indent``; return the first index that breaks
+    the dead-block (i.e. the new end-exclusive boundary).
+    """
+    end_index = target_index
+    while end_index < len(lines):
+        line = lines[end_index]
+        if not line.strip():  # pragma: no cover -- blank line within dead block; tested but branch depends on exact whitespace
+            end_index += 1
+            continue
+        line_indent = len(line) - len(line.lstrip())
+        if line_indent < target_indent:
+            break
+        end_index += 1
+    return end_index
 
 
 def generate(
@@ -35,22 +54,8 @@ def generate(
             suggested_tier="skip",
         )
 
-    # Get the indent level of the target line
     target_indent = len(target_line) - len(target_line.lstrip())
-
-    # Remove consecutive unreachable lines at the same or deeper indent level
-    end_index = target_index
-    while end_index < len(lines):
-        line = lines[end_index]
-        stripped = line.strip()
-        if stripped == "":  # pragma: no cover -- blank line within dead block; tested but branch depends on exact whitespace
-            end_index += 1
-            continue
-        line_indent = len(line) - len(line.lstrip())
-        if line_indent >= target_indent:
-            end_index += 1
-        else:
-            break
+    end_index = _scan_dead_block_end(lines, target_index, target_indent)
 
     if end_index == target_index:  # pragma: no cover -- defensive; requires target line to have lower indent than itself
         return PatchDeclined(

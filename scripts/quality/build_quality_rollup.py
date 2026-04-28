@@ -211,6 +211,36 @@ def _lane_statuses_from_rows(
     return statuses
 
 
+def _aggregate_rollup_status(rows: List[Dict[str, str]]) -> str:
+    """Reduce per-row statuses to a single overall verdict.
+
+    Hard-fails win; otherwise pending wins; otherwise pass.
+    """
+    overall = "pass"
+    for row in rows:
+        status = row["status"]
+        if status in {"fail", "missing"}:
+            return "fail"
+        if status == "pending" and overall == "pass":
+            overall = "pending"
+    return overall
+
+
+def _apply_severity_softening(overall: str, severity_verdict: str) -> str:
+    """If overall is ``fail`` but severity verdict is warn/pass, soften it.
+
+    Preserves the hard ``fail`` when blockers exist AND preserves
+    ``pending`` (not-yet-reported) regardless.
+    """
+    if overall != "fail":
+        return overall
+    if severity_verdict == "warn":
+        return "warn"
+    if severity_verdict == "pass":
+        return "pass"
+    return overall
+
+
 def build_rollup(
     *,
     profile: Mapping[str, Any],
@@ -228,35 +258,22 @@ def build_rollup(
     ``block`` severity (same as the existing behaviour).
     """
     required_contexts = sorted(profile.get("active_required_contexts", []))
-    rows: List[Dict[str, str]] = []
-    overall = "pass"
     reverse_map = {context: lane for lane, context in LANE_CONTEXTS.items()}
-    for context_name in required_contexts:
-        row = _build_rollup_row(
+    rows = [
+        _build_rollup_row(
             context_name=context_name,
             reverse_map=reverse_map,
             lane_payloads=lane_payloads,
             contexts=contexts,
         )
-        if row["status"] in {"fail", "missing"}:
-            overall = "fail"
-        elif row["status"] == "pending" and overall == "pass":
-            overall = "pending"
-        rows.append(row)
-
+        for context_name in required_contexts
+    ]
+    overall = _aggregate_rollup_status(rows)
     severity_verdict = classify_lanes(
         profile, _lane_statuses_from_rows(rows, reverse_map)
     )
     severity_payload = failing_lanes_to_gate_output(severity_verdict)
-    # Severity-aware overall: if the zero-rollup says ``fail`` but every
-    # failure is only ``warn``/``info`` severity, soften to ``warn`` or
-    # keep ``pass``. Preserves the hard ``fail`` when blockers exist
-    # AND preserves ``pending`` (not-yet-reported) regardless.
-    if overall == "fail":
-        if severity_verdict.verdict == "warn":
-            overall = "warn"
-        elif severity_verdict.verdict == "pass":
-            overall = "pass"
+    overall = _apply_severity_softening(overall, severity_verdict.verdict)
     return {
         "repo": profile["slug"],
         "sha": sha,

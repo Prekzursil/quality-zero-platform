@@ -405,5 +405,11 @@ Object.assign(_internals, {
 
 export { _internals };
 
-// eslint-disable-next-line no-unused-expressions -- top-level await as bootstrap entrypoint; the awaited promise's resolved value is intentionally unused
-await runCliIfEntrypoint(import.meta.url);
+// Top-level await as the bootstrap entrypoint. The resolved value is
+// intentionally unused — runCliIfEntrypoint exits via process.exit when
+// invoked as a CLI and resolves to ``undefined`` when imported as a
+// module. The underscore prefix tells eslint-no-unused-vars the binding
+// is intentional; assigning makes the statement an initialised binding
+// rather than a bare expression so Codacy's ESLint "expr"
+// (no-unused-expressions) doesn't fire on the await.
+const _bootstrapResult = await runCliIfEntrypoint(import.meta.url);

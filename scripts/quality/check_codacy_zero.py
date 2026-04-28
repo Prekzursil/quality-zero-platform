@@ -47,6 +47,7 @@ class CodacyQuery:
     pull_request: str = ""
     sha: str = ""
 
+
 CodacyPendingFn = Callable[[CodacyQuery, str], str | None]
 
 

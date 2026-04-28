@@ -96,20 +96,16 @@ export function promptForManualLogin(target, profileDir, deps = _internals) {
   return _promptForManualLoginInner(target, profileDir, deps.readline, deps.input, deps.output);
 }
 
-async function _promptForManualLoginInner(target, profileDir, readlineModule, inputStream, outputStream) {
+function _promptForManualLoginInner(target, profileDir, readlineModule, inputStream, outputStream) {
   const rl = readlineModule.createInterface({ input: inputStream, output: outputStream });
-  try {
-    outputStream.write(`\nManual login handoff for ${target.label}\n`);
-    outputStream.write(`Target URL: ${target.targetUrl}\n`);
-    outputStream.write(`Persistent profile: ${profileDir}\n`);
-    outputStream.write(`${target.loginHint}\n`);
-    await rl.question(
-      'Complete sign-in or provider checks in the opened browser, then ' +
-      'press Enter to continue... '
-    );
-  } finally {
-    rl.close();
-  }
+  outputStream.write(`\nManual login handoff for ${target.label}\n`);
+  outputStream.write(`Target URL: ${target.targetUrl}\n`);
+  outputStream.write(`Persistent profile: ${profileDir}\n`);
+  outputStream.write(`${target.loginHint}\n`);
+  return rl.question(
+    'Complete sign-in or provider checks in the opened browser, then ' +
+    'press Enter to continue... '
+  ).finally(() => rl.close());
 }
 
 /**

@@ -117,7 +117,7 @@ test('promptForManualLogin writes guidance and waits for Enter', async () => {
   let closed = false;
   const readlineModule = {
     createInterface: () => ({
-      question: (prompt) => { questionAsked = prompt; return ''; },
+      question: (prompt) => { questionAsked = prompt; return Promise.resolve(''); },
       close: () => { closed = true; }
     })
   };
@@ -375,7 +375,7 @@ test('bootstrap closes the context when keepOpen is false', async () => {
   await bootstrap(
     { keepOpen: false },
     {
-      launchPersistentContext: () => _bootstrapStubResult(async () => { closed += 1; }),
+      launchPersistentContext: () => _bootstrapStubResult(() => { closed += 1; }),
       printResult: () => undefined,
       waitForKeepOpenExit: () => undefined
     }
@@ -389,7 +389,7 @@ test('bootstrap waits for keep-open exit when requested', async () => {
   await bootstrap(
     { keepOpen: true },
     {
-      launchPersistentContext: () => _bootstrapStubResult(async () => { closed += 1; }),
+      launchPersistentContext: () => _bootstrapStubResult(() => { closed += 1; }),
       printResult: () => undefined,
       waitForKeepOpenExit: () => { waited = true; }
     }

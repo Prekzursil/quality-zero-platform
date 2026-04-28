@@ -2,6 +2,7 @@
 
 from __future__ import absolute_import
 
+import contextlib
 import re
 from copy import deepcopy
 from typing import Any, Dict, List, Mapping, Sequence, Tuple
@@ -83,12 +84,10 @@ def _add_optional_input_fields(item: Mapping[str, Any], dest: Dict[str, Any]) ->
             str(s).strip() for s in item["sources"] if str(s).strip()
         ]
     if "min_percent" in item:
-        try:
+        # Drop the field on parse error so downstream consumers fall
+        # back to the schema default rather than a malformed value.
+        with contextlib.suppress(TypeError, ValueError):
             dest["min_percent"] = float(item["min_percent"])
-        except (TypeError, ValueError):
-            # Drop the field on parse error so downstream consumers fall
-            # back to the schema default rather than a malformed value.
-            pass
 
 
 def _normalize_one_input(item: Any) -> Dict[str, Any] | None:

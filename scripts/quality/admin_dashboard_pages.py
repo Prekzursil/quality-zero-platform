@@ -18,15 +18,15 @@ full inventory scan.
 
 from __future__ import absolute_import
 
-# Newline constant used by the body builders so the duplicate "\n" literal
-# Sonar's python:S1192 rule flagged at line 93 stays at zero.
-_NL = "\n"
-
 import html
 import json
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Mapping
+
+# Newline constant used by the body builders so the duplicate "\n" literal
+# Sonar's python:S1192 rule flagged at line 93 stays at zero.
+_NL = "\n"
 
 
 def _ensure_platform_on_syspath() -> None:

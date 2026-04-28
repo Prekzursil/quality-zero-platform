@@ -24,15 +24,15 @@ _CoverageMapping = Dict[str, Any]
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # pragma: no cover
 
-from scripts.quality import assert_coverage_100
-from scripts.quality.common import (
+from scripts.quality import assert_coverage_100  # noqa: E402
+from scripts.quality.common import (  # noqa: E402
     DEFAULT_COVERAGE_JSON,
     DEFAULT_COVERAGE_MD,
     NONE_BULLET,
     utc_timestamp,
     write_report,
 )
-from scripts.security_helpers import load_bytes_https, normalize_https_url
+from scripts.security_helpers import load_bytes_https, normalize_https_url  # noqa: E402
 
 
 def _parse_args() -> argparse.Namespace:

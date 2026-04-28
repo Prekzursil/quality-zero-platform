@@ -63,15 +63,16 @@ required_contexts:
 enabled_scanners:
   deepsource_visible: true
 coverage:
+  setup:
+    node: "22"
   command: "python3 -m pip install --upgrade pip\npython3 -m pip install -r requirements-dev.txt\
     \ coverage\ncoverage run --branch -m unittest discover -s tests -p 'test_*.py'\n\
     coverage xml -o coverage/platform-coverage.xml\nmkdir -p coverage\n# scripts/provider_ui/*.mjs\
     \ has its own Node test suite; emit lcov for Sonar\n# (sonar.javascript.lcov.reportPaths)\
     \ + Codecov 'provider_ui' flag so the\n# 4 .mjs files stop sitting at 0% coverage\
-    \ in the dashboards. The\n# --test-coverage-exclude flag (Node ≥22.10) keeps the\
-    \ test files out of\n# the lcov source list so older runners don't pollute the line/branch\n\
-    # totals with test code. Newer Node versions exclude *.test.* by default\n# but the\
-    \ explicit flag is harmless on those.\nnode --test --experimental-test-coverage \\\n\
+    \ in the dashboards. The\n# --test-coverage-exclude flag requires Node ≥22.10 (set\n\
+    # via coverage.setup.node above) — it keeps test files out of the lcov\n# source list\
+    \ so totals match the source-only branch coverage gate.\nnode --test --experimental-test-coverage \\\n\
     \  --test-coverage-exclude='**/*.test.mjs' \\\n  --test-reporter=lcov \\\n  --test-reporter-destination=coverage/provider_ui-lcov.info\
     \ \\\n  scripts/provider_ui/*.test.mjs || true\n"
   inputs:

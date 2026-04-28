@@ -4,6 +4,7 @@ from __future__ import absolute_import
 import difflib
 import re
 from pathlib import Path
+from typing import List
 
 from scripts.quality.rollup_v2.schema.finding import Finding
 from scripts.quality.rollup_v2.schema.patch import PatchDeclined, PatchResult
@@ -15,6 +16,25 @@ CATEGORY = "mutable-default"
 _MUTABLE_DEFAULT = re.compile(
     r"^(\s*def\s+\w+\s*\([^)]*?)(\w+)\s*=\s*(\[\]|\{\})\s*([,)])"
 )
+
+
+def _build_def_line_replacement(target_line: str, match: re.Match) -> str:
+    """Produce ``def f(x=None, ...)`` from the matched ``def f(x=[], ...)`` line."""
+    prefix = match.group(1)
+    param_name = match.group(2)
+    trailing = match.group(4)
+    new_def_line = f"{prefix}{param_name}=None{trailing}{target_line[match.end():]}"
+    if not new_def_line.endswith("\n"):  # pragma: no cover -- source lines always end with newline from splitlines(keepends=True)
+        new_def_line += "\n"
+    return new_def_line
+
+
+def _find_body_start(lines: List[str], target_index: int) -> int:
+    """Skip blank lines after the ``def`` to find where the body begins."""
+    body_start = target_index + 1
+    while body_start < len(lines) and lines[body_start].strip() == "":  # pragma: no cover -- blank lines between def and body are rare
+        body_start += 1
+    return body_start
 
 
 def generate(
@@ -41,29 +61,12 @@ def generate(
             suggested_tier="llm-fallback",
         )
 
-    prefix = match.group(1)
-    param_name = match.group(2)
-    mutable_literal = match.group(3)
-    trailing = match.group(4)
-
-    # Replace `x=[]` with `x=None`
-    new_def_line = f"{prefix}{param_name}=None{trailing}"
-    # Reconstruct the rest of the line after the match
-    rest_of_line = target_line[match.end():]
-    new_def_line += rest_of_line
-    if not new_def_line.endswith("\n"):  # pragma: no cover -- source lines always end with newline from splitlines(keepends=True)
-        new_def_line += "\n"
-
-    # Determine the body indent (one level deeper than function def indent)
+    new_def_line = _build_def_line_replacement(target_line, match)
     def_indent = target_line[: len(target_line) - len(target_line.lstrip())]
     body_indent = def_indent + "    "
-
-    # Find the first body line to insert the guard before it
-    body_start = target_index + 1
-    # Skip the colon line if the def line doesn't end with ':'
-    while body_start < len(lines) and lines[body_start].strip() == "":  # pragma: no cover -- blank lines between def and body are rare
-        body_start += 1
-
+    param_name = match.group(2)
+    mutable_literal = match.group(3)
+    body_start = _find_body_start(lines, target_index)
     guard_line = f"{body_indent}{param_name} = {mutable_literal} if {param_name} is None else {param_name}\n"
 
     patched_lines = lines.copy()

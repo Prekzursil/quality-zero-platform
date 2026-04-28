@@ -4,6 +4,7 @@ from __future__ import absolute_import
 import difflib
 import re
 from pathlib import Path
+from typing import List
 
 from scripts.quality.rollup_v2.schema.finding import Finding
 from scripts.quality.rollup_v2.schema.patch import PatchDeclined, PatchResult
@@ -12,6 +13,23 @@ GENERATOR_VERSION = "indent_mismatch/1.0.0"
 CATEGORY = "indent-mismatch"
 
 _INDENT = re.compile(r"^(\s*)")
+
+
+def _infer_expected_indent(lines: List[str], target_index: int) -> str:
+    """Walk backward from ``target_index - 1`` to find the previous non-blank
+    line and derive the indent level it implies (adding one 4-space level
+    when the previous line ends with ``:``).
+    """
+    for i in range(target_index - 1, -1, -1):
+        stripped = lines[i].strip()
+        if not stripped:
+            continue
+        match = _INDENT.match(lines[i])
+        prev_indent = match.group(1) if match else ""
+        if stripped.endswith(":"):
+            prev_indent += "    "
+        return prev_indent
+    return ""
 
 
 def generate(
@@ -28,17 +46,6 @@ def generate(
             reason_text=f"line {finding.line} out of range",
             suggested_tier="skip",
         )
-    # Look for the previous non-blank line to infer expected indent
-    prev_indent = ""
-    for i in range(target_index - 1, -1, -1):
-        stripped = lines[i].strip()
-        if stripped:
-            m = _INDENT.match(lines[i])
-            prev_indent = m.group(1) if m else ""
-            # If prev line ends with ':', expect one more indent level
-            if stripped.endswith(":"):
-                prev_indent += "    "
-            break
 
     target_line = lines[target_index]
     target_stripped = target_line.strip()
@@ -49,7 +56,7 @@ def generate(
             suggested_tier="skip",
         )
 
-    new_line = prev_indent + target_stripped
+    new_line = _infer_expected_indent(lines, target_index) + target_stripped
     if target_line.endswith("\n"):
         new_line += "\n"
 

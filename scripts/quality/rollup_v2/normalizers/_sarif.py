@@ -79,26 +79,30 @@ def _extract_cwe(result: Dict[str, Any]) -> str | None:
     return None
 
 
+def _safe_dict(value: Any) -> Dict[str, Any]:
+    """Return ``value`` if it's a dict; otherwise an empty dict."""
+    return value if isinstance(value, dict) else {}
+
+
+def _coerce_optional_int(value: Any) -> int | None:
+    """Coerce ``value`` to ``int`` only if it's not ``None``."""
+    return int(value) if value is not None else None
+
+
 def _extract_location(result: Dict[str, Any]) -> Tuple[str, int, int | None, int | None]:
     """Extract (file, line, end_line, column) from the first SARIF location."""
     locations = result.get("locations", [])
     if not locations or not isinstance(locations, list):
         return ("unknown", 1, None, None)
-    loc = locations[0]
-    phys = loc.get("physicalLocation", {}) if isinstance(loc, dict) else {}
-    artifact_loc = phys.get("artifactLocation", {}) if isinstance(phys, dict) else {}
-    uri = str(artifact_loc.get("uri", "unknown")) if isinstance(artifact_loc, dict) else "unknown"
-    region = phys.get("region", {}) if isinstance(phys, dict) else {}
-    if not isinstance(region, dict):
-        region = {}
-    line = int(region.get("startLine", 1))
-    end_line = region.get("endLine")
-    if end_line is not None:
-        end_line = int(end_line)
-    column = region.get("startColumn")
-    if column is not None:
-        column = int(column)
-    return (uri, line, end_line, column)
+    phys = _safe_dict(_safe_dict(locations[0]).get("physicalLocation"))
+    artifact_loc = _safe_dict(phys.get("artifactLocation"))
+    region = _safe_dict(phys.get("region"))
+    return (
+        str(artifact_loc.get("uri", "unknown")),
+        int(region.get("startLine", 1)),
+        _coerce_optional_int(region.get("endLine")),
+        _coerce_optional_int(region.get("startColumn")),
+    )
 
 
 def _extract_context_snippet(result: Dict[str, Any]) -> str:

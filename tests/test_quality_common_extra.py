@@ -3,10 +3,7 @@
 
 from __future__ import absolute_import
 
-import contextlib
-import os
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
 from scripts.quality import profile_coverage_normalization
@@ -26,7 +23,6 @@ from scripts.quality.common import (
 from tests._quality_common_helpers import (
     inferred_coverage as _inferred_coverage_helper,
     normalized_explicit_coverage as _explicit_coverage_helper,
-    temporary_cwd as _temporary_cwd,
 )
 
 

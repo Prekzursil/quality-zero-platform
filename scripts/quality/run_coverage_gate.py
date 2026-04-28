@@ -52,7 +52,7 @@ def _parse_args() -> argparse.Namespace:
 
 def _coverage_mode(coverage: Dict[str, Any], event_name: str) -> str:
     """Handle coverage mode."""
-    assert_mode = cast(_CoverageMapping, coverage.get("assert_mode", {}))
+    assert_mode = cast("_CoverageMapping", coverage.get("assert_mode", {}))
     if event_name in assert_mode:
         return str(assert_mode[event_name])
     return str(assert_mode.get("default", "enforce"))
@@ -377,7 +377,7 @@ def main() -> int:
         if args.platform_dir
         else Path(__file__).resolve().parents[2]
     )
-    coverage = cast(_CoverageMapping, profile.get("coverage", {}))
+    coverage = cast("_CoverageMapping", profile.get("coverage", {}))
 
     _run_shell(
         str(coverage.get("command", "")),
@@ -397,7 +397,7 @@ def main() -> int:
             coverage, repo_dir=repo_dir, platform_dir=platform_dir
         )
         baseline_payload = _load_baseline_coverage_payload(
-            cast(_CoverageMapping, profile)
+            cast("_CoverageMapping", profile)
         )
         return _write_non_regression_report(current_payload, baseline_payload)
 

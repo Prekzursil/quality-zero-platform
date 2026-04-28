@@ -6,7 +6,7 @@ import json
 import sys
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Mapping
 
@@ -32,7 +32,7 @@ class ReportSpec:
 
 def utc_timestamp() -> str:
     """Handle utc timestamp."""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def github_commit_status_payload(repo: str, sha: str, token: str) -> Dict[str, Any]:

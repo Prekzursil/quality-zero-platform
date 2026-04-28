@@ -44,7 +44,7 @@ SecretSetter = Callable[[str, str], "subprocess.CompletedProcess[str]"]
 
 def _utc_now_iso() -> str:
     """Return the current UTC time as ``YYYY-MM-DDTHH:MM:SSZ``."""
-    return dt.datetime.now(tz=dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return dt.datetime.now(tz=dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def make_gh_secret_setter(

@@ -132,7 +132,7 @@ def build_triggers_from_fleet_state(
 ) -> List[at.AlertTrigger]:
     """Run every detector over the aggregated fleet state."""
     today: dt.date = state.get("today", dt.date.today())
-    now: dt.datetime = state.get("now", dt.datetime.now(dt.timezone.utc))
+    now: dt.datetime = state.get("now", dt.datetime.now(dt.UTC))
 
     triggers: List[at.AlertTrigger] = []
     for profile_entry in state.get("profiles", []):

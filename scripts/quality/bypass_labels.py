@@ -23,7 +23,7 @@ import json
 import re
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
@@ -88,7 +88,7 @@ def extract_incident_id(pr_body: str) -> Optional[str]:
 def _utc_iso_now() -> str:
     """Current UTC timestamp in ISO-8601 with ``Z`` suffix."""
     return (
-        datetime.now(timezone.utc)
+        datetime.now(UTC)
         .replace(microsecond=0)
         .isoformat()
         .replace("+00:00", "Z")

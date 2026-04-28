@@ -408,13 +408,15 @@ export { _internals };
 // Bootstrap entrypoint: kicks off main() when invoked as a CLI.
 // ``runCliIfEntrypoint``'s internal try/catch routes failures to
 // ``reportCliError``, so the resolved boolean (true=ran-as-CLI,
-// false=imported-as-module) is intentionally unused here. Top-level
-// await is the idiom Sonar javascript:S7785 prefers; bare top-level
-// await is what Codacy's ESLint "expr" rule rejects. The two
-// linters disagree on the canonical shape, so we list multiple
-// candidate rule names — this satisfies Sonar javascript:S7724
-// ("Specify the rules you want to disable") AND covers whichever
-// rule name Codacy's ESLint engine internally uses for the
-// ``Expected an assignment or function call`` finding.
-// eslint-disable-next-line no-unused-expressions, no-void, no-floating-promises
-await runCliIfEntrypoint(import.meta.url);
+// false=imported-as-module) is intentionally unused here. Wrapping
+// the call in an async IIFE makes the top-level statement a regular
+// function call (which all ESLint configs accept as a valid
+// expression statement) rather than a bare ``await`` expression.
+// Inside the IIFE the await is in an async function body — Sonar's
+// javascript:S7785 ("prefer top-level await") doesn't fire on
+// async-function bodies, only on ``.then()`` chains at the top
+// scope. Resolves the inline-disable-comment asymmetry between
+// Codacy's PR-scope and main-scope ESLint analyzers.
+(async () => {
+  await runCliIfEntrypoint(import.meta.url);
+})();

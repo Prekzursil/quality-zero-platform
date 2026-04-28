@@ -9,11 +9,8 @@ from unittest.mock import patch
 
 from scripts.quality import check_sonar_zero
 from scripts.quality.check_sonar_zero import load_sonar_findings_with_retry
-from tests._sonar_zero_helpers import SonarZeroHelpersMixin, raise_runtime_error
+from tests._sonar_zero_helpers import SonarZeroHelpersMixin
 from typing import List
-
-
-_raise_runtime_error = raise_runtime_error
 
 
 class SonarZeroTests(SonarZeroHelpersMixin, unittest.TestCase):

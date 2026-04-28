@@ -5,7 +5,6 @@ from __future__ import absolute_import
 import contextlib
 import io
 import json
-import os
 import sys
 import tempfile
 import unittest
@@ -19,7 +18,6 @@ from scripts.quality.common import (
     dedupe_strings,
     infer_coverage_inputs,
     merge_required_contexts,
-    normalize_coverage,
     normalize_coverage_inputs,
     normalize_required_contexts,
     safe_output_path,

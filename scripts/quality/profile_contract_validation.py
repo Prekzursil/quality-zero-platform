@@ -2,7 +2,7 @@
 
 from __future__ import absolute_import
 
-from typing import Any, Dict, List, Set, Tuple, Union
+from typing import Any, Dict, List, Set, Tuple
 
 from scripts.quality.common import dedupe_strings
 from scripts.quality.profile_shape import validate_profile_shape

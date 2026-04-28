@@ -65,7 +65,7 @@ export const PROVIDER_KEYS = Object.freeze(Object.keys(PROVIDERS));
 /**
  * Handle build repo target url.
  */
-function buildRepoTargetUrl(providerKey, repoSlug) {
+export function buildRepoTargetUrl(providerKey, repoSlug) {
   switch (providerKey) {
     case 'codecov':
       return `https://app.codecov.io/gh/${repoSlug}`;

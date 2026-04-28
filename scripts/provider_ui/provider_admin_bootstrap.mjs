@@ -35,18 +35,19 @@ export function ensureManagedStatePath(targetPath, stateRoot) {
  * Load Playwright from the managed external runner directory.
  * @returns {Promise<import('playwright').BrowserType>}
  */
-async function loadPlaywrightChromium() {
-  const runnerDir = process.env.QUALITY_ZERO_PROVIDER_UI_RUNNER_DIR;
-  if (!runnerDir) {
+export async function loadPlaywrightChromium(deps = {}) {
+  const runnerDirEnv = deps.runnerDir ?? process.env.QUALITY_ZERO_PROVIDER_UI_RUNNER_DIR;
+  if (!runnerDirEnv) {
     throw new Error(
       'QUALITY_ZERO_PROVIDER_UI_RUNNER_DIR is required so the bootstrap can ' +
       'load Playwright from the external runner directory.'
     );
   }
-
-  const runnerRequire = createRequire(path.join(runnerDir, 'package.json'));
+  const _createRequire = deps.createRequire ?? createRequire;
+  const _importModule = deps.importModule ?? ((href) => import(href));
+  const runnerRequire = _createRequire(path.join(runnerDirEnv, 'package.json'));
   const playwrightEntry = runnerRequire.resolve('playwright');
-  const playwrightModule = await import(pathToFileURL(playwrightEntry).href);
+  const playwrightModule = await _importModule(pathToFileURL(playwrightEntry).href);
   return resolvePlaywrightChromium(playwrightModule);
 }
 
@@ -84,13 +85,20 @@ export function isCliEntrypoint(importMetaUrl, argv = process.argv) {
  * @param {string} profileDir
  * @returns {Promise<void>}
  */
-async function promptForManualLogin(target, profileDir) {
-  const rl = readline.createInterface({ input, output });
+export async function promptForManualLogin(target, profileDir, deps = {}) {
+  const readlineModule = deps.readline ?? readline;
+  const inputStream = deps.input ?? input;
+  const outputStream = deps.output ?? output;
+  return _promptForManualLoginInner(target, profileDir, readlineModule, inputStream, outputStream);
+}
+
+async function _promptForManualLoginInner(target, profileDir, readlineModule, inputStream, outputStream) {
+  const rl = readlineModule.createInterface({ input: inputStream, output: outputStream });
   try {
-    output.write(`\nManual login handoff for ${target.label}\n`);
-    output.write(`Target URL: ${target.targetUrl}\n`);
-    output.write(`Persistent profile: ${profileDir}\n`);
-    output.write(`${target.loginHint}\n`);
+    outputStream.write(`\nManual login handoff for ${target.label}\n`);
+    outputStream.write(`Target URL: ${target.targetUrl}\n`);
+    outputStream.write(`Persistent profile: ${profileDir}\n`);
+    outputStream.write(`${target.loginHint}\n`);
     await rl.question(
       'Complete sign-in or provider checks in the opened browser, then ' +
       'press Enter to continue... '
@@ -107,14 +115,14 @@ async function promptForManualLogin(target, profileDir) {
  * @param {import('playwright').LaunchPersistentContextOptions} options
  * @returns {Promise<import('playwright').BrowserContext>}
  */
-async function launchContextWithFallback(chromium, profileDir, options) {
+export async function launchContextWithFallback(chromium, profileDir, options, platform = process.platform) {
   try {
     return await chromium.launchPersistentContext(profileDir, {
-      channel: process.platform === 'win32' ? 'msedge' : undefined,
+      channel: platform === 'win32' ? 'msedge' : undefined,
       ...options
     });
   } catch (error) {
-    if (process.platform !== 'win32') {
+    if (platform !== 'win32') {
       throw error;
     }
 
@@ -135,7 +143,10 @@ async function launchContextWithFallback(chromium, profileDir, options) {
  *   headless: boolean
  * }>}
  */
-async function launchPersistentContext(args, { headlessDefault, includeManualPrompt }) {
+export async function launchPersistentContext(args, { headlessDefault, includeManualPrompt }, deps = {}) {
+  const loadChromium = deps.loadPlaywrightChromium ?? loadPlaywrightChromium;
+  const launchCtx = deps.launchContextWithFallback ?? launchContextWithFallback;
+  const promptLogin = deps.promptForManualLogin ?? promptForManualLogin;
   const target = resolveProviderTarget(args.provider, {
     repo: args.repo,
     owner: args.owner
@@ -143,8 +154,8 @@ async function launchPersistentContext(args, { headlessDefault, includeManualPro
   const profileDir = ensureManagedStatePath(args.profileDir, args.stateRoot);
 
   const headless = args.headless ?? headlessDefault;
-  const chromium = await loadPlaywrightChromium();
-  const context = await launchContextWithFallback(chromium, profileDir, {
+  const chromium = await loadChromium();
+  const context = await launchCtx(chromium, profileDir, {
     headless,
     slowMo: args.slowMoMs,
     viewport: { width: 1440, height: 960 }
@@ -158,7 +169,7 @@ async function launchPersistentContext(args, { headlessDefault, includeManualPro
   });
 
   if (includeManualPrompt) {
-    await promptForManualLogin(target, profileDir);
+    await promptLogin(target, profileDir);
   }
 
   const title = await page.title();
@@ -178,7 +189,7 @@ async function launchPersistentContext(args, { headlessDefault, includeManualPro
  * }} result
  * @returns {void}
  */
-function printResult(prefix, result) {
+export function printResult(prefix, result, log = console.log) {
   const metadata = {
     provider: result.target.key,
     label: result.target.label,
@@ -190,7 +201,7 @@ function printResult(prefix, result) {
   };
 
   // skipcq: JS-0002 - this Node CLI intentionally emits structured JSON for automation.
-  console.log(`${prefix}: ${JSON.stringify(metadata, null, 2)}`);
+  log(`${prefix}: ${JSON.stringify(metadata, null, 2)}`);
 }
 
 /**
@@ -198,7 +209,7 @@ function printResult(prefix, result) {
  * @param {{stateRoot: string, profileDir: string}} args
  * @returns {void}
  */
-function listProviders(args) {
+export function listProviders(args, log = console.log) {
   const rows = PROVIDER_KEYS.map((key) => {
     const target = resolveProviderTarget(key, {});
     return {
@@ -210,7 +221,7 @@ function listProviders(args) {
   });
 
   // skipcq: JS-0002 - this Node CLI intentionally emits structured JSON for automation.
-  console.log(
+  log(
     JSON.stringify(
       {
         providers: rows,
@@ -229,21 +240,21 @@ function listProviders(args) {
  * @param {import('playwright').BrowserContext} context
  * @returns {Promise<void>}
  */
-function waitForKeepOpenExit(context) {
+export function waitForKeepOpenExit(context, processObj = process) {
   return new Promise((resolve) => {
     /**
      * Detach signal handlers and resolve the keep-open wait.
      * @returns {void}
      */
     function finish() {
-      process.off('SIGINT', finish);
-      process.off('SIGTERM', finish);
+      processObj.off('SIGINT', finish);
+      processObj.off('SIGTERM', finish);
       context.off('close', finish);
       resolve();
     }
 
-    process.once('SIGINT', finish);
-    process.once('SIGTERM', finish);
+    processObj.once('SIGINT', finish);
+    processObj.once('SIGTERM', finish);
     context.once('close', finish);
   });
 }
@@ -253,15 +264,18 @@ function waitForKeepOpenExit(context) {
  * @param {ReturnType<typeof parseArgs>} args
  * @returns {Promise<void>}
  */
-async function bootstrap(args) {
-  const result = await launchPersistentContext(args, {
+export async function bootstrap(args, deps = {}) {
+  const launchCtx = deps.launchPersistentContext ?? launchPersistentContext;
+  const printRes = deps.printResult ?? printResult;
+  const waitExit = deps.waitForKeepOpenExit ?? waitForKeepOpenExit;
+  const result = await launchCtx(args, {
     headlessDefault: false,
     includeManualPrompt: true
   });
   try {
-    printResult('bootstrap_complete', result);
+    printRes('bootstrap_complete', result);
     if (args.keepOpen) {
-      await waitForKeepOpenExit(result.context);
+      await waitExit(result.context);
     }
   } finally {
     if (!args.keepOpen) {
@@ -276,15 +290,18 @@ async function bootstrap(args) {
  * @param {{inspectOnly: boolean}} options
  * @returns {Promise<void>}
  */
-async function openOrInspect(args, { inspectOnly }) {
-  const result = await launchPersistentContext(args, {
+export async function openOrInspect(args, { inspectOnly }, deps = {}) {
+  const launchCtx = deps.launchPersistentContext ?? launchPersistentContext;
+  const printRes = deps.printResult ?? printResult;
+  const waitExit = deps.waitForKeepOpenExit ?? waitForKeepOpenExit;
+  const result = await launchCtx(args, {
     headlessDefault: true,
     includeManualPrompt: false
   });
   try {
-    printResult(inspectOnly ? 'inspect_complete' : 'open_complete', result);
+    printRes(inspectOnly ? 'inspect_complete' : 'open_complete', result);
     if (args.keepOpen) {
-      await waitForKeepOpenExit(result.context);
+      await waitExit(result.context);
     }
   } finally {
     if (!args.keepOpen) {
@@ -335,9 +352,11 @@ export async function runCommand(args, hooks = {}) {
  * Parse CLI arguments and run the requested provider command.
  * @returns {Promise<void>}
  */
-async function main() {
-  const args = parseArgs(process.argv.slice(2));
-  await runCommand(args);
+export async function main(argv = process.argv.slice(2), deps = {}) {
+  const parse = deps.parseArgs ?? parseArgs;
+  const run = deps.runCommand ?? runCommand;
+  const args = parse(argv);
+  await run(args);
 }
 
 /**
@@ -345,16 +364,34 @@ async function main() {
  * @param {unknown} error
  * @returns {void}
  */
-function reportCliError(error) {
+export function reportCliError(error, errLog = console.error, processObj = process) {
   // skipcq: JS-0002 - this Node CLI writes failures to stderr for callers and CI logs.
-  console.error(error instanceof Error ? error.stack ?? error.message : error);
-  process.exitCode = 1;
+  errLog(error instanceof Error ? error.stack ?? error.message : error);
+  processObj.exitCode = 1;
 }
 
-if (isCliEntrypoint(import.meta.url)) {
-  try {
-    await main();
-  } catch (error) {
-    reportCliError(error);
+/**
+ * Entry-point guard extracted so tests can drive both branches without
+ * spawning a child process. ``runCliIfEntrypoint`` is no-op when the
+ * module is imported by tests; runs ``main()`` and forwards any throw
+ * through ``reportCliError`` when invoked as the CLI script.
+ * @param {string} importMetaUrl - the calling module's ``import.meta.url``.
+ * @param {object} [deps]
+ * @returns {Promise<boolean>} ``true`` if the CLI ran, ``false`` otherwise.
+ */
+export async function runCliIfEntrypoint(importMetaUrl, deps = {}) {
+  const isEntrypoint = deps.isCliEntrypoint ?? isCliEntrypoint;
+  const runMain = deps.main ?? main;
+  const reportErr = deps.reportCliError ?? reportCliError;
+  if (!isEntrypoint(importMetaUrl)) {
+    return false;
   }
+  try {
+    await runMain();
+  } catch (error) {
+    reportErr(error);
+  }
+  return true;
 }
+
+await runCliIfEntrypoint(import.meta.url);

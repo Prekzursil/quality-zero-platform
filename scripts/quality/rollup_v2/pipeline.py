@@ -8,7 +8,7 @@ from __future__ import absolute_import
 from collections import defaultdict
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 from scripts.quality.rollup_v2 import patches as patch_dispatcher
 from scripts.quality.rollup_v2.dedup import assign_stable_ids, dedup
@@ -181,6 +181,49 @@ def _finding_to_dict(f: Finding) -> Dict[str, Any]:
     }
 
 
+def _normalize_all_artifacts(
+    artifacts: Dict[str, Any],
+    repo_root: Path,
+) -> Tuple[List[Finding], List[Dict[str, str]], List[Dict[str, str]]]:
+    """Run every registered normalizer over its matching artifact.
+
+    Returns ``(findings, normalizer_errors, security_drops)``.
+    """
+    all_findings: List[Finding] = []
+    all_errors: List[Dict[str, str]] = []
+    all_drops: List[Dict[str, str]] = []
+    for key, artifact in artifacts.items():
+        normalizer = NORMALIZER_REGISTRY.get(key)
+        if normalizer is None:
+            continue
+        result: NormalizerResult = normalizer.run(artifact=artifact, repo_root=repo_root)
+        all_findings.extend(result.findings)
+        all_errors.extend(result.normalizer_errors)
+        all_drops.extend(result.security_drops)
+    return all_findings, all_errors, all_drops
+
+
+def _build_canonical_payload(
+    final_findings: List[Finding],
+    all_errors: List[Dict[str, str]],
+    all_drops: List[Dict[str, str]],
+) -> Dict[str, Any]:
+    """Assemble the rollup canonical payload (provider_summaries + meta)."""
+    provider_summaries = _build_provider_summaries(final_findings)
+    configured_providers = {s["provider"] for s in provider_summaries}
+    for placeholder in _build_not_configured_summaries():
+        if placeholder["provider"] not in configured_providers:
+            provider_summaries.append(placeholder)
+    return {
+        "schema_version": "qzp-rollup/1",
+        "total_findings": len(final_findings),
+        "findings": final_findings,
+        "provider_summaries": provider_summaries,
+        "normalizer_errors": all_errors,
+        "security_drops": all_drops,
+    }
+
+
 def run_pipeline(
     artifacts: Dict[str, Any],
     repo_root: Path,
@@ -200,57 +243,16 @@ def run_pipeline(
     6. Build canonical payload
     7. Render markdown
     """
-    all_findings: List[Finding] = []
-    all_errors: List[Dict[str, str]] = []
-    all_drops: List[Dict[str, str]] = []
-
-    # Step 1-2: Normalize
-    for key, artifact in artifacts.items():
-        normalizer = NORMALIZER_REGISTRY.get(key)
-        if normalizer is None:
-            continue
-        result: NormalizerResult = normalizer.run(artifact=artifact, repo_root=repo_root)
-        all_findings.extend(result.findings)
-        all_errors.extend(result.normalizer_errors)
-        all_drops.extend(result.security_drops)
-
-    # Step 3: Dedup + merge + stable IDs
-    deduped = dedup(all_findings)
-    deduped = assign_stable_ids(deduped)
-
-    # Step 4: Patch dispatch
+    all_findings, all_errors, all_drops = _normalize_all_artifacts(artifacts, repo_root)
+    deduped = assign_stable_ids(dedup(all_findings))
     patched = _apply_patches(deduped, repo_root)
-
-    # Step 5: Derive autofixable
     final_findings = _derive_autofixable(patched)
-
-    # Step 6: Build canonical payload
-    provider_summaries = _build_provider_summaries(final_findings)
-
-    # Add not-configured placeholders for reserved lanes without artifacts
-    configured_providers = {s["provider"] for s in provider_summaries}
-    for placeholder in _build_not_configured_summaries():
-        if placeholder["provider"] not in configured_providers:
-            provider_summaries.append(placeholder)
-
-    canonical_payload: Dict[str, Any] = {
-        "schema_version": "qzp-rollup/1",
-        "total_findings": len(final_findings),
-        "findings": final_findings,
-        "provider_summaries": provider_summaries,
-        "normalizer_errors": all_errors,
-        "security_drops": all_drops,
-    }
-
-    # Step 7: Render markdown
+    canonical_payload = _build_canonical_payload(final_findings, all_errors, all_drops)
     markdown = render_markdown(canonical_payload)
-
-    # Build JSON-serializable version of canonical payload
     json_payload = {
         **canonical_payload,
         "findings": [_finding_to_dict(f) for f in final_findings],
     }
-
     return PipelineResult(
         findings=final_findings,
         normalizer_errors=all_errors,

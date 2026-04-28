@@ -24,7 +24,7 @@ def _build_def_line_replacement(target_line: str, match: re.Match) -> str:
     param_name = match.group(2)
     trailing = match.group(4)
     new_def_line = f"{prefix}{param_name}=None{trailing}{target_line[match.end():]}"
-    if not new_def_line.endswith("\n"):  # pragma: no cover -- source lines always end with newline from splitlines(keepends=True)
+    if not new_def_line.endswith("\n"):  # pragma: no cover -- splitlines(keepends=True) always retains \n
         new_def_line += "\n"
     return new_def_line
 
@@ -32,7 +32,10 @@ def _build_def_line_replacement(target_line: str, match: re.Match) -> str:
 def _find_body_start(lines: List[str], target_index: int) -> int:
     """Skip blank lines after the ``def`` to find where the body begins."""
     body_start = target_index + 1
-    while body_start < len(lines) and lines[body_start].strip() == "":  # pragma: no cover -- blank lines between def and body are rare
+    while (  # pragma: no cover -- blank lines between def and body are rare
+        body_start < len(lines)
+        and lines[body_start].strip() == ""
+    ):
         body_start += 1
     return body_start
 

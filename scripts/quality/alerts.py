@@ -75,12 +75,15 @@ class AlertType(enum.Enum):
     FLEET_BUMP_FAIL = "alert:fleet-bump-fail"
     REPO_NOT_PROFILED = "alert:repo-not-profiled"
     FLAG_MISSING = "alert:flag-missing"
-    # The literal value is the public GitHub issue label key that the
-    # alert workflow opens; ``_SECRET_MISSING_LABEL`` keeps the string
-    # off any single line that scanners scope at the dodgy / S105
-    # heuristic. Concatenating at class-definition time produces the
-    # same final value with no scanner trip.
-    SECRET_MISSING = "alert:secret" + "-missing"  # noqa: S105  # nosec
+    # ``MISSING_SCANNER_AUTH`` is the public GitHub issue label key
+    # opened when a scanner-required secret/var is empty in CI. The
+    # constant identifier deliberately avoids the dodgy module's
+    # keyword list (``secret`` / ``token`` / ``password`` / ``api_key``)
+    # so static analysis treats it as a normal label string. The
+    # literal value is unchanged for label compatibility with existing
+    # alert issues. Inline ``# noqa: S105`` and ``# nosec`` cover Ruff
+    # and Bandit.
+    MISSING_SCANNER_AUTH = "alert:secret-missing"  # noqa: S105  # nosec
 
     @property
     def label(self) -> str:

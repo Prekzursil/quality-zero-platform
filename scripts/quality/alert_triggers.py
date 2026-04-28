@@ -262,7 +262,7 @@ def detect_secret_missing(
             f"the secret lands, the corresponding quality lane will fail."
         )
         triggers.append(AlertTrigger(
-            alert_type=alerts.AlertType.SECRET_MISSING,
+            alert_type=alerts.AlertType.MISSING_SCANNER_AUTH,
             subject=subject, body=body,
         ))
     return triggers

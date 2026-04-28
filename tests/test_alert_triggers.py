@@ -349,7 +349,7 @@ class DetectSecretMissingTests(unittest.TestCase):
             missing_secrets=["CODACY_API_TOKEN"],
         )
         self.assertEqual(len(triggers), 1)
-        self.assertEqual(triggers[0].alert_type, alerts.AlertType.SECRET_MISSING)
+        self.assertEqual(triggers[0].alert_type, alerts.AlertType.MISSING_SCANNER_AUTH)
         self.assertEqual(triggers[0].subject, "org/repo:CODACY_API_TOKEN")
 
     def test_multiple_missing_secrets_each_open_separate_alert(self) -> None:

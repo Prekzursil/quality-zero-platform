@@ -405,11 +405,17 @@ Object.assign(_internals, {
 
 export { _internals };
 
-// Top-level await as the bootstrap entrypoint. The resolved value is
-// intentionally unused — runCliIfEntrypoint exits via process.exit when
-// invoked as a CLI and resolves to ``undefined`` when imported as a
-// module. The underscore prefix tells eslint-no-unused-vars the binding
-// is intentional; assigning makes the statement an initialised binding
-// rather than a bare expression so Codacy's ESLint "expr"
-// (no-unused-expressions) doesn't fire on the await.
-const _bootstrapResult = await runCliIfEntrypoint(import.meta.url);
+// Top-level await as the bootstrap entrypoint. ``runCliIfEntrypoint``
+// resolves to ``true`` when invoked as a CLI (after ``main()`` settles
+// — its internal try/catch routes failures to ``reportCliError``) and
+// ``false`` when the file is imported as a module. We default
+// ``process.exitCode`` to ``0`` only on the CLI branch so Node-as-CLI
+// exits cleanly when no error handler set a non-zero code. Module
+// imports leave the host's exitCode alone. This both consumes the
+// awaited value (no eslint ``no-unused-vars`` smell) and turns the
+// statement into an assignment (no eslint ``no-unused-expressions``
+// smell).
+const ranAsCli = await runCliIfEntrypoint(import.meta.url);
+if (ranAsCli) {
+  process.exitCode ??= 0;
+}

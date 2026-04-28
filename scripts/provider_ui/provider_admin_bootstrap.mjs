@@ -405,5 +405,14 @@ Object.assign(_internals, {
 
 export { _internals };
 
-// eslint-disable-next-line no-unused-expressions -- top-level await as bootstrap entrypoint; the awaited promise's resolved value is intentionally unused
+// Bootstrap entrypoint: kicks off main() when invoked as a CLI.
+// ``runCliIfEntrypoint``'s internal try/catch routes failures to
+// ``reportCliError``, so the resolved boolean (true=ran-as-CLI,
+// false=imported-as-module) is intentionally unused here. Top-level
+// await is the idiom Sonar javascript:S7785 prefers; the
+// ``eslint-disable-line`` directive silences Codacy's
+// ``no-unused-expressions`` on the bare-await form (the two rules
+// disagree on the canonical shape, so we follow Sonar and silence
+// the conflicting Codacy ESLint rule per-line).
+// eslint-disable-next-line
 await runCliIfEntrypoint(import.meta.url);

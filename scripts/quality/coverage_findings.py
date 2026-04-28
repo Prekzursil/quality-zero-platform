@@ -49,10 +49,8 @@ def _coverage_threshold_findings(
     for item in stats_list:
         if item.percent < min_percent:
             findings.append(
-                
-                    f"{item.name} coverage below {min_percent:.2f}%: "
-                    f"{item.percent:.2f}% ({item.covered}/{item.total})"
-                
+                f"{item.name} coverage below {min_percent:.2f}%: "
+                f"{item.percent:.2f}% ({item.covered}/{item.total})"
             )
 
     combined_total = sum(item.total for item in stats_list)
@@ -62,10 +60,8 @@ def _coverage_threshold_findings(
     )
     if combined < min_percent:
         findings.append(
-            
-                f"combined coverage below {min_percent:.2f}%: {combined:.2f}% "
-                f"({combined_covered}/{combined_total})"
-            
+            f"combined coverage below {min_percent:.2f}%: {combined:.2f}% "
+            f"({combined_covered}/{combined_total})"
         )
     return findings
 
@@ -88,11 +84,9 @@ def _branch_coverage_findings_for_stats(
     for item in stats:
         if item.branch_percent < branch_min_percent:
             findings.append(
-                
-                    f"{item.name} branch coverage below "
-                    f"{branch_min_percent:.2f}%: {item.branch_percent:.2f}% "
-                    f"({item.branch_covered}/{item.branch_total})"
-                
+                f"{item.name} branch coverage below "
+                f"{branch_min_percent:.2f}%: {item.branch_percent:.2f}% "
+                f"({item.branch_covered}/{item.branch_total})"
             )
     return findings
 
@@ -114,10 +108,8 @@ def _branch_threshold_findings(
     combined_total, combined_covered, combined = _combined_branch_coverage(stats_list)
     if combined_total > 0 and combined < branch_min_percent:
         findings.append(
-            
-                f"combined branch coverage below {branch_min_percent:.2f}%: "
-                f"{combined:.2f}% ({combined_covered}/{combined_total})"
-            
+            f"combined branch coverage below {branch_min_percent:.2f}%: "
+            f"{combined:.2f}% ({combined_covered}/{combined_total})"
         )
     return findings
 
@@ -129,10 +121,10 @@ def _required_source_findings(
     findings: List[str] = []
     if _is_tests_only_report(reported_sources):
         findings.append(
-            
+
                 "coverage inputs only reference tests/ paths; first-party "
                 "sources are missing."
-            
+
         )
     findings.extend(
         f"missing required source path: {missing_source}"

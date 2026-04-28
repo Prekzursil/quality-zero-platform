@@ -95,7 +95,7 @@ def _apply_patches(
             patch_result = patch_dispatcher.dispatch(
                 f, source_file_content=source_content, repo_root=repo_root
             )
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-exception-caught
             # Error boundary: patch generation failure is non-fatal (§A.6)
             patched = replace(
                 f,

@@ -63,20 +63,23 @@ required_contexts:
 enabled_scanners:
   deepsource_visible: true
 coverage:
-  command: 'python3 -m pip install --upgrade pip
-
-    python3 -m pip install -r requirements-dev.txt coverage
-
-    coverage run --branch -m unittest discover -s tests -p ''test_*.py''
-
-    coverage xml -o coverage/platform-coverage.xml
-
-    '
+  command: "python3 -m pip install --upgrade pip\npython3 -m pip install -r requirements-dev.txt\
+    \ coverage\ncoverage run --branch -m unittest discover -s tests -p 'test_*.py'\n\
+    coverage xml -o coverage/platform-coverage.xml\nmkdir -p coverage\n# scripts/provider_ui/*.mjs\
+    \ has its own Node test suite; emit lcov for Sonar\n# (sonar.javascript.lcov.reportPaths)\
+    \ + Codecov 'provider_ui' flag so the\n# 4 .mjs files stop sitting at 0% coverage\
+    \ in the dashboards.\nnode --test --experimental-test-coverage \\\n  --test-reporter=lcov\
+    \ \\\n  --test-reporter-destination=coverage/provider_ui-lcov.info \\\n  scripts/provider_ui/*.test.mjs\
+    \ || true\n"
   inputs:
   - format: xml
     name: platform
     path: coverage/platform-coverage.xml
     flag: platform
+  - format: lcov
+    name: provider_ui
+    path: coverage/provider_ui-lcov.info
+    flag: provider_ui
   require_sources:
   - scripts/
 vendors:

@@ -492,10 +492,10 @@ test('runCommand dispatches inspect to openOrInspect with inspectOnly=true', asy
   assert.deepEqual(calls, [['inspect', true]]);
 });
 
-test('runCommand prints help for unrecognised commands', async () => {
+async function _runCommandHelpScenario(command) {
   const messages = [];
   await runCommand(
-    { command: 'unknown-command-name' },
+    { command },
     {
       listProviders: () => {},
       normalizeProvider: () => {},
@@ -505,23 +505,15 @@ test('runCommand prints help for unrecognised commands', async () => {
       renderHelp: () => 'help text'
     }
   );
-  assert.deepEqual(messages, ['help text']);
+  return messages;
+}
+
+test('runCommand prints help for unrecognised commands', async () => {
+  assert.deepEqual(await _runCommandHelpScenario('unknown-command-name'), ['help text']);
 });
 
 test('runCommand prints help when command is "help" (covers case fall-through)', async () => {
-  const messages = [];
-  await runCommand(
-    { command: 'help' },
-    {
-      listProviders: () => {},
-      normalizeProvider: () => {},
-      bootstrap: () => {},
-      openOrInspect: () => {},
-      log: (m) => messages.push(m),
-      renderHelp: () => 'help text'
-    }
-  );
-  assert.deepEqual(messages, ['help text']);
+  assert.deepEqual(await _runCommandHelpScenario('help'), ['help text']);
 });
 
 // =============================================================================

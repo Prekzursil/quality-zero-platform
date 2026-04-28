@@ -88,24 +88,35 @@ def _combine_output(stdout: str, stderr: str) -> str:
     return stdout_tail or stderr_tail
 
 
+def _extract_path_pattern(line: str) -> str | None:
+    """Pull the ``path = "..."`` value out of one ``[[smells.exclude]]`` line."""
+    match = re.match(r'path\s*=\s*"([^"]+)"', line)
+    return match.group(1) if match else None
+
+
+def _smells_exclude_lines(toml_path: Path) -> Iterable[str]:
+    """Yield stripped non-empty lines from qlty.toml (or empty if missing)."""
+    if not toml_path.is_file():
+        return ()
+    return (raw.strip() for raw in toml_path.read_text(encoding="utf-8").splitlines())
+
+
 def _load_smells_exclude_patterns(repo_dir: Path) -> List[str]:
     """Parse qlty.toml for smells.exclude path patterns."""
-    toml_path = repo_dir / ".qlty" / "qlty.toml"
-    if not toml_path.is_file():
-        return []
     patterns: List[str] = []
     in_smells_exclude = False
-    for line in toml_path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if stripped == "[[smells.exclude]]":
+    for line in _smells_exclude_lines(repo_dir / ".qlty" / "qlty.toml"):
+        if line == "[[smells.exclude]]":
             in_smells_exclude = True
             continue
-        if in_smells_exclude and stripped.startswith("path"):
-            match = re.match(r'path\s*=\s*"([^"]+)"', stripped)
-            if match:
-                patterns.append(match.group(1))
+        if not in_smells_exclude:
+            continue
+        if line.startswith("path"):
+            value = _extract_path_pattern(line)
+            if value is not None:
+                patterns.append(value)
             in_smells_exclude = False
-        elif stripped.startswith("[") and in_smells_exclude:
+        elif line.startswith("["):
             in_smells_exclude = False
     return patterns
 
@@ -209,6 +220,22 @@ def _run_qlty_smells(repo_dir: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _smells_lane_has_findings(
+    name: str,
+    output_tail: str,
+    smells_exclude_patterns: List[str] | None,
+) -> bool:
+    """Return whether the smells lane reports actionable findings."""
+    if name != "smells":
+        return False
+    target = (
+        _filter_smells_output(output_tail, smells_exclude_patterns)
+        if smells_exclude_patterns
+        else output_tail
+    )
+    return _smells_output_indicates_findings(target)
+
+
 def _build_check_entry(
     name: str,
     argv: List[str],
@@ -217,21 +244,13 @@ def _build_check_entry(
 ) -> Dict[str, Any]:
     """Handle build check entry."""
     output_tail = _combine_output(result.stdout or "", result.stderr or "")
-    status = "pass"
-    if name == "smells" and smells_exclude_patterns:
-        filtered = _filter_smells_output(output_tail, smells_exclude_patterns)
-        has_findings = _smells_output_indicates_findings(filtered)
-    elif name == "smells":
-        has_findings = _smells_output_indicates_findings(output_tail)
-    else:
-        has_findings = False
+    has_findings = _smells_lane_has_findings(name, output_tail, smells_exclude_patterns)
     # Combine the two fail conditions into a single test so Sonar's
     # python:S1871 doesn't flag the duplicate ``status = "fail"`` branches
     # — both routes ultimately mean "this lane failed".
     failed_check = int(result.returncode) != 0 and name != "smells"
     failed_smells = name == "smells" and has_findings
-    if failed_check or failed_smells:
-        status = "fail"
+    status = "fail" if (failed_check or failed_smells) else "pass"
     return {
         "name": name,
         "status": status,

@@ -2,7 +2,7 @@
 from __future__ import absolute_import
 
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Dict, Iterable, Tuple
 
 from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer, FindingDraft
 from scripts.quality.rollup_v2.schema.finding import (
@@ -24,6 +24,14 @@ _SECURITY_CATEGORY_HINTS = frozenset({
 })
 
 
+def _resolve_location(issue: Dict[str, Any]) -> Tuple[str, int]:
+    """Pull ``(file_path, line_number)`` out of a DeepSource issue payload."""
+    location = issue.get("location") or {}
+    position = location.get("position") or {}
+    begin = position.get("begin") or {}
+    return str(location.get("path", "")), int(begin.get("line") or 1)
+
+
 class DeepSourceNormalizer(BaseNormalizer):
     provider = "DeepSource"
 
@@ -37,11 +45,7 @@ class DeepSourceNormalizer(BaseNormalizer):
                 if category in _SECURITY_CATEGORY_HINTS
                 else CATEGORY_GROUP_QUALITY
             )
-            location = issue.get("location") or {}
-            position = location.get("position") or {}
-            begin = position.get("begin") or {}
-            file_path = str(location.get("path", ""))
-            line = int(begin.get("line") or 1)
+            file_path, line = _resolve_location(issue)
             title = str(issue.get("title", ""))
             yield self._build_finding(FindingDraft(
                 finding_id=f"deepsource-{index:04d}",

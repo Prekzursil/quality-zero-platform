@@ -417,6 +417,10 @@ export { _internals };
 // async-function bodies, only on ``.then()`` chains at the top
 // scope. Resolves the inline-disable-comment asymmetry between
 // Codacy's PR-scope and main-scope ESLint analyzers.
-(async () => {  // NOSONAR javascript:S7785 — IIFE form needed for Codacy ESLint expr (Sonar/Codacy linter conflict, see reference_sonar_codacy_top_level_await_conflict)
+// IIFE form needed for Codacy ESLint expr (top-level await fires
+// Codacy's no-unused-expressions). NOSONAR silences Sonar's
+// javascript:S7785 ("prefer top-level await") which conflicts with
+// the IIFE pattern. See reference_sonar_codacy_top_level_await_conflict.
+(async () => { // NOSONAR
   await runCliIfEntrypoint(import.meta.url);
 })();

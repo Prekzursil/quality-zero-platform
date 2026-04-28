@@ -320,7 +320,14 @@ jobs:
             run(cmd, cwd=repo_dir)
           elif lane == "semgrep":
             run([sys.executable, "-m", "pip", "install", "semgrep"], cwd=repo_dir)
-            run(["semgrep", "ci"], cwd=repo_dir)
+            # ``semgrep ci`` exits 0 even when blocking-rule findings were
+            # uploaded to Semgrep Cloud Platform, so the gate would pass
+            # green while findings sit on the dashboard. ``--error`` makes
+            # the CLI exit non-zero on any finding (code OR supply-chain),
+            # forcing the gate to red-block per the strict-zero contract.
+            # ``--strict`` additionally fails when rule loading reports
+            # warnings (catches silent-skip scenarios on stale rule sets).
+            run(["semgrep", "ci", "--error", "--strict"], cwd=repo_dir)
           elif lane == "sentry":
             sentry = profile["vendors"]["sentry"]
             cmd = [

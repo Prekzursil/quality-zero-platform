@@ -116,7 +116,7 @@ class ParseSarifTests(unittest.TestCase):
 
     def test_empty_results(self):
         sarif = _minimal_sarif(results=[])
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(findings, [])
 
     def test_parses_single_result(self):
@@ -129,7 +129,7 @@ class ParseSarifTests(unittest.TestCase):
                 start_column=10,
             ),
         ])
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(len(findings), 1)
         f = findings[0]
         self.assertEqual(f.file, "src/app.py")
@@ -153,7 +153,7 @@ class ParseSarifTests(unittest.TestCase):
                 "locations": [{"physicalLocation": {"artifactLocation": {"uri": "src/app.py"}, "region": {"startLine": 2}}}],
             },
         ])
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(len(findings), 2)
         self.assertEqual(findings[0].severity, "medium")
         self.assertEqual(findings[1].severity, "low")
@@ -168,14 +168,14 @@ class ParseSarifTests(unittest.TestCase):
                     "locations": [{"physicalLocation": {"artifactLocation": {"uri": "src/app.py"}, "region": {"startLine": 1}}}],
                 }
             ])
-            findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+            findings = parse_sarif(sarif, "TestProvider", self.normalizer)
             self.assertEqual(findings[0].severity, expected_sev, f"level={level}")
 
     def test_missing_locations_defaults(self):
         sarif = _minimal_sarif(results=[
             {"ruleId": "no-loc", "level": "warning", "message": {"text": "no location"}}
         ])
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(len(findings), 1)
         self.assertEqual(findings[0].file, "unknown")
         self.assertEqual(findings[0].line, 1)
@@ -190,7 +190,7 @@ class ParseSarifTests(unittest.TestCase):
                 "properties": {"cwe": "CWE-79"},
             }
         ])
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(findings[0].cwe, "CWE-79")
 
     def test_cwe_extraction_from_tags(self):
@@ -203,7 +203,7 @@ class ParseSarifTests(unittest.TestCase):
                 "properties": {"tags": ["CWE-89", "security"]},
             }
         ])
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(findings[0].cwe, "CWE-89")
 
     def test_security_tags_set_category_group(self):
@@ -216,7 +216,7 @@ class ParseSarifTests(unittest.TestCase):
                 "properties": {"tags": ["security"]},
             }
         ])
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(findings[0].category_group, "security")
 
     def test_context_snippet_extraction(self):
@@ -239,7 +239,7 @@ class ParseSarifTests(unittest.TestCase):
                 ],
             }
         ])
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(findings[0].context_snippet, snippet_text)
 
     def test_rule_url_from_driver_rules(self):
@@ -265,17 +265,17 @@ class ParseSarifTests(unittest.TestCase):
                 ],
             }],
         }
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(len(findings), 1)
         self.assertEqual(findings[0].corroborators[0].rule_url, "https://example.com/rule-with-help")
 
     def test_malformed_runs_returns_empty(self):
-        findings = parse_sarif({"runs": "not-a-list"}, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif({"runs": "not-a-list"}, "TestProvider", self.normalizer)
         self.assertEqual(findings, [])
 
     def test_malformed_results_in_run(self):
         sarif = {"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "T", "rules": []}}, "results": "not-list"}]}
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(findings, [])
 
     def test_end_line_extraction(self):
@@ -284,7 +284,7 @@ class ParseSarifTests(unittest.TestCase):
                 rule_id="end-line-test", start_line=5, end_line=10,
             ),
         ])
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(findings[0].end_line, 10)
 
     def test_finding_id_format(self):
@@ -292,7 +292,7 @@ class ParseSarifTests(unittest.TestCase):
             {"ruleId": "r1", "level": "warning", "message": {"text": "a"}, "locations": [{"physicalLocation": {"artifactLocation": {"uri": "src/app.py"}, "region": {"startLine": 1}}}]},
             {"ruleId": "r2", "level": "warning", "message": {"text": "b"}, "locations": [{"physicalLocation": {"artifactLocation": {"uri": "src/app.py"}, "region": {"startLine": 2}}}]},
         ])
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(findings[0].finding_id, "testprovider-0000")
         self.assertEqual(findings[1].finding_id, "testprovider-0001")
 
@@ -316,7 +316,7 @@ class SarifDefensiveBranchTests(unittest.TestCase):
              "locations": [{"physicalLocation": {"artifactLocation": {"uri": "src/app.py"}, "region": {"startLine": 1}}}],
              "properties": "not-a-dict"}
         ])
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(len(findings), 1)
 
     def test_tags_not_list_returns_empty_tags(self):
@@ -325,7 +325,7 @@ class SarifDefensiveBranchTests(unittest.TestCase):
              "locations": [{"physicalLocation": {"artifactLocation": {"uri": "src/app.py"}, "region": {"startLine": 1}}}],
              "properties": {"tags": "not-a-list"}}
         ])
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(len(findings), 1)
 
     def test_cwe_not_in_props_falls_to_tags(self):
@@ -334,7 +334,7 @@ class SarifDefensiveBranchTests(unittest.TestCase):
              "locations": [{"physicalLocation": {"artifactLocation": {"uri": "src/app.py"}, "region": {"startLine": 1}}}],
              "properties": {"cwe": ""}}
         ])
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertIsNone(findings[0].cwe)
 
     def test_location_non_dict_returns_defaults(self):
@@ -342,7 +342,7 @@ class SarifDefensiveBranchTests(unittest.TestCase):
             {"ruleId": "r", "level": "warning", "message": {"text": "m"},
              "locations": ["not-a-dict"]}
         ])
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(findings[0].file, "unknown")
 
     def test_region_not_dict_falls_back(self):
@@ -350,7 +350,7 @@ class SarifDefensiveBranchTests(unittest.TestCase):
             {"ruleId": "r", "level": "warning", "message": {"text": "m"},
              "locations": [{"physicalLocation": {"artifactLocation": {"uri": "src/app.py"}, "region": "not-dict"}}]}
         ])
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(findings[0].line, 1)
 
     def test_context_snippet_non_dict_loc(self):
@@ -358,7 +358,7 @@ class SarifDefensiveBranchTests(unittest.TestCase):
             {"ruleId": "r", "level": "warning", "message": {"text": "m"},
              "locations": [42]}
         ])
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(findings[0].context_snippet, "")
 
     def test_context_snippet_non_dict_phys(self):
@@ -366,7 +366,7 @@ class SarifDefensiveBranchTests(unittest.TestCase):
             {"ruleId": "r", "level": "warning", "message": {"text": "m"},
              "locations": [{"physicalLocation": "not-dict"}]}
         ])
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(findings[0].context_snippet, "")
 
     def test_context_snippet_non_dict_region(self):
@@ -374,7 +374,7 @@ class SarifDefensiveBranchTests(unittest.TestCase):
             {"ruleId": "r", "level": "warning", "message": {"text": "m"},
              "locations": [{"physicalLocation": {"artifactLocation": {"uri": "src/app.py"}, "region": 42}}]}
         ])
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(findings[0].context_snippet, "")
 
     def test_context_snippet_string_snippet(self):
@@ -382,12 +382,12 @@ class SarifDefensiveBranchTests(unittest.TestCase):
             {"ruleId": "r", "level": "warning", "message": {"text": "m"},
              "locations": [{"physicalLocation": {"artifactLocation": {"uri": "src/app.py"}, "region": {"startLine": 1, "snippet": "string-not-dict"}}}]}
         ])
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(findings[0].context_snippet, "")
 
     def test_run_not_dict_skipped(self):
         sarif = {"runs": ["not-a-dict", {"tool": {"driver": {"name": "T", "rules": []}}, "results": []}]}
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(findings, [])
 
     def test_tool_not_dict_no_rules(self):
@@ -395,7 +395,7 @@ class SarifDefensiveBranchTests(unittest.TestCase):
             {"ruleId": "r", "level": "warning", "message": {"text": "m"},
              "locations": [{"physicalLocation": {"artifactLocation": {"uri": "src/app.py"}, "region": {"startLine": 1}}}]}
         ]}]}
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(len(findings), 1)
 
     def test_driver_not_dict_no_rules(self):
@@ -403,7 +403,7 @@ class SarifDefensiveBranchTests(unittest.TestCase):
             {"ruleId": "r", "level": "warning", "message": {"text": "m"},
              "locations": [{"physicalLocation": {"artifactLocation": {"uri": "src/app.py"}, "region": {"startLine": 1}}}]}
         ]}]}
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(len(findings), 1)
 
     def test_rules_not_list(self):
@@ -411,7 +411,7 @@ class SarifDefensiveBranchTests(unittest.TestCase):
             {"ruleId": "r", "level": "warning", "message": {"text": "m"},
              "locations": [{"physicalLocation": {"artifactLocation": {"uri": "src/app.py"}, "region": {"startLine": 1}}}]}
         ]}]}
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(len(findings), 1)
 
     def test_rule_not_dict_skipped(self):
@@ -419,7 +419,7 @@ class SarifDefensiveBranchTests(unittest.TestCase):
             {"ruleId": "r", "level": "warning", "message": {"text": "m"},
              "locations": [{"physicalLocation": {"artifactLocation": {"uri": "src/app.py"}, "region": {"startLine": 1}}}]}
         ]}]}
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(len(findings), 1)
 
     def test_rule_empty_id_skipped(self):
@@ -427,12 +427,12 @@ class SarifDefensiveBranchTests(unittest.TestCase):
             {"ruleId": "r", "level": "warning", "message": {"text": "m"},
              "locations": [{"physicalLocation": {"artifactLocation": {"uri": "src/app.py"}, "region": {"startLine": 1}}}]}
         ]}]}
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(len(findings), 1)
 
     def test_result_not_dict_skipped(self):
         sarif = _minimal_sarif(results=["not-a-dict"])
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(findings, [])
 
     def test_message_as_string(self):
@@ -440,7 +440,7 @@ class SarifDefensiveBranchTests(unittest.TestCase):
             {"ruleId": "r", "level": "warning", "message": "plain string",
              "locations": [{"physicalLocation": {"artifactLocation": {"uri": "src/app.py"}, "region": {"startLine": 1}}}]}
         ])
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(findings[0].primary_message, "plain string")
 
     def test_message_as_int_falls_through(self):
@@ -448,7 +448,7 @@ class SarifDefensiveBranchTests(unittest.TestCase):
             {"ruleId": "r", "level": "warning", "message": 42,
              "locations": [{"physicalLocation": {"artifactLocation": {"uri": "src/app.py"}, "region": {"startLine": 1}}}]}
         ])
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertEqual(findings[0].primary_message, "")
 
     def test_help_uri_not_string_ignored(self):
@@ -456,7 +456,7 @@ class SarifDefensiveBranchTests(unittest.TestCase):
             {"ruleId": "r", "level": "warning", "message": {"text": "m"},
              "locations": [{"physicalLocation": {"artifactLocation": {"uri": "src/app.py"}, "region": {"startLine": 1}}}]}
         ]}]}
-        findings = parse_sarif(sarif, "TestProvider", self.root, self.normalizer)
+        findings = parse_sarif(sarif, "TestProvider", self.normalizer)
         self.assertIsNone(findings[0].corroborators[0].rule_url)
 
 

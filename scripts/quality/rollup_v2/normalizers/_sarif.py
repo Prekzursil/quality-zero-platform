@@ -214,10 +214,15 @@ def _iter_sarif_results(runs: List[Any]) -> Iterable[Tuple[Dict[str, Any], Dict[
 def parse_sarif(
     data: Dict[str, Any],
     provider: str,
-    repo_root: Path,
     normalizer: BaseNormalizer,
 ) -> List[Finding]:
-    """Parse a SARIF 2.1.0 payload and return canonical Finding objects."""
+    """Parse a SARIF 2.1.0 payload and return canonical Finding objects.
+
+    SARIF artifact paths are taken from ``artifactLocation.uri`` as-is —
+    the rollup pipeline's path-safety check (``_base.run`` →
+    ``validate_finding_file``) handles repo-root validation downstream,
+    so this parser does not need ``repo_root`` itself.
+    """
     runs = data.get("runs", [])
     if not isinstance(runs, list):
         return []
@@ -251,4 +256,5 @@ class SarifBackedNormalizer(BaseNormalizer):
             data = artifact
         else:
             return []
-        return parse_sarif(data, self.provider, repo_root, self)
+        del repo_root  # forwarded by BaseNormalizer.run() but unused here
+        return parse_sarif(data, self.provider, self)

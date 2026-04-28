@@ -267,11 +267,8 @@ def _find_artifact_by_name(
     return next((item for item in artifacts if item.get("name") == name), None)
 
 
-def _load_baseline_coverage_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
-    """Handle load baseline coverage payload."""
-    token = _github_api_token()
-    repo_slug = str(profile["slug"])
-    default_branch = str(profile["default_branch"])
+def _resolve_baseline_run_id(repo_slug: str, default_branch: str, token: str) -> int:
+    """Find the latest successful Quality Zero Platform run on the default branch."""
     workflow_runs_url = (
         f"https://api.github.com/repos/{repo_slug}/actions/runs"
         f"?branch={default_branch}&status=completed&per_page=50"
@@ -286,6 +283,16 @@ def _load_baseline_coverage_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
             "Unable to find a successful Quality Zero Platform run on the "
             "default branch."
         )
+    return run_id
+
+
+def _load_baseline_coverage_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
+    """Handle load baseline coverage payload."""
+    token = _github_api_token()
+    repo_slug = str(profile["slug"])
+    run_id = _resolve_baseline_run_id(
+        repo_slug, str(profile["default_branch"]), token
+    )
     artifacts_url = (
         f"https://api.github.com/repos/{repo_slug}/actions/runs/{run_id}/artifacts"
         "?per_page=100"

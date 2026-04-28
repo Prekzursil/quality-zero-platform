@@ -405,4 +405,5 @@ Object.assign(_internals, {
 
 export { _internals };
 
+// eslint-disable-next-line no-unused-expressions -- top-level await as bootstrap entrypoint; the awaited promise's resolved value is intentionally unused
 await runCliIfEntrypoint(import.meta.url);

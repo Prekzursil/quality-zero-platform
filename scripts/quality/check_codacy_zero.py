@@ -99,7 +99,7 @@ def _request_json(
 def _direct_total_open(payload: Mapping[str, Any]) -> int | None:
     """Read the total issue count from one flat payload."""
     for key, value in payload.items():
-        if key in TOTAL_KEYS and isinstance(value, (int, float)):
+        if key in TOTAL_KEYS and isinstance(value, int | float):
             return int(value)
     return None
 

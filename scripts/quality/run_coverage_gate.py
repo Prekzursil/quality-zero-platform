@@ -283,10 +283,10 @@ def _load_baseline_coverage_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
     run_id = _find_successful_run_id(workflow_runs, "Quality Zero Platform")
     if run_id is None:
         raise RuntimeError(
-            (
+            
                 "Unable to find a successful Quality Zero Platform run on the "
                 "default branch."
-            )
+            
         )
     artifacts_url = (
         f"https://api.github.com/repos/{repo_slug}/actions/runs/{run_id}/artifacts"
@@ -341,10 +341,10 @@ def _write_non_regression_report(
     if current_percent < baseline_percent:
         status = "fail"
         findings.append(
-            (
+            
                 "combined coverage regressed from "
                 f"{baseline_percent:.2f}% to {current_percent:.2f}%"
-            )
+            
         )
     payload = {
         "status": status,

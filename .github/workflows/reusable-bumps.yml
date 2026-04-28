@@ -19,6 +19,7 @@ name: Reusable Bumps
 
 permissions: {}
 
+# checkov:skip=CKV_GHA_7:fleet-bump orchestrator; inputs are control-plane params (recipe path, fleet inventory, dry-run flag), not build-output mutators
 on:
   workflow_dispatch:
     inputs:

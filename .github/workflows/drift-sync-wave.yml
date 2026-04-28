@@ -8,6 +8,7 @@ name: Drift Sync Wave
 
 permissions: {}
 
+# checkov:skip=CKV_GHA_7:operator-dispatched fleet sweep; inputs are control-plane params (dry-run flag, slug filter), not build-output mutators
 on:
   workflow_dispatch:
     inputs:

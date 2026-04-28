@@ -19,37 +19,19 @@ from scripts.quality.common import dedupe_strings, utc_timestamp, write_report
 NONE_BULLET = "- None"
 
 
-def _parse_args() -> argparse.Namespace:
-    """Handle parse args."""
-    parser = argparse.ArgumentParser(
-        description="Validate required quality-gate secrets and variables."
-    )
-    parser.add_argument(
-        "--required-secret",
-        action="append",
-        default=[],
-        help="Required secret env var name",
-    )
-    parser.add_argument(
-        "--conditional-secret",
-        action="append",
-        default=[],
-        help="Conditional secret env var name",
-    )
-    parser.add_argument(
-        "--required-var",
-        action="append",
-        default=[],
-        help="Required variable env var name",
-    )
-    parser.add_argument(
-        "--conditional-var",
-        action="append",
-        default=[],
-        help="Conditional variable env var name",
-    )
-    parser.add_argument("--out-json", default="quality-secrets/secrets.json")
-    parser.add_argument("--out-md", default="quality-secrets/secrets.md")
+def _add_collection_args(parser: argparse.ArgumentParser) -> None:
+    """Add the four ``--required-secret`` / ``--conditional-*`` collectors."""
+    for flag, label in (
+        ("--required-secret", "Required secret env var name"),
+        ("--conditional-secret", "Conditional secret env var name"),
+        ("--required-var", "Required variable env var name"),
+        ("--conditional-var", "Conditional variable env var name"),
+    ):
+        parser.add_argument(flag, action="append", default=[], help=label)
+
+
+def _add_alert_args(parser: argparse.ArgumentParser) -> None:
+    """Add the ``--open-alerts`` / ``--dry-run-alerts`` / slug pair."""
     parser.add_argument(
         "--open-alerts",
         action="store_true",
@@ -73,6 +55,17 @@ def _parse_args() -> argparse.Namespace:
         help="Repo the secrets are missing on (subject of the alert). "
         "Defaults to --platform-slug when empty.",
     )
+
+
+def _parse_args() -> argparse.Namespace:
+    """Handle parse args."""
+    parser = argparse.ArgumentParser(
+        description="Validate required quality-gate secrets and variables."
+    )
+    _add_collection_args(parser)
+    parser.add_argument("--out-json", default="quality-secrets/secrets.json")
+    parser.add_argument("--out-md", default="quality-secrets/secrets.md")
+    _add_alert_args(parser)
     return parser.parse_args()
 
 

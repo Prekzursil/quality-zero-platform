@@ -10,10 +10,18 @@ from __future__ import absolute_import
 import argparse
 import json
 import os
+import shutil
 import subprocess  # nosec B404
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List
+
+# Resolve the absolute path to git at import time so the subprocess calls
+# below run a verified executable rather than depending on the runtime PATH
+# (Bandit B607 / Ruff S607). ``shutil.which`` returns ``None`` if ``git`` is
+# not on PATH; in that case fall back to the literal ``"git"`` so the call
+# fails fast with a clear error rather than crashing on a NoneType exec.
+_GIT_EXECUTABLE: str = shutil.which("git") or "git"
 
 
 def parse_args() -> argparse.Namespace:
@@ -65,11 +73,13 @@ def apply_single_patch(diff: str, repo_dir: Path) -> Dict[str, Any]:
 
     try:
         # Dry-run first.
-        # Safe by construction: shell=False (list argv), git is a trusted
-        # tool on PATH, args derived from the validated tmp_path. nosec/noqa
-        # silence Bandit B603/B607 + Ruff S603/S607 on this site.
-        check_result = subprocess.run(  # noqa: S603,S607  # nosec B603,B607
-            ["git", "apply", "--check", str(tmp_path)],
+        # Safe by construction: shell=False (list argv), git resolved to
+        # absolute path at module import via ``shutil.which``, args derived
+        # from the validated tmp_path. ``# nosec`` silences Bandit B603 and
+        # ``# noqa: S603`` silences Ruff S603 — both informational warnings
+        # about every subprocess call regardless of safety posture.
+        check_result = subprocess.run(  # noqa: S603  # nosec
+            [_GIT_EXECUTABLE, "apply", "--check", str(tmp_path)],
             cwd=repo_dir,
             capture_output=True,
             text=True,
@@ -83,8 +93,8 @@ def apply_single_patch(diff: str, repo_dir: Path) -> Dict[str, Any]:
             }
 
         # Apply for real (same safety analysis as the dry-run above).
-        apply_result = subprocess.run(  # noqa: S603,S607  # nosec B603,B607
-            ["git", "apply", str(tmp_path)],
+        apply_result = subprocess.run(  # noqa: S603  # nosec
+            [_GIT_EXECUTABLE, "apply", str(tmp_path)],
             cwd=repo_dir,
             capture_output=True,
             text=True,

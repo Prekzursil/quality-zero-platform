@@ -191,7 +191,7 @@ def _run_qlty_check(repo_dir: Path) -> subprocess.CompletedProcess[str]:
     # Safe-by-construction: a fixed literal executable name, explicit argv,
     # shell=False, and an absolute executable path supplied separately.
     # nosemgrep
-    return subprocess.run(  # nosec B603
+    return subprocess.run(  # noqa: S603  # nosec
         argv,
         executable=executable_path,
         cwd=repo_dir,
@@ -209,7 +209,7 @@ def _run_qlty_smells(repo_dir: Path) -> subprocess.CompletedProcess[str]:
     # Safe-by-construction: a fixed literal executable name, explicit argv,
     # shell=False, and an absolute executable path supplied separately.
     # nosemgrep
-    return subprocess.run(  # nosec B603
+    return subprocess.run(  # noqa: S603  # nosec
         argv,
         executable=executable_path,
         cwd=repo_dir,

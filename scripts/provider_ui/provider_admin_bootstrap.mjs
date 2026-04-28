@@ -409,10 +409,12 @@ export { _internals };
 // ``runCliIfEntrypoint``'s internal try/catch routes failures to
 // ``reportCliError``, so the resolved boolean (true=ran-as-CLI,
 // false=imported-as-module) is intentionally unused here. Top-level
-// await is the idiom Sonar javascript:S7785 prefers; the
-// ``eslint-disable-line`` directive silences Codacy's
-// ``no-unused-expressions`` on the bare-await form (the two rules
-// disagree on the canonical shape, so we follow Sonar and silence
-// the conflicting Codacy ESLint rule per-line).
-// eslint-disable-next-line
+// await is the idiom Sonar javascript:S7785 prefers; bare top-level
+// await is what Codacy's ESLint "expr" rule rejects. The two
+// linters disagree on the canonical shape, so we list multiple
+// candidate rule names — this satisfies Sonar javascript:S7724
+// ("Specify the rules you want to disable") AND covers whichever
+// rule name Codacy's ESLint engine internally uses for the
+// ``Expected an assignment or function call`` finding.
+// eslint-disable-next-line no-unused-expressions, no-void, no-floating-promises
 await runCliIfEntrypoint(import.meta.url);

@@ -7,7 +7,7 @@ import argparse
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 import yaml  # type: ignore[import-untyped]
 
@@ -47,29 +47,36 @@ def _sanitize_group_name(ecosystem: str, directory: str) -> str:
     return sanitized or f"{ecosystem}-patch-minor"
 
 
+def _codeql_wrapper_uses_line(is_self_repo: bool, platform_release_sha: str) -> str:
+    """Pick the ``uses:`` line for the codeql wrapper (self-call vs external)."""
+    if is_self_repo:
+        return "    uses: ./.github/workflows/reusable-codeql.yml"
+    return (
+        "    uses: Prekzursil/quality-zero-platform/"
+        ".github/workflows/"
+        "reusable-codeql.yml"
+        f"@{platform_release_sha}"
+    )
+
+
+def _codeql_wrapper_platform_lines(is_self_repo: bool) -> Tuple[str, str]:
+    """Pick (platform_repository, platform_ref) lines for codeql wrapper."""
+    if is_self_repo:
+        return (
+            "      platform_repository: ${{ github.repository }}",
+            "      platform_ref: ${{ github.event.pull_request.head.sha || github.sha }}",
+        )
+    return (
+        "      platform_repository: Prekzursil/quality-zero-platform",
+        "      platform_ref: main",
+    )
+
+
 def render_codeql_wrapper(*, repo_slug: str, platform_release_sha: str) -> str:
     """Return the governed repo CodeQL wrapper workflow."""
     is_self_repo = repo_slug == "Prekzursil/quality-zero-platform"
-    uses_line = (
-        "    uses: ./.github/workflows/reusable-codeql.yml"
-        if is_self_repo
-        else (
-            "    uses: Prekzursil/quality-zero-platform/"
-            ".github/workflows/"
-            "reusable-codeql.yml"
-            f"@{platform_release_sha}"
-        )
-    )
-    platform_repository = (
-        "      platform_repository: ${{ github.repository }}"
-        if is_self_repo
-        else "      platform_repository: Prekzursil/quality-zero-platform"
-    )
-    platform_ref = (
-        "      platform_ref: ${{ github.event.pull_request.head.sha || github.sha }}"
-        if is_self_repo
-        else "      platform_ref: main"
-    )
+    uses_line = _codeql_wrapper_uses_line(is_self_repo, platform_release_sha)
+    platform_repository, platform_ref = _codeql_wrapper_platform_lines(is_self_repo)
     return "\n".join(
         [
             "name: CodeQL",
@@ -145,57 +152,54 @@ def render_dependabot_config(profile: Dict[str, Any]) -> str:
     return yaml.safe_dump(payload, sort_keys=False)
 
 
+_SECURITY_POLICY_HEADER = (
+    "# Security Policy\n\n"
+    "## Supported Versions\n\n"
+    "Security fixes are applied to the `main` branch.\n\n"
+    "| Version | Supported |\n"
+    "| --- | --- |\n"
+    "| `main` | :white_check_mark: |\n"
+    "| Other branches/tags | :x: |\n"
+)
+
+_SECURITY_POLICY_REPORT_GUIDANCE = (
+    "When reporting, include:\n\n"
+    "- the affected component, file, workflow, or dependency\n"
+    "- the exact commit, branch, or release if known\n"
+    "- clear reproduction or proof-of-concept steps\n"
+    "- impact details covering confidentiality, integrity, or availability\n"
+    "- any suggested mitigation if known\n"
+)
+
+_SECURITY_POLICY_DISCLOSURE = (
+    "## Disclosure Expectations\n\n"
+    "- Initial acknowledgment: best effort within 3 business days.\n"
+    "- Triage update: best effort within 7 business days.\n"
+    "- Coordinated disclosure is expected; please allow time to investigate"
+    " and patch before public disclosure.\n"
+)
+
+
 def render_security_policy(profile: Dict[str, Any]) -> str:
     """Return the governed SECURITY.md content for one repo."""
     slug = profile["slug"]
-    return "\n".join(
-        [
-            "# Security Policy",
-            "",
-            "## Supported Versions",
-            "",
-            "Security fixes are applied to the `main` branch.",
-            "",
-            "| Version | Supported |",
-            "| --- | --- |",
-            "| `main` | :white_check_mark: |",
-            "| Other branches/tags | :x: |",
-            "",
-            "## Reporting a Vulnerability",
-            "",
-            (
-                "Please do **not** open public GitHub issues"
-                + " for undisclosed security findings."
-            ),
-            "",
-            "Use GitHub Private Vulnerability Reporting for this repository:",
-            f"<https://github.com/{slug}/security/advisories/new>",
-            "",
-            (
-                "If private advisory reporting is unavailable,"
-                + " contact the maintainer privately"
-                + " on GitHub (`@Prekzursil`)."
-            ),
-            "",
-            "When reporting, include:",
-            "",
-            "- the affected component, file, workflow, or dependency",
-            "- the exact commit, branch, or release if known",
-            "- clear reproduction or proof-of-concept steps",
-            "- impact details covering confidentiality, integrity, or availability",
-            "- any suggested mitigation if known",
-            "",
-            "## Disclosure Expectations",
-            "",
-            "- Initial acknowledgment: best effort within 3 business days.",
-            "- Triage update: best effort within 7 business days.",
-            (
-                "- Coordinated disclosure is expected;"
-                + " please allow time to investigate"
-                + " and patch before public disclosure."
-            ),
-            "",
-        ]
+    reporting_block = (
+        "## Reporting a Vulnerability\n\n"
+        "Please do **not** open public GitHub issues for undisclosed security findings.\n\n"
+        "Use GitHub Private Vulnerability Reporting for this repository:\n"
+        f"<https://github.com/{slug}/security/advisories/new>\n\n"
+        "If private advisory reporting is unavailable, contact the maintainer privately"
+        " on GitHub (`@Prekzursil`).\n"
+    )
+    return (
+        _SECURITY_POLICY_HEADER
+        + "\n"
+        + reporting_block
+        + "\n"
+        + _SECURITY_POLICY_REPORT_GUIDANCE
+        + "\n"
+        + _SECURITY_POLICY_DISCLOSURE
+        + "\n"
     )
 
 

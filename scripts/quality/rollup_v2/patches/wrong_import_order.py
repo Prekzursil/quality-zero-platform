@@ -50,6 +50,13 @@ def _classify_import(line: str) -> int:
     return 2  # Assume third-party (conservative)
 
 
+def _is_continuation_line(stripped: str, *, import_started: bool) -> bool:
+    """Return whether ``stripped`` is a blank/comment line we should keep walking."""
+    if stripped == "" and import_started:
+        return True
+    return stripped.startswith("#") and not import_started  # pragma: no cover
+
+
 def _find_import_block(lines: List[str]) -> Optional[Tuple[int, int]]:
     """Find the contiguous import block at the top of the file.
 
@@ -58,16 +65,14 @@ def _find_import_block(lines: List[str]) -> Optional[Tuple[int, int]]:
     import_start = None
     import_end = None
     for i, line in enumerate(lines):
-        stripped = line.strip()
         if _IMPORT_LINE.match(line):
             if import_start is None:
                 import_start = i
             import_end = i + 1
-        elif stripped == "" and import_start is not None:
             continue
-        elif stripped.startswith("#") and import_start is None:  # pragma: no cover -- leading comments before imports
+        if _is_continuation_line(line.strip(), import_started=import_start is not None):
             continue
-        elif import_start is not None:
+        if import_start is not None:
             break
     if import_start is None or import_end is None:
         return None

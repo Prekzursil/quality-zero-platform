@@ -9,8 +9,8 @@ import os
 import subprocess  # nosec B404
 import sys
 import zipfile
-from io import BytesIO
 from contextlib import contextmanager
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, cast
 
@@ -45,7 +45,7 @@ def _parse_args() -> argparse.Namespace:
 
 def _coverage_mode(coverage: Dict[str, Any], event_name: str) -> str:
     """Handle coverage mode."""
-    assert_mode = cast(Dict[str, Any], coverage.get("assert_mode", {}))
+    assert_mode = cast("Dict[str, Any]", coverage.get("assert_mode", {}))
     if event_name in assert_mode:
         return str(assert_mode[event_name])
     return str(assert_mode.get("default", "enforce"))
@@ -113,10 +113,10 @@ def _build_assert_coverage_argv(
 ) -> List[str]:
     """Handle build assert coverage argv."""
     cmd = [str(platform_dir / "scripts" / "quality" / "assert_coverage_100.py")]
-    for item in cast(List[Dict[str, Any]], coverage.get("inputs", [])):
+    for item in cast("List[Dict[str, Any]]", coverage.get("inputs", [])):
         flag = "--xml" if item.get("format") == "xml" else "--lcov"
         cmd.extend([flag, f"{item['name']}={item['path']}"])
-    for item in cast(List[Any], coverage.get("require_sources", [])):
+    for item in cast("List[Any]", coverage.get("require_sources", [])):
         cmd.extend(["--require-source", str(item)])
     cmd.extend(["--min-percent", str(coverage.get("min_percent", 100.0))])
     if coverage.get("branch_min_percent") is not None:
@@ -370,7 +370,7 @@ def main() -> int:
         if args.platform_dir
         else Path(__file__).resolve().parents[2]
     )
-    coverage = cast(Dict[str, Any], profile.get("coverage", {}))
+    coverage = cast("Dict[str, Any]", profile.get("coverage", {}))
 
     _run_shell(
         str(coverage.get("command", "")),
@@ -390,7 +390,7 @@ def main() -> int:
             coverage, repo_dir=repo_dir, platform_dir=platform_dir
         )
         baseline_payload = _load_baseline_coverage_payload(
-            cast(Dict[str, Any], profile)
+            cast("Dict[str, Any]", profile)
         )
         return _write_non_regression_report(current_payload, baseline_payload)
 

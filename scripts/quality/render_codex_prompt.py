@@ -5,9 +5,9 @@ from __future__ import absolute_import
 
 import argparse
 import json
+import sys
 from collections import defaultdict
 from pathlib import Path
-import sys
 from typing import Any, Dict, Iterable, List, cast
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
@@ -19,7 +19,6 @@ from scripts.quality.control_plane import (
     load_repo_profile,
 )
 from scripts.quality.known_issues import load_known_issues, qrv2_prompt_entries
-
 
 _KNOWN_ISSUES_ROOT = Path(__file__).resolve().parents[2] / "known-issues"
 
@@ -208,7 +207,7 @@ def _render_prompt(*args: object, **kwargs: object) -> str:
         raise TypeError(f"Missing required prompt field: {exc.args[0]}") from exc
     if not isinstance(artifacts_value, Iterable):
         raise TypeError("_render_prompt expects artifacts to be iterable")
-    artifacts = list(cast(Iterable[object], artifacts_value))
+    artifacts = list(cast("Iterable[object]", artifacts_value))
     if kwargs:
         raise TypeError(
             f"Unexpected _render_prompt parameters: {', '.join(sorted(kwargs))}"

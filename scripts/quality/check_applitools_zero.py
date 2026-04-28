@@ -8,12 +8,11 @@ Checks: unresolved == 0 AND failed == 0. Exits 0 on pass, 1 on fail.
 """
 from __future__ import absolute_import
 
-from typing import List, Tuple
-
 import argparse
 import json
 import sys
 from pathlib import Path
+from typing import List, Tuple
 
 
 def _check_applitools(data: dict) -> Tuple[bool, int, int, int]:
@@ -31,8 +30,14 @@ def _check_applitools(data: dict) -> Tuple[bool, int, int, int]:
 
 
 def main(argv: List[str] | None = None) -> int:
+    """Run the Applitools zero-regression gate from CLI args."""
     parser = argparse.ArgumentParser(description="Applitools zero-regression gate")
-    parser.add_argument("--json", required=True, dest="json_file", help="Path to Applitools JSON output")
+    parser.add_argument(
+        "--json",
+        required=True,
+        dest="json_file",
+        help="Path to Applitools JSON output",
+    )
     parser.add_argument("--out-json", default=None, help="Write JSON summary")
     parser.add_argument("--out-md", default=None, help="Write Markdown summary")
     args = parser.parse_args(argv)
@@ -60,7 +65,13 @@ def main(argv: List[str] | None = None) -> int:
 
     if args.out_md:
         status = "PASS" if passed else "FAIL"
-        md = f"# Applitools Zero\n\n**Status:** {status}\n**Total:** {total}\n**Unresolved:** {unresolved}\n**Failed:** {failed}\n"
+        md = (
+            f"# Applitools Zero\n\n"
+            f"**Status:** {status}\n"
+            f"**Total:** {total}\n"
+            f"**Unresolved:** {unresolved}\n"
+            f"**Failed:** {failed}\n"
+        )
         out_md = Path(args.out_md)
         out_md.parent.mkdir(parents=True, exist_ok=True)
         out_md.write_text(md, encoding="utf-8")

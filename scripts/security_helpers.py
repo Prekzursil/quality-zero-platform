@@ -2,12 +2,12 @@
 
 from __future__ import absolute_import
 
-from dataclasses import dataclass
-from http.client import HTTPConnection, HTTPS_PORT
 import ipaddress
 import json
 import ssl
-from typing import Any, cast, Dict, List, Mapping, Set, Tuple
+from dataclasses import dataclass
+from http.client import HTTPS_PORT, HTTPConnection
+from typing import Any, Dict, List, Mapping, Set, Tuple, cast
 from urllib.error import HTTPError
 from urllib.parse import ParseResult, urlparse, urlunparse
 
@@ -168,7 +168,7 @@ def _require_request_hostname(parsed: ParseResult) -> str:
     """Handle require request hostname."""
     if not parsed.hostname:
         raise ValueError(f"Request URL is missing a hostname: {urlunparse(parsed)!r}")
-    return cast(str, parsed.hostname)
+    return cast("str", parsed.hostname)
 
 
 def _build_tls_context() -> ssl.SSLContext:

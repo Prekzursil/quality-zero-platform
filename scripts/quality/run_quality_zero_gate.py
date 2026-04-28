@@ -134,7 +134,7 @@ def main() -> int:
         else Path(__file__).resolve().parents[2]
     )
     argv = _build_argv(
-        cast(Dict[str, Any], profile),
+        cast("Dict[str, Any]", profile),
         sha,
         platform_dir=platform_dir,
         out_json=args.out_json,

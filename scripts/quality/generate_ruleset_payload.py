@@ -5,8 +5,8 @@ from __future__ import absolute_import
 
 import argparse
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))

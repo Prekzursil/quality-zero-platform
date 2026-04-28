@@ -3,7 +3,6 @@ from __future__ import absolute_import
 
 import hashlib
 
-
 _CONTEXT_WINDOW: int = 10  # lines before and after the finding line
 
 

@@ -4,13 +4,13 @@
 from __future__ import absolute_import
 
 import argparse
-from contextlib import contextmanager
 import json
 import os
-from pathlib import Path
 import re
 import shutil
 import sys
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Dict, Iterable, List
 
 from scripts.quality.coverage_paths import (

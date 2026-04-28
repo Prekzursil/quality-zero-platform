@@ -4,9 +4,9 @@
 from __future__ import absolute_import
 
 import argparse
-from pathlib import Path
 import re
 import sys
+from pathlib import Path
 from typing import Any, Dict
 
 import yaml  # type: ignore[import-untyped]

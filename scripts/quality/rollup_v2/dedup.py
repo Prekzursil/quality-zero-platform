@@ -4,12 +4,12 @@ from __future__ import absolute_import
 from dataclasses import replace
 from typing import Dict, Iterable, List, cast
 
-from scripts.quality.rollup_v2.severity import max_severity
 from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_QUALITY,
     CATEGORY_GROUP_SECURITY,
     Finding,
 )
+from scripts.quality.rollup_v2.severity import max_severity
 
 
 def dedup(findings: Iterable[Finding]) -> List[Finding]:
@@ -43,7 +43,7 @@ def merge_corroborators(findings: List[Finding]) -> Finding:
     # protocol covering any frozen dataclass), so Sonar python:S5886 flags
     # the ``-> Finding`` return type as a downcast. The cast is a no-op at
     # runtime since ``primary`` is concretely a Finding.
-    return cast(Finding, replace(
+    return cast("Finding", replace(
         primary,
         severity=severity,
         corroboration="multi" if len(findings) >= 2 else "single",

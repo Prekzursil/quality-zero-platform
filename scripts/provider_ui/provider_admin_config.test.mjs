@@ -143,12 +143,12 @@ test('parseArgs --state-root + --profile-dir resolve to absolute paths', () => {
     '-p',
     'codecov',
     '--state-root',
-    '/tmp/state',
+    '/qzp-fixture/state',
     '--profile-dir',
-    '/tmp/profile'
+    '/qzp-fixture/profile'
   ]);
-  assert.equal(args.stateRoot, path.resolve('/tmp/state'));
-  assert.equal(args.profileDir, path.resolve('/tmp/profile'));
+  assert.equal(args.stateRoot, path.resolve('/qzp-fixture/state'));
+  assert.equal(args.profileDir, path.resolve('/qzp-fixture/profile'));
 });
 
 test('parseArgs rejects non-positive --timeout-ms', () => {

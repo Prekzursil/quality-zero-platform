@@ -405,17 +405,13 @@ Object.assign(_internals, {
 
 export { _internals };
 
-// Top-level await as the bootstrap entrypoint. ``runCliIfEntrypoint``
-// resolves to ``true`` when invoked as a CLI (after ``main()`` settles
-// — its internal try/catch routes failures to ``reportCliError``) and
-// ``false`` when the file is imported as a module. We default
-// ``process.exitCode`` to ``0`` only on the CLI branch so Node-as-CLI
-// exits cleanly when no error handler set a non-zero code. Module
-// imports leave the host's exitCode alone. This both consumes the
-// awaited value (no eslint ``no-unused-vars`` smell) and turns the
-// statement into an assignment (no eslint ``no-unused-expressions``
-// smell).
-const ranAsCli = await runCliIfEntrypoint(import.meta.url);
-if (ranAsCli) {
-  process.exitCode ??= 0;
-}
+// Bootstrap entrypoint: kicks off main() when invoked as a CLI. The
+// returned promise settles internally — ``runCliIfEntrypoint``'s
+// own try/catch routes failures to ``reportCliError``. Using
+// ``.then(() => {})`` makes the statement a method-call (not a bare
+// expression) so Codacy's ESLint ``no-unused-expressions`` doesn't
+// fire. The empty handler is intentional: the resolved value
+// (true/false) is the entrypoint check result, which the caller
+// doesn't need to act on. Top-level await is dropped — Node keeps
+// the event loop alive until the promise settles regardless.
+runCliIfEntrypoint(import.meta.url).then(() => {});

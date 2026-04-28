@@ -16,6 +16,7 @@ set -e
 # Load environment variables if .env exists
 if [ -f .env ]; then
   set -a
+  # shellcheck source=/dev/null  # .env is operator-supplied at runtime
   source .env
   set +a
 fi

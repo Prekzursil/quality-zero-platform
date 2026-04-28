@@ -106,7 +106,14 @@ def bump_workflow_files(
     return results
 
 
-if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
+def _run_cli() -> None:  # pragma: no cover — ad-hoc CLI
+    """Dispatch one bump-workflow-shas run from argv to stdout/stderr.
+
+    Wrapped in a function so the loop variable ``path`` stays local and
+    doesn't shadow the same-named loop variable in
+    ``bump_workflow_files`` (pylint W0621 — see
+    ``reference_pylint_c0103_module_main_block`` memory).
+    """
     import argparse
     import json
 
@@ -123,27 +130,31 @@ if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
         "--apply", action="store_true",
         help="Write changes to disk (default: dry-run, prints a summary).",
     )
-    _args = parser.parse_args()
+    args = parser.parse_args()
 
-    _wd = Path(_args.workflow_dir)
-    if not _wd.is_dir():
-        print(f"workflow dir not found: {_wd}", file=sys.stderr)
+    workflow_dir = Path(args.workflow_dir)
+    if not workflow_dir.is_dir():
+        print(f"workflow dir not found: {workflow_dir}", file=sys.stderr)
         raise SystemExit(2)
 
-    _files = {
+    files = {
         str(p): p.read_text(encoding="utf-8")
-        for p in sorted(_wd.glob("*.yml"))
+        for p in sorted(workflow_dir.glob("*.yml"))
     }
-    _results = bump_workflow_files(_files, target_sha=_args.target_sha)
+    results = bump_workflow_files(files, target_sha=args.target_sha)
 
     summary = {
-        path: result["bumped"] for path, result in _results.items()
+        path: result["bumped"] for path, result in results.items()
     }
     print(json.dumps(summary, indent=2, sort_keys=True))
 
-    if _args.apply:
-        for path, result in _results.items():
+    if args.apply:
+        for path, result in results.items():
             if result["bumped"]:
                 Path(path).write_text(result["new_text"], encoding="utf-8")
                 print(f"wrote {path} ({result['bumped']} pin(s) bumped)",
                       file=sys.stderr)
+
+
+if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
+    _run_cli()

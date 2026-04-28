@@ -69,7 +69,7 @@ def _derive_autofixable(findings: List[Finding]) -> List[Finding]:
     autofixable = (patch_source != "none")
     """
     return [
-        replace(f, autofixable=(f.patch_source != "none"))
+        replace(f, autofixable=f.patch_source != "none")
         for f in findings
     ]
 

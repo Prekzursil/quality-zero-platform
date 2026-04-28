@@ -180,6 +180,7 @@ When `TeamCreate` and `SendMessage` tools are available, the orchestrator uses T
 ## Guides
 
 Development patterns and standards are documented in `guides/`:
+
 - `agent-coordination.md` — Team Mode vs Task Mode, agent dispatch patterns
 - `build-validation.md` — Build and validation workflow
 - `coding-standards.md` — Code style and conventions

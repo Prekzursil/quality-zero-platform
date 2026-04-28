@@ -3,7 +3,7 @@
 Verifies that synthetic security-class findings (Dependabot-class,
 CWE-tagged, scanner-name heuristic, category flag, OWASP reference)
 are all pulled out of the auto-merge-eligible set. Also exercises the
-``SecurityAutoMergeRefused`` belt-and-suspenders error.
+``SecurityAutoMergeRefusedError`` belt-and-suspenders error.
 """
 
 from __future__ import absolute_import
@@ -123,7 +123,7 @@ class EnsurePrOnlyGuardTests(unittest.TestCase):
 
     def test_auto_merge_with_security_raises(self) -> None:
         """A Dependabot-class finding blocks auto-merge."""
-        with self.assertRaises(sg.SecurityAutoMergeRefused) as ctx:
+        with self.assertRaises(sg.SecurityAutoMergeRefusedError) as ctx:
             sg.ensure_pr_only_for_security(
                 [{"scanner": "dependabot", "id": "DEP-42"}],
                 intends_auto_merge=True,
@@ -142,7 +142,7 @@ class EnsurePrOnlyGuardTests(unittest.TestCase):
 
     def test_refusal_message_names_every_security_finding(self) -> None:
         """The error message lists each finding's id so logs stay actionable."""
-        with self.assertRaises(sg.SecurityAutoMergeRefused) as ctx:
+        with self.assertRaises(sg.SecurityAutoMergeRefusedError) as ctx:
             sg.ensure_pr_only_for_security(
                 [
                     {"scanner": "codeql", "id": "py/injection"},
@@ -171,7 +171,7 @@ class EnsurePrOnlyGuardTests(unittest.TestCase):
         classified = sg.filter_auto_merge_candidates([synthetic])
         self.assertEqual(len(classified.must_open_pr), 1)
         self.assertEqual(classified.auto_merge_ok, [])
-        with self.assertRaises(sg.SecurityAutoMergeRefused):
+        with self.assertRaises(sg.SecurityAutoMergeRefusedError):
             sg.ensure_pr_only_for_security([synthetic], intends_auto_merge=True)
 
 

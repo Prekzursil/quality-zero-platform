@@ -244,7 +244,7 @@ class SarifBackedNormalizer(BaseNormalizer):
     """
 
     def parse(self, artifact: Any, repo_root: Path) -> Iterable[Finding]:
-        if isinstance(artifact, (str, bytes)):
+        if isinstance(artifact, str | bytes):
             check_sarif_size(artifact)
             data = json.loads(artifact)
         elif isinstance(artifact, dict):

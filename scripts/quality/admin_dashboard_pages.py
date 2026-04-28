@@ -86,7 +86,7 @@ def render_coverage_trend_page(
     for row in rows:
         slug = html.escape(str(row.get("slug", "")))
         cov = row.get("coverage_percent")
-        cov_text = f"{cov:.1f}" if isinstance(cov, (int, float)) else html.escape(
+        cov_text = f"{cov:.1f}" if isinstance(cov, int | float) else html.escape(
             str(cov or ""),
         )
         tbl_rows.append(f"      <tr><td>{slug}</td><td>{cov_text}</td></tr>")

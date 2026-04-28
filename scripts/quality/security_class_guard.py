@@ -94,7 +94,7 @@ def _has_security_tag(finding: Mapping[str, Any]) -> bool:
         if isinstance(value, str):
             haystack_parts.append(value)
     tags = finding.get("tags")
-    if isinstance(tags, (list, tuple)):
+    if isinstance(tags, list | tuple):
         haystack_parts.extend(str(t) for t in tags if isinstance(t, str))
     haystack = " | ".join(haystack_parts)
     if _CWE_RE.search(haystack):

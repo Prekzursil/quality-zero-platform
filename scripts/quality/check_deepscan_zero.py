@@ -67,7 +67,7 @@ def extract_total_open(payload: Any) -> int | None:
     """Handle extract total open."""
     if isinstance(payload, dict):
         for key, value in payload.items():
-            if key in TOTAL_KEYS and isinstance(value, (int, float)):
+            if key in TOTAL_KEYS and isinstance(value, int | float):
                 return int(value)
     for nested in _nested_payload_values(payload):
         total = extract_total_open(nested)

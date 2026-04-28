@@ -6,7 +6,7 @@ import json
 import sys
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Mapping
 

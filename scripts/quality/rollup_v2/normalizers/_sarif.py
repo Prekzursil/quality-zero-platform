@@ -165,81 +165,73 @@ def check_sarif_size(data: bytes | str) -> None:
         )
 
 
+def _build_sarif_finding_draft(
+    *,
+    result: Dict[str, Any],
+    rule_meta: Dict[str, Any],
+    provider: str,
+    index: int,
+) -> FindingDraft:
+    """Translate one SARIF ``result`` into a normaliser-ready FindingDraft."""
+    rule_id = str(result.get("ruleId", "unknown"))
+    message = _extract_message(result)
+    level = str(result.get("level", "warning")).lower()
+    file_path, line, end_line, column = _extract_location(result)
+    category = lookup(provider, rule_id) or rule_id
+    tags = _extract_tags(result)
+    return FindingDraft(
+        finding_id=f"{provider.lower()}-{index:04d}",
+        file=file_path,
+        line=line,
+        end_line=end_line,
+        column=column,
+        category=category,
+        category_group=_classify_category_group(category, tags),
+        severity=_SARIF_LEVEL_TO_SEVERITY.get(level, "medium"),
+        primary_message=message,
+        rule_id=rule_id,
+        rule_url=_extract_rule_url(rule_meta),
+        original_message=message,
+        context_snippet=_extract_context_snippet(result),
+        cwe=_extract_cwe(result),
+    )
+
+
+def _iter_sarif_results(runs: List[Any]) -> Iterable[Tuple[Dict[str, Any], Dict[str, Dict[str, Any]]]]:
+    """Yield ``(result, rule_index)`` pairs from valid SARIF runs."""
+    for run in runs:
+        if not isinstance(run, dict):
+            continue
+        rule_index = _build_rule_index(run)
+        results = run.get("results", [])
+        if not isinstance(results, list):
+            continue
+        for result in results:
+            if isinstance(result, dict):
+                yield result, rule_index
+
+
 def parse_sarif(
     data: Dict[str, Any],
     provider: str,
     repo_root: Path,
     normalizer: BaseNormalizer,
 ) -> List[Finding]:
-    """Parse a SARIF 2.1.0 payload and return canonical Finding objects.
-
-    Parameters
-    ----------
-    data : dict
-        Parsed SARIF JSON (the top-level object with ``runs`` array).
-    provider : str
-        Provider name for taxonomy lookup and corroborator construction.
-    repo_root : Path
-        Repository root for path validation.
-    normalizer : BaseNormalizer
-        The normalizer instance (used for ``_build_finding``).
-
-    Returns
-    -------
-    List[Finding]
-        Canonical findings parsed from all SARIF runs.
-    """
-    findings: List[Finding] = []
+    """Parse a SARIF 2.1.0 payload and return canonical Finding objects."""
     runs = data.get("runs", [])
     if not isinstance(runs, list):
-        return findings
-
-    index = 0
-    for run in runs:
-        if not isinstance(run, dict):
-            continue
-        rule_index = _build_rule_index(run)
-
-        results = run.get("results", [])
-        if not isinstance(results, list):
-            continue
-
-        for result in results:
-            if not isinstance(result, dict):
-                continue
-
-            rule_id = str(result.get("ruleId", "unknown"))
-            rule_meta = rule_index.get(rule_id, {})
-            message = _extract_message(result)
-            level = str(result.get("level", "warning")).lower()
-            severity = _SARIF_LEVEL_TO_SEVERITY.get(level, "medium")
-            file_path, line, end_line, column = _extract_location(result)
-            category = lookup(provider, rule_id) or rule_id
-            tags = _extract_tags(result)
-            cwe = _extract_cwe(result)
-            category_group = _classify_category_group(category, tags)
-            rule_url = _extract_rule_url(rule_meta)
-            context_snippet = _extract_context_snippet(result)
-
-            finding = normalizer._build_finding(FindingDraft(
-                finding_id=f"{provider.lower()}-{index:04d}",
-                file=file_path,
-                line=line,
-                end_line=end_line,
-                column=column,
-                category=category,
-                category_group=category_group,
-                severity=severity,
-                primary_message=message,
-                rule_id=rule_id,
-                rule_url=rule_url,
-                original_message=message,
-                context_snippet=context_snippet,
-                cwe=cwe,
-            ))
-            findings.append(finding)
-            index += 1
-
+        return []
+    findings: List[Finding] = []
+    for index, (result, rule_index) in enumerate(_iter_sarif_results(runs)):
+        rule_id = str(result.get("ruleId", "unknown"))
+        rule_meta = rule_index.get(rule_id, {})
+        draft = _build_sarif_finding_draft(
+            result=result,
+            rule_meta=rule_meta,
+            provider=provider,
+            index=index,
+        )
+        findings.append(normalizer._build_finding(draft))
     return findings
 
 

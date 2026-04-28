@@ -16,6 +16,21 @@ engines:
   # alongside ESLint's modern coverage of the same files.
   jshint:
     enabled: false
+  # Codacy's default ESLint config bundles eslint-plugin-es-x rules
+  # (es-x_no-block-scoped-variables, es-x_no-trailing-commas,
+  # es-x_no-keyword-properties, es-x_no-arrow-functions) that flag every
+  # `let`/`const`/arrow function as if the target runtime is ES5. The
+  # scripts/beads-*.ts files run via tsx on Node 22+ and legitimately
+  # use modern syntax (~150 ESLint findings on those 3 files alone).
+  # Pin ESLint to a modern config that targets ES2022+ so the es-x
+  # backwards-compat plugin stops generating noise; @typescript-eslint
+  # remains active for real TS code-quality issues.
+  eslint:
+    enabled: true
+    exclude_paths:
+      - "scripts/beads-fetch-conversation-history.ts"
+      - "scripts/beads-fetch-pr-comments.ts"
+      - "scripts/beads-self-reflect.ts"
   bandit:
     enabled: true
   semgrep:

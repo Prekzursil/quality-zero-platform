@@ -99,9 +99,7 @@ def _has_security_tag(finding: Mapping[str, Any]) -> bool:
     haystack = " | ".join(haystack_parts)
     if _CWE_RE.search(haystack):
         return True
-    if _OWASP_RE.search(haystack):
-        return True
-    return False
+    return bool(_OWASP_RE.search(haystack))
 
 
 def is_security_finding(finding: Mapping[str, Any]) -> bool:

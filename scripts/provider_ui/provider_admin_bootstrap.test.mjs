@@ -508,6 +508,22 @@ test('runCommand prints help for unrecognised commands', async () => {
   assert.deepEqual(messages, ['help text']);
 });
 
+test('runCommand prints help when command is "help" (covers case fall-through)', async () => {
+  const messages = [];
+  await runCommand(
+    { command: 'help' },
+    {
+      listProviders: () => {},
+      normalizeProvider: () => {},
+      bootstrap: () => {},
+      openOrInspect: () => {},
+      log: (m) => messages.push(m),
+      renderHelp: () => 'help text'
+    }
+  );
+  assert.deepEqual(messages, ['help text']);
+});
+
 // =============================================================================
 // main / reportCliError
 // =============================================================================

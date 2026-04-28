@@ -68,9 +68,12 @@ coverage:
     coverage xml -o coverage/platform-coverage.xml\nmkdir -p coverage\n# scripts/provider_ui/*.mjs\
     \ has its own Node test suite; emit lcov for Sonar\n# (sonar.javascript.lcov.reportPaths)\
     \ + Codecov 'provider_ui' flag so the\n# 4 .mjs files stop sitting at 0% coverage\
-    \ in the dashboards.\nnode --test --experimental-test-coverage \\\n  --test-reporter=lcov\
-    \ \\\n  --test-reporter-destination=coverage/provider_ui-lcov.info \\\n  scripts/provider_ui/*.test.mjs\
-    \ || true\n"
+    \ in the dashboards. The\n# --test-coverage-exclude flag (Node ≥22.10) keeps the\
+    \ test files out of\n# the lcov source list so older runners don't pollute the line/branch\n\
+    # totals with test code. Newer Node versions exclude *.test.* by default\n# but the\
+    \ explicit flag is harmless on those.\nnode --test --experimental-test-coverage \\\n\
+    \  --test-coverage-exclude='**/*.test.mjs' \\\n  --test-reporter=lcov \\\n  --test-reporter-destination=coverage/provider_ui-lcov.info\
+    \ \\\n  scripts/provider_ui/*.test.mjs || true\n"
   inputs:
   - format: xml
     name: platform

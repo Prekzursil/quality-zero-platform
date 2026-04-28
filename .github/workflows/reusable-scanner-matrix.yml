@@ -320,7 +320,33 @@ jobs:
             run(cmd, cwd=repo_dir)
           elif lane == "semgrep":
             run([sys.executable, "-m", "pip", "install", "semgrep"], cwd=repo_dir)
-            run(["semgrep", "ci"], cwd=repo_dir)
+            sarif_path = repo_dir / "semgrep.sarif"
+            # ``semgrep ci`` only exits non-zero on findings whose rule
+            # severity is marked "blocking" on Semgrep Cloud; non-blocking
+            # findings appear on the dashboard while the lane reports green
+            # (the silent-pass shape we are closing). Capture the SARIF and
+            # let the zero-gate count ALL findings regardless of severity.
+            # check=False keeps us going when semgrep itself exits 1 so the
+            # SARIF gate can produce the lane's report; the gate then fails
+            # the lane on any finding count > 0.
+            subprocess.run(
+                ["semgrep", "ci", "--sarif-output", str(sarif_path)],
+                cwd=repo_dir,
+                check=False,
+            )
+            run(
+                [
+                    sys.executable,
+                    str(platform_dir / "scripts/quality/check_semgrep_zero.py"),
+                    "--sarif",
+                    str(sarif_path),
+                    "--out-json",
+                    "semgrep-zero/semgrep.json",
+                    "--out-md",
+                    "semgrep-zero/semgrep.md",
+                ],
+                cwd=repo_dir,
+            )
           elif lane == "sentry":
             sentry = profile["vendors"]["sentry"]
             cmd = [

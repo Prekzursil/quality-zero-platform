@@ -79,3 +79,10 @@ exclude_paths:
   - "scripts/beads-fetch-conversation-history.ts"
   - "scripts/beads-fetch-pr-comments.ts"
   - "scripts/beads-self-reflect.ts"
+  # Test files colocated with source. The QZP self-profile already marks
+  # these via sonar.test.inclusions, but Codacy uses its own test-pattern
+  # detection. Excluding here mirrors the convention from tests/** above
+  # and keeps Lizard's 500-line nloc threshold off legitimate test
+  # fixtures (the *.test.mjs files run every test and naturally grow as
+  # source is refactored).
+  - "scripts/**/*.test.mjs"

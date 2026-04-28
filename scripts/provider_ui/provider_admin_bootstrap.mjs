@@ -13,6 +13,15 @@ import {
 } from './provider_admin_config.mjs';
 
 /**
+ * Mutable test seam for module-level default dependencies. Public API
+ * functions that previously used ``deps.foo ?? moduleFoo`` fallbacks now
+ * use ``deps = _internals`` defaults, eliminating per-``??`` branch
+ * coverage gaps. Tests can swap entries in ``_internals`` to exercise the
+ * no-deps default path; production code never mutates it.
+ */
+const _internals = {};
+
+/**
  * Ensure provider UI state stays under the managed state root.
  * @param {string} targetPath
  * @param {string} stateRoot
@@ -35,7 +44,7 @@ export function ensureManagedStatePath(targetPath, stateRoot) {
  * Load Playwright from the managed external runner directory.
  * @returns {Promise<import('playwright').BrowserType>}
  */
-export async function loadPlaywrightChromium(deps = {}) {
+export async function loadPlaywrightChromium(deps = _internals) {
   const runnerDirEnv = deps.runnerDir ?? process.env.QUALITY_ZERO_PROVIDER_UI_RUNNER_DIR;
   if (!runnerDirEnv) {
     throw new Error(
@@ -43,11 +52,9 @@ export async function loadPlaywrightChromium(deps = {}) {
       'load Playwright from the external runner directory.'
     );
   }
-  const _createRequire = deps.createRequire ?? createRequire;
-  const _importModule = deps.importModule ?? ((href) => import(href));
-  const runnerRequire = _createRequire(path.join(runnerDirEnv, 'package.json'));
+  const runnerRequire = deps.createRequire(path.join(runnerDirEnv, 'package.json'));
   const playwrightEntry = runnerRequire.resolve('playwright');
-  const playwrightModule = await _importModule(pathToFileURL(playwrightEntry).href);
+  const playwrightModule = await deps.importModule(pathToFileURL(playwrightEntry).href);
   return resolvePlaywrightChromium(playwrightModule);
 }
 
@@ -85,27 +92,20 @@ export function isCliEntrypoint(importMetaUrl, argv = process.argv) {
  * @param {string} profileDir
  * @returns {Promise<void>}
  */
-export async function promptForManualLogin(target, profileDir, deps = {}) {
-  const readlineModule = deps.readline ?? readline;
-  const inputStream = deps.input ?? input;
-  const outputStream = deps.output ?? output;
-  return _promptForManualLoginInner(target, profileDir, readlineModule, inputStream, outputStream);
+export function promptForManualLogin(target, profileDir, deps = _internals) {
+  return _promptForManualLoginInner(target, profileDir, deps.readline, deps.input, deps.output);
 }
 
-async function _promptForManualLoginInner(target, profileDir, readlineModule, inputStream, outputStream) {
+function _promptForManualLoginInner(target, profileDir, readlineModule, inputStream, outputStream) {
   const rl = readlineModule.createInterface({ input: inputStream, output: outputStream });
-  try {
-    outputStream.write(`\nManual login handoff for ${target.label}\n`);
-    outputStream.write(`Target URL: ${target.targetUrl}\n`);
-    outputStream.write(`Persistent profile: ${profileDir}\n`);
-    outputStream.write(`${target.loginHint}\n`);
-    await rl.question(
-      'Complete sign-in or provider checks in the opened browser, then ' +
-      'press Enter to continue... '
-    );
-  } finally {
-    rl.close();
-  }
+  outputStream.write(`\nManual login handoff for ${target.label}\n`);
+  outputStream.write(`Target URL: ${target.targetUrl}\n`);
+  outputStream.write(`Persistent profile: ${profileDir}\n`);
+  outputStream.write(`${target.loginHint}\n`);
+  return rl.question(
+    'Complete sign-in or provider checks in the opened browser, then ' +
+    'press Enter to continue... '
+  ).finally(() => rl.close());
 }
 
 /**
@@ -143,10 +143,7 @@ export async function launchContextWithFallback(chromium, profileDir, options, p
  *   headless: boolean
  * }>}
  */
-export async function launchPersistentContext(args, { headlessDefault, includeManualPrompt }, deps = {}) {
-  const loadChromium = deps.loadPlaywrightChromium ?? loadPlaywrightChromium;
-  const launchCtx = deps.launchContextWithFallback ?? launchContextWithFallback;
-  const promptLogin = deps.promptForManualLogin ?? promptForManualLogin;
+export async function launchPersistentContext(args, { headlessDefault, includeManualPrompt }, deps = _internals) {
   const target = resolveProviderTarget(args.provider, {
     repo: args.repo,
     owner: args.owner
@@ -154,8 +151,8 @@ export async function launchPersistentContext(args, { headlessDefault, includeMa
   const profileDir = ensureManagedStatePath(args.profileDir, args.stateRoot);
 
   const headless = args.headless ?? headlessDefault;
-  const chromium = await loadChromium();
-  const context = await launchCtx(chromium, profileDir, {
+  const chromium = await deps.loadPlaywrightChromium();
+  const context = await deps.launchContextWithFallback(chromium, profileDir, {
     headless,
     slowMo: args.slowMoMs,
     viewport: { width: 1440, height: 960 }
@@ -169,7 +166,7 @@ export async function launchPersistentContext(args, { headlessDefault, includeMa
   });
 
   if (includeManualPrompt) {
-    await promptLogin(target, profileDir);
+    await deps.promptForManualLogin(target, profileDir);
   }
 
   const title = await page.title();
@@ -264,18 +261,15 @@ export function waitForKeepOpenExit(context, processObj = process) {
  * @param {ReturnType<typeof parseArgs>} args
  * @returns {Promise<void>}
  */
-export async function bootstrap(args, deps = {}) {
-  const launchCtx = deps.launchPersistentContext ?? launchPersistentContext;
-  const printRes = deps.printResult ?? printResult;
-  const waitExit = deps.waitForKeepOpenExit ?? waitForKeepOpenExit;
-  const result = await launchCtx(args, {
+export async function bootstrap(args, deps = _internals) {
+  const result = await deps.launchPersistentContext(args, {
     headlessDefault: false,
     includeManualPrompt: true
   });
   try {
-    printRes('bootstrap_complete', result);
+    deps.printResult('bootstrap_complete', result);
     if (args.keepOpen) {
-      await waitExit(result.context);
+      await deps.waitForKeepOpenExit(result.context);
     }
   } finally {
     if (!args.keepOpen) {
@@ -290,18 +284,15 @@ export async function bootstrap(args, deps = {}) {
  * @param {{inspectOnly: boolean}} options
  * @returns {Promise<void>}
  */
-export async function openOrInspect(args, { inspectOnly }, deps = {}) {
-  const launchCtx = deps.launchPersistentContext ?? launchPersistentContext;
-  const printRes = deps.printResult ?? printResult;
-  const waitExit = deps.waitForKeepOpenExit ?? waitForKeepOpenExit;
-  const result = await launchCtx(args, {
+export async function openOrInspect(args, { inspectOnly }, deps = _internals) {
+  const result = await deps.launchPersistentContext(args, {
     headlessDefault: true,
     includeManualPrompt: false
   });
   try {
-    printRes(inspectOnly ? 'inspect_complete' : 'open_complete', result);
+    deps.printResult(inspectOnly ? 'inspect_complete' : 'open_complete', result);
     if (args.keepOpen) {
-      await waitExit(result.context);
+      await deps.waitForKeepOpenExit(result.context);
     }
   } finally {
     if (!args.keepOpen) {
@@ -352,11 +343,9 @@ export async function runCommand(args, hooks = {}) {
  * Parse CLI arguments and run the requested provider command.
  * @returns {Promise<void>}
  */
-export async function main(argv = process.argv.slice(2), deps = {}) {
-  const parse = deps.parseArgs ?? parseArgs;
-  const run = deps.runCommand ?? runCommand;
-  const args = parse(argv);
-  await run(args);
+export async function main(argv = process.argv.slice(2), deps = _internals) {
+  const args = deps.parseArgs(argv);
+  await deps.runCommand(args);
 }
 
 /**
@@ -379,19 +368,41 @@ export function reportCliError(error, errLog = console.error, processObj = proce
  * @param {object} [deps]
  * @returns {Promise<boolean>} ``true`` if the CLI ran, ``false`` otherwise.
  */
-export async function runCliIfEntrypoint(importMetaUrl, deps = {}) {
-  const isEntrypoint = deps.isCliEntrypoint ?? isCliEntrypoint;
-  const runMain = deps.main ?? main;
-  const reportErr = deps.reportCliError ?? reportCliError;
-  if (!isEntrypoint(importMetaUrl)) {
+export async function runCliIfEntrypoint(importMetaUrl, deps = _internals) {
+  if (!deps.isCliEntrypoint(importMetaUrl)) {
     return false;
   }
   try {
-    await runMain();
+    await deps.main();
   } catch (error) {
-    reportErr(error);
+    deps.reportCliError(error);
   }
   return true;
 }
+
+// Populate the test seam after every function is hoisted so the default
+// parameter expressions ``deps = _internals`` resolve to the production
+// implementations at call time. Tests can mutate entries on this object
+// to drive the no-deps branch of each public function.
+Object.assign(_internals, {
+  createRequire,
+  importModule: (href) => import(href),
+  readline,
+  input,
+  output,
+  loadPlaywrightChromium,
+  launchContextWithFallback,
+  promptForManualLogin,
+  launchPersistentContext,
+  printResult,
+  waitForKeepOpenExit,
+  parseArgs,
+  runCommand,
+  isCliEntrypoint,
+  main,
+  reportCliError
+});
+
+export { _internals };
 
 await runCliIfEntrypoint(import.meta.url);

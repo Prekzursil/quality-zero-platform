@@ -1,12 +1,11 @@
 """CLI entrypoint for quality rollup v2 (per design §A.8 + Phase 13)."""
 from __future__ import absolute_import
 
-from typing import Dict, Tuple
-
 import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Dict, Tuple
 
 from scripts.quality.rollup_v2.pipeline import run_pipeline
 

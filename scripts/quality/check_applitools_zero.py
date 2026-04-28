@@ -8,12 +8,11 @@ Checks: unresolved == 0 AND failed == 0. Exits 0 on pass, 1 on fail.
 """
 from __future__ import absolute_import
 
-from typing import List, Tuple
-
 import argparse
 import json
 import sys
 from pathlib import Path
+from typing import List, Tuple
 
 
 def _check_applitools(data: dict) -> Tuple[bool, int, int, int]:

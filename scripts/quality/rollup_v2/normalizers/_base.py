@@ -158,7 +158,7 @@ class BaseNormalizer(ABC):
         # (a protocol covering any frozen dataclass), so Sonar python:S5886
         # flags the ``-> Finding`` return type as a downcast. The cast is a
         # no-op at runtime since ``finding`` is concretely a Finding.
-        return cast(Finding, replace(
+        return cast("Finding", replace(
             finding,
             primary_message=redact_secrets(finding.primary_message),
             context_snippet=redact_secrets(finding.context_snippet),

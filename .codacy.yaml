@@ -2,6 +2,20 @@
 engines:
   pylint:
     enabled: false   # disabled in PR 2 per §A.7; .pylintrc deleted in PR 4
+  # TSLint was officially deprecated in 2019 in favor of @typescript-eslint.
+  # Codacy still ships "TSLint (deprecated)" and emits 74 findings on the
+  # scripts/beads-*.ts files (object-literal-sort-keys, only-arrow-functions,
+  # no-magic-numbers, trailing-comma, typedef, max-file-line-count). Those
+  # rules are either already covered by ESLint+typescript-eslint or are
+  # stylistic noise the active rule set doesn't enforce. Disable so the
+  # active ESLint engine is the single source of truth for .ts findings.
+  tslint:
+    enabled: false
+  # JSHint is also deprecated (last release 2018; superseded by ESLint).
+  # Disable so the deprecated tool's stale single finding stops showing up
+  # alongside ESLint's modern coverage of the same files.
+  jshint:
+    enabled: false
   bandit:
     enabled: true
   semgrep:

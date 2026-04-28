@@ -7,9 +7,8 @@ import argparse
 import os
 import sys
 import time
-from typing import Any, Dict, List, Mapping, Tuple
-
 from pathlib import Path
+from typing import Any, Dict, List, Mapping, Tuple
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))

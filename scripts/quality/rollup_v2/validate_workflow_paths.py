@@ -11,11 +11,10 @@ Usage:
 """
 from __future__ import absolute_import
 
-from typing import List
-
 import argparse
 import sys
 from pathlib import Path
+from typing import List
 
 from scripts.quality.rollup_v2.path_safety import PathEscapedRootError, validate_finding_file
 

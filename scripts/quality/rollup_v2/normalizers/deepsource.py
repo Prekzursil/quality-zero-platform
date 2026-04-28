@@ -5,12 +5,12 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer, FindingDraft
-from scripts.quality.rollup_v2.taxonomy import lookup
 from scripts.quality.rollup_v2.schema.finding import (
     CATEGORY_GROUP_QUALITY,
     CATEGORY_GROUP_SECURITY,
     Finding,
 )
+from scripts.quality.rollup_v2.taxonomy import lookup
 
 _SEVERITY_MAP = {
     "CRITICAL": "high",

@@ -20,7 +20,7 @@ def _scan_dead_block_end(lines: List[str], target_index: int, target_indent: int
     end_index = target_index
     while end_index < len(lines):
         line = lines[end_index]
-        if not line.strip():  # pragma: no cover -- blank line within dead block; tested but branch depends on exact whitespace
+        if not line.strip():  # pragma: no cover -- blank line in dead block; whitespace-dependent
             end_index += 1
             continue
         line_indent = len(line) - len(line.lstrip())
@@ -57,7 +57,7 @@ def generate(
     target_indent = len(target_line) - len(target_line.lstrip())
     end_index = _scan_dead_block_end(lines, target_index, target_indent)
 
-    if end_index == target_index:  # pragma: no cover -- defensive; requires target line to have lower indent than itself
+    if end_index == target_index:  # pragma: no cover -- defensive: target indent inversion
         return PatchDeclined(
             reason_code="ambiguous-fix",
             reason_text="could not identify unreachable block",

@@ -63,7 +63,13 @@ def main(argv: List[str] | None = None) -> int:
 
     if args.out_md:
         status = "PASS" if passed else "FAIL"
-        md = f"# Chromatic Zero\n\n**Status:** {status}\n**Total:** {total}\n**Accepted:** {accepted}\n**Errored:** {errored}\n"
+        md = (
+            "# Chromatic Zero\n\n"
+            f"**Status:** {status}\n"
+            f"**Total:** {total}\n"
+            f"**Accepted:** {accepted}\n"
+            f"**Errored:** {errored}\n"
+        )
         out_md = Path(args.out_md)
         out_md.parent.mkdir(parents=True, exist_ok=True)
         out_md.write_text(md, encoding="utf-8")

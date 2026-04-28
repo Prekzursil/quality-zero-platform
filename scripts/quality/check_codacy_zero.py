@@ -32,13 +32,20 @@ SCOPED_ANALYSIS_RETRY_ATTEMPTS = 180  # PR analysis can lag several minutes behi
 @dataclass(frozen=True)
 class CodacyStatusResult:
     """Describe one resolved Codacy gate result."""
-    status: str; findings: List[str]; open_issues: int | None; pull_request: str
+    status: str
+    findings: List[str]
+    open_issues: int | None
+    pull_request: str
 
 
 @dataclass(frozen=True)
 class CodacyQuery:
     """Describe the repository and optional PR scope for one Codacy query."""
-    provider: str; owner: str; repo: str; pull_request: str = ""; sha: str = ""
+    provider: str
+    owner: str
+    repo: str
+    pull_request: str = ""
+    sha: str = ""
 
 CodacyPendingFn = Callable[[CodacyQuery, str], str | None]
 
@@ -46,8 +53,10 @@ CodacyPendingFn = Callable[[CodacyQuery, str], str | None]
 @dataclass(frozen=True)
 class CodacyRetryConfig:
     """Describe the retry settings for one Codacy zero-gate lookup."""
-    provider_candidates: Tuple[str, ...]; attempts: int
-    pending_fn: CodacyPendingFn; sleep_seconds: float
+    provider_candidates: Tuple[str, ...]
+    attempts: int
+    pending_fn: CodacyPendingFn
+    sleep_seconds: float
 
 
 def _mapping_or_empty(value: Any) -> Dict[str, Any]:

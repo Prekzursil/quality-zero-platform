@@ -17,6 +17,7 @@ name: Reusable Bootstrap Repo
 
 permissions: {}
 
+# checkov:skip=CKV_GHA_7:operator-dispatched bootstrap; inputs are control-plane params (target repo, stack name), not build-output mutators
 on:
   workflow_dispatch:
     inputs:

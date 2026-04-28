@@ -17,6 +17,7 @@ name: Scheduled Alerts
 
 permissions: {}
 
+# checkov:skip=CKV_GHA_7:dry_run is a control-plane flag (computes triggers without firing gh CLI), not a build-output mutator
 on:
   schedule:
     # Every 6 hours, offset by 17 minutes to avoid the top-of-hour

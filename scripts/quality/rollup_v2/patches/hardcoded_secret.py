@@ -11,11 +11,12 @@ from scripts.quality.rollup_v2.schema.patch import PatchDeclined, PatchResult
 GENERATOR_VERSION = "hardcoded_secret/1.0.0"
 CATEGORY = "hardcoded-secret"
 
-# Matches `SECRET_NAME = "value"` or `secret_name = 'value'`. IGNORECASE
-# makes A-Z redundant with a-z, so the leading character class is just
-# ``[a-z_]`` here. The trailing ``_?`` is dropped from a non-capturing
-# wrapper since the outer group adds no atomicity over inlining the
-# alternation directly (Sonar python:S6395 / S5869).
+# Matches credential assignments like ``API_KEY = "value"`` or
+# ``token = 'value'``. IGNORECASE makes A-Z redundant with a-z, so the
+# leading character class is just ``[a-z_]`` here. The trailing ``_?``
+# is dropped from a non-capturing wrapper since the outer group adds
+# no atomicity over inlining the alternation directly (Sonar
+# python:S6395 / S5869).
 _SECRET_ASSIGN = re.compile(
     r"""^(\s*)([a-z_]\w*_?(?:KEY|TOKEN|SECRET|PASSWORD|PASS|PWD|API_KEY|ACCESS_TOKEN)\s*=\s*)(['"])(.+?)\3""",
     re.IGNORECASE,

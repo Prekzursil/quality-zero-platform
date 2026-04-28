@@ -97,6 +97,7 @@ def _utc_iso_now() -> str:
 
 def _build_audit_record(
     label: str,
+    *,
     pr_slug: str,
     pr_number: int,
     head_sha: str,
@@ -152,7 +153,12 @@ def evaluate_break_glass(
             "line in the PR body (e.g. ``Incident: INC-1234``)."
         )
     record = _build_audit_record(
-        BREAK_GLASS_LABEL, pr_slug, pr_number, head_sha, actor, incident,
+        BREAK_GLASS_LABEL,
+        pr_slug=pr_slug,
+        pr_number=pr_number,
+        head_sha=head_sha,
+        actor=actor,
+        incident=incident,
     )
     title, body = _build_tracking_issue(pr_slug, pr_number, actor, incident)
     return BypassDecision(
@@ -182,7 +188,12 @@ def evaluate_skip(
     """
     _ = pr_body  # unused; see docstring
     record = _build_audit_record(
-        SKIP_LABEL, pr_slug, pr_number, head_sha, actor, incident=None,
+        SKIP_LABEL,
+        pr_slug=pr_slug,
+        pr_number=pr_number,
+        head_sha=head_sha,
+        actor=actor,
+        incident=None,
     )
     return BypassDecision(
         label=SKIP_LABEL,

@@ -414,4 +414,5 @@ export { _internals };
 // ``no-unused-expressions`` on the bare-await form (the two rules
 // disagree on the canonical shape, so we follow Sonar and silence
 // the conflicting Codacy ESLint rule per-line).
-await runCliIfEntrypoint(import.meta.url); // eslint-disable-line no-unused-expressions
+// eslint-disable-next-line
+await runCliIfEntrypoint(import.meta.url);

@@ -57,7 +57,7 @@ def generate(
 
     # Add `import os` at the top if not already present
     has_os_import = any(
-        re.match(r"^\s*import\s+os\b", l) for l in lines
+        re.match(r"^\s*import\s+os\b", line) for line in lines
     )
     if not has_os_import:
         patched_lines.insert(0, "import os\n")

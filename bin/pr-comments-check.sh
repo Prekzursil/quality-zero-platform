@@ -25,7 +25,7 @@ UNADDRESSED=0
 echo "=== Inline Code Review Comments ==="
 
 # Fetch all comments first, fail if API error
-COMMENTS_JSON=$(gh api --paginate repos/$OWNER/$REPO_NAME/pulls/$PR_NUMBER/comments 2>&1) || {
+COMMENTS_JSON=$(gh api --paginate "repos/${OWNER}/${REPO_NAME}/pulls/${PR_NUMBER}/comments" 2>&1) || {
   echo "API ERROR: Failed to fetch PR comments"
   echo "   $COMMENTS_JSON"
   exit 2
@@ -64,7 +64,7 @@ fi
 echo ""
 echo "=== General PR Discussion Comments ==="
 # List discussion comments (bot comments typically don't need replies)
-ISSUE_COMMENTS=$(gh api --paginate repos/$OWNER/$REPO_NAME/issues/$PR_NUMBER/comments 2>&1) || {
+ISSUE_COMMENTS=$(gh api --paginate "repos/${OWNER}/${REPO_NAME}/issues/${PR_NUMBER}/comments" 2>&1) || {
   echo "WARNING: Could not fetch discussion comments"
   echo "   $ISSUE_COMMENTS"
 }

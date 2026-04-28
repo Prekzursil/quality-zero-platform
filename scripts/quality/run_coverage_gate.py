@@ -14,6 +14,13 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, cast
 
+# Type alias used by the three ``cast`` call sites below. Sonar's
+# python:S1192 flags the bare string form ``cast(_CoverageMapping, ...)``
+# (introduced by ruff TC006 auto-fix) as a duplicate-literal smell once
+# it appears 3+ times. Defining the alias once eliminates the repeated
+# string literal while keeping ``cast`` happy.
+_CoverageMapping = Dict[str, Any]
+
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # pragma: no cover
 
@@ -45,7 +52,7 @@ def _parse_args() -> argparse.Namespace:
 
 def _coverage_mode(coverage: Dict[str, Any], event_name: str) -> str:
     """Handle coverage mode."""
-    assert_mode = cast("Dict[str, Any]", coverage.get("assert_mode", {}))
+    assert_mode = cast(_CoverageMapping, coverage.get("assert_mode", {}))
     if event_name in assert_mode:
         return str(assert_mode[event_name])
     return str(assert_mode.get("default", "enforce"))
@@ -370,7 +377,7 @@ def main() -> int:
         if args.platform_dir
         else Path(__file__).resolve().parents[2]
     )
-    coverage = cast("Dict[str, Any]", profile.get("coverage", {}))
+    coverage = cast(_CoverageMapping, profile.get("coverage", {}))
 
     _run_shell(
         str(coverage.get("command", "")),
@@ -390,7 +397,7 @@ def main() -> int:
             coverage, repo_dir=repo_dir, platform_dir=platform_dir
         )
         baseline_payload = _load_baseline_coverage_payload(
-            cast("Dict[str, Any]", profile)
+            cast(_CoverageMapping, profile)
         )
         return _write_non_regression_report(current_payload, baseline_payload)
 

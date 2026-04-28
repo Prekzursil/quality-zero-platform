@@ -15,11 +15,16 @@ from pathlib import Path
 from typing import Any, Dict, List, cast
 
 # Type alias used by the three ``cast`` call sites below. Sonar's
-# python:S1192 flags the bare string form ``cast(_CoverageMapping, ...)``
+# python:S1192 flags the bare string form ``cast("_CoverageMapping", ...)``
 # (introduced by ruff TC006 auto-fix) as a duplicate-literal smell once
 # it appears 3+ times. Defining the alias once eliminates the repeated
 # string literal while keeping ``cast`` happy.
 _CoverageMapping = Dict[str, Any]
+# CodeQL's py/unused-global-variable can't follow string literals to
+# type aliases, so it flags the alias as unused. The ``__all__`` export
+# below gives it an explicit reference without changing runtime
+# behavior or introducing additional duplicate string literals.
+__all__ = ["_CoverageMapping"]
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # pragma: no cover

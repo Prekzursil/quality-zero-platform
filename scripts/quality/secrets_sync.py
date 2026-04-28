@@ -50,7 +50,15 @@ _ISO_UTC_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 
 def _utc_now_iso() -> str:
-    """Return the current UTC time as ``YYYY-MM-DDTHH:MM:SSZ``."""
+    """Return the current UTC time as ``YYYY-MM-DDTHH:MM:SSZ``.
+
+    The ``# nosemgrep`` silences Codacy's i18n rule which fires on any
+    ``strftime`` call regardless of the format origin (literal, constant,
+    or computed). This timestamp is for machine-readable audit logs, not
+    user-facing display, so locale-aware formatting is intentionally
+    avoided.
+    """
+    # nosemgrep: codacy.python.i18n.no-hardcoded-strftime
     return dt.datetime.now(tz=dt.UTC).strftime(_ISO_UTC_FORMAT)
 
 

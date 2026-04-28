@@ -8,7 +8,7 @@ import json
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, cast
+from typing import Any, Dict, Iterable, List, Tuple, cast
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -189,8 +189,15 @@ def _render_canonical_findings_section(findings: List[Dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def _render_prompt(*args: object, **kwargs: object) -> str:
-    """Handle render prompt."""
+def _validate_render_prompt_inputs(
+    args: tuple,
+    kwargs: Dict[str, object],
+) -> Tuple[Dict[str, Any], str, str, str, list]:
+    """Validate the (*args, **kwargs) shape for ``_render_prompt`` and unpack it.
+
+    Returns (profile, lane, event_name, failure_context, artifacts).
+    Raises ``TypeError`` for any contract violation.
+    """
     if len(args) != 1:
         raise TypeError(
             "_render_prompt expects a single profile mapping positional argument"
@@ -207,11 +214,24 @@ def _render_prompt(*args: object, **kwargs: object) -> str:
         raise TypeError(f"Missing required prompt field: {exc.args[0]}") from exc
     if not isinstance(artifacts_value, Iterable):
         raise TypeError("_render_prompt expects artifacts to be iterable")
-    artifacts = list(cast("Iterable[object]", artifacts_value))
     if kwargs:
         raise TypeError(
             f"Unexpected _render_prompt parameters: {', '.join(sorted(kwargs))}"
         )
+    return (
+        profile,
+        lane,
+        event_name,
+        failure_context,
+        list(cast("Iterable[object]", artifacts_value)),
+    )
+
+
+def _render_prompt(*args: object, **kwargs: object) -> str:
+    """Handle render prompt."""
+    profile, lane, event_name, failure_context, artifacts = (
+        _validate_render_prompt_inputs(args, kwargs)
+    )
     headline = "PR failure remediation" if lane == "remediation" else "backlog sweep"
     sections = [
         f"# Codex {headline}",

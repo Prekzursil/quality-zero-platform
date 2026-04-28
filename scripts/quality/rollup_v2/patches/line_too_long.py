@@ -13,6 +13,40 @@ CATEGORY = "line-too-long"
 MAX_LINE_LENGTH = 100
 
 
+def _wrap_comment_line(target_line: str) -> str:
+    """Re-flow a long ``# ...`` comment within MAX_LINE_LENGTH using textwrap."""
+    stripped = target_line.strip()
+    indent = target_line[: len(target_line) - len(target_line.lstrip())]
+    comment_text = stripped[2:]  # Remove '# '
+    wrapped = textwrap.fill(
+        comment_text,
+        width=MAX_LINE_LENGTH - len(indent) - 2,
+        initial_indent=indent + "# ",
+        subsequent_indent=indent + "# ",
+    )
+    return wrapped + "\n"
+
+
+def _build_wrapped_replacement(
+    target_line: str,
+) -> str | PatchDeclined:
+    """Decide what (if anything) the long line should be replaced with."""
+    stripped = target_line.strip()
+    if stripped.startswith("#"):
+        return _wrap_comment_line(target_line)
+    if len(target_line.rstrip("\n")) <= MAX_LINE_LENGTH:
+        return PatchDeclined(
+            reason_code="ambiguous-fix",
+            reason_text="line is not actually too long",
+            suggested_tier="skip",
+        )
+    return PatchDeclined(
+        reason_code="ambiguous-fix",
+        reason_text="cannot safely wrap non-comment line",
+        suggested_tier="llm-fallback",
+    )
+
+
 def generate(
     finding: Finding,
     source_file_content: str,
@@ -28,36 +62,12 @@ def generate(
             suggested_tier="skip",
         )
 
-    target_line = lines[target_index]
-    # Only wrap comments and string literals; complex expressions decline
-    stripped = target_line.strip()
-    if stripped.startswith("#"):
-        # Wrap comment
-        indent = target_line[: len(target_line) - len(target_line.lstrip())]
-        comment_text = stripped[2:]  # Remove '# '
-        wrapped = textwrap.fill(
-            comment_text,
-            width=MAX_LINE_LENGTH - len(indent) - 2,
-            initial_indent=indent + "# ",
-            subsequent_indent=indent + "# ",
-        )
-        new_lines = wrapped + "\n"
-    elif len(target_line.rstrip("\n")) <= MAX_LINE_LENGTH:
-        return PatchDeclined(
-            reason_code="ambiguous-fix",
-            reason_text="line is not actually too long",
-            suggested_tier="skip",
-        )
-    else:
-        # For non-comments, decline to avoid breaking syntax
-        return PatchDeclined(
-            reason_code="ambiguous-fix",
-            reason_text="cannot safely wrap non-comment line",
-            suggested_tier="llm-fallback",
-        )
+    replacement = _build_wrapped_replacement(lines[target_index])
+    if isinstance(replacement, PatchDeclined):
+        return replacement
 
     patched_lines = lines.copy()
-    patched_lines[target_index] = new_lines
+    patched_lines[target_index] = replacement
     if patched_lines == lines:  # pragma: no cover -- defensive; wrap always changes long comments
         return PatchDeclined(
             reason_code="ambiguous-fix",

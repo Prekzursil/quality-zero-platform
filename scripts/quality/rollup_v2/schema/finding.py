@@ -26,11 +26,18 @@ Corroboration = Literal["multi", "single"]
 
 
 @dataclass(frozen=True, slots=True)
-class Finding:
+class Finding:  # pylint: disable=too-many-instance-attributes
     """Canonical finding produced by any provider normalizer.
 
     All string fields that may contain user/provider content have been passed
     through `redact_secrets()` by the normalizer before construction (see §B.1).
+
+    The 22 attributes are deliberate: this is the union of every column that
+    any downstream consumer (renderer, dedup, patch dispatch, alerts, codex
+    prompt) needs from a finding. Splitting into sub-records would force
+    every consumer to navigate nested objects to read fields they already
+    treat as flat. ``# pylint: disable=too-many-instance-attributes`` keeps
+    the canonical-record intent without per-attribute justification noise.
     """
     schema_version: str
     finding_id: str

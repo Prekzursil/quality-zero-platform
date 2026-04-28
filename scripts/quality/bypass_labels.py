@@ -207,7 +207,14 @@ def append_jsonl(audit_path: Path, record: Mapping[str, Any]) -> None:
         handle.write(line + "\n")
 
 
-if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
+def _run_cli() -> None:  # pragma: no cover — ad-hoc CLI
+    """Dispatch one bypass-label decision from argv + stdin to stdout.
+
+    Wrapped in a function (rather than inlined under ``if __name__ ==
+    "__main__":``) so all locals stay local-scoped — at module level
+    pylint treats every name as a constant and flags ``filename`` as a
+    C0103 invalid-name finding for not being UPPER_CASE.
+    """
     if len(sys.argv) < 6:
         print(
             "usage: bypass_labels.py <label> <pr_slug> <pr_number> "
@@ -215,22 +222,26 @@ if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
             file=sys.stderr,
         )
         raise SystemExit(2)
-    _label, _slug, _pr_num, _sha, _actor, _audit_dir = sys.argv[1:7]
-    _body = sys.stdin.read()
-    if _label == BREAK_GLASS_LABEL:
-        _decision = evaluate_break_glass(_body, _slug, int(_pr_num), _sha, _actor)
-        _filename = "break-glass.jsonl"
-    elif _label == SKIP_LABEL:
-        _decision = evaluate_skip(_body, _slug, int(_pr_num), _sha, _actor)
-        _filename = "skip.jsonl"
+    label, slug, pr_num, sha, actor, audit_dir = sys.argv[1:7]
+    body = sys.stdin.read()
+    if label == BREAK_GLASS_LABEL:
+        decision = evaluate_break_glass(body, slug, int(pr_num), sha, actor)
+        filename = "break-glass.jsonl"
+    elif label == SKIP_LABEL:
+        decision = evaluate_skip(body, slug, int(pr_num), sha, actor)
+        filename = "skip.jsonl"
     else:
-        print(f"unknown label: {_label}", file=sys.stderr)
+        print(f"unknown label: {label}", file=sys.stderr)
         raise SystemExit(2)
-    if _decision.audit_record is not None:
-        append_jsonl(Path(_audit_dir) / _filename, _decision.audit_record)
+    if decision.audit_record is not None:
+        append_jsonl(Path(audit_dir) / filename, decision.audit_record)
     print(json.dumps({
-        "label": _decision.label,
-        "allowed": _decision.allowed,
-        "incident": _decision.incident,
-        "tracking_issue_title": _decision.tracking_issue_title,
+        "label": decision.label,
+        "allowed": decision.allowed,
+        "incident": decision.incident,
+        "tracking_issue_title": decision.tracking_issue_title,
     }))
+
+
+if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
+    _run_cli()

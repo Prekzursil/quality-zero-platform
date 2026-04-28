@@ -28,7 +28,7 @@ class NormalizerResult:
 
 
 @dataclass(frozen=True, slots=True)
-class FindingDraft:
+class FindingDraft:  # pylint: disable=too-many-instance-attributes
     """Per-result fields supplied by a normalizer; redacted by ``_build_finding``.
 
     Bundled into one dataclass so :py:meth:`BaseNormalizer._build_finding` keeps
@@ -80,7 +80,7 @@ class BaseNormalizer(ABC):
         drops: List[Dict[str, str]] = []
         try:
             raw = list(self.parse(artifact, repo_root))
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-exception-caught
             errors.append({
                 "provider": self.provider,
                 "error_class": exc.__class__.__name__,

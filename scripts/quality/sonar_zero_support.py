@@ -20,7 +20,7 @@ FinalFindingsFn = Callable[[List[str], str | None], List[str]]
 
 
 @dataclass(frozen=True)
-class AnalysisRevisionConfig:
+class AnalysisRevisionConfig:  # pylint: disable=too-many-instance-attributes
     """Configuration needed to resolve one Sonar analysis revision."""
 
     request_json: RequestFn

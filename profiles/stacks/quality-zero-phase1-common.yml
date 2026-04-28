@@ -75,7 +75,13 @@ coverage:
   command_shell: bash
   setup:
     python: "3.12"
-    node: "20"
+    # Bumped to Node 22 LTS (active LTS; supports --test-coverage-exclude
+    # added in 22.10, which the QZP self-profile relies on for its .mjs
+    # lcov scope). Fleet-wide bump because GitHub Actions also flags
+    # Node 20 actions as deprecated (forced default flips to Node 24 on
+    # 2026-06-02). Repos that explicitly need a different version can
+    # override coverage.setup.node in their per-repo profile.
+    node: "22"
   inputs: []
   min_percent: 100.0
   branch_min_percent: 100.0

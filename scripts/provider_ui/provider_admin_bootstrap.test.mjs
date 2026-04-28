@@ -27,19 +27,19 @@ import {
 // =============================================================================
 
 test('ensureManagedStatePath returns absolute path under the state root', () => {
-  const root = path.resolve('/tmp/state');
+  const root = path.resolve('/qzp-fixture/state');
   const target = path.join(root, 'profile');
   const got = ensureManagedStatePath(target, root);
   assert.equal(got, path.resolve(target));
 });
 
 test('ensureManagedStatePath rejects sibling escape', () => {
-  const root = path.resolve('/tmp/state');
-  assert.throws(() => ensureManagedStatePath('/tmp/elsewhere', root), /managed state root/);
+  const root = path.resolve('/qzp-fixture/state');
+  assert.throws(() => ensureManagedStatePath('/qzp-fixture/elsewhere', root), /managed state root/);
 });
 
 test('ensureManagedStatePath rejects parent traversal', () => {
-  const root = path.resolve('/tmp/state');
+  const root = path.resolve('/qzp-fixture/state');
   assert.throws(
     () => ensureManagedStatePath(path.join(root, '..', 'evil'), root),
     /managed state root/
@@ -89,19 +89,19 @@ test('loadPlaywrightChromium throws when QUALITY_ZERO_PROVIDER_UI_RUNNER_DIR is 
 // =============================================================================
 
 test('isCliEntrypoint matches when argv[1] resolves to the import URL', () => {
-  const target = path.resolve('/tmp/some-script.mjs');
+  const target = path.resolve('/qzp-fixture/some-script.mjs');
   const url = pathToFileURL(target).href;
   assert.equal(isCliEntrypoint(url, ['node', target]), true);
 });
 
 test('isCliEntrypoint rejects when argv[1] is a different file', () => {
-  const target = path.resolve('/tmp/script.mjs');
-  const otherUrl = pathToFileURL(path.resolve('/tmp/other.mjs')).href;
+  const target = path.resolve('/qzp-fixture/script.mjs');
+  const otherUrl = pathToFileURL(path.resolve('/qzp-fixture/other.mjs')).href;
   assert.equal(isCliEntrypoint(otherUrl, ['node', target]), false);
 });
 
 test('isCliEntrypoint returns false when argv[1] is missing', () => {
-  const url = pathToFileURL(path.resolve('/tmp/script.mjs')).href;
+  const url = pathToFileURL(path.resolve('/qzp-fixture/script.mjs')).href;
   assert.equal(isCliEntrypoint(url, ['node']), false);
 });
 
@@ -117,21 +117,21 @@ test('promptForManualLogin writes guidance and waits for Enter', async () => {
   let closed = false;
   const readlineModule = {
     createInterface: () => ({
-      question: async (prompt) => { questionAsked = prompt; return ''; },
+      question: (prompt) => { questionAsked = prompt; return Promise.resolve(''); },
       close: () => { closed = true; }
     })
   };
 
   await promptForManualLogin(
     { label: 'Codecov', targetUrl: 'https://example.com', loginHint: 'Press something.' },
-    '/tmp/profile',
+    '/qzp-fixture/profile',
     { readline: readlineModule, input: inputStream, output: outputStream }
   );
 
   assert.equal(closed, true);
   assert.match(writes.join(''), /Manual login handoff for Codecov/);
   assert.match(writes.join(''), /https:\/\/example\.com/);
-  assert.match(writes.join(''), /\/tmp\/profile/);
+  assert.match(writes.join(''), /\/qzp-fixture\/profile/);
   assert.match(writes.join(''), /Press something/);
   assert.match(questionAsked, /press Enter to continue/);
 });
@@ -143,12 +143,12 @@ test('promptForManualLogin writes guidance and waits for Enter', async () => {
 test('launchContextWithFallback uses msedge channel on win32', async () => {
   const calls = [];
   const chromium = {
-    launchPersistentContext: async (dir, options) => {
+    launchPersistentContext: (dir, options) => {
       calls.push({ dir, options });
       return { ctx: 'edge' };
     }
   };
-  const ctx = await launchContextWithFallback(chromium, '/tmp/profile', { headless: true }, 'win32');
+  const ctx = await launchContextWithFallback(chromium, '/qzp-fixture/profile', { headless: true }, 'win32');
   assert.deepEqual(ctx, { ctx: 'edge' });
   assert.equal(calls[0].options.channel, 'msedge');
   assert.equal(calls[0].options.headless, true);
@@ -157,19 +157,19 @@ test('launchContextWithFallback uses msedge channel on win32', async () => {
 test('launchContextWithFallback skips channel on non-win32', async () => {
   const calls = [];
   const chromium = {
-    launchPersistentContext: async (dir, options) => {
+    launchPersistentContext: (dir, options) => {
       calls.push({ dir, options });
       return { ctx: 'chromium' };
     }
   };
-  await launchContextWithFallback(chromium, '/tmp/profile', { headless: true }, 'linux');
+  await launchContextWithFallback(chromium, '/qzp-fixture/profile', { headless: true }, 'linux');
   assert.equal(calls[0].options.channel, undefined);
 });
 
 test('launchContextWithFallback retries without channel on win32 launch failure', async () => {
   const calls = [];
   const chromium = {
-    launchPersistentContext: async (dir, options) => {
+    launchPersistentContext: (dir, options) => {
       calls.push({ options });
       if (options.channel === 'msedge') {
         throw new Error('edge missing');
@@ -177,7 +177,7 @@ test('launchContextWithFallback retries without channel on win32 launch failure'
       return { ctx: 'fallback-chromium' };
     }
   };
-  const ctx = await launchContextWithFallback(chromium, '/tmp/profile', { headless: true }, 'win32');
+  const ctx = await launchContextWithFallback(chromium, '/qzp-fixture/profile', { headless: true }, 'win32');
   assert.deepEqual(ctx, { ctx: 'fallback-chromium' });
   assert.equal(calls.length, 2);
   assert.equal(calls[0].options.channel, 'msedge');
@@ -186,10 +186,10 @@ test('launchContextWithFallback retries without channel on win32 launch failure'
 
 test('launchContextWithFallback re-throws on non-win32 launch failure', async () => {
   const chromium = {
-    launchPersistentContext: async () => { throw new Error('boom'); }
+    launchPersistentContext: () => { throw new Error('boom'); }
   };
   await assert.rejects(
-    launchContextWithFallback(chromium, '/tmp/profile', { headless: true }, 'linux'),
+    launchContextWithFallback(chromium, '/qzp-fixture/profile', { headless: true }, 'linux'),
     /boom/
   );
 });
@@ -203,8 +203,8 @@ function _stubArgs() {
     provider: 'chromatic',
     repo: 'org/repo',
     owner: 'org',
-    profileDir: path.resolve('/tmp/state/profile'),
-    stateRoot: path.resolve('/tmp/state'),
+    profileDir: path.resolve('/qzp-fixture/state/profile'),
+    stateRoot: path.resolve('/qzp-fixture/state'),
     headless: undefined,
     slowMoMs: 0,
     timeoutMs: 1000
@@ -213,18 +213,18 @@ function _stubArgs() {
 
 function _stubBrowserContext() {
   const page = {
-    setDefaultTimeout: () => {},
-    goto: async () => {},
-    title: async () => 'Test Title',
+    setDefaultTimeout: () => undefined,
+    goto: () => undefined,
+    title: () => 'Test Title',
     url: () => 'https://final.example.com'
   };
   return {
     pages: () => [page],
-    newPage: async () => page,
-    on: () => {},
-    once: () => {},
-    off: () => {},
-    close: async () => {}
+    newPage: () => page,
+    on: () => undefined,
+    once: () => undefined,
+    off: () => undefined,
+    close: () => undefined
   };
 }
 
@@ -235,18 +235,18 @@ test('launchPersistentContext walks the launch path and skips manual prompt when
     _stubArgs(),
     { headlessDefault: true, includeManualPrompt: false },
     {
-      loadPlaywrightChromium: async () => ({ tag: 'chromium' }),
-      launchContextWithFallback: async (chromium, dir, opts) => {
+      loadPlaywrightChromium: () => ({ tag: 'chromium' }),
+      launchContextWithFallback: (chromium, dir, opts) => {
         calls.push({ dir, headless: opts.headless });
         return ctx;
       },
-      promptForManualLogin: async () => { calls.push('prompt'); }
+      promptForManualLogin: () => { calls.push('prompt'); }
     }
   );
   assert.equal(result.headless, true);
   assert.equal(result.title, 'Test Title');
   assert.equal(result.finalUrl, 'https://final.example.com');
-  assert.deepEqual(calls.map((c) => c.dir ?? c), [path.resolve('/tmp/state/profile')]);
+  assert.deepEqual(calls.map((c) => c.dir ?? c), [path.resolve('/qzp-fixture/state/profile')]);
 });
 
 test('launchPersistentContext invokes manual prompt when requested', async () => {
@@ -256,9 +256,9 @@ test('launchPersistentContext invokes manual prompt when requested', async () =>
     _stubArgs(),
     { headlessDefault: false, includeManualPrompt: true },
     {
-      loadPlaywrightChromium: async () => ({}),
-      launchContextWithFallback: async () => ctx,
-      promptForManualLogin: async () => { prompted = true; }
+      loadPlaywrightChromium: () => ({}),
+      launchContextWithFallback: () => ctx,
+      promptForManualLogin: () => { prompted = true; }
     }
   );
   assert.equal(prompted, true);
@@ -266,23 +266,23 @@ test('launchPersistentContext invokes manual prompt when requested', async () =>
 
 test('launchPersistentContext creates a new page when context.pages() is empty', async () => {
   const page = {
-    setDefaultTimeout: () => {},
-    goto: async () => {},
-    title: async () => 'New Page',
+    setDefaultTimeout: () => undefined,
+    goto: () => undefined,
+    title: () => 'New Page',
     url: () => 'https://new.example.com'
   };
   const ctx = {
     pages: () => [],
-    newPage: async () => page,
-    on: () => {}, once: () => {}, off: () => {}, close: async () => {}
+    newPage: () => page,
+    on: () => undefined, once: () => undefined, off: () => undefined, close: () => undefined
   };
   const result = await launchPersistentContext(
     _stubArgs(),
     { headlessDefault: false, includeManualPrompt: false },
     {
-      loadPlaywrightChromium: async () => ({}),
-      launchContextWithFallback: async () => ctx,
-      promptForManualLogin: async () => {}
+      loadPlaywrightChromium: () => ({}),
+      launchContextWithFallback: () => ctx,
+      promptForManualLogin: () => undefined
     }
   );
   assert.equal(result.title, 'New Page');
@@ -360,7 +360,7 @@ test('waitForKeepOpenExit resolves on SIGTERM', async () => {
 // bootstrap / openOrInspect
 // =============================================================================
 
-function _bootstrapStubResult(close = async () => {}) {
+function _bootstrapStubResult(close = () => undefined) {
   return {
     target: { key: 'codecov', label: 'Codecov', repoSlug: 'org/repo', targetUrl: 'https://x' },
     finalUrl: 'https://final',
@@ -375,9 +375,9 @@ test('bootstrap closes the context when keepOpen is false', async () => {
   await bootstrap(
     { keepOpen: false },
     {
-      launchPersistentContext: async () => _bootstrapStubResult(async () => { closed += 1; }),
-      printResult: () => {},
-      waitForKeepOpenExit: async () => {}
+      launchPersistentContext: () => _bootstrapStubResult(() => { closed += 1; }),
+      printResult: () => undefined,
+      waitForKeepOpenExit: () => undefined
     }
   );
   assert.equal(closed, 1);
@@ -389,9 +389,9 @@ test('bootstrap waits for keep-open exit when requested', async () => {
   await bootstrap(
     { keepOpen: true },
     {
-      launchPersistentContext: async () => _bootstrapStubResult(async () => { closed += 1; }),
-      printResult: () => {},
-      waitForKeepOpenExit: async () => { waited = true; }
+      launchPersistentContext: () => _bootstrapStubResult(() => { closed += 1; }),
+      printResult: () => undefined,
+      waitForKeepOpenExit: () => { waited = true; }
     }
   );
   assert.equal(waited, true);
@@ -404,9 +404,9 @@ test('openOrInspect uses inspect_complete prefix in inspect mode', async () => {
     { keepOpen: false },
     { inspectOnly: true },
     {
-      launchPersistentContext: async () => _bootstrapStubResult(),
+      launchPersistentContext: () => _bootstrapStubResult(),
       printResult: (prefix) => prefixes.push(prefix),
-      waitForKeepOpenExit: async () => {}
+      waitForKeepOpenExit: () => undefined
     }
   );
   assert.deepEqual(prefixes, ['inspect_complete']);
@@ -418,9 +418,9 @@ test('openOrInspect uses open_complete prefix when not inspect-only', async () =
     { keepOpen: false },
     { inspectOnly: false },
     {
-      launchPersistentContext: async () => _bootstrapStubResult(),
+      launchPersistentContext: () => _bootstrapStubResult(),
       printResult: (prefix) => prefixes.push(prefix),
-      waitForKeepOpenExit: async () => {}
+      waitForKeepOpenExit: () => undefined
     }
   );
   assert.deepEqual(prefixes, ['open_complete']);
@@ -432,9 +432,9 @@ test('openOrInspect waits for keep-open exit when requested', async () => {
     { keepOpen: true },
     { inspectOnly: false },
     {
-      launchPersistentContext: async () => _bootstrapStubResult(),
-      printResult: () => {},
-      waitForKeepOpenExit: async () => { waited = true; }
+      launchPersistentContext: () => _bootstrapStubResult(),
+      printResult: () => undefined,
+      waitForKeepOpenExit: () => { waited = true; }
     }
   );
   assert.equal(waited, true);
@@ -450,10 +450,10 @@ test('runCommand dispatches list to listProviders hook', async () => {
     { command: 'list' },
     {
       listProviders: (args) => { calls.push(['list', args]); },
-      normalizeProvider: () => {},
-      bootstrap: () => {},
-      openOrInspect: () => {},
-      log: () => {},
+      normalizeProvider: () => undefined,
+      bootstrap: () => undefined,
+      openOrInspect: () => undefined,
+      log: () => undefined,
       renderHelp: () => 'help'
     }
   );
@@ -465,11 +465,11 @@ test('runCommand dispatches open to openOrInspect with inspectOnly=false', async
   await runCommand(
     { command: 'open', provider: 'Sonar' },
     {
-      listProviders: () => {},
+      listProviders: () => undefined,
       normalizeProvider: (p) => { calls.push(['normalize', p]); return p.toLowerCase(); },
       bootstrap: () => { calls.push(['bootstrap']); },
       openOrInspect: (_args, opts) => { calls.push(['open', opts.inspectOnly]); },
-      log: () => {},
+      log: () => undefined,
       renderHelp: () => 'help'
     }
   );
@@ -481,31 +481,39 @@ test('runCommand dispatches inspect to openOrInspect with inspectOnly=true', asy
   await runCommand(
     { command: 'inspect', provider: 'Codacy' },
     {
-      listProviders: () => {},
+      listProviders: () => undefined,
       normalizeProvider: (p) => p.toLowerCase(),
-      bootstrap: () => {},
+      bootstrap: () => undefined,
       openOrInspect: (_args, opts) => { calls.push(['inspect', opts.inspectOnly]); },
-      log: () => {},
+      log: () => undefined,
       renderHelp: () => 'help'
     }
   );
   assert.deepEqual(calls, [['inspect', true]]);
 });
 
-test('runCommand prints help for unrecognised commands', async () => {
+async function _runCommandHelpScenario(command) {
   const messages = [];
   await runCommand(
-    { command: 'unknown-command-name' },
+    { command },
     {
-      listProviders: () => {},
-      normalizeProvider: () => {},
-      bootstrap: () => {},
-      openOrInspect: () => {},
+      listProviders: () => undefined,
+      normalizeProvider: () => undefined,
+      bootstrap: () => undefined,
+      openOrInspect: () => undefined,
       log: (m) => messages.push(m),
       renderHelp: () => 'help text'
     }
   );
-  assert.deepEqual(messages, ['help text']);
+  return messages;
+}
+
+test('runCommand prints help for unrecognised commands', async () => {
+  assert.deepEqual(await _runCommandHelpScenario('unknown-command-name'), ['help text']);
+});
+
+test('runCommand prints help when command is "help" (covers case fall-through)', async () => {
+  assert.deepEqual(await _runCommandHelpScenario('help'), ['help text']);
 });
 
 // =============================================================================
@@ -518,7 +526,7 @@ test('main parses argv and forwards to runCommand', async () => {
     ['list'],
     {
       parseArgs: (argv) => { calls.push(['parse', argv]); return { command: 'list' }; },
-      runCommand: async (args) => { calls.push(['run', args]); }
+      runCommand: (args) => { calls.push(['run', args]); }
     }
   );
   assert.deepEqual(calls, [['parse', ['list']], ['run', { command: 'list' }]]);
@@ -557,8 +565,8 @@ test('runCliIfEntrypoint short-circuits when not the CLI entrypoint', async () =
   let mainCalled = false;
   const ran = await runCliIfEntrypoint('file:///not-the-script.mjs', {
     isCliEntrypoint: () => false,
-    main: async () => { mainCalled = true; },
-    reportCliError: () => {}
+    main: () => { mainCalled = true; },
+    reportCliError: () => undefined
   });
   assert.equal(ran, false);
   assert.equal(mainCalled, false);
@@ -568,8 +576,8 @@ test('runCliIfEntrypoint runs main when called as CLI', async () => {
   let mainCalled = false;
   const ran = await runCliIfEntrypoint('file:///cli.mjs', {
     isCliEntrypoint: () => true,
-    main: async () => { mainCalled = true; },
-    reportCliError: () => {}
+    main: () => { mainCalled = true; },
+    reportCliError: () => undefined
   });
   assert.equal(ran, true);
   assert.equal(mainCalled, true);
@@ -579,7 +587,7 @@ test('runCliIfEntrypoint forwards errors to reportCliError', async () => {
   const errors = [];
   const ran = await runCliIfEntrypoint('file:///cli.mjs', {
     isCliEntrypoint: () => true,
-    main: async () => { throw new Error('boom from main'); },
+    main: () => { throw new Error('boom from main'); },
     reportCliError: (e) => errors.push(e.message)
   });
   assert.equal(ran, true);
@@ -594,15 +602,15 @@ test('loadPlaywrightChromium reads runner dir env and resolves chromium via inje
   const stubChromium = { tag: 'stub-chromium' };
   const stubPlaywright = { chromium: stubChromium };
   const got = await loadPlaywrightChromium({
-    runnerDir: '/tmp/runner',
+    runnerDir: '/qzp-fixture/runner',
     createRequire: () => ({
       resolve: (id) => {
         assert.equal(id, 'playwright');
-        return '/tmp/runner/node_modules/playwright/index.js';
+        return '/qzp-fixture/runner/node_modules/playwright/index.js';
       }
     }),
-    importModule: async (href) => {
-      assert.match(href, /\/tmp\/runner\/node_modules\/playwright\/index\.js$/);
+    importModule: (href) => {
+      assert.match(href, /\/qzp-fixture\/runner\/node_modules\/playwright\/index\.js$/);
       return stubPlaywright;
     }
   });
@@ -624,9 +632,9 @@ test('runCommand bootstrap branch invokes normalize then bootstrap hooks in orde
     {
       listProviders: () => order.push('list'),
       normalizeProvider: (p) => { order.push(`normalize:${p}`); return p; },
-      bootstrap: async (a) => { order.push(`bootstrap:${a.provider}`); },
+      bootstrap: (a) => { order.push(`bootstrap:${a.provider}`); },
       openOrInspect: () => order.push('openOrInspect'),
-      log: () => {},
+      log: () => undefined,
       renderHelp: () => 'help'
     }
   );

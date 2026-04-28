@@ -24,7 +24,7 @@ open-pr-and-wait.
 
 ``ensure_pr_only_for_security(findings)`` is the assertion the loop
 uses as a belt-and-suspenders guard: it raises
-``SecurityAutoMergeRefused`` if called with a mode ``auto_merge`` AND
+``SecurityAutoMergeRefusedError`` if called with a mode ``auto_merge`` AND
 any finding is security-class.
 """
 
@@ -65,7 +65,7 @@ _CWE_RE = re.compile(r"\bCWE-\d+\b", re.IGNORECASE)
 _OWASP_RE = re.compile(r"\bA0\d:\d{4}\b", re.IGNORECASE)
 
 
-class SecurityAutoMergeRefused(RuntimeError):
+class SecurityAutoMergeRefusedError(RuntimeError):
     """Raised when QRv2 tries to auto-merge a security-class remediation."""
 
 
@@ -136,7 +136,7 @@ def ensure_pr_only_for_security(
 ) -> None:
     """Belt-and-suspenders guard called by the QRv2 loop.
 
-    Raises :class:`SecurityAutoMergeRefused` when ``intends_auto_merge``
+    Raises :class:`SecurityAutoMergeRefusedError` when ``intends_auto_merge``
     is true AND any finding in ``findings`` is security-class. Silent
     when no auto-merge is intended or no security-class findings are
     present.
@@ -149,7 +149,7 @@ def ensure_pr_only_for_security(
             str(f.get("id") or f.get("rule") or "<anonymous>")
             for f in classified.must_open_pr
         )
-        raise SecurityAutoMergeRefused(
+        raise SecurityAutoMergeRefusedError(
             f"QRv2 refused to auto-merge: security-class findings present "
             f"({ids}). Security-class remediations must open a PR."
         )

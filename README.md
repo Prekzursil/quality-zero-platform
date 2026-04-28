@@ -5,6 +5,7 @@ It replaces the old queue/template baseline with reusable workflows, shared qual
 
 > [!IMPORTANT]
 > **Where to start:**
+>
 > - **Adding a new repo to the fleet?** → [`docs/ONBOARDING.md`](docs/ONBOARDING.md)
 > - **Choosing gates / thresholds?** → [`docs/QUALITY-GATES.md`](docs/QUALITY-GATES.md)
 > - **Running fleet-wide operations?** → [`docs/OPERATOR-RUNBOOK.md`](docs/OPERATOR-RUNBOOK.md)

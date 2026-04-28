@@ -405,13 +405,13 @@ Object.assign(_internals, {
 
 export { _internals };
 
-// Bootstrap entrypoint: kicks off main() when invoked as a CLI. The
-// returned promise settles internally — ``runCliIfEntrypoint``'s
-// own try/catch routes failures to ``reportCliError``. Using
-// ``.then(() => {})`` makes the statement a method-call (not a bare
-// expression) so Codacy's ESLint ``no-unused-expressions`` doesn't
-// fire. The empty handler is intentional: the resolved value
-// (true/false) is the entrypoint check result, which the caller
-// doesn't need to act on. Top-level await is dropped — Node keeps
-// the event loop alive until the promise settles regardless.
-runCliIfEntrypoint(import.meta.url).then(() => {});
+// Bootstrap entrypoint: kicks off main() when invoked as a CLI.
+// ``runCliIfEntrypoint``'s internal try/catch routes failures to
+// ``reportCliError``, so the resolved boolean (true=ran-as-CLI,
+// false=imported-as-module) is intentionally unused here. Top-level
+// await is the idiom Sonar javascript:S7785 prefers; the
+// ``eslint-disable-line`` directive silences Codacy's
+// ``no-unused-expressions`` on the bare-await form (the two rules
+// disagree on the canonical shape, so we follow Sonar and silence
+// the conflicting Codacy ESLint rule per-line).
+await runCliIfEntrypoint(import.meta.url); // eslint-disable-line no-unused-expressions

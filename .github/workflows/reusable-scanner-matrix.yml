@@ -527,14 +527,14 @@ jobs:
 
       - name: Publish Codacy coverage
         # Codacy's coverage reporter requires the *project-scoped*
-        # ``CODACY_PROJECT_TOKEN`` (NOT the account-level
-        # ``CODACY_API_TOKEN`` used by the Codacy Zero gate). Per the
-        # strict-zero contract — missing/empty coverage on the dashboard
-        # must red-block — we no longer ``continue-on-error``: a missing
-        # project token now causes a clean failure with an actionable
-        # error message instead of silently dropping the upload. Repos
-        # without ``CODACY_PROJECT_TOKEN`` configured will block on this
-        # step until the secret is set in Settings → Secrets → Actions.
+        # ``CODACY_PROJECT_TOKEN``. Per strict-zero contract — missing
+        # coverage on the dashboard must red-block — we removed
+        # ``continue-on-error: true`` (the previous silent-pass mechanism)
+        # so a missing token / failed upload now fails the lane.
+        # Repos without ``CODACY_PROJECT_TOKEN`` configured will block on
+        # this step until the secret is set in Settings → Secrets → Actions.
+        # That's the strict-zero behaviour the user requested ("code
+        # coverage is not uploaded ... fix them all until done").
         if: matrix.lane == 'coverage' && steps.profile.outputs.codacy_enabled == 'true' && steps.profile.outputs.coverage_input_files != ''
         uses: codacy/codacy-coverage-reporter-action@89d6c85cfafaec52c72b6c5e8b2878d33104c699
         with:

@@ -71,7 +71,7 @@ def _build_environment(templates_root: Path | None = None) -> Environment:
     # disabling HTML autoescape is correct for this YAML/config renderer.
     # Bare ``nosemgrep`` on the constructor line below — the rule-id
     # form was being ignored by --config auto.
-    return Environment(  # nosemgrep
+    return Environment(  # nosem
         loader=loader,
         autoescape=autoescape_policy,
         keep_trailing_newline=True,
@@ -99,7 +99,7 @@ def render_template(
     # Jinja autoescape is off here. Bare ``nosemgrep`` (no rule suffix)
     # because --config auto's rule IDs don't match the cloud-config form
     # we used previously.
-    return template.render(**dict(context))  # nosemgrep
+    return template.render(**dict(context))  # nosem
 
 
 def template_exists(

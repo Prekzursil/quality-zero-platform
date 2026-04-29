@@ -444,7 +444,7 @@ jobs:
         # false positive. Bare ``nosemgrep`` (no rule suffix) suppresses
         # any rule on the line below — the rule-id form was being
         # ignored by --config auto so we drop the suffix.
-        # nosemgrep
+        # nosem
         uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602  # v6 pinned per §A.2.4
         with:
           projectBaseDir: repo

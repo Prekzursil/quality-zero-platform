@@ -46,6 +46,7 @@ class ParseQualitySnapshotTests(unittest.TestCase):
     """Verify ``parse_quality_snapshot`` extracts the right fields."""
 
     def test_parses_typical_qzp_payload(self) -> None:
+        """Extract every metric and goal from the live QZP payload shape."""
         snapshot = parse_quality_snapshot(_qzp_payload())
         self.assertEqual(snapshot.issues_percentage, 0)
         self.assertEqual(snapshot.complex_files_percentage, 15)
@@ -57,16 +58,19 @@ class ParseQualitySnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot.min_coverage_percentage, 60)
 
     def test_recognises_uploaded_coverage_via_coverage_percentage(self) -> None:
+        """Mark coverage uploaded when ``coveragePercentage`` is present."""
         snapshot = parse_quality_snapshot(_qzp_payload(coverage_percentage=87.5))
         self.assertTrue(snapshot.coverage_uploaded)
         self.assertEqual(snapshot.coverage_percentage, 87.5)
 
     def test_handles_data_envelope_or_flat_payload(self) -> None:
+        """Accept both ``{"data": {...}}`` and flat top-level payloads."""
         flat = _qzp_payload()["data"]
         snapshot = parse_quality_snapshot(flat)
         self.assertEqual(snapshot.complex_files_percentage, 15)
 
     def test_returns_none_fields_when_payload_missing(self) -> None:
+        """Return ``None`` metrics when the payload is empty (no analysis yet)."""
         snapshot = parse_quality_snapshot({})
         self.assertIsNone(snapshot.complex_files_percentage)
         self.assertIsNone(snapshot.max_complex_files_percentage)
@@ -77,18 +81,21 @@ class EvaluateThresholdsTests(unittest.TestCase):
     """Verify ``evaluate_quality_thresholds`` enforces the strict-zero floors."""
 
     def test_qzp_baseline_fails_on_complexity_and_missing_coverage(self) -> None:
+        """QZP baseline trips both the complexity goal and the coverage floor."""
         findings = evaluate_quality_thresholds(parse_quality_snapshot(_qzp_payload()))
         self.assertEqual(len(findings), 2)
         self.assertTrue(any("complex-files" in f for f in findings))
         self.assertTrue(any("missing" in f for f in findings))
 
     def test_passes_when_all_thresholds_satisfied_with_full_coverage(self) -> None:
+        """Return no findings when complexity, duplication, and coverage all clear."""
         payload = _qzp_payload(coverage_percentage=100)
         payload["data"]["complexFilesPercentage"] = 5
         findings = evaluate_quality_thresholds(parse_quality_snapshot(payload))
         self.assertEqual(findings, [])
 
     def test_partial_coverage_below_floor_fails(self) -> None:
+        """Coverage below the floor (default 100%) emits a single finding."""
         payload = _qzp_payload(coverage_percentage=95)
         payload["data"]["complexFilesPercentage"] = 5
         findings = evaluate_quality_thresholds(parse_quality_snapshot(payload))
@@ -104,6 +111,7 @@ class EvaluateThresholdsTests(unittest.TestCase):
         self.assertEqual(findings, [])
 
     def test_duplication_violation_emits_finding(self) -> None:
+        """Duplication above the goal emits a single duplication finding."""
         payload = _qzp_payload(coverage_percentage=100)
         payload["data"]["complexFilesPercentage"] = 5
         payload["data"]["duplicationPercentage"] = 19
@@ -112,6 +120,7 @@ class EvaluateThresholdsTests(unittest.TestCase):
         self.assertIn("duplication", findings[0].lower())
 
     def test_coverage_floor_is_overridable(self) -> None:
+        """Callers can lower the coverage floor (used by tests / staged rollout)."""
         payload = _qzp_payload(coverage_percentage=85)
         payload["data"]["complexFilesPercentage"] = 5
         findings = evaluate_quality_thresholds(
@@ -141,9 +150,11 @@ class FetchRepositoryQualityTests(unittest.TestCase):
     """Verify the HTTP-fetch wrapper passes through to ``parse_quality_snapshot``."""
 
     def test_invokes_request_json_and_parses_result(self) -> None:
+        """Forward URL+token to the requester and parse the response."""
         captured: Dict[str, Any] = {}
 
         def fake_request(url: str, token: str) -> Dict[str, Any]:
+            """Record the request inputs and return a canned QZP payload."""
             captured["url"] = url
             captured["token"] = token
             return _qzp_payload()

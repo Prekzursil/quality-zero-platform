@@ -29,6 +29,7 @@ DEFAULT_COVERAGE_FLOOR = 100
 @dataclass(frozen=True)
 class CodacyQualitySnapshot:
     """Resolved metrics + thresholds for one Codacy repository."""
+
     issues_percentage: float | None
     complex_files_percentage: float | None
     duplication_percentage: float | None
@@ -55,21 +56,26 @@ def _coverage_data(payload: Mapping[str, Any]) -> Mapping[str, Any]:
     return coverage if isinstance(coverage, dict) else {}
 
 
+_COVERAGE_PERCENTAGE_KEYS = (
+    "coveragePercentage", "linesCoveragePercentage", "filesCoveragePercentage",
+)
+
+
 def _coverage_uploaded(coverage: Mapping[str, Any]) -> bool:
     """Return whether coverage data was actually uploaded (not just file count).
 
     Codacy returns ``{"numberTotalFiles": N}`` even when no coverage report
     has been pushed — the file count alone is not a coverage signal.
     """
-    for key in ("coveragePercentage", "filesCoveragePercentage", "linesCoveragePercentage"):
-        if _coerce_number(coverage.get(key)) is not None:
-            return True
-    return False
+    return any(
+        _coerce_number(coverage.get(key)) is not None
+        for key in _COVERAGE_PERCENTAGE_KEYS
+    )
 
 
 def _coverage_percentage(coverage: Mapping[str, Any]) -> float | None:
     """Pick the most relevant coverage percentage from a Codacy payload."""
-    for key in ("coveragePercentage", "linesCoveragePercentage", "filesCoveragePercentage"):
+    for key in _COVERAGE_PERCENTAGE_KEYS:
         value = _coerce_number(coverage.get(key))
         if value is not None:
             return value

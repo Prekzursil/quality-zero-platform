@@ -19,6 +19,9 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.quality import codacy_zero_helpers, codacy_zero_support
+from scripts.quality.codacy_quality_thresholds import (
+    DEFAULT_COVERAGE_FLOOR, evaluate_quality_thresholds, fetch_repository_quality,
+)
 from scripts.quality.common import utc_timestamp, write_report
 from scripts.security_helpers import load_json_https
 
@@ -454,6 +457,24 @@ def load_codacy_findings_with_retry(
     )
 
 
+def _quality_threshold_findings(query: CodacyQuery, token: str) -> List[str]:
+    """Return findings for complexity/duplication/coverage drift on the repo branch.
+
+    Codacy exposes complexity/duplication/coverage on the repository
+    analysis endpoint (default branch view); PR-scoped runs piggy-back on
+    that view because PR-only complexity drift is rare and the cloud
+    dashboard mirrors the same metrics. Errors are swallowed into a
+    single finding so an outage on this endpoint does not mask the
+    primary issue-count gate.
+    """
+    url = build_repository_analysis_url(query.provider, query.owner, query.repo)
+    try:
+        snapshot = fetch_repository_quality(url, token, request_json=_request_json)
+    except (urllib.error.URLError, RuntimeError, ValueError) as exc:
+        return [f"Codacy quality-threshold fetch failed: {exc}"]
+    return evaluate_quality_thresholds(snapshot, coverage_floor=DEFAULT_COVERAGE_FLOOR)
+
+
 def _resolve_codacy_status(args: argparse.Namespace) -> CodacyStatusResult:
     """Resolve the final Codacy gate status for the current invocation."""
     token = _preferred_text(args.token, os.environ.get("CODACY_API_TOKEN", ""))
@@ -471,6 +492,7 @@ def _resolve_codacy_status(args: argparse.Namespace) -> CodacyStatusResult:
     fallback = _commit_scope_fallback(base, token, providers, findings)
     if fallback is not None:
         open_issues, findings = fallback
+    findings = list(findings) + _quality_threshold_findings(base, token)
     return CodacyStatusResult(
         status=_codacy_status(findings, getattr(args, "policy_mode", "ratchet")),
         findings=findings, open_issues=open_issues, pull_request=pull_request,

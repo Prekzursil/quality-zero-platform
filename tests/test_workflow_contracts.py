@@ -327,11 +327,31 @@ class WorkflowContractTests(unittest.TestCase):
         ]:
             self.assertIn(expected, template_text)
 
-    def test_semgrep_lane_uses_supported_cli_invocation(self) -> None:
-        """Keep Semgrep on the supported CLI invocation shape."""
+    def test_semgrep_lane_hard_blocks_via_sarif_zero_gate(self) -> None:
+        """Semgrep lane must hard-block on any finding via the SARIF zero gate.
+
+        ``semgrep ci`` exits 0 when findings are tagged non-blocking on
+        Semgrep Cloud — the gate would silently pass while findings sit on
+        the dashboard. The lane writes SARIF and runs the zero-finding gate
+        which counts ALL findings (blocking + non-blocking) and fails the
+        lane when the count is non-zero. ``semgrep ci`` also refuses to
+        run without ``SEMGREP_APP_TOKEN``, so the lane falls back to
+        ``semgrep scan --config auto`` to keep producing SARIF without
+        auth. This contract locks in the SARIF gate + fallback so a
+        future refactor can't reintroduce the silent-pass / no-SARIF forms.
+        """
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
-        self.assertIn('run(["semgrep", "ci"], cwd=repo_dir)', text)
-        self.assertNotIn('run(["semgrep", "ci", "--error"], cwd=repo_dir)', text)
+        self.assertIn('"semgrep", "ci", "--sarif-output", str(sarif_path)', text)
+        # The unauthenticated fallback must use ``semgrep scan --config auto``
+        # so the SARIF still gets produced when SEMGREP_APP_TOKEN is unset.
+        self.assertIn('"semgrep", "scan"', text)
+        self.assertIn('"--config", "auto"', text)
+        self.assertIn('"scripts/quality/check_semgrep_zero.py"', text)
+        # Reject the silent-pass invocation: bare ``semgrep ci`` without
+        # SARIF capture, and the broken ``--error`` form (not a valid
+        # ``semgrep ci`` flag — ``ci`` rejects it as ``unknown option``).
+        self.assertNotIn('run(["semgrep", "ci"], cwd=repo_dir)', text)
+        self.assertNotIn('run(["semgrep", "ci", "--error"', text)
 
     def test_reusable_workflows_do_not_inline_inputs_inside_run_blocks(self) -> None:
         """Reject direct GitHub expression interpolation inside reusable workflow shell blocks."""

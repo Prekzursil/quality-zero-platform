@@ -379,12 +379,49 @@ class CodacyZeroRetryTests(unittest.TestCase):
                 "_query_codacy_open_issues",
                 return_value=(0, [], None),
             ),
+            patch.object(
+                check_codacy_zero, "_quality_threshold_findings", return_value=[],
+            ),
         ):
             result = check_codacy_zero._resolve_codacy_status(args)
 
         self.assertEqual(result.status, "pass")
         self.assertEqual(result.open_issues, 0)
         self.assertEqual(result.findings, [])
+
+    def test_resolve_status_appends_quality_threshold_findings(self) -> None:
+        """Threshold findings (complexity/duplication/coverage) are merged into the gate result."""
+        args = Namespace(
+            provider="gh",
+            owner="Prekzursil",
+            repo="quality-zero-platform",
+            pull_request="",
+            sha="targetsha",
+            token="t",
+            policy_mode="ratchet",
+            out_json="codacy-zero/codacy.json",
+            out_md="codacy-zero/codacy.md",
+        )
+        threshold_findings = [
+            "Codacy complex-files percentage is 15% (goal: <= 10%).",
+            "Codacy coverage is missing — no coverage report was uploaded "
+            "(strict-zero floor: 100% line+branch).",
+        ]
+        with (
+            patch.object(
+                check_codacy_zero, "load_codacy_findings_with_retry",
+                return_value=(0, []),
+            ),
+            patch.object(
+                check_codacy_zero, "_quality_threshold_findings",
+                return_value=threshold_findings,
+            ),
+        ):
+            result = check_codacy_zero._resolve_codacy_status(args)
+
+        self.assertEqual(result.status, "fail")
+        self.assertEqual(result.open_issues, 0)
+        self.assertEqual(result.findings, threshold_findings)
 
     def test_support_detects_stale_pull_request_findings(self) -> None:
         """Cover the shared stale PR finding matcher."""

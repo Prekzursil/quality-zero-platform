@@ -334,11 +334,18 @@ class WorkflowContractTests(unittest.TestCase):
         Semgrep Cloud — the gate would silently pass while findings sit on
         the dashboard. The lane writes SARIF and runs the zero-finding gate
         which counts ALL findings (blocking + non-blocking) and fails the
-        lane when the count is non-zero. This contract locks in the SARIF
-        gate so a future refactor can't reintroduce the silent-pass form.
+        lane when the count is non-zero. ``semgrep ci`` also refuses to
+        run without ``SEMGREP_APP_TOKEN``, so the lane falls back to
+        ``semgrep scan --config auto`` to keep producing SARIF without
+        auth. This contract locks in the SARIF gate + fallback so a
+        future refactor can't reintroduce the silent-pass / no-SARIF forms.
         """
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
         self.assertIn('"semgrep", "ci", "--sarif-output", str(sarif_path)', text)
+        # The unauthenticated fallback must use ``semgrep scan --config auto``
+        # so the SARIF still gets produced when SEMGREP_APP_TOKEN is unset.
+        self.assertIn('"semgrep", "scan"', text)
+        self.assertIn('"--config", "auto"', text)
         self.assertIn('"scripts/quality/check_semgrep_zero.py"', text)
         # Reject the silent-pass invocation: bare ``semgrep ci`` without
         # SARIF capture, and the broken ``--error`` form (not a valid

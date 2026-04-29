@@ -329,11 +329,29 @@ jobs:
             # check=False keeps us going when semgrep itself exits 1 so the
             # SARIF gate can produce the lane's report; the gate then fails
             # the lane on any finding count > 0.
-            subprocess.run(
-                ["semgrep", "ci", "--sarif-output", str(sarif_path)],
-                cwd=repo_dir,
-                check=False,
-            )
+            #
+            # When SEMGREP_APP_TOKEN is unset, ``semgrep ci`` refuses to run
+            # ("run `semgrep login`...") and writes no SARIF, leaving the
+            # gate with nothing to count. Fall back to ``semgrep scan
+            # --config auto`` which uses the public ruleset without auth so
+            # the gate still produces a meaningful report. Repos with a
+            # token keep their cloud-configured policy + dashboard sync.
+            if os.environ.get("SEMGREP_APP_TOKEN"):
+                subprocess.run(
+                    ["semgrep", "ci", "--sarif-output", str(sarif_path)],
+                    cwd=repo_dir,
+                    check=False,
+                )
+            if not sarif_path.exists():
+                subprocess.run(
+                    [
+                        "semgrep", "scan",
+                        "--config", "auto",
+                        "--sarif", "--output", str(sarif_path),
+                    ],
+                    cwd=repo_dir,
+                    check=False,
+                )
             run(
                 [
                     sys.executable,

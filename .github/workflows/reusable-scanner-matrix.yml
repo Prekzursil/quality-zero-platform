@@ -320,7 +320,51 @@ jobs:
             run(cmd, cwd=repo_dir)
           elif lane == "semgrep":
             run([sys.executable, "-m", "pip", "install", "semgrep"], cwd=repo_dir)
-            run(["semgrep", "ci"], cwd=repo_dir)
+            sarif_path = repo_dir / "semgrep.sarif"
+            # ``semgrep ci`` only exits non-zero on findings whose rule
+            # severity is marked "blocking" on Semgrep Cloud; non-blocking
+            # findings appear on the dashboard while the lane reports green
+            # (the silent-pass shape we are closing). Capture the SARIF and
+            # let the zero-gate count ALL findings regardless of severity.
+            # check=False keeps us going when semgrep itself exits 1 so the
+            # SARIF gate can produce the lane's report; the gate then fails
+            # the lane on any finding count > 0.
+            #
+            # When SEMGREP_APP_TOKEN is unset, ``semgrep ci`` refuses to run
+            # ("run `semgrep login`...") and writes no SARIF, leaving the
+            # gate with nothing to count. Fall back to ``semgrep scan
+            # --config auto`` which uses the public ruleset without auth so
+            # the gate still produces a meaningful report. Repos with a
+            # token keep their cloud-configured policy + dashboard sync.
+            if os.environ.get("SEMGREP_APP_TOKEN"):
+                subprocess.run(
+                    ["semgrep", "ci", "--sarif-output", str(sarif_path)],
+                    cwd=repo_dir,
+                    check=False,
+                )
+            if not sarif_path.exists():
+                subprocess.run(
+                    [
+                        "semgrep", "scan",
+                        "--config", "auto",
+                        "--sarif", "--output", str(sarif_path),
+                    ],
+                    cwd=repo_dir,
+                    check=False,
+                )
+            run(
+                [
+                    sys.executable,
+                    str(platform_dir / "scripts/quality/check_semgrep_zero.py"),
+                    "--sarif",
+                    str(sarif_path),
+                    "--out-json",
+                    "semgrep-zero/semgrep.json",
+                    "--out-md",
+                    "semgrep-zero/semgrep.md",
+                ],
+                cwd=repo_dir,
+            )
           elif lane == "sentry":
             sentry = profile["vendors"]["sentry"]
             cmd = [
@@ -394,7 +438,13 @@ jobs:
             --workflows-dir platform/.github/workflows
       - name: SonarCloud scan
         if: matrix.lane == 'coverage' && env.SONAR_TOKEN != ''
-        # nosemgrep: generic.secrets.security.detected-sonarqube-docs-api-key.detected-sonarqube-docs-api-key
+        # The Sonar action SHA pin (40-char hex) trips
+        # generic.secrets.security.detected-sonarqube-docs-api-key on the
+        # public auto-config; on Semgrep Cloud this was triaged as a
+        # false positive. Bare ``nosemgrep`` (no rule suffix) suppresses
+        # any rule on the line below — the rule-id form was being
+        # ignored by --config auto so we drop the suffix.
+        # nosem
         uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602  # v6 pinned per §A.2.4
         with:
           projectBaseDir: repo
@@ -571,8 +621,11 @@ jobs:
             repo/qlty-zero
             repo/sonar-zero
             repo/codacy-zero
+            repo/semgrep-zero
+            repo/semgrep.sarif
             repo/sentry-zero
             repo/deepscan-zero
+            repo/deepsource-visible-zero
             repo/deps-zero
 
   quality-rollup:

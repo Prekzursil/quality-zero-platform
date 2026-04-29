@@ -1,0 +1,27 @@
+# Semgrep scan ignores for QZP-specific false positives.
+#
+# Both inline ``# nosem`` and ``# nosemgrep`` directives proved unreliable
+# under ``semgrep scan --config auto`` (the unauthenticated fallback used
+# when SEMGREP_APP_TOKEN is unset). The suppressions worked under the
+# cloud-config form but not the public auto-config. ``.semgrepignore``
+# applies to both modes consistently.
+#
+# Each ignore below has a documented rationale so future maintainers can
+# review whether the entry is still warranted.
+
+# The Sonar action SHA pin is a 40-char hex SHA, which the auto-config
+# rule ``generic.secrets.security.detected-sonarqube-docs-api-key``
+# misclassifies as a SonarQube docs token. The action pin is a SHA, not a
+# token. Cloud-config dashboard had this triaged as a false positive.
+.github/workflows/reusable-scanner-matrix.yml
+
+# This module is QZP's Jinja2 renderer for YAML / TOML / source-file
+# templates (see ``profiles/templates/``). The auto-config rule
+# ``python.flask.security.xss.audit.direct-use-of-jinja2`` flags any
+# direct ``Environment``/``template.render`` use because for Flask
+# applications HTML autoescape is critical. This module's whole purpose
+# is to render NON-HTML files where autoescape would corrupt output —
+# the security model is enforced by ``StrictUndefined`` + the file-system
+# loader rooted at ``profiles/templates/`` so a template can't include
+# files outside the curated surface.
+scripts/quality/template_render.py

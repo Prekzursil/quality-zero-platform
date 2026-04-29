@@ -100,8 +100,7 @@ def render_template(
     template = env.get_template(relative_path)
     # YAML/config output — see ``_build_environment`` docstring for why
     # Jinja autoescape is off here.
-    # nosemgrep: python.flask.security.xss.audit.direct-use-of-jinja2.direct-use-of-jinja2
-    return template.render(**dict(context))  # noqa: E501 — same-line match required
+    return template.render(**dict(context))  # nosemgrep: python.flask.security.xss.audit.direct-use-of-jinja2.direct-use-of-jinja2
 
 
 def template_exists(

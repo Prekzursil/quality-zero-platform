@@ -456,3 +456,63 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("ADMIN_REPO_SLUG: ${{ inputs.repo_slug }}", admin_text)
         self.assertIn('--repo-slug "$ADMIN_REPO_SLUG"', admin_text)
         self.assertNotIn('--repo-slug "${{ inputs.repo_slug }}"', admin_text)
+
+    def test_coverage_publish_steps_have_no_silent_pass_mechanisms(self) -> None:
+        """Lock in the strict-zero contract for coverage publishes.
+
+        After PR #223, the Codacy + DeepSource publish steps no longer use
+        ``continue-on-error: true`` or ``|| true`` to swallow upload
+        failures. These were the silent-pass shapes that left fleet repos
+        showing "no coverage" on cloud dashboards while the workflow
+        reported green. Lock the contract so a future refactor can't
+        reintroduce either pattern in the publish steps.
+        """
+        text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
+        # The Codacy publish step must not silently swallow failures via
+        # the action's continue-on-error attribute.
+        codacy_block_start = text.find("Publish Codacy coverage")
+        self.assertNotEqual(codacy_block_start, -1, "Publish Codacy coverage step is missing")
+        codacy_block_end = text.find("Publish DeepSource coverage", codacy_block_start)
+        codacy_block = text[codacy_block_start:codacy_block_end]
+        # Match the directive at YAML-key level (leading whitespace +
+        # bare key:value), not a reference inside a comment.
+        import re as _re
+        directive_match = _re.search(
+            r"^\s+continue-on-error:\s*true\s*$",
+            codacy_block,
+            _re.MULTILINE,
+        )
+        self.assertIsNone(
+            directive_match,
+            "Codacy publish step must not silently swallow failures via continue-on-error",
+        )
+        # The DeepSource publish step must propagate per-file ``deepsource
+        # report`` exit codes — ``|| true`` was the previous silent-pass.
+        deepsource_block_start = text.find("Publish DeepSource coverage")
+        self.assertNotEqual(deepsource_block_start, -1, "Publish DeepSource coverage step is missing")
+        # Look for the next step boundary or end of step list.
+        deepsource_block_end = text.find("- name:", deepsource_block_start + 1)
+        deepsource_block = text[deepsource_block_start:deepsource_block_end]
+        # Reject ``|| true`` on the per-file report invocations specifically.
+        self.assertNotIn(
+            "deepsource report --analyzer test-coverage --key python --value-file \"$f\" || true",
+            deepsource_block,
+            "DeepSource Python coverage report must not be ||true-suppressed",
+        )
+        self.assertNotIn(
+            "deepsource report --analyzer test-coverage --key javascript --value-file \"$f\" || true",
+            deepsource_block,
+            "DeepSource JavaScript coverage report must not be ||true-suppressed",
+        )
+        # Both steps should fail loud when their respective secrets are
+        # missing — preflight checks emit ``::error::`` and exit 1.
+        self.assertIn(
+            "CODACY_PROJECT_TOKEN secret is missing",
+            text,
+            "Workflow must emit an actionable error when CODACY_PROJECT_TOKEN is missing",
+        ) if "set -euo pipefail" in codacy_block else None  # action-based step path
+        self.assertIn(
+            "DEEPSOURCE_DSN secret is missing",
+            text,
+            "Workflow must emit an actionable error when DEEPSOURCE_DSN is missing",
+        )

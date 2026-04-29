@@ -27,8 +27,14 @@ DEFAULT_COVERAGE_FLOOR = 100
 
 
 @dataclass(frozen=True)
-class CodacyQualitySnapshot:
-    """Resolved metrics + thresholds for one Codacy repository."""
+class CodacyQualitySnapshot:  # pylint: disable=too-many-instance-attributes
+    """Resolved metrics + thresholds for one Codacy repository.
+
+    Pairs each Codacy quality metric with its goal (cap or floor) so the
+    threshold evaluator can compute findings in one pass without a second
+    fetch. Pylint's R0902 (max 7 instance attributes) does not fit a
+    value-object that mirrors the API payload's metric+goal shape.
+    """
 
     issues_percentage: float | None
     complex_files_percentage: float | None

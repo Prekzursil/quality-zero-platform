@@ -472,7 +472,9 @@ def _quality_threshold_findings_for_provider(
         if exc.code == 404:
             return [], exc
         return [f"Codacy quality-threshold fetch failed: {exc}"], exc
-    except (urllib.error.URLError, OSError, RuntimeError, ValueError) as exc:
+    # OSError covers urllib.error.URLError (a subclass) and raw socket
+    # failures (DNS / connect / read) — listing both would be redundant.
+    except (OSError, RuntimeError, ValueError) as exc:
         return [f"Codacy quality-threshold fetch failed: {exc}"], exc
     return (
         evaluate_quality_thresholds(snapshot, coverage_floor=DEFAULT_COVERAGE_FLOOR),

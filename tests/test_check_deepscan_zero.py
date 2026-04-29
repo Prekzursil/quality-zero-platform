@@ -172,7 +172,7 @@ class DeepScanZeroTests(unittest.TestCase):
     def test_github_check_context_mode_fails_when_deepscan_status_is_missing(
         self,
     ) -> None:
-        """Cover github check context mode fails when deepscan status is missing."""
+        """Missing DeepScan status must red-block (strict-zero contract)."""
         args = Namespace(repo="Prekzursil/quality-zero-platform", sha="abc123")
         api_token = _placeholder_token("api")
 
@@ -189,10 +189,18 @@ class DeepScanZeroTests(unittest.TestCase):
 
         self.assertIsNone(open_issues)
         self.assertEqual(source_url, "")
-        self.assertIn("DeepScan GitHub status context is missing.", findings)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("DeepScan", findings[0])
+        self.assertIn("missing", findings[0])
 
-    def test_github_check_context_mode_allows_missing_status_on_push_main(self) -> None:
-        """Cover github check context mode allows missing status on push main."""
+    def test_github_check_context_mode_red_blocks_missing_status_on_push(self) -> None:
+        """Strict-zero: push events with no DeepScan status must red-block.
+
+        Previously the gate silently passed when no DeepScan status was
+        published for a push/workflow_dispatch event. The user explicitly
+        asked for the inverse — a missing status means DeepScan isn't
+        integrated and the lane must red-block until it is.
+        """
         args = Namespace(repo="Prekzursil/quality-zero-platform", sha="abc123")
         api_token = _placeholder_token("api")
 
@@ -209,9 +217,10 @@ class DeepScanZeroTests(unittest.TestCase):
                 )
             )
 
-        self.assertEqual(open_issues, 0)
+        self.assertIsNone(open_issues)
         self.assertEqual(source_url, "")
-        self.assertEqual(findings, [])
+        self.assertEqual(len(findings), 1)
+        self.assertIn("missing", findings[0])
 
     def test_validate_deepscan_inputs_accepts_github_check_context_mode(self) -> None:
         """Cover validate deepscan inputs accepts github check context mode."""

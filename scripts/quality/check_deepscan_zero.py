@@ -235,15 +235,29 @@ def _status_findings(status: Dict[str, Any] | None, context: str) -> List[str]:
 def _evaluate_github_check_context(
     args: argparse.Namespace, token: str
 ) -> Tuple[int | None, str, List[str]]:
-    """Handle evaluate github check context."""
+    """Evaluate the DeepScan GitHub check status for the current commit.
+
+    Strict-zero contract: when no DeepScan status is published for the
+    SHA, the gate must red-block instead of pass-by-default. The previous
+    silent-pass branch (`status is None and event in {push,workflow_dispatch}`)
+    masked repos that never integrated with DeepScan — the user
+    explicitly called this out: "make sure that depscan properly red
+    gated blocked on both PR and main, on this repo and the rest of them
+    as well and especially on QZP repo".
+    """
     payload = _github_status_payload(_github_repo(args), _github_sha(args), token)
     context = str(
         getattr(args, "github_context", DEEPSCAN_STATUS_CONTEXT)
         or DEEPSCAN_STATUS_CONTEXT
     )
     status = _find_github_status(payload, context)
-    if status is None and _event_name() in {"push", "workflow_dispatch"}:
-        return 0, "", []
+    if status is None:
+        return None, "", [
+            f"DeepScan status context '{context}' is missing for the commit. "
+            "Install the DeepScan GitHub App on the repository so each push "
+            "publishes a DeepScan check, or set DEEPSCAN_POLICY_MODE=open_issues "
+            "+ DEEPSCAN_OPEN_ISSUES_URL to query the API directly.",
+        ]
     findings = _status_findings(status, context)
     open_issues = 0 if not findings else None
     return open_issues, _status_target_url(status), findings

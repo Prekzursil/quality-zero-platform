@@ -71,7 +71,7 @@ def _build_environment(templates_root: Path | None = None) -> Environment:
     # disabling HTML autoescape is correct for this YAML/config renderer.
     # Bare ``nosemgrep`` on the constructor line below — the rule-id
     # form was being ignored by --config auto.
-    return Environment(  # nosem
+    return Environment(  # nosec  # nosem
         loader=loader,
         autoescape=autoescape_policy,
         keep_trailing_newline=True,

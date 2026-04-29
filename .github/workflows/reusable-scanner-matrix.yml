@@ -615,8 +615,11 @@ jobs:
             repo/qlty-zero
             repo/sonar-zero
             repo/codacy-zero
+            repo/semgrep-zero
+            repo/semgrep.sarif
             repo/sentry-zero
             repo/deepscan-zero
+            repo/deepsource-visible-zero
             repo/deps-zero
 
   quality-rollup:

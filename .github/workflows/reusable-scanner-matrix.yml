@@ -54,6 +54,8 @@ on:
         required: false
       CODACY_API_TOKEN:
         required: false
+      CODACY_PROJECT_TOKEN:
+        required: false
       CODECOV_TOKEN:
         required: false
       CHROMATIC_PROJECT_TOKEN:
@@ -574,39 +576,46 @@ jobs:
           done
 
       - name: Publish Codacy coverage
-        # ``continue-on-error`` because Codacy's coverage reporter needs a
-        # project-scoped token (``CODACY_PROJECT_TOKEN``) that's distinct
-        # from the account-level ``CODACY_API_TOKEN`` used by the Codacy
-        # Zero gate. When only the API token is available, the reporter
-        # emits ``Request URL not found. Check if the API Token you are
-        # using and the API base URL are valid.`` and exits 1 — which
-        # shouldn't gate the PR because coverage enforcement happens
-        # locally via ``assert_coverage_100.py`` (that step already ran
-        # and passed before this upload). The Codacy dashboard upload is
-        # cosmetic; if the project token isn't wired, log the failure
-        # and move on.
+        # Codacy's coverage reporter requires the *project-scoped*
+        # ``CODACY_PROJECT_TOKEN``. Per strict-zero contract — missing
+        # coverage on the dashboard must red-block — we removed
+        # ``continue-on-error: true`` (the previous silent-pass mechanism)
+        # so a missing token / failed upload now fails the lane.
+        # Repos without ``CODACY_PROJECT_TOKEN`` configured will block on
+        # this step until the secret is set in Settings → Secrets → Actions.
+        # That's the strict-zero behaviour the user requested ("code
+        # coverage is not uploaded ... fix them all until done").
         if: matrix.lane == 'coverage' && steps.profile.outputs.codacy_enabled == 'true' && steps.profile.outputs.coverage_input_files != ''
-        continue-on-error: true
         uses: codacy/codacy-coverage-reporter-action@89d6c85cfafaec52c72b6c5e8b2878d33104c699
         with:
-          project-token: ${{ secrets.CODACY_API_TOKEN }}
+          project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
           coverage-reports: ${{ steps.profile.outputs.coverage_input_files }}
 
       - name: Publish DeepSource coverage
+        # Strict-zero: each lcov/xml upload propagates its exit code so
+        # missing ``DEEPSOURCE_DSN`` or transient API failures red-block
+        # the lane instead of being swallowed by ``|| true``. Set the DSN
+        # in Settings → Secrets → Actions on each repo.
         if: matrix.lane == 'coverage' && steps.profile.outputs.deepsource_enabled == 'true' && steps.profile.outputs.coverage_input_files != ''
         working-directory: repo
         env:
           DEEPSOURCE_DSN: ${{ secrets.DEEPSOURCE_DSN }}
         run: |
+          set -euo pipefail
+          if [ -z "${DEEPSOURCE_DSN:-}" ]; then
+            echo "::error::DEEPSOURCE_DSN secret is missing — coverage cannot be uploaded to DeepSource."
+            echo "::error::Add it via Settings → Secrets → Actions. Strict-zero requires every repo to publish coverage to every cloud platform."
+            exit 1
+          fi
           curl -sSL https://deepsource.io/cli | sh
           IFS=',' read -ra FILES <<< "${{ steps.profile.outputs.coverage_input_files }}"
           for f in "${FILES[@]}"; do
             f=$(echo "$f" | xargs)
             [ -z "$f" ] && continue
             if echo "$f" | grep -qE '\.xml$'; then
-              ./bin/deepsource report --analyzer test-coverage --key python --value-file "$f" || true
+              ./bin/deepsource report --analyzer test-coverage --key python --value-file "$f"
             elif echo "$f" | grep -qE 'lcov'; then
-              ./bin/deepsource report --analyzer test-coverage --key javascript --value-file "$f" || true
+              ./bin/deepsource report --analyzer test-coverage --key javascript --value-file "$f"
             fi
           done
 

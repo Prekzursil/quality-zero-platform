@@ -9,7 +9,7 @@ import os
 import shutil
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Sequence, Set
+from typing import Any, Dict, List, Mapping
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -17,11 +17,12 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
 from scripts.quality.admin_dashboard_pages import (
     redact_private_repos,
 )
+from scripts.quality.build_admin_dashboard_health import (  # noqa: F401  pylint: disable=unused-import
+    GITHUB_API_BASE,
+    _live_health,
+)
 from scripts.quality.common import utc_timestamp
 from scripts.quality.control_plane import load_inventory, load_repo_profile
-from scripts.security_helpers import load_json_https
-
-GITHUB_API_BASE = "https://api.github.com"
 
 
 def parse_args() -> argparse.Namespace:
@@ -189,84 +190,6 @@ def write_dashboard(
     (output_dir / "index.html").write_text(
         render_dashboard_html(payload), encoding="utf-8"
     )
-
-
-def _github_payload(url: str, token: str) -> Any:
-    """Handle github payload."""
-    payload, _ = load_json_https(
-        url,
-        allowed_hosts={"api.github.com"},
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {token}",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "quality-zero-platform",
-        },
-    )
-    return payload
-
-
-def _select_runs(
-    workflow_runs: Sequence[Mapping[str, Any]], *, filter_fn=None
-) -> List[Mapping[str, Any]]:
-    """Handle select runs."""
-    if filter_fn is None:
-        return list(workflow_runs)
-    return [item for item in workflow_runs if filter_fn(item)]
-
-
-def _run_conclusions(workflow_runs: Sequence[Mapping[str, Any]]) -> Set[str]:
-    """Handle run conclusions."""
-    return {
-        str(item.get("conclusion") or "")
-        for item in workflow_runs
-        if item.get("conclusion")
-    }
-
-
-def _compute_health(
-    workflow_runs: Sequence[Mapping[str, Any]], *, filter_fn=None
-) -> str:
-    """Handle compute health."""
-    runs = _select_runs(workflow_runs, filter_fn=filter_fn)
-    if not runs:
-        return "unknown"
-    conclusions = _run_conclusions(runs)
-    return "success" if conclusions and conclusions <= {"success"} else "partial"
-
-
-def _live_health(token: str, repo_slug: str, default_branch: str) -> Dict[str, Any]:
-    """Handle live health."""
-    runs = _github_payload(
-        (
-            f"{GITHUB_API_BASE}/repos/{repo_slug}/actions/runs"
-            f"?branch={default_branch}&per_page=20"
-        ),
-        token,
-    )
-    rulesets = _github_payload(f"{GITHUB_API_BASE}/repos/{repo_slug}/rulesets", token)
-    # Fetch repo metadata to capture visibility for the redaction step
-    # in ``build_dashboard_payload``. Using the same token lets private
-    # repos (where the bot has read access) report their true visibility;
-    # repos visible only as public report ``"public"``. Defaults to
-    # ``"public"`` on any failure so a missing/erroring metadata fetch
-    # cannot accidentally redact (or leak via mis-default).
-    repo_meta = _github_payload(f"{GITHUB_API_BASE}/repos/{repo_slug}", token)
-    visibility = "public"
-    if isinstance(repo_meta, dict):
-        raw_visibility = repo_meta.get("visibility")
-        if isinstance(raw_visibility, str) and raw_visibility.strip():
-            visibility = raw_visibility.strip().lower()
-    workflow_runs = runs.get("workflow_runs", []) if isinstance(runs, dict) else []
-    return {
-        "default_branch_health": _compute_health(workflow_runs),
-        "open_pr_health": _compute_health(
-            workflow_runs,
-            filter_fn=lambda item: item.get("event") == "pull_request",
-        ),
-        "ruleset_present": bool(rulesets),
-        "visibility": visibility,
-    }
 
 
 def main() -> int:

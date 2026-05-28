@@ -10,6 +10,7 @@ from typing import Any, List, Mapping
 from unittest.mock import patch
 
 from scripts.quality import build_admin_dashboard
+from scripts.quality import build_admin_dashboard_health
 
 
 class BuildAdminDashboardExtraTests(unittest.TestCase):
@@ -43,10 +44,10 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
             {"event": "push", "conclusion": "success"},
             {"event": "pull_request", "conclusion": "failure"},
         ]
-        self.assertEqual(len(build_admin_dashboard._select_runs(runs)), 2)
+        self.assertEqual(len(build_admin_dashboard_health._select_runs(runs)), 2)
         self.assertEqual(
             len(
-                build_admin_dashboard._select_runs(
+                build_admin_dashboard_health._select_runs(
                     runs,
                     filter_fn=lambda item: item.get("event") == "pull_request",
                 )
@@ -54,12 +55,12 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
             1,
         )
         self.assertEqual(
-            build_admin_dashboard._run_conclusions(runs), {"success", "failure"}
+            build_admin_dashboard_health._run_conclusions(runs), {"success", "failure"}
         )
-        self.assertEqual(build_admin_dashboard._compute_health([]), "unknown")
-        self.assertEqual(build_admin_dashboard._compute_health(runs), "partial")
+        self.assertEqual(build_admin_dashboard_health._compute_health([]), "unknown")
+        self.assertEqual(build_admin_dashboard_health._compute_health(runs), "partial")
         self.assertEqual(
-            build_admin_dashboard._compute_health(
+            build_admin_dashboard_health._compute_health(
                 runs,
                 filter_fn=lambda item: item.get("event") == "push",
             ),
@@ -69,14 +70,14 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
     def test_github_payload_and_live_health_cover_token_paths(self) -> None:
         """Cover github payload and live health cover token paths."""
         with patch.object(
-            build_admin_dashboard,
+            build_admin_dashboard_health,
             "load_json_https",
             return_value=(
                 {"workflow_runs": [{"event": "pull_request", "conclusion": "success"}]},
                 {},
             ),
         ) as load_json_mock:
-            payload = build_admin_dashboard._github_payload(
+            payload = build_admin_dashboard_health._github_payload(
                 "https://api.github.com/repos/example", "token"
             )
         self.assertEqual(payload["workflow_runs"][0]["event"], "pull_request")
@@ -85,7 +86,7 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
         )
 
         with patch.object(
-            build_admin_dashboard,
+            build_admin_dashboard_health,
             "_github_payload",
             side_effect=[
                 {
@@ -100,7 +101,7 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
                 {"visibility": "public"},
             ],
         ):
-            live = build_admin_dashboard._live_health(
+            live = build_admin_dashboard_health._live_health(
                 "token", "Prekzursil/example", "main"
             )
         self.assertEqual(live["default_branch_health"], "success")

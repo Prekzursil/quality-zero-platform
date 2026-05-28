@@ -151,224 +151,43 @@ def normalize_coverage(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
     return profile_coverage_normalization.normalize_coverage(raw)
 
 
-def normalize_codex_environment(
-    raw: Mapping[str, Any] | None, *, verify_command: str
-) -> Dict[str, Any]:
-    """Handle normalize codex environment."""
-    payload = deepcopy(raw or {}) if isinstance(raw, dict) else {}
-    return {
-        "mode": str(payload.get("mode", "automatic")).strip() or "automatic",
-        "verify_command": str(payload.get("verify_command", verify_command)).strip()
-        or verify_command,
-        "auth_file": str(payload.get("auth_file", "~/.codex/auth.json")).strip()
-        or "~/.codex/auth.json",
-        "network_profile": str(payload.get("network_profile", "unrestricted")).strip()
-        or "unrestricted",
-        "methods": str(payload.get("methods", "all")).strip() or "all",
-        "runner_labels": dedupe_strings(
-            payload.get("runner_labels", ["self-hosted", "codex-trusted"])
-        ),
-    }
-
-
-def normalize_codeql(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
-    """Normalize CodeQL workflow settings."""
-    payload = deepcopy(raw or {}) if isinstance(raw, dict) else {}
-    return {
-        "enabled": bool(payload.get("enabled", True)),
-        "languages": dedupe_strings(payload.get("languages", [])),
-        "runner": str(payload.get("runner", "ubuntu-latest")).strip()
-        or "ubuntu-latest",
-        "build_mode": str(payload.get("build_mode", "none")).strip() or "none",
-        "setup": normalize_coverage_setup(payload.get("setup", {})),
-    }
-
-
-def normalize_dependabot(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
-    """Normalize Dependabot update settings."""
-    payload = deepcopy(raw or {}) if isinstance(raw, dict) else {}
-    updates = []
-    for item in payload.get("updates", []):
-        if not isinstance(item, dict):
-            continue
-        ecosystem = str(item.get("ecosystem", "")).strip()
-        directory = str(item.get("directory", "")).strip()
-        if not ecosystem or not directory:
-            continue
-        updates.append(
-            {
-                "ecosystem": ecosystem,
-                "directory": directory,
-            }
-        )
-    return {
-        "enabled": bool(payload.get("enabled", True)),
-        "updates": updates,
-        "open_pull_requests_limit": int(payload.get("open_pull_requests_limit", 10)),
-        "schedule_interval": str(payload.get("schedule_interval", "weekly")).strip()
-        or "weekly",
-        "labels": dedupe_strings(
-            payload.get("labels", ["dependencies", "type:chore", "area:ci"])
-        ),
-    }
-
-
 # ---------------------------------------------------------------------------
-# v2 schema normalisers (see docs/QZP-V2-DESIGN.md §3).
-# Pure helpers; not yet wired into ``_finalize_normalized_profile_sections``.
-# They produce the canonical v2 shape from either v1 legacy fields or explicit
-# v2 input, so the same downstream code can handle both during migration.
+# v2 schema normalisers (see docs/QZP-V2-DESIGN.md §3) live in
+# ``profile_v2_normalization`` and are re-exported here so the historical
+# import surface (``from scripts.quality.profile_normalization import ...``)
+# keeps working. Splitting them out keeps each module's file-level complexity
+# bounded and the v1/v2 concerns cohesively separated.
 # ---------------------------------------------------------------------------
 
+from scripts.quality.profile_v2_normalization import (  # noqa: E402  pylint: disable=wrong-import-position,unused-import
+    normalize_mode,
+    normalize_overrides,
+    normalize_profile_version,
+    normalize_scanners,
+)
+from scripts.quality.profile_workflow_normalization import (  # noqa: E402  pylint: disable=wrong-import-position,unused-import
+    normalize_codeql,
+    normalize_codex_environment,
+    normalize_dependabot,
+)
 
-_VALID_SEVERITIES = {"block", "warn", "info"}
-_VALID_PHASES = {"shadow", "ratchet", "absolute"}
-
-
-def normalize_profile_version(raw: Any) -> int:
-    """Return the declared profile schema version.
-
-    Unknown / missing / unparsable values fall back to ``1`` so pre-existing
-    profiles continue to be treated as the legacy contract.
-    """
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return 1
-    return value if value in (1, 2) else 1
-
-
-def _phase_from_issue_policy(legacy_issue_policy: Mapping[str, Any] | None) -> str:
-    """Translate a v1 ``issue_policy.mode`` into a v2 ``mode.phase``."""
-    if not isinstance(legacy_issue_policy, Mapping):
-        return "absolute"
-    raw_mode = str(legacy_issue_policy.get("mode", "")).strip()
-    if raw_mode in {"zero", "absolute"}:
-        return "absolute"
-    if raw_mode == "ratchet":
-        return "ratchet"
-    return "absolute"
-
-
-def _normalize_ratchet(raw_ratchet: Any) -> Dict[str, Any]:
-    """Return a canonical ratchet sub-structure from user input."""
-    payload = (
-        deepcopy(raw_ratchet or {}) if isinstance(raw_ratchet, Mapping) else {}
-    )
-    raw_baseline = payload.get("baseline")
-    baseline = raw_baseline if isinstance(raw_baseline, Mapping) else {}
-    return {
-        "baseline": dict(baseline),
-        "target_date": str(payload.get("target_date", "")).strip(),
-        "escalation_date": str(payload.get("escalation_date", "")).strip(),
-        "on_escalation": str(payload.get("on_escalation", "absolute")).strip()
-        or "absolute",
-    }
-
-
-def normalize_mode(
-    raw_mode: Mapping[str, Any] | None,
-    *,
-    legacy_issue_policy: Mapping[str, Any] | None = None,
-) -> Dict[str, Any]:
-    """Return the canonical v2 ``mode`` block.
-
-    * When ``raw_mode`` is provided it wins.
-    * Otherwise the legacy ``issue_policy.mode`` is translated into a phase.
-    * Unknown phases coerce to ``"absolute"`` (strict default, per §10.1).
-    """
-    payload = deepcopy(raw_mode or {}) if isinstance(raw_mode, Mapping) else {}
-    return {
-        "phase": _resolve_mode_phase(payload, legacy_issue_policy),
-        "shadow_until": _coerce_shadow_until(payload.get("shadow_until")),
-        "ratchet": _normalize_ratchet(payload.get("ratchet")),
-    }
-
-
-def _resolve_mode_phase(
-    payload: Mapping[str, Any],
-    legacy_issue_policy: Mapping[str, Any] | None,
-) -> str:
-    """Pick the canonical phase from explicit v2 input or the legacy field."""
-    phase = str(payload.get("phase", "")).strip()
-    if not phase:
-        phase = _phase_from_issue_policy(legacy_issue_policy)
-    if phase not in _VALID_PHASES:
-        return "absolute"
-    return phase
-
-
-def _coerce_shadow_until(raw: Any) -> str | None:
-    """Accept an ISO-date string or ``None``; coerce everything else."""
-    if raw is None:
-        return None
-    value = raw if isinstance(raw, str) else str(raw)
-    stripped = value.strip()
-    return stripped or None
-
-
-def _coerce_severity(raw: Any) -> str:
-    """Map raw scanner severity to one of ``{block, warn, info}``."""
-    if isinstance(raw, str):
-        cleaned = raw.strip().lower()
-        if cleaned in _VALID_SEVERITIES:
-            return cleaned
-    return "block"
-
-
-def normalize_scanners(
-    raw_scanners: Mapping[str, Any] | None,
-    *,
-    legacy_enabled_scanners: Mapping[str, Any] | None = None,
-) -> Dict[str, Dict[str, str]]:
-    """Return the canonical v2 ``scanners`` map (``{name: {severity}}``).
-
-    * Explicit ``raw_scanners`` entries win.
-    * Legacy ``enabled_scanners`` entries fill in as ``severity: block`` so
-      v1 profiles keep their existing gate semantics.
-    """
-    canonical: Dict[str, Dict[str, str]] = {}
-
-    if isinstance(legacy_enabled_scanners, Mapping):
-        for name, value in legacy_enabled_scanners.items():
-            if not bool(value):
-                continue
-            canonical[str(name)] = {"severity": "block"}
-
-    if isinstance(raw_scanners, Mapping):
-        for name, value in raw_scanners.items():
-            entry = value if isinstance(value, Mapping) else {}
-            severity = _coerce_severity(entry.get("severity"))
-            canonical[str(name)] = {"severity": severity}
-
-    return canonical
-
-
-def normalize_overrides(raw_overrides: Any) -> List[Dict[str, Any]]:
-    """Return a canonical list of explicit template overrides.
-
-    Each entry requires ``file`` + ``key`` + ``reason``. Entries missing any
-    of these are dropped; see docs/QZP-V2-DESIGN.md §3 for the rationale
-    (no silent drift — overrides must be self-describing).
-    """
-    if not isinstance(raw_overrides, list):
-        return []
-    canonical: List[Dict[str, Any]] = []
-    for item in raw_overrides:
-        if not isinstance(item, Mapping):
-            continue
-        file_name = str(item.get("file", "")).strip()
-        key = str(item.get("key", "")).strip()
-        reason = str(item.get("reason", "")).strip()
-        if not file_name or not key or not reason:
-            continue
-        canonical.append(
-            {
-                "file": file_name,
-                "key": key,
-                "value": item.get("value"),
-                "reason": reason,
-                "expires": str(item.get("expires", "")).strip(),
-            }
-        )
-    return canonical
+__all__ = [
+    "infer_coverage_inputs",
+    "infer_required_sources",
+    "merge_required_contexts",
+    "normalize_codeql",
+    "normalize_codex_environment",
+    "normalize_coverage",
+    "normalize_coverage_assert_mode",
+    "normalize_coverage_inputs",
+    "normalize_coverage_setup",
+    "normalize_dependabot",
+    "normalize_deps",
+    "normalize_issue_policy",
+    "normalize_java_setup",
+    "normalize_mode",
+    "normalize_overrides",
+    "normalize_profile_version",
+    "normalize_required_contexts",
+    "normalize_scanners",
+]

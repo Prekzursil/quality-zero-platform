@@ -8,6 +8,9 @@ source = [
   "scripts/quality/rollup_v2",
   "scripts.quality.fleet_inventory",
   "scripts.quality.migrate_profiles_to_v2",
+  # Pure v2 migration transformers split out of migrate_profiles_to_v2 to keep
+  # each module's file-level complexity bounded; same 100% enforced scope.
+  "scripts.quality.migrate_profiles_to_v2_rules",
   # Gate-hardening helper: maps wired providers to the status contexts the
   # quality-zero gate must enforce, so a wired-but-absent provider fails
   # closed instead of passing silently. Pure logic, 100% unit-covered.

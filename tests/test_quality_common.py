@@ -318,20 +318,20 @@ class EnsureWithinRootPR1Tests(unittest.TestCase):
         self._tmp.cleanup()
 
     def test_well_formed_resolved_path_accepted(self):
-        from scripts.quality.common import _ensure_within_root
+        from scripts.quality.report_writer import _ensure_within_root
         _ensure_within_root(
             (self.tmp_root / "a" / "b.py").resolve(strict=False),
             self.tmp_root,
         )
 
     def test_resolved_dotdot_escape_rejected(self):
-        from scripts.quality.common import _ensure_within_root
+        from scripts.quality.report_writer import _ensure_within_root
         escape = (self.tmp_root / ".." / ".." / "etc" / "passwd").resolve(strict=False)
         with self.assertRaises(ValueError):
             _ensure_within_root(escape, self.tmp_root)
 
     def test_absolute_escape_rejected(self):
-        from scripts.quality.common import _ensure_within_root
+        from scripts.quality.report_writer import _ensure_within_root
         with self.assertRaises(ValueError):
             _ensure_within_root(Path("/etc/passwd"), self.tmp_root)
 
@@ -339,7 +339,7 @@ class EnsureWithinRootPR1Tests(unittest.TestCase):
     def test_symlink_escape_rejected_when_resolved_by_caller(self):
         escape_link = self.tmp_root / "a" / "escape"
         escape_link.symlink_to(Path("/etc/passwd"))
-        from scripts.quality.common import _ensure_within_root
+        from scripts.quality.report_writer import _ensure_within_root
         with self.assertRaises(ValueError):
             _ensure_within_root(escape_link.resolve(strict=False), self.tmp_root)
 

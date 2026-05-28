@@ -4,40 +4,29 @@ from __future__ import absolute_import
 from collections import defaultdict
 from typing import Any, Dict, List, Sequence, Tuple
 
-from scripts.quality.rollup_v2.redaction import redact_secrets
+from scripts.quality.rollup_v2.renderer_common import (  # noqa: F401  pylint: disable=unused-import
+    _DETAILS_CLOSE,
+    _SEVERITY_EMOJI,
+    _safe,
+    _severity_emoji,
+)
+from scripts.quality.rollup_v2.renderer_views import (  # noqa: F401  pylint: disable=unused-import
+    _render_alternate_views,
+    _render_autofixable_view,
+    _render_by_provider_view,
+    _render_by_severity_view,
+)
 from scripts.quality.rollup_v2.schema.finding import Finding
-from scripts.quality.rollup_v2.severity import SEVERITY_ORDER
 
 # --- Truncation thresholds (§A.1.2 + §B.3.9 + §B.3.15) ---
 _MAX_VISIBLE_FILES: int = 20
 _MAX_FINDINGS_BEFORE_COLLAPSE: int = 200
 _MAX_CHARS: int = 60_000
 
-# Closing ``</details>`` literal for the collapsible-section blocks. Pulled to
-# a constant so SonarCloud rule python:S1192 (duplicate string literal) stays
-# at zero.
-_DETAILS_CLOSE = "</details>\n"
-
-# --- Severity emoji mapping ---
-_SEVERITY_EMOJI: Dict[str, str] = {
-    "critical": "\U0001f534",  # red circle
-    "high": "\U0001f534",      # red circle
-    "medium": "\U0001f7e1",    # yellow circle
-    "low": "\u26aa",           # white circle
-    "info": "\u26aa",          # white circle
-}
-
 _ARTIFACT_FALLBACK_SENTENCE = (
     "_Full report is too large for a PR comment; see the "
     "`quality-rollup-full-<sha>.md` workflow artifact for complete details._"
 )
-
-
-def _safe(value: str | None) -> str:
-    """Belt-and-suspenders: redact every user-content string at write time (§B.1.2)."""
-    if not value:
-        return ""
-    return redact_secrets(value)
 
 
 def _provider_label(providers: Sequence[Dict[str, Any]]) -> str:
@@ -70,10 +59,6 @@ def _render_provider_summary_table(payload: Dict[str, Any]) -> str:
         )
     lines.append("")
     return "\n".join(lines)
-
-
-def _severity_emoji(severity: str) -> str:
-    return _SEVERITY_EMOJI.get(severity.lower(), "\u26aa")
 
 
 def _render_finding_heading(f: Finding) -> str:
@@ -156,82 +141,6 @@ def _render_by_file_view(
         lines.append(_DETAILS_CLOSE)
 
     return "\n".join(lines)
-
-
-def _render_by_provider_view(findings: Sequence[Finding]) -> str:
-    """Render the alternate by-provider view."""
-    by_provider: Dict[str, List[Finding]] = defaultdict(list)
-    for f in findings:
-        for c in f.corroborators:
-            by_provider[c.provider].append(f)
-    lines: List[str] = []
-    for provider in sorted(by_provider):
-        pf = by_provider[provider]
-        lines.append(f"### {provider} ({len(pf)} finding{'s' if len(pf) != 1 else ''})\n")
-        for f in sorted(pf, key=lambda x: (x.file, x.line)):
-            lines.append(
-                f"- {_severity_emoji(f.severity)} `{f.file}` line {f.line} "
-                f"\u00b7 `{f.category}` \u00b7 **{f.severity}**"
-            )
-        lines.append("")
-    return "\n".join(lines)
-
-
-def _render_by_severity_view(findings: Sequence[Finding]) -> str:
-    """Render the alternate by-severity view."""
-    by_sev: Dict[str, List[Finding]] = defaultdict(list)
-    for f in findings:
-        by_sev[f.severity.lower()].append(f)
-    lines: List[str] = []
-    for sev in SEVERITY_ORDER:
-        if sev not in by_sev:
-            continue
-        sf = by_sev[sev]
-        lines.append(
-            f"### {_severity_emoji(sev)} {sev.capitalize()} ({len(sf)} finding{'s' if len(sf) != 1 else ''})\n"
-        )
-        for f in sorted(sf, key=lambda x: (x.file, x.line)):
-            lines.append(
-                f"- `{f.file}` line {f.line} \u00b7 `{f.category}` "
-                f"\u00b7 {len(f.corroborators)} provider{'s' if len(f.corroborators) != 1 else ''}"
-            )
-        lines.append("")
-    return "\n".join(lines)
-
-
-def _render_autofixable_view(findings: Sequence[Finding]) -> str:
-    """Render the alternate autofixable-only view."""
-    fixable = [f for f in findings if f.autofixable]
-    if not fixable:
-        return "_No autofixable findings._\n"
-    lines: List[str] = []
-    lines.append(f"**{len(fixable)} autofixable finding{'s' if len(fixable) != 1 else ''}:**\n")
-    for f in sorted(fixable, key=lambda x: (x.file, x.line)):
-        lines.append(
-            f"- {_severity_emoji(f.severity)} `{f.file}` line {f.line} "
-            f"\u00b7 `{f.category}` \u00b7 **{f.patch_source}**"
-        )
-    lines.append("")
-    return "\n".join(lines)
-
-
-def _render_alternate_views(findings: Sequence[Finding]) -> str:
-    """Render all alternate views wrapped in <details> (§A.1.1)."""
-    sections: List[str] = []
-
-    sections.append("<details><summary>View by provider</summary>\n")
-    sections.append(_render_by_provider_view(findings))
-    sections.append(_DETAILS_CLOSE)
-
-    sections.append("<details><summary>View by severity</summary>\n")
-    sections.append(_render_by_severity_view(findings))
-    sections.append(_DETAILS_CLOSE)
-
-    sections.append("<details><summary>Autofixable only</summary>\n")
-    sections.append(_render_autofixable_view(findings))
-    sections.append(_DETAILS_CLOSE)
-
-    return "\n".join(sections)
 
 
 def _render_footer() -> str:

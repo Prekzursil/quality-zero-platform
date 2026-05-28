@@ -1,0 +1,88 @@
+{
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "exclude": [],
+      "include": [
+        "refs/heads/main"
+      ]
+    }
+  },
+  "enforcement": "active",
+  "name": "quality-zero-platform / bilbo-app",
+  "profile_id": "bilbo-app",
+  "repo_slug": "Prekzursil/bilbo-app",
+  "rules": [
+    {
+      "parameters": {
+        "dismiss_stale_reviews_on_push": false,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_approving_review_count": 0,
+        "required_review_thread_resolution": false
+      },
+      "type": "pull_request"
+    },
+    {
+      "parameters": {
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          {
+            "context": "shared-scanner-matrix / Coverage 100 Gate"
+          },
+          {
+            "context": "shared-codecov-analytics / Codecov Analytics"
+          },
+          {
+            "context": "codeql / CodeQL"
+          },
+          {
+            "context": "shared-scanner-matrix / QLTY Zero"
+          },
+          {
+            "context": "shared-scanner-matrix / Sonar Zero"
+          },
+          {
+            "context": "shared-scanner-matrix / Codacy Zero"
+          },
+          {
+            "context": "shared-scanner-matrix / Semgrep Zero"
+          },
+          {
+            "context": "shared-scanner-matrix / Sentry Zero"
+          },
+          {
+            "context": "shared-scanner-matrix / DeepScan Zero"
+          },
+          {
+            "context": "SonarCloud Code Analysis"
+          },
+          {
+            "context": "Codacy Static Code Analysis"
+          },
+          {
+            "context": "DeepScan"
+          },
+          {
+            "context": "qlty check"
+          },
+          {
+            "context": "qlty coverage"
+          },
+          {
+            "context": "qlty coverage diff"
+          }
+        ],
+        "strict_required_status_checks_policy": true
+      },
+      "type": "required_status_checks"
+    },
+    {
+      "type": "non_fast_forward"
+    },
+    {
+      "type": "deletion"
+    }
+  ],
+  "target": "branch"
+}

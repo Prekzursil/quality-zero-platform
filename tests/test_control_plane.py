@@ -29,10 +29,10 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
             self.assertIn(context, ruleset_contexts)
             self.assertIn(context, ruleset_status_checks)
 
-    def test_inventory_expands_to_15_repos(self) -> None:
+    def test_inventory_expands_to_17_repos(self) -> None:
         """Inventory should continue to expose the full enrolled repo set."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
-        self.assertEqual(len(inventory["repos"]), 15)
+        self.assertEqual(len(inventory["repos"]), 17)
 
     def test_common_phase1_template_contexts_resolve(self) -> None:
         """Phase-1 overlays should keep their shared required-context defaults."""

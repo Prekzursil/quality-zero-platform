@@ -1,0 +1,80 @@
+slug: Prekzursil/bilbo-app
+version: 2
+stack: gradle-java
+mode:
+  # Strict-zero from day one: gates BLOCK on ANY finding, whole-tree, on
+  # push AND pull_request. Matches the fleet-wide hardening in PR #232 —
+  # no shadow/ratchet escalation step for this cohort.
+  phase: absolute
+scanners: {}
+overrides: []
+verify_command: bash scripts/verify
+issue_policy:
+  # zero (block on ANY issue, pre-existing included). pr_behavior=absolute so
+  # PRs are held to the same whole-tree bar as direct pushes to main.
+  mode: zero
+  pr_behavior: absolute
+  main_behavior: absolute
+required_contexts_mode: replace
+# Whole provider context set in ``always`` so each is enforced on push AND
+# pull_request. Nothing is pull_request_only.
+required_contexts:
+  always:
+  - shared-scanner-matrix / Coverage 100 Gate
+  - shared-codecov-analytics / Codecov Analytics
+  - codeql / CodeQL
+  - shared-scanner-matrix / QLTY Zero
+  - shared-scanner-matrix / Sonar Zero
+  - shared-scanner-matrix / Codacy Zero
+  - shared-scanner-matrix / Semgrep Zero
+  - shared-scanner-matrix / Sentry Zero
+  - shared-scanner-matrix / DeepScan Zero
+  - SonarCloud Code Analysis
+  - Codacy Static Code Analysis
+  - DeepScan
+  - qlty check
+  - qlty coverage
+  - qlty coverage diff
+  pull_request_only: []
+  target:
+  - shared-scanner-matrix / Coverage 100 Gate
+  - shared-codecov-analytics / Codecov Analytics
+  - codeql / CodeQL
+  - shared-scanner-matrix / QLTY Zero
+  - shared-scanner-matrix / Sonar Zero
+  - shared-scanner-matrix / Codacy Zero
+  - shared-scanner-matrix / Semgrep Zero
+  - shared-scanner-matrix / Sentry Zero
+  - shared-scanner-matrix / DeepScan Zero
+  - SonarCloud Code Analysis
+  - Codacy Static Code Analysis
+  - DeepScan
+  - qlty check
+  - qlty coverage
+  - qlty coverage diff
+coverage:
+  # Kotlin Multiplatform via Kover. The :shared module applies the Kover
+  # plugin and enforces 100% line+branch; koverXmlReport emits the Cobertura
+  # XML the Codecov/QLTY lanes ingest. iOS leg is not Linux-buildable, so the
+  # Linux coverage run targets the shared (commonTest) + androidApp legs.
+  command: 'chmod +x gradlew || true
+
+    ./gradlew :shared:koverXmlReport
+
+    '
+  inputs:
+  - format: xml
+    name: shared
+    path: shared/build/reports/kover/report.xml
+    flag: shared
+vendors:
+  sonar:
+    project_key: Prekzursil_bilbo-app
+codeql:
+  languages:
+  - actions
+  - java-kotlin
+dependabot:
+  updates:
+  - ecosystem: gradle
+    directory: /

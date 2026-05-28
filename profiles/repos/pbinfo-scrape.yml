@@ -1,0 +1,80 @@
+slug: Prekzursil/pbinfo-scrape
+version: 2
+stack: node-frontend
+mode:
+  # Strict-zero from day one: gates BLOCK on ANY finding, whole-tree, on
+  # push AND pull_request. Matches the fleet-wide hardening in PR #232 —
+  # no shadow/ratchet escalation step for this cohort.
+  phase: absolute
+scanners: {}
+overrides: []
+verify_command: bash scripts/verify
+issue_policy:
+  # zero (block on ANY issue, pre-existing included). pr_behavior=absolute so
+  # PRs are held to the same whole-tree bar as direct pushes to main.
+  mode: zero
+  pr_behavior: absolute
+  main_behavior: absolute
+required_contexts_mode: replace
+# Whole provider context set in ``always`` so each is enforced on push AND
+# pull_request. Nothing is pull_request_only.
+required_contexts:
+  always:
+  - shared-scanner-matrix / Coverage 100 Gate
+  - shared-codecov-analytics / Codecov Analytics
+  - codeql / CodeQL
+  - shared-scanner-matrix / QLTY Zero
+  - shared-scanner-matrix / Sonar Zero
+  - shared-scanner-matrix / Codacy Zero
+  - shared-scanner-matrix / Semgrep Zero
+  - shared-scanner-matrix / Sentry Zero
+  - shared-scanner-matrix / DeepScan Zero
+  - SonarCloud Code Analysis
+  - Codacy Static Code Analysis
+  - DeepScan
+  - qlty check
+  - qlty coverage
+  - qlty coverage diff
+  pull_request_only: []
+  target:
+  - shared-scanner-matrix / Coverage 100 Gate
+  - shared-codecov-analytics / Codecov Analytics
+  - codeql / CodeQL
+  - shared-scanner-matrix / QLTY Zero
+  - shared-scanner-matrix / Sonar Zero
+  - shared-scanner-matrix / Codacy Zero
+  - shared-scanner-matrix / Semgrep Zero
+  - shared-scanner-matrix / Sentry Zero
+  - shared-scanner-matrix / DeepScan Zero
+  - SonarCloud Code Analysis
+  - Codacy Static Code Analysis
+  - DeepScan
+  - qlty check
+  - qlty coverage
+  - qlty coverage diff
+coverage:
+  # Node/TypeScript (Electron + Vite + Vitest + React). GitHub reports the
+  # repo as HTML, but the actual stack is TS — node-frontend fits. Vitest
+  # emits lcov for the Codecov/QLTY lanes (default reporters are text+html,
+  # so lcov is requested explicitly here).
+  command: 'npm ci
+
+    npx vitest run --coverage --coverage.reporter=lcov
+
+    '
+  inputs:
+  - format: lcov
+    name: node
+    path: coverage/lcov.info
+    flag: node
+vendors:
+  sonar:
+    project_key: Prekzursil_pbinfo-scrape
+codeql:
+  languages:
+  - actions
+  - javascript-typescript
+dependabot:
+  updates:
+  - ecosystem: npm
+    directory: /

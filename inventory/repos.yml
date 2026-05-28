@@ -75,3 +75,13 @@ repos:
     rollout: phase1-wave6
     default_branch: main
     notes: Public fetch-and-package Code::Blocks control-plane repo with managed profile seeding and strict-zero governance.
+  - slug: Prekzursil/bilbo-app
+    profile: bilbo-app
+    rollout: phase2-wave3
+    default_branch: main
+    notes: Kotlin Multiplatform (shared + androidApp + non-Linux iOS leg) on gradle-java with Kover coverage; strict-zero from enrollment.
+  - slug: Prekzursil/pbinfo-scrape
+    profile: pbinfo-scrape
+    rollout: phase2-wave3
+    default_branch: main
+    notes: Node/TypeScript Electron + Vite + Vitest console (GitHub mislabels as HTML) on node-frontend; strict-zero from enrollment.

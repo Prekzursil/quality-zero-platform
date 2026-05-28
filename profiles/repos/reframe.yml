@@ -7,6 +7,12 @@ scanners: {}
 overrides: []
 verify_command: make verify
 required_contexts_mode: replace
+issue_policy:
+  # Explicit strict zero (was inheriting stack default): block on ANY
+  # finding, whole-tree, on push AND pull_request.
+  mode: zero
+  pr_behavior: absolute
+  main_behavior: absolute
 required_secrets:
 - CHROMATIC_PROJECT_TOKEN
 - APPLITOOLS_API_KEY
@@ -37,31 +43,37 @@ coverage:
     name: desktop-ts
     path: apps/desktop/coverage/lcov.info
     flag: desktop-ts
+# Whole provider context set enforced on push AND pull_request: native
+# DeepScan/Codacy/qlty + CodeRabbit moved out of pull_request_only into
+# always, and the QLTY Zero aggregator added.
 required_contexts:
   always:
   - shared-scanner-matrix / Coverage 100 Gate
   - shared-codecov-analytics / Codecov Analytics
   - codeql / CodeQL
+  - shared-scanner-matrix / QLTY Zero
+  - qlty check
+  - qlty coverage
+  - qlty coverage diff
   - shared-scanner-matrix / Sonar Zero
   - shared-scanner-matrix / Codacy Zero
   - shared-scanner-matrix / Semgrep Zero
   - shared-scanner-matrix / Sentry Zero
   - shared-scanner-matrix / DeepScan Zero
   - SonarCloud Code Analysis
+  - DeepScan
+  - CodeRabbit
+  - Codacy Static Code Analysis
   - Python API & worker checks
   - Web build
   - Chromatic Playwright
   - Applitools Visual
-  pull_request_only:
-  - DeepScan
-  - CodeRabbit
-  - Codacy Static Code Analysis
-  - qlty check
-  - qlty coverage
-  - qlty coverage diff
+  pull_request_only: []
   target:
   - shared-scanner-matrix / Coverage 100 Gate
   - shared-codecov-analytics / Codecov Analytics
+  - codeql / CodeQL
+  - shared-scanner-matrix / QLTY Zero
   - qlty check
   - qlty coverage
   - qlty coverage diff
@@ -72,13 +84,12 @@ required_contexts:
   - shared-scanner-matrix / DeepScan Zero
   - SonarCloud Code Analysis
   - DeepScan
+  - CodeRabbit
+  - Codacy Static Code Analysis
   - Python API & worker checks
   - Web build
   - Chromatic Playwright
   - Applitools Visual
-  - codeql / CodeQL
-  - CodeRabbit
-  - Codacy Static Code Analysis
 visual_pair_required: true
 visual_lane:
   kind: web

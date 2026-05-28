@@ -36,6 +36,14 @@ issue_policy:
   pr_behavior: absolute
   main_behavior: absolute
   baseline_ref: ""
+# STRICT-ZERO, WHOLE-TREE default for the whole fleet. Every wired
+# provider status context lives in ``always`` so it is a required check on
+# push AND pull_request — the native cloud contexts (Codacy Static Code
+# Analysis, DeepScan, qlty check/coverage/diff) are no longer
+# pull_request_only, which previously let a direct push to main bypass
+# them. ``pull_request_only`` is intentionally empty. Repos with extra
+# owned contexts (DeepSource, visual, native build) extend this in their
+# per-repo profile.
 required_contexts:
   always:
     - shared-scanner-matrix / Coverage 100 Gate
@@ -48,12 +56,12 @@ required_contexts:
     - shared-scanner-matrix / Sentry Zero
     - shared-scanner-matrix / DeepScan Zero
     - SonarCloud Code Analysis
-  pull_request_only:
     - Codacy Static Code Analysis
     - DeepScan
     - qlty check
     - qlty coverage
     - qlty coverage diff
+  pull_request_only: []
   target:
     - shared-scanner-matrix / Coverage 100 Gate
     - shared-codecov-analytics / Codecov Analytics

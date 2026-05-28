@@ -30,6 +30,15 @@ coverage:
 visual_pair_required: true
 visual_lane:
   kind: desktop-adapter
+# Merge the paired visual contexts onto the full common-stack provider set
+# so they are enforced on push AND pull_request (whole-tree strict-zero).
+required_contexts:
+  always:
+  - Chromatic Playwright
+  - Applitools Visual
+  target:
+  - Chromatic Playwright
+  - Applitools Visual
 trigger:
   mode: standard
   pr_head_sha: true

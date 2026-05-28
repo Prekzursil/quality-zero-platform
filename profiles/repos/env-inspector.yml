@@ -39,18 +39,10 @@ coverage:
 trigger:
   mode: pr-focused
   pr_head_sha: true
+# Whole provider context set enforced on push AND pull_request: every
+# native cloud context moved out of pull_request_only into always.
 required_contexts:
   always:
-  - shared-scanner-matrix / Coverage 100 Gate
-  - shared-codecov-analytics / Codecov Analytics
-  - codeql / CodeQL
-  - shared-scanner-matrix / QLTY Zero
-  - shared-scanner-matrix / Sonar Zero
-  - shared-scanner-matrix / Codacy Zero
-  - shared-scanner-matrix / Semgrep Zero
-  - shared-scanner-matrix / Sentry Zero
-  - shared-scanner-matrix / DeepScan Zero
-  target:
   - shared-scanner-matrix / Coverage 100 Gate
   - shared-codecov-analytics / Codecov Analytics
   - codeql / CodeQL
@@ -66,7 +58,17 @@ required_contexts:
   - qlty check
   - qlty coverage
   - qlty coverage diff
-  pull_request_only:
+  pull_request_only: []
+  target:
+  - shared-scanner-matrix / Coverage 100 Gate
+  - shared-codecov-analytics / Codecov Analytics
+  - codeql / CodeQL
+  - shared-scanner-matrix / QLTY Zero
+  - shared-scanner-matrix / Sonar Zero
+  - shared-scanner-matrix / Codacy Zero
+  - shared-scanner-matrix / Semgrep Zero
+  - shared-scanner-matrix / Sentry Zero
+  - shared-scanner-matrix / DeepScan Zero
   - SonarCloud Code Analysis
   - Codacy Static Code Analysis
   - DeepScan

@@ -2,12 +2,8 @@ slug: Prekzursil/codex-session-manager
 version: 2
 stack: dotnet-wpf
 mode:
-  phase: ratchet
-  ratchet:
-    baseline: {}
-    target_date: ''
-    escalation_date: ''
-    on_escalation: absolute
+  # ratchet -> absolute: block on ANY finding, whole-tree, on push AND PR.
+  phase: absolute
 scanners:
   deepsource_visible:
     severity: block
@@ -15,16 +11,20 @@ overrides: []
 verify_command: bash scripts/verify
 required_contexts_mode: replace
 issue_policy:
-  mode: ratchet
-  pr_behavior: introduced_only
+  # ratchet -> zero, pr_behavior introduced_only -> absolute.
+  mode: zero
+  pr_behavior: absolute
   main_behavior: absolute
 enabled_scanners:
   deepsource_visible: true
+# Whole provider + native build context set enforced on push AND PR:
+# dependency-review and the aggregate/rollup contexts moved into always.
 required_contexts:
   always:
   - build-test
   - scan
   - codeql / CodeQL
+  - dependency-review
   - shared-codecov-analytics / Codecov Analytics
   - shared-scanner-matrix / Coverage 100 Gate
   - shared-scanner-matrix / QLTY Zero
@@ -34,8 +34,9 @@ required_contexts:
   - shared-scanner-matrix / Sentry Zero
   - shared-scanner-matrix / DeepScan Zero
   - shared-scanner-matrix / DeepSource Visible Zero
-  pull_request_only:
-  - dependency-review
+  - aggregate-gate / Quality Zero Gate
+  - shared-scanner-matrix / Quality Rollup
+  pull_request_only: []
   required_now:
   - build-test
   - scan

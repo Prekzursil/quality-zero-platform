@@ -3,16 +3,17 @@ version: 2
 stack: python-tooling
 mode:
   phase: absolute
-# The platform's OWN CI self-tests against the same zero-gate scanners it
-# provides to consumer repos. But the platform has 838 Codacy / 1116
-# DeepSource / 110 Sonar issues accumulated before governance landed —
-# fixing them all is out of scope for the QZP v2 rollout. Set
-# ``issue_policy.mode: audit`` so those gates are INFORMATIONAL on the
-# platform itself; consumer repos stay on ``zero`` via the stack common
-# template. See docs/QZP-V2-DESIGN.md — this is a deliberate policy
-# divergence for the self-hosted case, not a softening of the product.
+# The platform governs itself under the SAME strict-zero contract it
+# enforces on every consumer repo: whole-tree, on push AND pull_request.
+# The earlier ``issue_policy.mode: audit`` divergence (grandfathering the
+# pre-governance Codacy/DeepSource/Sonar backlog) is retired — the user
+# requires absolute + zero everywhere, no self-hosted exception. Any
+# residual provider findings must be fixed at the source, not waved
+# through as informational.
 issue_policy:
-  mode: audit
+  mode: zero
+  pr_behavior: absolute
+  main_behavior: absolute
 scanners:
   # Every scanner is severity: block on the platform per Phase 5
   # self-governance contract. Only socket_project_report drops to info
@@ -34,6 +35,9 @@ scanners:
 overrides: []
 verify_command: bash scripts/verify
 required_contexts_mode: replace
+# STRICT-ZERO, WHOLE-TREE, on push AND pull_request. Every wired provider
+# context lives in ``always`` so it is enforced on both events — nothing
+# is left pull_request_only where a direct push to main could bypass it.
 required_contexts:
   always:
   - shared-scanner-matrix / Coverage 100 Gate
@@ -46,8 +50,8 @@ required_contexts:
   - shared-scanner-matrix / Sentry Zero
   - shared-scanner-matrix / DeepScan Zero
   - shared-scanner-matrix / DeepSource Visible Zero
-  pull_request_only:
   - SonarCloud Code Analysis
+  pull_request_only: []
   target:
   - shared-scanner-matrix / Coverage 100 Gate
   - shared-codecov-analytics / Codecov Analytics

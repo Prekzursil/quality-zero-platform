@@ -8,8 +8,10 @@ overrides: []
 verify_command: bash scripts/verify
 required_contexts_mode: replace
 issue_policy:
+  # pr_behavior introduced_only -> absolute: PRs are held to the same
+  # whole-tree zero bar as pushes to main (no new-code-only grandfathering).
   mode: zero
-  pr_behavior: introduced_only
+  pr_behavior: absolute
   main_behavior: absolute
 coverage:
   command: "python3 -m venv .venv-pytest\n. .venv-pytest/bin/activate\npython -m pip\
@@ -47,12 +49,18 @@ coverage:
   - airline-gui/src/
   min_percent: 100.0
   branch_min_percent: 100.0
+# Whole provider context set enforced on push AND pull_request: native
+# Codacy/DeepScan/qlty contexts and the DeepScan Zero aggregator moved out
+# of pull_request_only into always.
 required_contexts:
   always:
   - shared-scanner-matrix / Coverage 100 Gate
   - shared-codecov-analytics / Codecov Analytics
   - codeql / CodeQL
   - shared-scanner-matrix / QLTY Zero
+  - qlty check
+  - qlty coverage
+  - qlty coverage diff
   - shared-scanner-matrix / Sonar Zero
   - shared-scanner-matrix / Codacy Zero
   - shared-scanner-matrix / Semgrep Zero
@@ -62,7 +70,11 @@ required_contexts:
   - 'DeepSource: C & C++'
   - 'DeepSource: Shell'
   - 'DeepSource: Secrets'
+  - shared-scanner-matrix / DeepScan Zero
   - SonarCloud Code Analysis
+  - Codacy Static Code Analysis
+  - DeepScan
+  pull_request_only: []
   target:
   - shared-scanner-matrix / Coverage 100 Gate
   - shared-codecov-analytics / Codecov Analytics
@@ -84,13 +96,6 @@ required_contexts:
   - SonarCloud Code Analysis
   - Codacy Static Code Analysis
   - DeepScan
-  pull_request_only:
-  - Codacy Static Code Analysis
-  - DeepScan
-  - qlty check
-  - qlty coverage
-  - qlty coverage diff
-  - shared-scanner-matrix / DeepScan Zero
 vendors:
   sonar:
     project_key_from_repo_slug: true

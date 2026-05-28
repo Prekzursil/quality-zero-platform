@@ -47,6 +47,9 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
         self.assertEqual(profile["stack"], "node-frontend")
         self.assertEqual(profile["coverage"]["branch_min_percent"], 100.0)
         self.assertEqual(pbinfo["coverage"]["branch_min_percent"], 100.0)
+        # STRICT-ZERO, WHOLE-TREE: every native cloud context (Codacy
+        # Static Code Analysis, DeepScan, qlty check/coverage/diff) is now
+        # enforced on push too, not just on pull_request.
         self.assertEqual(
             active_required_contexts(profile, event_name="push"),
             [
@@ -60,9 +63,20 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
                 "shared-scanner-matrix / Sentry Zero",
                 "shared-scanner-matrix / DeepScan Zero",
                 "SonarCloud Code Analysis",
+                "Codacy Static Code Analysis",
+                "DeepScan",
+                "qlty check",
+                "qlty coverage",
+                "qlty coverage diff",
                 "Chromatic Playwright",
                 "Applitools Visual",
             ],
+        )
+        # Whole-tree enforcement: push and pull_request must require the
+        # exact same provider context set — nothing pull_request_only.
+        self.assertEqual(
+            set(active_required_contexts(profile, event_name="push")),
+            set(pr_contexts),
         )
         self.assertIn("shared-scanner-matrix / QLTY Zero", pr_contexts)
         self.assertTrue(
@@ -118,8 +132,14 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
             ["self-hosted", "codex-trusted"],
         )
 
-    def test_airline_keeps_deepscan_contexts_pr_only(self) -> None:
-        """Airline should keep native DeepScan and related cloud contexts PR-only."""
+    def test_airline_enforces_all_provider_contexts_on_push_and_pr(self) -> None:
+        """Airline must enforce every native + aggregator context on push AND PR.
+
+        Previously the native DeepScan / Codacy / qlty cloud contexts (and
+        the DeepScan Zero aggregator) were pull_request_only, so a direct
+        push to main bypassed them. Under strict-zero whole-tree they are
+        required on both events.
+        """
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/Airline-Reservations-System")
 
@@ -132,23 +152,19 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
             "DeepSource: C & C++",
             "DeepSource: Shell",
             "DeepSource: Secrets",
+            "shared-scanner-matrix / DeepScan Zero",
+            "shared-scanner-matrix / QLTY Zero",
+            "DeepScan",
+            "Codacy Static Code Analysis",
+            "qlty check",
+            "qlty coverage",
+            "qlty coverage diff",
         ):
             self.assertIn(required, push_contexts)
             self.assertIn(required, pr_contexts)
-        self.assertNotIn("DeepScan Zero", push_contexts)
-        self.assertNotIn("DeepScan", push_contexts)
-        self.assertNotIn("Codacy Static Code Analysis", push_contexts)
-        self.assertNotIn("qlty check", push_contexts)
-        self.assertNotIn("qlty coverage", push_contexts)
-        self.assertNotIn("qlty coverage diff", push_contexts)
-        self.assertIn("shared-scanner-matrix / QLTY Zero", push_contexts)
-        self.assertIn("shared-scanner-matrix / DeepScan Zero", pr_contexts)
-        self.assertIn("DeepScan", pr_contexts)
-        self.assertIn("Codacy Static Code Analysis", pr_contexts)
-        self.assertIn("shared-scanner-matrix / QLTY Zero", pr_contexts)
-        self.assertIn("qlty check", pr_contexts)
-        self.assertIn("qlty coverage", pr_contexts)
-        self.assertIn("qlty coverage diff", pr_contexts)
+        # No pull_request_only holes: push and PR enforce the same set.
+        self.assertEqual(set(push_contexts), set(pr_contexts))
+        self.assertEqual(profile["required_contexts"]["pull_request_only"], [])
 
     def test_quality_zero_platform_keeps_codacy_native_context_pr_only(self) -> None:
         """The control-plane repo should not require native Codacy contexts itself."""

@@ -40,15 +40,6 @@
             "context": "shared-scanner-matrix / QLTY Zero"
           },
           {
-            "context": "qlty check"
-          },
-          {
-            "context": "qlty coverage"
-          },
-          {
-            "context": "qlty coverage diff"
-          },
-          {
             "context": "shared-scanner-matrix / Sonar Zero"
           },
           {
@@ -64,6 +55,9 @@
             "context": "shared-scanner-matrix / DeepScan Zero"
           },
           {
+            "context": "shared-scanner-matrix / DeepSource Visible Zero"
+          },
+          {
             "context": "SonarCloud Code Analysis"
           },
           {
@@ -73,7 +67,13 @@
             "context": "DeepScan"
           },
           {
-            "context": "shared-scanner-matrix / DeepSource Visible Zero"
+            "context": "qlty check"
+          },
+          {
+            "context": "qlty coverage"
+          },
+          {
+            "context": "qlty coverage diff"
           }
         ],
         "strict_required_status_checks_policy": true

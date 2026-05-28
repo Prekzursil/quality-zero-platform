@@ -34,6 +34,12 @@
             "context": "shared-codecov-analytics / Codecov Analytics"
           },
           {
+            "context": "codeql / CodeQL"
+          },
+          {
+            "context": "shared-scanner-matrix / QLTY Zero"
+          },
+          {
             "context": "qlty check"
           },
           {
@@ -64,6 +70,12 @@
             "context": "DeepScan"
           },
           {
+            "context": "CodeRabbit"
+          },
+          {
+            "context": "Codacy Static Code Analysis"
+          },
+          {
             "context": "Python API & worker checks"
           },
           {
@@ -74,15 +86,6 @@
           },
           {
             "context": "Applitools Visual"
-          },
-          {
-            "context": "codeql / CodeQL"
-          },
-          {
-            "context": "CodeRabbit"
-          },
-          {
-            "context": "Codacy Static Code Analysis"
           }
         ],
         "strict_required_status_checks_policy": true

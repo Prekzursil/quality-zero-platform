@@ -27,7 +27,17 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
 
     @staticmethod
     def _pr_only_contexts() -> Set[str]:
-        """Return contexts that only appear on pull requests and rulesets."""
+        """Return contexts that only appear on pull requests and rulesets.
+
+        Under strict-zero whole-tree there are none: every owned context
+        (including dependency-review and the aggregate/rollup gates) is now
+        enforced on push too.
+        """
+        return set()
+
+    @staticmethod
+    def _push_extra_contexts() -> Set[str]:
+        """Return owned contexts that must now also be required on push."""
         return {
             "dependency-review",
             "aggregate-gate / Quality Zero Gate",
@@ -36,16 +46,13 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
 
     @staticmethod
     def _unexpected_contexts() -> Set[str]:
-        """Return contexts that must stay out of this repo contract."""
+        """Return contexts that must stay out of this repo contract.
+
+        codex-session-manager does not wire native Codacy / DeepScan / qlty
+        cloud contexts (it relies on the shared ``* Zero`` aggregators and
+        its own build-test/scan checks), so those stay absent on every event.
+        """
         return {
-            "Codecov Analytics",
-            "Coverage 100 Gate",
-            "QLTY Zero",
-            "Sonar Zero",
-            "Codacy Zero",
-            "Semgrep Zero",
-            "Sentry Zero",
-            "DeepScan Zero",
             "qlty check",
             "qlty coverage",
             "qlty coverage diff",
@@ -63,21 +70,21 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
     ) -> None:
         """Assert the event-specific context contract for the repo."""
         repo_required = self._repo_required_contexts()
-        pr_required = (
+        # Strict-zero whole-tree: push and PR enforce the SAME full set.
+        full_required = (
             self._shared_zero_gate_contexts()
             | {"codeql / CodeQL"}
             | repo_required
-            | self._pr_only_contexts()
+            | self._push_extra_contexts()
         )
-        self._assert_context_subset(
-            push_contexts,
-            self._zero_gate_provider_contexts() | {"codeql / CodeQL"} | repo_required,
-        )
-        self._assert_context_subset(pr_contexts, pr_required)
-        self._assert_context_subset(ruleset_contexts, pr_required)
+        self._assert_context_subset(push_contexts, full_required)
+        self._assert_context_subset(pr_contexts, full_required)
+        self._assert_context_subset(ruleset_contexts, full_required)
         self.assertTrue(ruleset_contexts.issubset(target_contexts))
+        self.assertEqual(set(push_contexts), set(pr_contexts))
         for unexpected in self._unexpected_contexts():
             self.assertNotIn(unexpected, pr_contexts)
+            self.assertNotIn(unexpected, push_contexts)
 
     def _assert_profile_shape(self, profile: dict) -> None:
         """Assert the repo profile still matches the WPF rollout shape."""
@@ -118,17 +125,10 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
             ruleset_contexts=ruleset_contexts,
             target_contexts=target_contexts,
         )
-        self.assertNotIn("dependency-review", push_contexts)
+        # dependency-review is now enforced on push too (whole-tree).
+        self.assertIn("dependency-review", push_contexts)
         for unexpected in {"qlty check", "qlty coverage", "qlty coverage diff"}:
             self.assertNotIn(unexpected, push_contexts)
-            self.assertNotIn(unexpected, pr_contexts)
-        for unexpected in self._unexpected_contexts() - {
-            "qlty check",
-            "qlty coverage",
-            "qlty coverage diff",
-            "Codacy Static Code Analysis",
-            "DeepScan",
-        }:
             self.assertNotIn(unexpected, pr_contexts)
 
     def test_codex_session_manager_profile_validation_accepts_emitted_required_now_contexts(self) -> None:

@@ -126,22 +126,17 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
         self.assertEqual(profile["codex_auth_lane"], "chatgpt-account")
         self.assertNotIn("OPENAI_API_KEY", profile["required_secrets"])
         self.assertIn("CODEX_AUTH_JSON", profile["conditional_secrets"])
-        # The platform's self-CI runs in ``audit`` mode so the 838 Codacy /
-        # 1116 DeepSource / 110 Sonar pre-governance findings don't block
-        # main. Consumer repos stay on the zero-policy default via the
-        # stack common template — the softening is scoped to the
-        # platform's own profile. See the comment at the top of
-        # ``profiles/repos/quality-zero-platform.yml`` for the rationale.
+        # The platform governs ITSELF under strict zero — the prior
+        # ``audit`` self-exception (grandfathering the pre-governance
+        # backlog) is retired. ``mode: zero`` blocks main on ANY finding,
+        # whole-tree, like every consumer repo.
         self.assertEqual(
             profile["issue_policy"],
             {
-                "mode": "audit",
-                # ``pr_behavior: absolute`` comes from the stack common
-                # template; the platform override only softens ``mode``
-                # so PR-time severity enforcement stays unchanged.
+                "mode": "zero",
                 "pr_behavior": "absolute",
                 "main_behavior": "absolute",
-                "baseline_ref": "main",
+                "baseline_ref": "",
             },
         )
 
@@ -165,7 +160,12 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
     def test_env_inspector_overlay_aligns_push_required_contexts_to_emitted_surface(
         self,
     ) -> None:
-        """Env Inspector push contexts should match the emitted green surface."""
+        """Env Inspector enforces every provider context on push AND PR.
+
+        Strict-zero whole-tree: the native cloud contexts that used to be
+        pull_request_only are now in ``always``, so push and PR require the
+        same complete set.
+        """
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/env-inspector")
 
@@ -185,28 +185,22 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
                 "shared-scanner-matrix / Semgrep Zero",
                 "shared-scanner-matrix / Sentry Zero",
                 "shared-scanner-matrix / DeepScan Zero",
-            ],
-        )
-        self._assert_context_subset(
-            pr_contexts,
-            self._zero_gate_provider_contexts()
-            | {
                 "SonarCloud Code Analysis",
                 "Codacy Static Code Analysis",
                 "DeepScan",
                 "qlty check",
                 "qlty coverage",
                 "qlty coverage diff",
-            },
+            ],
         )
+        self.assertEqual(set(push_contexts), set(pr_contexts))
+        self.assertEqual(profile["required_contexts"]["pull_request_only"], [])
         self.assertIn(
             "shared-codecov-analytics / Codecov Analytics", target_contexts
         )
         self.assertIn("shared-scanner-matrix / QLTY Zero", target_contexts)
         self.assertIn("qlty coverage", target_contexts)
         self.assertIn("qlty coverage diff", target_contexts)
-        for unexpected in ("qlty coverage", "qlty coverage diff"):
-            self.assertNotIn(unexpected, push_contexts)
 
     def test_event_link_profile_installs_lizard_and_enforces_branch_coverage(
         self,

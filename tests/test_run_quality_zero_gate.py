@@ -14,6 +14,7 @@ from typing import List
 from unittest.mock import patch
 
 from scripts.quality.run_quality_zero_gate import (
+    _assert_providers_enforced,
     _build_argv,
     _parse_args,
     _run_required_checks,
@@ -271,6 +272,83 @@ class RunQualityZeroGateTests(unittest.TestCase):
             self.assertIn(repo_root, sys.path)
         finally:
             sys.path[:] = original_sys_path
+
+    def test_assert_providers_enforced_passes_when_all_wired_providers_required(
+        self,
+    ) -> None:
+        """A wired provider present in the required set must not raise."""
+        profile = {
+            "enabled_scanners": {"codacy": True},
+            "scanners": {"codacy": {"severity": "block"}},
+        }
+        # Should not raise.
+        _assert_providers_enforced(
+            profile, ["shared-scanner-matrix / Codacy Zero"]
+        )
+
+    def test_assert_providers_enforced_fails_closed_on_silent_pass_hole(
+        self,
+    ) -> None:
+        """A wired-but-absent provider must abort the gate (fail closed)."""
+        profile = {
+            "enabled_scanners": {"codacy": True, "semgrep": True},
+            "scanners": {
+                "codacy": {"severity": "block"},
+                "semgrep": {"severity": "block"},
+            },
+        }
+        with self.assertRaises(SystemExit) as exc:
+            _assert_providers_enforced(
+                profile, ["shared-scanner-matrix / Codacy Zero"]
+            )
+        message = str(exc.exception)
+        self.assertIn("wired providers are not", message)
+        self.assertIn("shared-scanner-matrix / Semgrep Zero", message)
+
+    def test_main_fails_closed_when_provider_context_missing(self) -> None:
+        """main() must abort before probing if a wired provider is unenforced."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            profile_path = tmp / "profile.json"
+            profile_path.write_text(
+                json.dumps(
+                    {
+                        "slug": "Prekzursil/quality-zero-platform",
+                        "active_required_contexts": [
+                            "shared-scanner-matrix / Coverage 100 Gate"
+                        ],
+                        "enabled_scanners": {"codacy": True},
+                        "scanners": {"codacy": {"severity": "block"}},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            args = Namespace(
+                profile_json=str(profile_path),
+                repo_dir=str(tmp / "repo"),
+                platform_dir=str(tmp / "platform"),
+                out_json="quality-zero-gate/required-checks.json",
+                out_md="quality-zero-gate/required-checks.md",
+            )
+            (tmp / "repo").mkdir()
+            (tmp / "platform" / "scripts" / "quality").mkdir(parents=True)
+
+            with (
+                patch(
+                    "scripts.quality.run_quality_zero_gate._parse_args",
+                    return_value=args,
+                ),
+                patch(
+                    "scripts.quality.run_quality_zero_gate.check_required_checks.main",
+                    return_value=0,
+                ) as mock_main,
+                patch.dict("os.environ", {"TARGET_SHA": "deadbeef"}, clear=False),
+                self.assertRaises(SystemExit) as exc,
+            ):
+                main()
+
+        self.assertIn("Codacy Zero", str(exc.exception))
+        self.assertEqual(mock_main.call_count, 0)
 
     def test_run_required_checks_uses_repo_dir_as_working_directory_and_restores_argv(
         self,

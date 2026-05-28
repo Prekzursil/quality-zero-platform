@@ -15,6 +15,7 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.quality import check_required_checks
+from scripts.quality.provider_enforcement import unenforced_providers
 
 
 def _parse_args() -> argparse.Namespace:
@@ -41,6 +42,24 @@ def _required_contexts(profile: Dict[str, Any]) -> List[str]:
         if isinstance(target, list):
             return [str(item).strip() for item in target if str(item).strip()]
     raise SystemExit("Resolved profile did not include active_required_contexts")
+
+
+def _assert_providers_enforced(profile: Dict[str, Any], required: List[str]) -> None:
+    """Fail closed when a wired provider's Zero context is not enforced.
+
+    Whole-codebase strict-zero means every enabled, blocking provider must
+    surface a required status context the gate waits on. A provider that is
+    wired but whose context is missing from ``required`` would let the gate
+    pass while the provider's findings can never block — exactly the
+    silent-pass hole this gate exists to close. Treat it as a hard failure.
+    """
+    findings = unenforced_providers(profile, required)
+    if findings:
+        joined = "\n  - ".join(findings)
+        raise SystemExit(
+            "Quality-zero gate refuses to run: wired providers are not "
+            "enforced as required contexts:\n  - " + joined
+        )
 
 
 def _build_argv(
@@ -132,6 +151,10 @@ def main() -> int:
         Path(args.platform_dir).resolve()
         if args.platform_dir
         else Path(__file__).resolve().parents[2]
+    )
+    _assert_providers_enforced(
+        cast("Dict[str, Any]", profile),
+        _required_contexts(cast("Dict[str, Any]", profile)),
     )
     argv = _build_argv(
         cast("Dict[str, Any]", profile),

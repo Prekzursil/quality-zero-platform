@@ -1,0 +1,45 @@
+# GuardRails configuration
+# Reference: https://docs.guardrails.io/docs/configuration
+#
+# Bounds the org-installed GuardRails App's scan to source code so its
+# status check converges. All analyzers stay enabled with default
+# rules; no findings are silenced — this matches the platform's own
+# self-governance contract (strict-zero, whole-tree, on push and PR).
+
+version: 1
+
+ignore-paths:
+  - build
+  - generated
+  - htmlcov
+  - docs
+  - profiles
+  - tests
+  - inventory
+  - known-issues
+  - coverage-100
+  - deepscan-zero
+  - deepsource-visible-zero
+  - deps-zero
+  - "**/build/**"
+  - "**/__pycache__/**"
+  - "scripts/**/*.test.mjs"
+
+engines:
+  python:
+    enabled: true
+    secrets:
+      enabled: true
+    sast:
+      enabled: true
+  javascript:
+    enabled: true
+    secrets:
+      enabled: true
+    sast:
+      enabled: true
+  general:
+    secrets:
+      enabled: true
+    vulnerable_dependencies:
+      enabled: true

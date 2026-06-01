@@ -182,10 +182,11 @@ findings reach literal zero. Two principled, non-lying options:
   state, but very large, and the same legacy-debt question recurs for
   every future repo onboarded with existing debt.
 
-**Recommendation: A1.** It generalizes (every legacy repo onboards in
-ratchet with a deadline), it's honest, and it doesn't gate the whole
-subsystem on a multi-thousand-finding cleanup. A2's cleanup can still
-proceed *under* an A1 baseline as burn-down.
+**CHOSEN (user 2026-06-01): A2 — drive platform to literal zero now**,
+with the A1 frozen baseline retained as a *regression floor* during the
+burn-down (no NEW debt while clearing old). `audit` mode is deleted from
+the schema. See §8 + §9 Track 2. The baseline mechanism still generalizes
+to future legacy onboards.
 
 ### 3.5 Zero-conf onboarding (`scripts/quality/onboard.py` + `qzp onboard`)
 
@@ -238,10 +239,10 @@ contexts, coverage scaffolding, etc. To make profiles ~8 lines:
   140 lines and drift-prone; "no micromanagement" only holds for *new*
   repos, not existing ones.
 
-**Recommendation: B1** for the "once and for all" mandate, *if* the
-migration's blast radius is acceptable (it touches all 15 profiles +
-the resolver + every profile test). B2 is the safe fallback if the
-review gate judges B1 too risky for one PR series.
+**CHOSEN (user 2026-06-01): B1 — thin profiles + inheritance + migrate all
+15.** The migration touches all 15 profiles + the resolver + every profile
+test; it is done behavior-preserving with golden tests on the *resolved*
+profile (snapshot before, assert identical after). See §8 + §9 TG-5.
 
 ### 3.7 Dashboard + alerts
 
@@ -305,16 +306,69 @@ truth contract).
   still operator-only (but the subsystem makes their *absence* loud).
 - Not building new scanners — unifying the truth of existing ones.
 
-## 8. OPEN DECISIONS (for user + design-review-gate)
+## 8. LOCKED DECISIONS (user-confirmed 2026-06-01)
 
-- **Decision A — legacy debt:** A1 truthful baseline/burn-down
-  (recommended) vs A2 drive-to-literal-zero-now.
-- **Decision B — profile shape:** B1 thin+inheritance+migrate-15
-  (recommended) vs B2 generate-only-for-new-repos.
-- **Decision C — fleet scope:** ship the subsystem only (then it drives
-  the fleet), vs also drive all 15 live repos to green in this effort
-  (needs `DRIFT_SYNC_PAT` for cross-repo PRs).
-- **Decision D — #232 disposition:** extend (recommended) vs supersede.
-- **Decision E — execution method** (per `CLAUDE.md`): orchestrated
-  execution vs subagent-driven vs parallel-session.
+The user selected the **maximal program** — "solve everything, once and
+for all." All forks resolved:
+
+- **Decision A — legacy debt → A2 (drive platform to literal zero now).**
+  The platform's ~2064 findings (838 Codacy + 1116 DeepSource + 110 Sonar)
+  are burned down to literal zero. A **frozen baseline is still recorded
+  as a regression floor** during the burn-down (so no NEW debt sneaks in
+  while we clear the old), but the target is 0, not baseline-hold. `audit`
+  mode is deleted from the schema either way.
+- **Decision B — profile shape → B1 (thin + stack inheritance, migrate
+  all 15).** Resolver hardened so `required_contexts` is fully derived
+  from `scanners.*.severity`; all 15 profiles migrated to ~8-line thin
+  form, behavior-preserving with golden tests on the resolved profile.
+- **Decision C — fleet scope → drive all 15 repos green now.** The
+  subsystem is built first, then used as the instrument to drive every
+  governed repo to green CI in this same program. Cross-repo PRs are
+  opened via the operator's authenticated `gh` token from this
+  environment (verify scope covers consumers) and/or `DRIFT_SYNC_PAT`;
+  the subsystem makes a missing PAT *loud* rather than a blocker to
+  building.
+- **Decision D — #232 disposition → extend.** Keep
+  `provider_enforcement.py` and the fleet `audit→zero` flip; TG-1/TG-3
+  rebase #232 onto the truth contract + baseline so it merges truthfully.
+- **Decision E — execution → metaswarm orchestrated execution** (4-phase
+  loop per work unit, fresh adversarial reviewers, coverage enforcement,
+  pre-PR knowledge capture).
+
+## 9. Program structure & sequencing
+
+Three tracks, sequenced so each stands on a non-regressing foundation:
+
+```
+Track 1 — SUBSYSTEM (TG-1..TG-6)   [build the instrument]
+   TG-1 Truth Source contract + adapter refactor (+ fold #232 provider_enforcement)
+   TG-2 Token-rotation resilience (auth preflight, alert:scanner-unavailable)
+   TG-3 Truthful baseline + delete `audit` mode (rebase/unblock #232)
+   TG-4 Reconciliation + alert:gate-truth-drift + dashboard grey state
+   TG-5 Thin profiles + derived required_contexts + migrate 15 (Decision B1)
+   TG-6 Zero-conf onboarding `qzp onboard` + ONBOARDING.md rewrite
+          │
+          ▼
+Track 2 — PLATFORM LITERAL-ZERO (dogfood; Decision A2)   [prove the instrument on ourselves]
+   Burn down ~2064 platform findings to 0 using the subsystem's truth +
+   QRv2 deterministic patches; record baseline as regression floor;
+   merge #232 once platform is truthfully green.
+          │
+          ▼
+Track 3 — FLEET GREEN (Decision C)   [scale to all 15]
+   For each governed repo: read dashboard truth → burn down to 0 →
+   thin-migrate profile → promote shadow→absolute → confirm green CI.
+   Cross-repo PRs via authed gh / DRIFT_SYNC_PAT.
+```
+
+**Hard external dependencies (loud, not silent):** `DRIFT_SYNC_PAT` (or
+operator gh-token scope) for cross-repo PR opening; SonarCloud
+Auto-Analysis OFF on event-link (UI-only). The subsystem surfaces each as
+an explicit `alert:*` / preflight BLOCK — never a silent skip.
+
+**Done means (verified, not believed):** every governed repo's provider
+dashboards read literal zero through the Truth Source contract; every
+`* Zero` gate green on main; `qzp onboard` reproduces the 4 unprofiled
+repos' profiles from scratch; `verify_v2_deployment.py --all` exit 0; no
+open `alert:*`. Only then does the campaign close.
 ```

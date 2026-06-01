@@ -136,12 +136,14 @@ jobs:
 
   # TG-2 token-rotation preflight. Distinct from the digest dispatch above
   # (which stays dry-run on manual dispatch): this job is ALWAYS non-dry-run
-  # because it must make the rotated-token case loud. It injects the four
+  # because it must make the rotated-token case loud. It injects the three
   # read-capable provider secrets and probes every block-severity scanner in
   # the QZP self-profile. Exit 2 (any unreadable) → rotated/revoked token;
   # the --open-alerts flag files alert:scanner-unavailable (deduped). Without
   # the injected secrets the job would only ever see secret_missing (exit 1),
   # never the rotation case — so the secrets are wired here explicitly.
+  # DeepScan is EXEMPT (github_check_context mode — a GitHub check context, not
+  # a token-polled API), so no DeepScan secret/URL is injected here.
   token-preflight:
     runs-on: ubuntu-latest
     permissions:
@@ -166,11 +168,6 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           CODACY_API_TOKEN: ${{ secrets.CODACY_API_TOKEN }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          DEEPSCAN_API_TOKEN: ${{ secrets.DEEPSCAN_API_TOKEN }}
-          # DeepScan has no documented whoami; mirror check_deepscan_zero.py by
-          # reading the configurable open-issues URL. Absent it the deepscan
-          # probe reports unreadable (loud) rather than silently passing.
-          DEEPSCAN_OPEN_ISSUES_URL: ${{ vars.DEEPSCAN_OPEN_ISSUES_URL }}
         run: |
           python -m scripts.quality.truth.preflight \
             --profile quality-zero-platform \

@@ -17,6 +17,7 @@ import ssl
 import unittest
 import urllib.error
 from typing import Any, Dict, List, Mapping
+from unittest import mock
 from unittest.mock import MagicMock
 
 from scripts.quality.truth import preflight
@@ -111,27 +112,47 @@ class ProbeRequestShapeTests(unittest.TestCase):
         self.assertEqual(kwargs["allowed_host_suffixes"], {"sentry.io"})
         self.assertEqual(kwargs["headers"]["Authorization"], "Bearer tok")
 
-    def test_deepscan_mirrors_configurable_open_issues_url(self) -> None:
-        """DeepScan mirrors check_deepscan_zero: reads DEEPSCAN_OPEN_ISSUES_URL."""
+    def test_env_resolved_url_provider_reads_url_env(self) -> None:
+        """A runtime-configured probe (empty ``request_url``) reads its ``url_env``.
+
+        QZP's deepscan is now EXEMPT (github_check_context mode), so no
+        *registered* probe has an empty ``request_url`` anymore. The retained
+        open_issues-mode ``_DEEPSCAN`` spec still carries that contract, so we
+        register it transiently to exercise the ``url_env`` resolution branch.
+        """
         url_value = "https://api.deepscan.io/api/projects/acme/issues"
-        args = self._capture(
-            "deepscan",
-            {"DEEPSCAN_API_TOKEN": "tok", "DEEPSCAN_OPEN_ISSUES_URL": url_value},
-        )
+        with mock.patch.dict(
+            preflight.PROVIDER_PROBES, {"deepscan": preflight._DEEPSCAN}
+        ):
+            args = self._capture(
+                "deepscan",
+                {"DEEPSCAN_API_TOKEN": "tok", "DEEPSCAN_OPEN_ISSUES_URL": url_value},
+            )
         url = args.args[0]
         kwargs = args.kwargs
         self.assertEqual(url, url_value)
         self.assertEqual(kwargs["allowed_host_suffixes"], {"deepscan.io"})
         self.assertEqual(kwargs["headers"]["Authorization"], "Bearer tok")
 
-    def test_deepscan_without_url_is_unreadable_not_silent(self) -> None:
-        """DeepScan token present but no configured read URL → unreadable (loud)."""
+    def test_env_resolved_url_provider_without_url_is_unreadable_not_silent(
+        self,
+    ) -> None:
+        """An env-resolved probe with the URL absent → unreadable (loud), no call.
+
+        Exercises ``probe_provider``'s "no read endpoint configured" branch via
+        the retained open_issues-mode ``_DEEPSCAN`` spec (empty ``request_url``,
+        ``url_env`` unset in env). Registered transiently because QZP's deepscan
+        is now EXEMPT, not auth-probed.
+        """
         loader = MagicMock()
-        result = preflight.probe_provider(
-            "deepscan",
-            env={"DEEPSCAN_API_TOKEN": "tok"},
-            loader=loader,
-        )
+        with mock.patch.dict(
+            preflight.PROVIDER_PROBES, {"deepscan": preflight._DEEPSCAN}
+        ):
+            result = preflight.probe_provider(
+                "deepscan",
+                env={"DEEPSCAN_API_TOKEN": "tok"},
+                loader=loader,
+            )
         self.assertEqual(result.outcome, "unreadable")
         self.assertIsNone(result.http_status)
         loader.assert_not_called()
@@ -197,8 +218,8 @@ class ProbeProviderUnreadableTests(unittest.TestCase):
     def test_probe_unreadable_on_unreachable_urlerror(self) -> None:
         """``URLError`` → ``unreadable`` with ``http_status`` None."""
         result = preflight.probe_provider(
-            "deepscan",
-            env={"DEEPSCAN_API_TOKEN": "tok"},
+            "sonarcloud",
+            env={"SONAR_TOKEN": "tok"},
             loader=_raising_loader(urllib.error.URLError("dns")),
         )
         self.assertEqual(result.outcome, "unreadable")
@@ -318,12 +339,25 @@ class ProbeSpecContractTests(unittest.TestCase):
             self.assertTrue(spec.secret_env, f"{name} has empty secret env")
             self.assertTrue(spec.auth_header, f"{name} has empty auth header")
 
-    def test_four_distinct_tokens_back_the_probe_table(self) -> None:
-        """The 9 probe names collapse onto exactly the 4 read-capable tokens."""
+    def test_three_distinct_tokens_back_the_probe_table(self) -> None:
+        """The 8 probe names collapse onto exactly the 3 read-capable tokens.
+
+        DeepScan is no longer auth-probed (it is EXEMPT — github_check_context
+        mode), so DEEPSCAN_API_TOKEN is not part of the probe table.
+        """
         tokens = {spec.secret_env for spec in preflight.PROVIDER_PROBES.values()}
         self.assertEqual(
             tokens,
-            {"SONAR_TOKEN", "CODACY_API_TOKEN", "SENTRY_AUTH_TOKEN", "DEEPSCAN_API_TOKEN"},
+            {"SONAR_TOKEN", "CODACY_API_TOKEN", "SENTRY_AUTH_TOKEN"},
+        )
+
+    def test_deepscan_is_exempt_not_probed(self) -> None:
+        """DeepScan is EXEMPT (github_check_context mode), not in the probe table."""
+        self.assertIn("deepscan", preflight.EXEMPT_BLOCK_SCANNERS)
+        self.assertNotIn("deepscan", preflight.PROVIDER_PROBES)
+        self.assertIn(
+            "github_check_context",
+            preflight.EXEMPT_BLOCK_SCANNERS["deepscan"],
         )
 
     def test_exempt_entries_each_carry_a_reason(self) -> None:
@@ -394,14 +428,18 @@ class RunPreflightTests(unittest.TestCase):
                 "SONAR_TOKEN": "tok",
                 "CODACY_API_TOKEN": "tok",
                 "SENTRY_AUTH_TOKEN": "tok",
-                "DEEPSCAN_API_TOKEN": "tok",
-                "DEEPSCAN_OPEN_ISSUES_URL": "https://api.deepscan.io/api/projects/acme/issues",
             },
             loader=_ok_loader,
         )
         outcomes = {r.outcome for r in results}
         self.assertNotIn("unreadable", outcomes)
         self.assertNotIn("secret_missing", outcomes)
+        # DeepScan is EXEMPT (github_check_context mode) — classified, not
+        # probed — so it must NOT raise and must NOT emit a false unreadable
+        # even with no DeepScan token/URL in env.
+        deepscan = next(r for r in results if r.provider == "deepscan")
+        self.assertEqual(deepscan.outcome, "ok")
+        self.assertIn("exempt", deepscan.diagnostic.lower())
 
 
 class ResolveProfileDefaultLoaderTests(unittest.TestCase):
@@ -437,8 +475,6 @@ class ResolveProfileDefaultLoaderTests(unittest.TestCase):
                 "SONAR_TOKEN": "tok",
                 "CODACY_API_TOKEN": "tok",
                 "SENTRY_AUTH_TOKEN": "tok",
-                "DEEPSCAN_API_TOKEN": "tok",
-                "DEEPSCAN_OPEN_ISSUES_URL": "https://api.deepscan.io/api/projects/acme/issues",
             },
             loader=_ok_loader,
         )

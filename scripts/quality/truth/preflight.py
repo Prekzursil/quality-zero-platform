@@ -17,10 +17,9 @@ dominates all-``ok`` → 0) is fail-closed and deterministic.
 ``PROVIDER_PROBES`` NOR ``EXEMPT_BLOCK_SCANNERS`` raises
 ``UnclassifiedScannerError`` — that is the truth-model's north-star #2.
 
-The four auth-probed secrets (``SONAR_TOKEN``, ``CODACY_API_TOKEN``,
-``SENTRY_AUTH_TOKEN``, ``DEEPSCAN_API_TOKEN``) live only in CI, so the live
-exit-0 acceptance is verified on the PR, not locally; the unit tests inject a
-mocked ``loader``.
+The three auth-probed secrets (``SONAR_TOKEN``, ``CODACY_API_TOKEN``,
+``SENTRY_AUTH_TOKEN``) live only in CI, so the live exit-0 acceptance is
+verified on the PR, not locally; the unit tests inject a mocked ``loader``.
 
 Token non-leak (A.CB-8 clause 4): ``diagnostic`` carries only
 ``f"{provider}: HTTP {status}"`` / ``f"{provider}: unreachable"`` — never the
@@ -135,7 +134,7 @@ class UnclassifiedScannerError(RuntimeError):
     """
 
 
-# AUTH-PROBED providers (read-capable tokens). The 9 names collapse onto the 4
+# AUTH-PROBED providers (read-capable tokens). The 8 names collapse onto the 3
 # distinct read tokens: the normalized profile expands each logical provider
 # into per-facet scanner names (``codacy_issues`` etc.) + carries v1/v2
 # aliases (``sonar``/``sonarcloud``, ``codacy``/``codacy_*``). Per-facet
@@ -176,13 +175,16 @@ _SENTRY = ProbeSpec(
     auth_header="Authorization",
     auth_format="Bearer {token}",
 )
+# Open_issues-mode DeepScan spec. RETAINED but NOT registered in
+# ``PROVIDER_PROBES``: QZP runs the DeepScan gate in github_check_context mode
+# (its result is a GitHub check context, not a token-polled API), so deepscan
+# is EXEMPT here, not auth-probed (see EXEMPT_BLOCK_SCANNERS). This spec is the
+# runtime-configured open_issues-mode probe — mirroring ``check_deepscan_zero.py``
+# (Bearer-authed, deepscan.io-allowlisted, URL from ``DEEPSCAN_OPEN_ISSUES_URL``
+# via ``url_env``) — kept so an open_issues-mode repo can re-register it without
+# re-deriving the endpoint contract.
 _DEEPSCAN = ProbeSpec(
     secret_env="DEEPSCAN_API_TOKEN",  # noqa: S106  # nosec — env-var NAME, not a secret
-    # DeepScan has no publicly-documented whoami endpoint; the plan says to
-    # mirror ``check_deepscan_zero.py``, which reads the configurable
-    # ``DEEPSCAN_OPEN_ISSUES_URL`` (Bearer-authed, deepscan.io-allowlisted). The
-    # URL is supplied at runtime via ``url_env``; absent it the token cannot be
-    # probed → ``unreadable`` (loud), never a silent skip. See unresolved notes.
     request_url="",
     allowed_host_suffix="deepscan.io",
     auth_header="Authorization",
@@ -204,8 +206,6 @@ PROVIDER_PROBES: Dict[str, ProbeSpec] = {
     "codacy_coverage": _CODACY,
     # Sentry org listing (authenticated) → SENTRY_AUTH_TOKEN.
     "sentry": _SENTRY,
-    # DeepScan open-issues read → DEEPSCAN_API_TOKEN (mirrors check_deepscan_zero).
-    "deepscan": _DEEPSCAN,
 }
 
 # EXEMPT block scanners — NOT auth-probed, but recorded with a reason (never a
@@ -218,6 +218,13 @@ EXEMPT_BLOCK_SCANNERS: Dict[str, str] = {
     "qlty_check": "QLTY runs in-CI via its GitHub check; no external read API token.",
     "qlty": "Legacy alias of qlty_check (in-CI); no external read API token.",
     "socket_pr_alerts": "Socket GitHub App posts PR alerts in-CI; no read API token.",
+    "deepscan": (
+        "QZP runs the DeepScan gate in github_check_context mode "
+        "(DEEPSCAN_POLICY_MODE=github_check_context); its result is a GitHub "
+        "check context, not a token-polled API — no auth probe applies. The "
+        "open_issues-mode DEEPSCAN_OPEN_ISSUES_URL/DEEPSCAN_API_TOKEN are not "
+        "configured on this repo."
+    ),
     # Token-shaped but NOT read-capable.
     "codecov": (
         "CODECOV_TOKEN is upload-only; the v2 read API returns 401/403 "

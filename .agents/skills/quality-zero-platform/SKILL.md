@@ -1,9 +1,10 @@
-```markdown
+````markdown
 # quality-zero-platform Development Patterns
 
 > Auto-generated skill from repository analysis
 
 ## Overview
+
 This skill covers the core development patterns, coding conventions, and collaborative workflows used in the `quality-zero-platform` Python codebase. The repository emphasizes structured planning, review, and implementation for major features and subsystems, with clear documentation and test practices. This guide will help contributors follow established conventions and participate effectively in the project's workflows.
 
 ## Coding Conventions
@@ -30,6 +31,7 @@ This skill covers the core development patterns, coding conventions, and collabo
 ## Workflows
 
 ### Design Doc Review Gate Workflow
+
 **Trigger:** When designing a new subsystem or major feature and needing to document, review, and iterate on the plan.  
 **Command:** `/design-review-gate`
 
@@ -42,16 +44,19 @@ This skill covers the core development patterns, coding conventions, and collabo
 5. **Mark the design-review-gate as passed** in the documentation.
 
 #### Example Addendum Structure
+
 ```markdown
 ## Addendum B: Token Preflight Adjustments
 
 - Decision: Switch to strict token validation for all entrypoints.
 - Blocker: Awaiting feedback from security review (closed 2026-06-03).
 ```
+````
 
 ---
 
 ### Implementation Plan and Execution Workflow
+
 **Trigger:** When implementing a planned feature or milestone (e.g., TG-x), especially after design review.  
 **Command:** `/implement-plan`
 
@@ -65,13 +70,16 @@ This skill covers the core development patterns, coding conventions, and collabo
    - Write or update tests in `tests/` (e.g., `tests/test_truth_preflight.py`).
 
 #### Example Implementation Plan Outline
+
 ```markdown
 # TG2 Token Preflight Plan
 
 ## Objectives
+
 - Ensure all tokens are validated before processing.
 
 ## Steps
+
 1. Implement `runPreflightCheck` in `preflight.py`.
 2. Add test cases in `test_truth_preflight.py`.
 3. Update CI workflow to include new tests.
@@ -80,6 +88,7 @@ This skill covers the core development patterns, coding conventions, and collabo
 ---
 
 ### Code and Test Update Workflow
+
 **Trigger:** When making a targeted fix or feature update, ensuring both code and tests are updated.  
 **Command:** `/fix-feature`
 
@@ -88,6 +97,7 @@ This skill covers the core development patterns, coding conventions, and collabo
 3. **Optionally update related workflow files** if the change affects CI or automation.
 
 #### Example Fix Commit
+
 ```python
 # scripts/quality/truth/preflight.py
 def runPreflightCheck(token):
@@ -95,6 +105,7 @@ def runPreflightCheck(token):
         raise ValueError("Invalid token")
     # ...rest of logic...
 ```
+
 ```python
 # tests/test_truth_preflight.py
 def test_runPreflightCheck_invalid_token():
@@ -117,9 +128,12 @@ def test_runPreflightCheck_invalid_token():
 
 ## Commands
 
-| Command                | Purpose                                                        |
-|------------------------|----------------------------------------------------------------|
-| /design-review-gate    | Start or iterate on a design doc review for a major subsystem  |
-| /implement-plan        | Begin implementation of a planned feature or milestone         |
-| /fix-feature           | Make a targeted fix or update, including code and tests        |
+| Command             | Purpose                                                       |
+| ------------------- | ------------------------------------------------------------- |
+| /design-review-gate | Start or iterate on a design doc review for a major subsystem |
+| /implement-plan     | Begin implementation of a planned feature or milestone        |
+| /fix-feature        | Make a targeted fix or update, including code and tests       |
+
+```
+
 ```

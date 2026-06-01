@@ -1,0 +1,475 @@
+# Instincts generated from https://github.com/Prekzursil/quality-zero-platform
+# Generated: 2026-06-01T03:59:04.363Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: quality-zero-platform-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: docs, feat, fix
+
+## Evidence
+
+- 10 commits analyzed
+- Detected conventional commit pattern
+- Examples: docs(truthful-gate): reconstruct + commit design for truthful-gate subsystem, feat(tg2): token-rotation preflight (unreadable->BLOCK + alert:scanner-unavailable)
+
+---
+id: quality-zero-platform-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Commit Length
+
+## Action
+
+Write moderate-length commit messages (~81 characters)
+
+## Evidence
+
+- Average commit message length: 81 chars
+- Based on 10 commits
+
+---
+id: quality-zero-platform-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Naming Files
+
+## Action
+
+Use camelCase naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: camelCase
+
+---
+id: quality-zero-platform-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: quality-zero-platform-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: quality-zero-platform-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: quality-zero-platform-workflow-design-doc-review-gate-workflow
+trigger: "when doing design doc review gate workflow"
+confidence: 0.55
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Workflow Design Doc Review Gate Workflow
+
+## Action
+
+Follow the design-doc-review-gate-workflow workflow:
+1. Create or update a detailed design document in docs/plans/
+2. Update the active plan pointer in .beads/plans/active-plan.md
+3. Iterate with addenda to the design doc as review rounds progress (Addendum A, B, C, D, etc.)
+4. Lock in decisions and record closure of blockers
+5. Mark design-review-gate as passed in the documentation
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~1x per month
+- Files: docs/plans/2026-06-01-truthful-gate-subsystem-design.md, .beads/plans/active-plan.md
+
+---
+id: quality-zero-platform-workflow-implementation-plan-and-execution-workflow
+trigger: "when doing implementation plan and execution workflow"
+confidence: 0.55
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Workflow Implementation Plan And Execution Workflow
+
+## Action
+
+Follow the implementation-plan-and-execution-workflow workflow:
+1. Write an initial implementation plan in docs/plans/ (e.g., -tg2-token-preflight-plan.md)
+2. Revise the plan after review (e.g., fold in must-fixes)
+3. Implement the feature: add code (scripts/quality/...), update workflows (.github/workflows/...), update configuration (pyproject.toml), and write tests (tests/...)
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~1x per month
+- Files: docs/plans/2026-06-01-truthful-gate-tg2-token-preflight-plan.md, scripts/quality/truth/preflight.py, scripts/quality/alerts.py
+
+---
+id: quality-zero-platform-workflow-code-and-test-update-workflow
+trigger: "when doing code and test update workflow"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Workflow Code And Test Update Workflow
+
+## Action
+
+Follow the code-and-test-update-workflow workflow:
+1. Update implementation code (e.g., scripts/quality/truth/preflight.py)
+2. Update or add corresponding tests (e.g., tests/test_truth_preflight.py)
+3. Optionally update related workflow files if behavior affects CI
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: scripts/quality/truth/preflight.py, tests/test_truth_preflight.py, .github/workflows/scheduled-alerts.yml
+
+---
+id: quality-zero-platform-instinct-file-naming
+trigger: "When creating or renaming a file in the codebase"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct File Naming
+
+## Action
+
+Use camelCase for file names
+
+## Evidence
+
+- Pattern in namingConventions.files: camelCase
+
+---
+id: quality-zero-platform-instinct-function-naming
+trigger: "When defining a new function"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Function Naming
+
+## Action
+
+Name the function using camelCase
+
+## Evidence
+
+- Pattern in namingConventions.functions: camelCase
+
+---
+id: quality-zero-platform-instinct-class-naming
+trigger: "When defining a new class"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Class Naming
+
+## Action
+
+Name the class using PascalCase
+
+## Evidence
+
+- Pattern in namingConventions.classes: PascalCase
+
+---
+id: quality-zero-platform-instinct-constant-naming
+trigger: "When defining a constant"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Constant Naming
+
+## Action
+
+Use SCREAMING_SNAKE_CASE for constant names
+
+## Evidence
+
+- Pattern in namingConventions.constants: SCREAMING_SNAKE_CASE
+
+---
+id: quality-zero-platform-instinct-relative-imports
+trigger: "When importing modules within the package"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Relative Imports
+
+## Action
+
+Use relative imports
+
+## Evidence
+
+- Pattern in importStyle: relative
+
+---
+id: quality-zero-platform-instinct-named-exports
+trigger: "When exporting functions, classes, or variables"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Named Exports
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Pattern in exportStyle: named
+
+---
+id: quality-zero-platform-instinct-test-location
+trigger: "When adding or updating tests"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Test Location
+
+## Action
+
+Place test files in the separate 'tests' directory
+
+## Evidence
+
+- Pattern in architecture.folderStructure.testLocation: separate
+- Files like tests/test_truth_preflight.py
+
+---
+id: quality-zero-platform-instinct-test-naming
+trigger: "When naming a test file"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Test Naming
+
+## Action
+
+Name the test file as test_<target>.py, matching the implementation file
+
+## Evidence
+
+- Files: tests/test_truth_preflight.py
+
+---
+id: quality-zero-platform-instinct-test-update-with-code
+trigger: "When updating or adding implementation code"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Test Update With Code
+
+## Action
+
+Update or add corresponding tests in the tests directory
+
+## Evidence
+
+- Workflow: code-and-test-update-workflow
+- Commit sequence: update code + update/add tests
+
+---
+id: quality-zero-platform-instinct-conventional-commits
+trigger: "When writing a commit message"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Conventional Commits
+
+## Action
+
+Use conventional commit prefixes: docs, feat, or fix, followed by scope in parentheses and a concise message
+
+## Evidence
+
+- Pattern in commits.type: conventional
+- Prefixes: docs, feat, fix
+- Examples: docs(truthful-gate): ..., feat(tg2): ..., fix(tg2): ...
+
+---
+id: quality-zero-platform-instinct-commit-length
+trigger: "When composing a commit message"
+confidence: 0.7
+domain: git
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Commit Length
+
+## Action
+
+Keep the commit message concise, aiming for around 80 characters
+
+## Evidence
+
+- Pattern in commits.averageLength: 81
+
+---
+id: quality-zero-platform-instinct-design-doc-review-gate
+trigger: "When designing a new subsystem or major feature and needing to document, review, and iterate on the plan"
+confidence: 0.95
+domain: workflow
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Design Doc Review Gate
+
+## Action
+
+Follow the design-doc-review-gate workflow: create/update design doc in docs/plans/, update .beads/plans/active-plan.md, iterate with addenda, lock decisions, and mark review gate as passed
+
+## Evidence
+
+- Workflow: design-doc-review-gate-workflow
+- Files: docs/plans/2026-06-01-truthful-gate-subsystem-design.md, .beads/plans/active-plan.md
+- Commit examples: Addendum A/B/C/D, lock user-confirmed decisions
+
+---
+id: quality-zero-platform-instinct-implementation-plan-execution
+trigger: "When implementing a planned feature or milestone (TG-x), especially after design review"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Implementation Plan Execution
+
+## Action
+
+Write an implementation plan in docs/plans/, revise after review, then implement feature code, update workflows/config, and write tests
+
+## Evidence
+
+- Workflow: implementation-plan-and-execution-workflow
+- Files: docs/plans/2026-06-01-truthful-gate-tg2-token-preflight-plan.md, scripts/quality/truth/preflight.py, tests/test_truth_preflight.py
+
+---
+id: quality-zero-platform-instinct-code-and-test-update
+trigger: "When fixing or adjusting a feature"
+confidence: 0.85
+domain: workflow
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Code And Test Update
+
+## Action
+
+Update implementation code and corresponding tests; optionally update related workflow files if CI is affected
+
+## Evidence
+
+- Workflow: code-and-test-update-workflow
+- Files: scripts/quality/truth/preflight.py, tests/test_truth_preflight.py, .github/workflows/scheduled-alerts.yml
+

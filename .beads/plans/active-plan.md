@@ -1,15 +1,19 @@
 ---
 status: in-progress
-phase: design-review-PASSED — writing-plans for TG-2 (token preflight)
+phase: TG-2 SHIPPED (PR #236 open) — next is TG-1
 task: truthful-gate-subsystem
 branch: feat/truthful-gate-subsystem
 base: origin/main @ c0a5437
+pr: 236 (feat/truthful-gate-subsystem -> main; design + TG-2 token preflight)
 design_doc: docs/plans/2026-06-01-truthful-gate-subsystem-design.md (+ Addenda A,B,C,D)
 design_review_gate: PASSED (4 rounds; R1 9 blockers→A, R2 2 HIGH→B, R3 2 HIGH→C, R4 PASS)
+tg2_plan: docs/plans/2026-06-01-truthful-gate-tg2-token-preflight-plan.md (rev 2)
+tg2_plan_review_gate: PASSED (1 round, 5 must-fixes folded into rev 2)
+tg2_build: dc47182 (impl) + 2ae55a7 (fix: deepscan->EXEMPT); 1531 tests, 100% line+branch on truth/preflight.py, verify exit 0
 execution_method: metaswarm orchestrated (user decision E)
 started: 2026-06-01
 updated: 2026-06-01
-resume_hint: writing-plans-TG-2-then-plan-review-gate-then-orchestrated-execution
+resume_hint: monitor-PR-236-CI-then-merge-then-writing-plans-TG-1
 ---
 
 # Active Plan — Truthful-Gate Subsystem
@@ -46,10 +50,18 @@ SHA-settle + alert:gate-truth-drift + dashboard grey + exit-2) → TG-5
 
 ## NEXT ACTION
 
-`writing-plans` for **TG-2** → **plan-review-gate** (3 adversarial:
-Feasibility, Completeness, Scope+Alignment, all PASS) → metaswarm
-orchestrated execution (IMPLEMENT→VALIDATE→ADVERSARIAL→COMMIT). Then repeat
-per TG.
+1. **Monitor PR #236 CI** (touches `scheduled-alerts.yml` → human review, no
+   auto-merge). On green, merge → `origin/main` advances.
+2. **TG-1** (Truth Source contract + adapter refactor; auth path
+   behavior-CHANGING per A.CB-5; fold #232 `provider_enforcement.py`):
+   `writing-plans` → 1-round plan-review-gate → orchestrated build → PR.
+3. Repeat the per-TG cadence (one TG green/merged before the next):
+   TG-3 (atomic) → TG-4 → TG-5 → TG-6 → TG-7.
+
+**Cadence rule (advisor):** one round of plan-review per TG, fix genuine
+build-breakers once, then build. Measure progress in merged PRs, not gates.
+The per-unit adversarial review in the orchestrated build is the real
+defect-catcher — do not iterate-to-clean on documents.
 
 ## Carried MEDIUM notes (Addendum D — resolve in named TG)
 

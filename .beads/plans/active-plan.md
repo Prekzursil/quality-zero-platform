@@ -1,67 +1,72 @@
 ---
 status: in-progress
-phase: design-review-round-4 (r1=9 blockers/Add.A; r2=2 HIGH/Add.B; r3=FAIL 2 HIGH (ARCH-B1 baseline-read fail-closed, SEC-N1-W1 drift-PR path guard)/Add.C; r4=final verify)
+phase: design-review-PASSED — writing-plans for TG-2 (token preflight)
 task: truthful-gate-subsystem
 branch: feat/truthful-gate-subsystem
 base: origin/main @ c0a5437
-design_doc: docs/plans/2026-06-01-truthful-gate-subsystem-design.md (+ Addenda A, B)
-design_review_round1: 5/5 BLOCK, 9 consolidated blockers (CB-1..CB-9), all addressed in Addendum A
-design_review_round2: 5/5 APPROVED_WITH_CONCERNS -> PASS_WITH_REQUIRED_FIXES; NB-A1 (baseline-verdict wiring) + SEC-N1 (auto-merge security guard) + 4 MEDIUMs addressed in Addendum B
-user_signoff_pending: 3 items in Addendum B §B.SIGN-OFF (M1=baseline-hold green; #232 merges at baseline-hold; CB-7 no-micromanagement expectation adjustment) — proceeding unless vetoed
+design_doc: docs/plans/2026-06-01-truthful-gate-subsystem-design.md (+ Addenda A,B,C,D)
+design_review_gate: PASSED (4 rounds; R1 9 blockers→A, R2 2 HIGH→B, R3 2 HIGH→C, R4 PASS)
+execution_method: metaswarm orchestrated (user decision E)
 started: 2026-06-01
 updated: 2026-06-01
-supersedes_active_plan: quality-rollup-v2 (qrv2 PRs already landed; that plan was stale)
-related_open_pr: 232 (BLOCKED — truthful gate correctly red on platform legacy debt)
-related_merged: 221, 222, 223, 224, 225 (strict-zero push)
-resume_hint: confirm-scope-then-run-design-review-gate
+resume_hint: writing-plans-TG-2-then-plan-review-gate-then-orchestrated-execution
 ---
 
 # Active Plan — Truthful-Gate Subsystem
 
-> **For resume:** The "as discussed" plan from the 2026-06-01 session
-> (lost on restart; recovered from `.remember/today-2026-06-01.md`) is the
-> **truthful-gate subsystem**: dashboard-truth scanner → QZP profiles +
-> zero-conf onboarding. The detailed design was reconstructed into
-> `docs/plans/2026-06-01-truthful-gate-subsystem-design.md` and committed.
+The "as discussed" plan (recovered from `.remember/today-2026-06-01.md` after
+a restart): **truthful-gate subsystem** = dashboard-truth scanner → QZP
+profiles + zero-conf onboarding. Design reconstructed, user-confirmed, and
+**design-review-gate PASSED after 4 rounds** (all findings code-verified).
 
-## Where we are
+## Locked program (design §8/§9 + Addenda A–D)
 
-1. Orientation complete. Ground facts verified (PRs #221/#222 MERGED;
-   tokens LIVE incl. DEEPSOURCE_DSN refreshed 2026-05-31; per-provider
-   `check_*_zero.py` already exist; #232 OPEN+BLOCKED because the truthful
-   gate is correctly red on the platform's 838 Codacy + 1116 DeepSource +
-   110 Sonar legacy findings).
-2. Design reconstructed + committed.
-3. **NEXT:** user confirms scope + 5 OPEN DECISIONS (A–E in the design
-   doc §8). Then run the mandatory **design-review-gate** (5 agents).
+Three tracks, sequenced so each stands on a non-regressing foundation:
+- **Track 1 SUBSYSTEM (TG-1..TG-6):** Truth Source contract (verdict enum
+  clean|dirty|unreadable, BOTH count+baseline axes fail-closed → silent-pass
+  unrepresentable), token preflight, baseline (deletes `issue_policy.mode:
+  audit`), reconciliation, thin profiles, `qzp onboard`.
+- **Track 2 PLATFORM LITERAL-ZERO (A2):** burn down ~2064 platform findings
+  to 0 by escalation_date 2026-09-30; #232 merges at baseline-hold first.
+- **Track 3 FLEET-GREEN (C):** drive all 15 repos green via the subsystem.
 
-## Mandated pipeline (this repo's CLAUDE.md)
+## PR sequence (gate-approved)
 
-design-review-gate (5 agents, all approve) → writing-plans (PR-sliced) →
-plan-review-gate (3 adversarial, all PASS) → ask execution method →
-execute (TDD, 100% cov) → /self-reflect → PR.
+TG-2 (token preflight + alert:scanner-unavailable + cron) → TG-1 (Truth
+Source contract + adapter refactor; auth path behavior-CHANGING; fold #232
+provider_enforcement) → **TG-3 ATOMIC** (delete issue_policy.mode audit +
+truth/verdict.py [count&baseline fail-closed] + truth/baseline.py +
+security_path_guard.py + rebase #232 to baseline-hold) → TG-4 (reconcile
+SHA-settle + alert:gate-truth-drift + dashboard grey + exit-2) → TG-5
+(scanner→context map + golden-identical migration, B1/B2 fallback) → TG-6
+(qzp onboard + python -m invocation + deterministic detection + doc lockstep
++ inventory exclude:) → TG-7 stretch (kotlin-multiplatform → bilbo-app).
 
-## OPEN DECISIONS (block finalization)
+## NEXT ACTION
 
-- **A** legacy debt: A1 truthful frozen baseline + burn-down (recommended)
-  vs A2 drive platform to literal zero now.
-- **B** profile shape: B1 thin + stack inheritance + migrate 15
-  (recommended) vs B2 generate-only-for-new-repos.
-- **C** fleet scope: ship subsystem only vs also drive 15 live repos green
-  now (needs DRIFT_SYNC_PAT).
-- **D** #232: extend (recommended) vs supersede.
-- **E** execution method.
+`writing-plans` for **TG-2** → **plan-review-gate** (3 adversarial:
+Feasibility, Completeness, Scope+Alignment, all PASS) → metaswarm
+orchestrated execution (IMPLEMENT→VALIDATE→ADVERSARIAL→COMMIT). Then repeat
+per TG.
 
-## Do NOT
+## Carried MEDIUM notes (Addendum D — resolve in named TG)
 
-- Re-brainstorm the target — intent is locked (truthful gates + zero-conf
-  onboarding). Forks A–E are the only open questions.
-- Skip design-review-gate / plan-review-gate (CLAUDE.md mandates both).
-- Use `--no-verify`; touch `main`; drop coverage below 100% on new modules.
-- Disturb the 8 git stashes (7 are "prevent loss" from prior sessions).
+- [TG-3] reconcile `list_templates` output paths with `SECURITY_RELEVANT_PATHS`
+  globs; test against actual emitted paths.
+- [TG-3] document why `deadline` axis is intentionally not fail-closed
+  (monotonically stricter).
+- [TG-3] land baseline DATA files atomically with verdict/loader code.
 
-## Preserved state
+## USER sign-off pending (3, reversible — proceeding unless vetoed)
 
-- Branch `fix/coverage-uploads-strict-zero-2026-04-29` retains 3 commits
-  (2 possibly unmerged: c99cfa5, 39099fa) — triage into TG-1.
-- Stash count: 8 (incl. `qzp-generated-rulesets-local-2026-06-01`).
+1. M1 "platform green" = baseline-hold green (not literal-zero green).
+2. #232 merges at baseline-hold; A2 literal-zero = M2 target by 2026-09-30.
+3. Onboarding = "one command + deterministic detection", NOT ≤8-line profiles
+   for all (4-5 complex profiles stay 30-50 lines; scanner→context map is
+   hand-maintained).
+
+## Guardrails (CLAUDE.md)
+
+TDD, 100% line+branch on new modules; `.coverage-thresholds.json` is truth;
+lizard -C 15; new scripts → `sonar.coverage.exclusions`; no `--no-verify`;
+never touch main; never silent-pass; 8 git stashes are "prevent loss" — keep.

@@ -1,10 +1,11 @@
 # Truthful-Gate Subsystem — Design
 
-**Status:** reconstructed + user-confirmed (decisions §8). Design-review-gate
-**Round 1 = 5/5 BLOCK → PASS_WITH_REQUIRED_FIXES** (9 consolidated blockers).
-All 9 resolved in **Addendum A** (below); re-review in Round 2. Read the body
-§1–§9 for the original design, but **Addendum A overrides any conflicting
-statement in the body** — it carries the corrected, code-cited plan.
+**Status:** ✅ **DESIGN-REVIEW-GATE PASSED** (4 rounds, 2026-06-01).
+R1 5/5 BLOCK → 9 blockers (Addendum A); R2 → 2 HIGH (Addendum B); R3 FAIL → 2
+HIGH (Addendum C); **R4 PASS, `ready_for_writing_plans: true`**, zero open
+CRITICAL/HIGH. Read body §1–§9 for the original design, but **Addenda A→B→C→D
+override the body and each other in order** — they carry the corrected,
+code-cited, gate-approved plan. Next: `writing-plans` per-TG + plan-review-gate.
 
 **Author session:** 2026-06-01
 **Branch:** `feat/truthful-gate-subsystem` (off `origin/main` @ `c0a5437`)
@@ -906,4 +907,47 @@ files would survive. **Resolution — two distinct guards composing:**
 TG-2 → TG-1 → TG-3 (audit-delete + `truth/verdict.py` with both axes
 fail-closed + `truth/baseline.py` + `security_path_guard.py` wiring, atomic)
 → TG-4 → TG-5 → TG-6 → TG-7 (stretch).
+
+---
+
+# Addendum D — Design-review-gate closure (PASS) + carried implementation notes
+
+**Round 4 (final):** Architect + Security both **APPROVE**; synthesis
+**`PASS`, `ready_for_writing_plans: true`**, zero open CRITICAL/HIGH. The
+design is approved to proceed to `writing-plans`. Gate summary: R1 9
+blockers → R2 2 HIGH → R3 2 HIGH → R4 clean, every finding verified against
+live code.
+
+**Carried MEDIUM implementation notes (resolve during the named TG, NOT
+design blockers — all fail in the safe/over-blocking direction):**
+
+1. **[TG-3] `list_templates` output-path vs `SECURITY_RELEVANT_PATHS` globs.**
+   `template_render.py:119-143` emits repo-ROOT paths (`ci.yml`,
+   `dependabot.yml`) by stripping the `templates/common|stack/<stack>`
+   prefix — not `.github/`-prefixed destinations the guard globs assume.
+   Inert for security today (a root-level `ci.yml` is not executed by
+   GitHub), but TG-3 MUST (a) reconcile the `list_templates` output-path
+   mapping with the guard globs, and (b) write the `security_path_guard`
+   pinned test against the **actual** paths `list_templates` emits, not
+   synthetic `.github/workflows/` strings — else the test greens while a
+   future correctly-placed payload diverges.
+2. **[TG-3] `deadline` axis is intentionally not fail-closed.** `deadline`
+   stays a non-optional `date` with no `None`-guard: it appears only in
+   `today > deadline and count > 0 → dirty` (monotonically stricter), so a
+   missing/failed `escalation_date` read cannot mask new debt (`count >
+   baseline` still bites); worst case is baseline-hold persisting past
+   intent (the CB-1 concern), never silent-green. TG-3 states this
+   rationale explicitly in code comments.
+3. **[TG-3] Baseline-data deploy atomicity.** A fail-closed loader gates
+   every governed repo to BLOCK until its frozen baseline files exist. The
+   atomic TG-3 PR MUST land the baseline DATA files (`baselines/<slug>/<provider>.json`)
+   together with the verdict/loader code (worst case is over-blocking, never
+   silent-green, but avoid a self-inflicted fleet BLOCK window).
+
+**User sign-off items (3, from §B.SIGN-OFF):** carried forward; non-blocking
+for the gate. Proceeding unless the user vetoes.
+
+**Next:** `writing-plans` for **TG-2** (token preflight) → plan-review-gate
+(3 adversarial: Feasibility, Completeness, Scope+Alignment) → metaswarm
+orchestrated execution. Then TG-1, TG-3 (atomic), TG-4, TG-5, TG-6, TG-7.
 ```

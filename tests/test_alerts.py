@@ -29,7 +29,7 @@ class AlertTypeRegistryTests(unittest.TestCase):
     """The design spec's 8 alert types are all registered with labels."""
 
     def test_every_documented_alert_type_has_a_label(self) -> None:
-        """All §8 + §9 alert:* labels are exposed as ``AlertType`` members."""
+        """All §8 + §9 + TG-2 alert:* labels are exposed as ``AlertType`` members."""
         expected_labels = {
             "alert:regression",
             "alert:deadline-missed",
@@ -40,6 +40,7 @@ class AlertTypeRegistryTests(unittest.TestCase):
             "alert:repo-not-profiled",
             "alert:flag-missing",
             "alert:secret-missing",
+            "alert:scanner-unavailable",
         }
         actual_labels = {member.label for member in alerts.AlertType}
         self.assertEqual(actual_labels, expected_labels)
@@ -51,6 +52,24 @@ class AlertTypeRegistryTests(unittest.TestCase):
         )
         self.assertEqual(
             alerts.AlertType.FLAG_MISSING.label, "alert:flag-missing",
+        )
+
+    def test_scanner_unavailable_label_and_dedupe(self) -> None:
+        """TG-2 ``SCANNER_UNAVAILABLE`` carries its label and dedupes by title."""
+        self.assertEqual(
+            alerts.AlertType.SCANNER_UNAVAILABLE.label, "alert:scanner-unavailable",
+        )
+        # Dedupe-by-title: the canonical title mirrors MISSING_SCANNER_AUTH.
+        title = alerts.alert_issue_title(
+            alerts.AlertType.SCANNER_UNAVAILABLE, "Prekzursil/quality-zero-platform:sonarcloud",
+        )
+        self.assertEqual(
+            title,
+            "[alert:scanner-unavailable] Prekzursil/quality-zero-platform:sonarcloud",
+        )
+        self.assertEqual(
+            alerts.resolve_alert_type("alert:scanner-unavailable"),
+            alerts.AlertType.SCANNER_UNAVAILABLE,
         )
 
 

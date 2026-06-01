@@ -84,6 +84,14 @@ class AlertType(enum.Enum):
     # alert issues. Inline ``# noqa: S105`` and ``# nosec`` cover Ruff
     # and Bandit.
     MISSING_SCANNER_AUTH = "alert:secret-missing"  # noqa: S105  # nosec
+    # ``SCANNER_UNAVAILABLE`` (TG-2 token-rotation preflight) is opened when a
+    # block-severity scanner has its secret wired but the authenticated probe
+    # is REJECTED (HTTP 401/403) or the endpoint is unreachable/allowlist-
+    # blocked — the rotated-token case the campaign's master blocker hides.
+    # Distinct from ``MISSING_SCANNER_AUTH`` (secret absent): a present-but-
+    # dead token is louder than a never-configured one. Dedupe-by-title via
+    # the shared ``alert_issue_title`` helper, exactly like every other type.
+    SCANNER_UNAVAILABLE = "alert:scanner-unavailable"
 
     @property
     def label(self) -> str:

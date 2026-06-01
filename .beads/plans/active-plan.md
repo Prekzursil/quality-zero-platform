@@ -1,10 +1,11 @@
 ---
 status: in-progress
-phase: design-reconstructed-awaiting-user-confirm-then-design-review-gate
+phase: design-review-round-2 (round-1 = 5/5 BLOCK -> PASS_WITH_REQUIRED_FIXES; 9 blockers resolved in Addendum A)
 task: truthful-gate-subsystem
 branch: feat/truthful-gate-subsystem
 base: origin/main @ c0a5437
-design_doc: docs/plans/2026-06-01-truthful-gate-subsystem-design.md
+design_doc: docs/plans/2026-06-01-truthful-gate-subsystem-design.md (+ Addendum A)
+design_review_round1: 5/5 BLOCK, 9 consolidated blockers (CB-1..CB-9), all addressed in Addendum A
 started: 2026-06-01
 updated: 2026-06-01
 supersedes_active_plan: quality-rollup-v2 (qrv2 PRs already landed; that plan was stale)

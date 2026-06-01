@@ -1,10 +1,10 @@
 # Truthful-Gate Subsystem — Design
 
-**Status:** reconstructed from session handoff `.remember/today-2026-06-01.md`
-("designed truthful-gate subsystem (dashboard-truth scanner → QZP
-profiles, zero-conf onboarding)"). Pending **user scope confirmation**,
-then the mandatory **design-review-gate** (5 agents) per this repo's
-`CLAUDE.md`.
+**Status:** reconstructed + user-confirmed (decisions §8). Design-review-gate
+**Round 1 = 5/5 BLOCK → PASS_WITH_REQUIRED_FIXES** (9 consolidated blockers).
+All 9 resolved in **Addendum A** (below); re-review in Round 2. Read the body
+§1–§9 for the original design, but **Addendum A overrides any conflicting
+statement in the body** — it carries the corrected, code-cited plan.
 
 **Author session:** 2026-06-01
 **Branch:** `feat/truthful-gate-subsystem` (off `origin/main` @ `c0a5437`)
@@ -371,4 +371,306 @@ dashboards read literal zero through the Truth Source contract; every
 `* Zero` gate green on main; `qzp onboard` reproduces the 4 unprofiled
 repos' profiles from scratch; `verify_v2_deployment.py --all` exit 0; no
 open `alert:*`. Only then does the campaign close.
+
+> ⚠️ The §9 paragraph above is the *original* (Round-1) DoD. It is
+> **superseded by Addendum A §A.CB-1** (it conflated "subsystem shipped"
+> with "campaign closed" and named infeasible fixtures). Read Addendum A.
+
+---
+
+# Addendum A — Round-1 design-review-gate remediation
+
+**Gate:** 5 reviewers (PM, Architect, Designer, Security, CTO) +
+synthesis. **Round-1 result:** 5/5 BLOCK → synthesis
+`PASS_WITH_REQUIRED_FIXES`, 9 consolidated blockers (CB-1..CB-9; 6
+CRITICAL, 3 HIGH). Every blocker was verified by a reviewer against live
+code. **None reopens a user-locked decision (A2/B1/C/D/E)** — all are
+amendments that make those decisions implementable. This addendum is the
+corrected, code-cited plan and **overrides the body where they conflict.**
+
+## A.0 Re-baselined facts (corrections to the body's framing)
+
+The body overstated friction; reviewers verified the real numbers. The
+*approach* is unchanged, but estimates and the §1a narrative are corrected:
+
+- **Profiles are 30–124 lines (median ~80), not "~140".** Several are
+  already 30–37 lines. (CTO concern.)
+- **The resolver ALREADY does stack inheritance + context merge** —
+  `control_plane.py` `_load_stack` (recursive) + `common.py`
+  `merge_required_contexts`, driven by `required_contexts_mode:
+  replace|merge`. B1 is therefore *not* "build inheritance"; it is "add
+  severity-derivation + thin the 9 profiles carrying explicit context
+  lists" (see A.CB-7).
+- **§1a is reworded.** The silent-pass is NOT "PASS off a CI exit code."
+  `check_codacy_zero.py` / `check_deepsource_zero.py` already fetch
+  dashboard truth. The *real* verified silent-pass vectors are: (i)
+  `issue_policy.mode: audit` → unconditional pass; (ii) auth-failure →
+  unauthenticated public fallback → 0 → pass; (iii) `None`/unparseable
+  scrape count coerced to 0 → pass; (iv) Codecov 401/403 warn-and-skip.
+  TG-1 characterization tests must pin **specifically these paths.**
+
+## A.CB-1 (CRITICAL) — Split Definition of Done; #232 merges at baseline-hold
+
+The body's §9 made campaign closure depend on operator-only inputs
+(`DRIFT_SYNC_PAT` absent; SonarCloud Auto-Analysis UI-only toggle) — the
+exact trap that left rounds 5/7/8/9/12/13 un-closeable. **Resolution:**
+
+**Milestone 1 — SUBSYSTEM-DoD (this design's actual DoD; fully verifiable
+with no operator-gated fleet action):**
+- TG-1..TG-6 merged, platform self-governed and green, 100% line+branch on
+  new modules.
+- `unreadable → BLOCK` proven by inverted fail-closed tests **and** a live
+  TG-2 preflight against the platform's own block-severity providers.
+- A working `qzp onboard` (acceptance per A.CB-2).
+- **#232 merges truthfully on the A1 frozen baseline** as a regression
+  floor — its merge gate is pinned to **baseline-hold** (real count shown,
+  count ≤ dated baseline, no new debt, deadline recorded), **NOT literal
+  zero.** This lets the truth contract ship and prove value without
+  waiting on the ~2064-finding burn-down.
+
+**Milestone 2 — CAMPAIGN-CLOSURE (separate, operator-gated; preserves
+locked A2 + C):**
+- A2 literal-zero burn-down (platform dashboards → 0) proceeds *behind* the
+  shipped subsystem, driven by QRv2 deterministic patches over time.
+- C fleet-green across all 15 repos.
+- **Hard preconditions, surfaced as a loud preflight BLOCK (never a silent
+  warn):** operator provisions `DRIFT_SYNC_PAT` (fine-grained, see A.CB-8)
+  and toggles SonarCloud Auto-Analysis OFF on event-link. The TG-2
+  preflight verifies both; the campaign cannot *start* its cross-repo
+  phase until they are confirmed.
+- The TG-2 auth-preflight runs **on a cron** so a future token rotation
+  that re-introduces a silent green is caught within a day.
+
+> **Sequencing note for the user (reversible):** locked decision A2 said
+> "drive platform to literal zero." The gate strongly recommends merging
+> #232 at *baseline-hold* first, then burning down to literal zero behind
+> it — so the subsystem's value isn't hostage to a 2064-finding cleanup.
+> Literal zero remains the target; only the *gating* changes. Say the word
+> if you'd rather #232 wait for literal zero.
+
+## A.CB-2 (CRITICAL) — Re-scope onboarding acceptance fixtures
+
+The body pinned acceptance to 4 repos, 2 of which are infeasible/wrong.
+**Resolution:**
+- **Acceptance fixtures (must work):** `omniaudit-mcp` → `python-tooling`;
+  `pbinfo-scrape` → `node-frontend` (both stacks exist).
+- **Excluded:** `skills-introduction-to-github` — tutorial scaffold,
+  recorded decision: **not governed** (added to an inventory exclude list,
+  not onboarded).
+- **Deferred (named follow-up, non-gating):** `bilbo-app` needs a
+  `kotlin-multiplatform` stack that does not exist. Tracked as **TG-7
+  (stretch)**: author `profiles/stacks/kotlin-multiplatform.yml` +
+  template; only then onboard bilbo-app. Not in the SUBSYSTEM-DoD.
+- **Detector advertises ONLY stacks with a `profiles/stacks/<stack>.yml`**
+  that exists today (cpp-cmake, dotnet-wpf, fullstack-web, go,
+  gradle-java, node-frontend, python-desktop, python-tooling, python-web).
+  `react-vite-vitest` / `rust` / `swift` are removed from the detector
+  until their templates exist. **§7 updated:** net-new stack templates are
+  *out of scope* for the subsystem except the TG-7 stretch.
+
+## A.CB-3 (HIGH) — Deterministic stack detection (no `prompt` in CI)
+
+`pyproject.toml` is consumed by `python-tooling` / `python-web` /
+`python-desktop`, so a bare manifest match is ambiguous and the body's
+"prompt or --stack" fallback reintroduces micromanagement. **Resolution —
+a checked-in, ordered signature→stack decision table** (the contract;
+first match wins):
+
+| Order | Signature (in repo contents / manifest) | → Stack |
+|---|---|---|
+| 1 | `*.csproj`/`*.sln` + WPF refs, or `*.xaml` | `dotnet-wpf` |
+| 2 | `CMakeLists.txt` / `*.vcxproj` | `cpp-cmake` |
+| 3 | `build.gradle`/`pom.xml` | `gradle-java` |
+| 4 | `go.mod` | `go` |
+| 5 | `package.json` **and** a Python manifest | `fullstack-web` |
+| 6 | `package.json` only (no Python) | `node-frontend` |
+| 7 | Python manifest + `flask`/`fastapi`/`django` in deps | `python-web` |
+| 8 | Python manifest + PyInstaller/`*.spec`/WPF-via-pythonnet | `python-desktop` |
+| 9 | Python manifest (none of the above) | `python-tooling` |
+| — | no signature matched | **terminal: emit actionable diagnostic** |
+
+- **Non-interactive contract:** never prompt. On no-match, exit non-zero
+  with `no stack signature found in <repo>; pass --stack=<one of: ...> or
+  exclude via inventory`. `--stack` always overrides detection.
+- **Monorepos:** explicit **non-goal** for auto-detection (operator passes
+  `--stack`); documented as such.
+- The promise is reframed honestly: **"one command; at most a single
+  `--stack` hint for genuinely ambiguous repos."**
+
+## A.CB-4 (HIGH) — Define the `qzp` invocation surface
+
+No `qzp` command exists today. **Resolution (TG-6):** add
+`[project.scripts] qzp = "scripts.quality.qzp_cli:main"` to the platform
+`pyproject.toml`; `qzp_cli` dispatches subcommands (`onboard`, later
+`gate`, `verify`). ONBOARDING.md prerequisites document `pip install -e .`
+(or `pipx install`). A repo-root `./qzp` shim wrapping
+`python -m scripts.quality.qzp_cli` is provided for the no-install path.
+All doc examples use the exact pinned form.
+
+## A.CB-5 (CRITICAL) — Auth/`unreadable` path is INTENTIONALLY behavior-changing
+
+The body's "behavior-preserving, characterization-tested" mandate (§6)
+would pin and lock in the verified fail-open paths. **Resolution:**
+- §6 + TG-1 amended: **auth-failure handling is behavior-CHANGING and
+  EXEMPT from characterization-pinning.** Characterization tests pin
+  **only the clean and dirty paths.** The unreadable path gets **NEW
+  inverted assertions:** `401 / 403 / 404-project-missing → unreadable →
+  exit 2 → BLOCK + alert:scanner-unavailable`, never pass, no fallback.
+- **DELETE the three fail-open branches:** Codacy public fallback
+  (`codacy_zero_support.py:122-134` `unauthorized_http_result` →
+  `_query_codacy_public_repository_issues`; `:150` 404 handler);
+  DeepSource `None→0` coercion (`check_deepsource_zero.py:199-217`);
+  Codecov 401/403 warn-and-skip (`validate_codecov_flags`).
+- **Positive-proof invariant (contract test):** a `clean` verdict MUST
+  derive from an **authenticated** response that **positively parsed a
+  count**. No adapter may emit `clean` from an unauthenticated/public read
+  or an unparseable scrape.
+- **DeepSource fidelity (resolves Architect/Security concern):** move
+  DeepSource truth to its **GraphQL API** (`DEEPSOURCE_DSN` refreshed
+  2026-05-31) inside the adapter; if API is unavailable, the scraped
+  `count`-vs-`issue-cards` disagreement already detected at
+  `check_deepsource_zero.py:212-214` returns **`unreadable`**, not a
+  finding-of-0.
+
+## A.CB-6 (CRITICAL) — TG-3 targets `issue_policy.mode`, not `mode.phase`; atomic with floor
+
+The gate verdict is driven by **`issue_policy.mode`** (zero/ratchet/audit),
+a different axis than the `mode.phase` (shadow/ratchet/absolute) the body
+discussed. **Resolution — TG-3 enumerates the exact edit set:**
+1. Remove the `policy_mode == "audit"` short-circuit in
+   `check_codacy_zero.py:308` (`_codacy_status`), `check_sonar_zero.py:428-429`
+   (`main`), `check_deepsource_zero.py:303-314` (`_resolve_status`); audit
+   every other `check_*_zero.py` for the same branch.
+2. Remove/replace the `issue_mode` plumbing in
+   `reusable-scanner-matrix.yml:217-218` (reads
+   `profile.issue_policy.mode`, passes `--policy-mode`).
+3. Confirm the post-deletion floor: common stack
+   `quality-zero-phase1-common.yml` `issue_policy.mode` is currently
+   `zero` — that becomes the only floor (audit removed from the schema +
+   `profile_shape.py`).
+4. Flip the self-profile `profiles/repos/quality-zero-platform.yml:14-15`
+   `issue_policy.mode: audit` → removed (inherits `zero`).
+5. Characterization test: with audit removed, a dirty provider FAILS where
+   the audit path would have passed.
+
+**HARD atomicity constraint (TG-3 + DoD):** audit deletion and the
+baseline regression-floor gate **land in the same PR** (or the floor lands
+strictly first). The platform is `mode.phase: absolute` with every scanner
+`severity: block`; a window with audit removed but no floor would self-RED
+the platform on ~2064 findings and block TG-4/5/6.
+
+## A.CB-7 (CRITICAL) — Lossless scanner→context map; golden-identical before migrating
+
+`active_required_contexts()` (`control_plane.py:413-431`) reads
+hand-written lists; there is **no** severity-derivation, and the
+scanner→context relation is **non-injective/partial**. **Resolution
+(TG-5):**
+- **Checked-in, hand-maintained mapping table**
+  `scanner → {always, target, pull_request_only}` context names, handling:
+  4 `codacy_*` block scanners → single `Codacy Zero`; `sonarcloud` →
+  `Sonar Zero` (always) + `SonarCloud Code Analysis` (PR-only);
+  `dependabot`/`socket_*` → (their actual contexts or none, recorded
+  explicitly); `Coverage 100 Gate`/`Codecov Analytics` contexts that map
+  to no scanner key → carried as fixed always-entries.
+- **Normalize `vendors.sonar.project_key` AND `project_key_parts`**
+  (list form in `swfoc-mod-menu.yml`) to one canonical shape in the
+  loader; confirm the single source where codacy/deepsource keys are
+  derived so `onboard.py` reuses it (no second derivation).
+- **Migration is gated on byte-identity:** pin each of the 15 profiles'
+  *current resolved* `required_contexts` as golden fixtures FIRST; assert
+  the severity-derived set is **byte-identical** before thinning. **Any
+  profile whose derived set differs is NOT a thin-derivation candidate**
+  until the map is reconciled — it falls back to **B2** (keeps its
+  explicit list). This prevents a fleet-wide branch-protection rewrite
+  (dropping required checks = silent-merge risk; adding never-posted
+  contexts = permanent PR block).
+- **Drop the "~8-line" target.** Realistic invariant: stack-uniform fields
+  (`scanners`, derived `required_contexts`) inherit; genuinely per-repo
+  fields (`coverage.command`, `runner`, `command_shell`,
+  `legacy_policy_checks`, `visual_lane`, `trigger`, `assert_mode`) stay
+  explicit. **4–5 profiles (desktop/dotnet/visual) remain 30–50 lines.**
+
+## A.CB-8 (CRITICAL) — Auto-merge security policy + fine-grained PAT
+
+**Resolution — new policy section + TG-2/TG-3 wiring:**
+1. **Auto-merge permitted ONLY when every required gate reports an
+   authenticated `clean`** — auto-merge is **blocked on any `unreadable`/
+   grey** state.
+2. **Security-class contexts are excluded from auto-merge and require
+   human approval:** CodeQL, Semgrep, Codacy security rules, Sonar
+   `security_rating`/hotspots, Dependabot, Socket.
+3. **Cross-repo PR writes MUST use a fine-grained `DRIFT_SYNC_PAT`**
+   scoped to *exactly* the governed consumer repos with **only**
+   `contents:write` + `pull_requests:write`, with an expiry/rotation
+   cadence and an authenticated `whoami` probe in the TG-2 preflight —
+   **not** the operator's personal broadly-scoped `gh` token. (This makes
+   the cross-repo writer a rotatable, bounded machine identity and aligns
+   Decision C's "and/or personal token" down to PAT-only for automated
+   writes.)
+4. **No-leak contract (test):** `TruthResult.source_url` / `.diagnostic`
+   and all `baselines/*.json` are scrubbed of query-string credentials and
+   never persist auth material (mirrors the verified-good
+   `http_error_findings` "HTTP {code}" + 12-char SHA-truncation pattern).
+
+## A.CB-9 (HIGH) — Reconcile waits for SHA-settle; exit-2 surfaced distinctly
+
+Dashboards index minutes behind the push (existing scripts already carry
+144/180-attempt settle budgets: `check_sonar_zero.py:29`
+`SCOPED_ANALYSIS_RETRY_ATTEMPTS=144`; `check_codacy_zero.py:32` 180).
+**Resolution (TG-4):**
+- `reconcile.py` compares in-CI vs dashboard **only after the dashboard
+  analysis SHA matches the CI SHA** (reuse the scripts' existing
+  observed-vs-target SHA tracking). Tolerance is **0 for finding counts**
+  (any post-settle delta is drift); test asserts a 1-count post-settle
+  divergence trips `alert:gate-truth-drift`.
+- **Rework `reusable-scanner-matrix.yml` `run()`** (`:222-223`,
+  `subprocess.run(check=True)` makes exit 1 and exit 2 indistinguishable)
+  so **exit 2 (unreadable)** is caught and surfaced distinctly (feeds
+  `alert:scanner-unavailable` + dashboard grey), separate from exit 1
+  (dirty). If not reworked, the "distinct exit code" benefit is dropped in
+  favor of the JSON `verdict` field — but the rework is preferred.
+
+## A.10 Remaining concerns folded in
+
+- **Gate layer is net-new** (not a thin extraction): TG-1 names the
+  policy-bearing gate as a new deliverable and states its relationship to
+  the existing `build_quality_rollup.py` severity logic (the gate is the
+  authority; rollup consumes the same `TruthResult`s). The `sys.path`
+  bootstrap (`parents[2]` shim, needed because gates run `cwd=repo_dir`)
+  is preserved in both the thin adapters and the new `truth/` package.
+- **Dashboard grey collision:** `unreadable` gets its **own** badge
+  class/label (e.g. amber `TOKEN?`), distinct from existing
+  `.badge.pending`/`.unknown` (CI-not-run). TG-4 specifies the data path
+  (`dashboard.json` verdict field → `app.js` class map) and fixes the
+  pre-existing `success`/`partial` vs `.pass`/`.fail` class-name mismatch
+  in `docs/admin/`.
+- **Doc lockstep (TG-6):** every doc mentioning `audit` mode, the 9-step
+  flow, or `qzp onboard` is updated together — `ONBOARDING.md`,
+  `QUALITY-GATES.md`, `OPERATOR-RUNBOOK.md`, `QZP-V2-DESIGN.md` — plus the
+  net-new single-page **rotation playbook** whose verification step is the
+  TG-2 preflight.
+
+## A.11 Revised PR sequence (supersedes §4 ordering)
+
+Per the synthesis remediation order:
+
+1. **TG-2** — token preflight + `alert:scanner-unavailable` + cron (master
+   blocker becomes loud *before* any adapter relies on live reads).
+2. **TG-1** — Truth Source contract + adapter refactor (auth path
+   behavior-changing per A.CB-5; fold #232 `provider_enforcement.py`;
+   characterization pins clean/dirty only).
+3. **TG-3** — delete `issue_policy.mode: audit` (A.CB-6) + baseline floor,
+   **atomic**; rebase #232 to merge at baseline-hold.
+4. **TG-4** — reconciliation (SHA-settle) + `alert:gate-truth-drift` +
+   dashboard grey + exit-2 surfacing.
+5. **TG-5** — scanner→context map + golden-identical migration (B1 where
+   identical, B2 fallback otherwise).
+6. **TG-6** — `qzp onboard` + invocation surface + deterministic detection
+   + doc lockstep.
+7. **TG-7 (stretch, non-gating)** — `kotlin-multiplatform` stack → onboard
+   `bilbo-app`.
+
+Each PR: independently green, TDD, 100% line+branch on new modules,
+self-governed, `lizard -C 15`, new scripts added to
+`sonar.coverage.exclusions`, no `--no-verify`.
 ```

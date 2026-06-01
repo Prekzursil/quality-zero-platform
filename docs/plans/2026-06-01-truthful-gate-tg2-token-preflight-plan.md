@@ -18,11 +18,11 @@ For every provider that is **block-severity in the resolved profile AND has
 a read-capable token wired in platform secrets**, perform a cheap
 authenticated probe and classify:
 
-| Outcome | Condition | Exit | Alert |
-|---|---|---|---|
-| `ok` | authenticated probe → 2xx | 0 | — |
-| `secret_missing` | required secret absent from env | 1 | `alert:secret-missing` (EXISTING) |
-| `unreadable` | secret present but rejected (HTTP 401/403) OR unreachable/allowlist-reject | **2** | **`alert:scanner-unavailable` (NEW)** |
+| Outcome          | Condition                                                                  | Exit  | Alert                                 |
+| ---------------- | -------------------------------------------------------------------------- | ----- | ------------------------------------- |
+| `ok`             | authenticated probe → 2xx                                                  | 0     | —                                     |
+| `secret_missing` | required secret absent from env                                            | 1     | `alert:secret-missing` (EXISTING)     |
+| `unreadable`     | secret present but rejected (HTTP 401/403) OR unreachable/allowlist-reject | **2** | **`alert:scanner-unavailable` (NEW)** |
 
 **Exit precedence:** any `unreadable` dominates → process exit 2 (even if a
 `secret_missing` also occurred). Both are non-zero (fail-closed); precedence
@@ -63,7 +63,7 @@ the truth-model's north-star #2). Tested.
      status ≥ 400. Exception taxonomy (for 100% branch coverage):
      `except HTTPError as e → unreadable, http_status=e.code`;
      `except (URLError, OSError, TimeoutError, ValueError, ssl.SSLError) →
-     unreadable, http_status=None` (ValueError = `normalize_https_url`
+unreadable, http_status=None` (ValueError = `normalize_https_url`
      rejecting a non-allowlisted host / non-HTTPS URL). Auth via
      `Authorization: Bearer <token>` header (mirror `check_deepscan_zero.py`),
      never in the URL. **`allowed_host_suffixes` is MANDATORY per provider**
@@ -85,8 +85,8 @@ the truth-model's north-star #2). Tested.
    whole file into coverage-source — out of scope). The "100% per
    `.coverage-thresholds.json`" claim applies ONLY to `truth/*`.
 3. **`pyproject.toml`** (now in scope): add `scripts.quality.truth.preflight`
-   + `scripts.quality.truth.__init__` (dotted form, mirroring
-   `fleet_inventory`) to `[tool.coverage.run].source`.
+   - `scripts.quality.truth.__init__` (dotted form, mirroring
+     `fleet_inventory`) to `[tool.coverage.run].source`.
 4. **`sonar-project.properties`**: do **NOT** add `truth/*` to
    `sonar.coverage.exclusions` (the `test_exclusions_match_coverage_source_complement`
    contract requires exclusions to be the EXACT complement of
@@ -97,7 +97,7 @@ the truth-model's north-star #2). Tested.
    non-dry-run preflight step/job** whose `env` injects the 4 probed
    secrets (`SONAR_TOKEN`, `CODACY_API_TOKEN`, `SENTRY_AUTH_TOKEN`,
    `DEEPSCAN_API_TOKEN`) and runs `preflight --profile quality-zero-platform
-   --open-alerts` with `QZ_DRY_RUN: 'false'` (the existing digest dispatch
+--open-alerts` with `QZ_DRY_RUN: 'false'` (the existing digest dispatch
    stays dry-run). Without injected secrets the step would see all-absent →
    only ever `secret_missing` → never the rotation case.
 6. Tests `tests/test_truth_preflight.py` (+ `tests/test_alerts.py` delta):

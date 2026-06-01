@@ -60,7 +60,6 @@ def _ensure_platform_on_syspath() -> None:
 
 _ensure_platform_on_syspath()
 
-
 ProcessRunner = Callable[..., "subprocess.CompletedProcess[str]"]
 
 
@@ -116,11 +115,16 @@ def resolve_alert_type(name_or_label: str) -> AlertType:
 
 
 def _run_gh(
-    args: List[str], *, runner: ProcessRunner,
+    args: List[str],
+    *,
+    runner: ProcessRunner,
 ) -> "subprocess.CompletedProcess[str]":
     """Invoke ``gh`` with shared defaults (capture, text, check=False)."""
     return runner(
-        ["gh", *args], capture_output=True, text=True, check=False,
+        ["gh", *args],
+        capture_output=True,
+        text=True,
+        check=False,
     )  # nosec B603 — gh args are controlled by call site
 
 
@@ -133,13 +137,20 @@ def find_existing_alert_issue(
 ) -> Optional[Mapping[str, Any]]:
     """Return a matching open alert issue for ``(alert_type, subject)``."""
     args = [
-        "issue", "list",
-        "--repo", platform_slug,
-        "--label", alert_type.label,
-        "--state", "open",
-        "--search", subject,
-        "--json", "number,title,state",
-        "--limit", "100",
+        "issue",
+        "list",
+        "--repo",
+        platform_slug,
+        "--label",
+        alert_type.label,
+        "--state",
+        "open",
+        "--search",
+        subject,
+        "--json",
+        "number,title,state",
+        "--limit",
+        "100",
     ]
     completed = _run_gh(args, runner=runner)
     payload = json.loads(completed.stdout) if completed.stdout else []
@@ -174,11 +185,16 @@ def _create_alert_issue(
     """Create the issue on ``platform_slug`` and return the record."""
     title = alert_issue_title(alert_type, subject)
     args = [
-        "issue", "create",
-        "--repo", platform_slug,
-        "--title", title,
-        "--label", alert_type.label,
-        "--body", body,
+        "issue",
+        "create",
+        "--repo",
+        platform_slug,
+        "--title",
+        title,
+        "--label",
+        alert_type.label,
+        "--body",
+        body,
     ]
     completed = _run_gh(args, runner=runner)
     return {
@@ -244,8 +260,11 @@ def close_alert_issue(
         return {"number": 0, "closed": False}
     issue_number = int(existing.get("number", 0))
     args: List[str] = [
-        "issue", "close", str(issue_number),
-        "--repo", platform_slug,
+        "issue",
+        "close",
+        str(issue_number),
+        "--repo",
+        platform_slug,
     ]
     if close_comment:
         args.extend(["--comment", close_comment])

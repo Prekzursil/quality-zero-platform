@@ -121,9 +121,7 @@ class ProbeRequestShapeTests(unittest.TestCase):
         register it transiently to exercise the ``url_env`` resolution branch.
         """
         url_value = "https://api.deepscan.io/api/projects/acme/issues"
-        with mock.patch.dict(
-            preflight.PROVIDER_PROBES, {"deepscan": preflight._DEEPSCAN}
-        ):
+        with mock.patch.dict(preflight.PROVIDER_PROBES, {"deepscan": preflight._DEEPSCAN}):
             args = self._capture(
                 "deepscan",
                 {"DEEPSCAN_API_TOKEN": "tok", "DEEPSCAN_OPEN_ISSUES_URL": url_value},
@@ -145,9 +143,7 @@ class ProbeRequestShapeTests(unittest.TestCase):
         is now EXEMPT, not auth-probed.
         """
         loader = MagicMock()
-        with mock.patch.dict(
-            preflight.PROVIDER_PROBES, {"deepscan": preflight._DEEPSCAN}
-        ):
+        with mock.patch.dict(preflight.PROVIDER_PROBES, {"deepscan": preflight._DEEPSCAN}):
             result = preflight.probe_provider(
                 "deepscan",
                 env={"DEEPSCAN_API_TOKEN": "tok"},
@@ -170,7 +166,9 @@ class ProbeBodyValidityTests(unittest.TestCase):
         """
         loader = MagicMock(return_value=({"valid": False}, {}))
         result = preflight.probe_provider(
-            "sonarcloud", env={"SONAR_TOKEN": "tok"}, loader=loader,
+            "sonarcloud",
+            env={"SONAR_TOKEN": "tok"},
+            loader=loader,
         )
         self.assertEqual(result.outcome, "unreadable")
         self.assertEqual(result.http_status, 200)
@@ -179,7 +177,9 @@ class ProbeBodyValidityTests(unittest.TestCase):
         """200 + ``{"valid": true}`` (live Sonar token) → ``ok``."""
         loader = MagicMock(return_value=({"valid": True}, {}))
         result = preflight.probe_provider(
-            "sonarcloud", env={"SONAR_TOKEN": "tok"}, loader=loader,
+            "sonarcloud",
+            env={"SONAR_TOKEN": "tok"},
+            loader=loader,
         )
         self.assertEqual(result.outcome, "ok")
 
@@ -187,7 +187,9 @@ class ProbeBodyValidityTests(unittest.TestCase):
         """Codacy (no body predicate) treats any 2xx payload as ``ok``."""
         loader = MagicMock(return_value=({"data": {}}, {}))
         result = preflight.probe_provider(
-            "codacy", env={"CODACY_API_TOKEN": "tok"}, loader=loader,
+            "codacy",
+            env={"CODACY_API_TOKEN": "tok"},
+            loader=loader,
         )
         self.assertEqual(result.outcome, "ok")
 
@@ -300,7 +302,9 @@ class DiagnosticNonLeakTests(unittest.TestCase):
         """Across ok/unreadable, the secret literal and host/query never leak."""
         secret = "super-secret-token-value-12345"
         ok = preflight.probe_provider(
-            "sonarcloud", env={"SONAR_TOKEN": secret}, loader=_ok_loader,
+            "sonarcloud",
+            env={"SONAR_TOKEN": secret},
+            loader=_ok_loader,
         )
         rejected = preflight.probe_provider(
             "sonarcloud",
@@ -334,7 +338,8 @@ class ProbeSpecContractTests(unittest.TestCase):
         """Every probe spec carries a non-empty allowlist suffix (SSRF guard)."""
         for name, spec in preflight.PROVIDER_PROBES.items():
             self.assertTrue(
-                spec.allowed_host_suffix, f"{name} has empty host suffix",
+                spec.allowed_host_suffix,
+                f"{name} has empty host suffix",
             )
             self.assertTrue(spec.secret_env, f"{name} has empty secret env")
             self.assertTrue(spec.auth_header, f"{name} has empty auth header")
@@ -383,7 +388,9 @@ class RunPreflightTests(unittest.TestCase):
             }
         }
         results = preflight.run_preflight(
-            profile, env={"SONAR_TOKEN": "tok"}, loader=_ok_loader,
+            profile,
+            env={"SONAR_TOKEN": "tok"},
+            loader=_ok_loader,
         )
         providers = {r.provider for r in results}
         self.assertIn("sonarcloud", providers)
@@ -419,9 +426,7 @@ class RunPreflightTests(unittest.TestCase):
         from scripts.quality import control_plane
 
         inventory = control_plane.load_inventory()
-        profile = control_plane.load_repo_profile(
-            inventory, "Prekzursil/quality-zero-platform"
-        )
+        profile = control_plane.load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
         results = preflight.run_preflight(
             profile,
             env={
@@ -485,7 +490,10 @@ class MainExitCodeTests(unittest.TestCase):
     """``main`` precedence: unreadable(2) dominates secret_missing(1) over ok(0)."""
 
     def _run_main(
-        self, scanners: Mapping[str, str], env: Mapping[str, str], loader: Any,
+        self,
+        scanners: Mapping[str, str],
+        env: Mapping[str, str],
+        loader: Any,
     ) -> int:
         profile = {"scanners": {n: {"severity": s} for n, s in scanners.items()}}
         loaded = MagicMock(return_value=profile)
@@ -499,14 +507,18 @@ class MainExitCodeTests(unittest.TestCase):
     def test_main_exit_0_on_all_ok(self) -> None:
         """All providers ``ok`` → exit 0."""
         code = self._run_main(
-            {"sonarcloud": "block"}, {"SONAR_TOKEN": "tok"}, _ok_loader,
+            {"sonarcloud": "block"},
+            {"SONAR_TOKEN": "tok"},
+            _ok_loader,
         )
         self.assertEqual(code, 0)
 
     def test_main_exit_1_on_secret_missing(self) -> None:
         """A missing secret (no unreadable) → exit 1."""
         code = self._run_main(
-            {"sonarcloud": "block"}, {}, _ok_loader,
+            {"sonarcloud": "block"},
+            {},
+            _ok_loader,
         )
         self.assertEqual(code, 1)
 

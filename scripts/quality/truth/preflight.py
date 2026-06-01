@@ -272,9 +272,7 @@ def _unreadable_invalid_body(provider: str, status: int) -> ProbeResult:
     SonarCloud's ``validate`` 200s for a rotated token (``{"valid": false}``);
     the body predicate failing on a 2xx is a dead-token signal, not an ``ok``.
     """
-    return ProbeResult(
-        provider, "unreadable", status, f"{provider}: HTTP {status} (token rejected)"
-    )
+    return ProbeResult(provider, "unreadable", status, f"{provider}: HTTP {status} (token rejected)")
 
 
 def _unreadable_unreachable(provider: str) -> ProbeResult:
@@ -299,7 +297,11 @@ def _probe_headers(spec: ProbeSpec, token: str) -> Dict[str, str]:
 
 
 def _run_probe(
-    provider: str, spec: ProbeSpec, url: str, token: str, loader: Loader,
+    provider: str,
+    spec: ProbeSpec,
+    url: str,
+    token: str,
+    loader: Loader,
 ) -> ProbeResult:
     """Issue the authenticated probe and classify the outcome (no token leak)."""
     try:
@@ -332,9 +334,7 @@ def probe_provider(
     if not url:
         # Token present but no configured read endpoint (DeepScan needs
         # DEEPSCAN_OPEN_ISSUES_URL): cannot verify liveness → unreadable, loud.
-        return ProbeResult(
-            provider, "unreadable", None, f"{provider}: no read endpoint configured"
-        )
+        return ProbeResult(provider, "unreadable", None, f"{provider}: no read endpoint configured")
     return _run_probe(provider, spec, url, token, loader)
 
 
@@ -342,9 +342,7 @@ def _block_severity_scanners(profile: Mapping[str, Any]) -> List[str]:
     """Return the sorted names of block-severity scanners in ``profile``."""
     scanners = profile.get("scanners", {})
     return sorted(
-        name
-        for name, entry in scanners.items()
-        if isinstance(entry, Mapping) and entry.get("severity") == "block"
+        name for name, entry in scanners.items() if isinstance(entry, Mapping) and entry.get("severity") == "block"
     )
 
 
@@ -355,7 +353,10 @@ def _exempt_result(provider: str) -> ProbeResult:
 
 
 def _classify_block_scanner(
-    provider: str, *, env: Mapping[str, str], loader: Loader,
+    provider: str,
+    *,
+    env: Mapping[str, str],
+    loader: Loader,
 ) -> ProbeResult:
     """Route one block scanner to a probe, a recorded exempt skip, or a raise."""
     if provider in PROVIDER_PROBES:
@@ -376,10 +377,7 @@ def run_preflight(
     loader: Loader = load_json_https,
 ) -> List[ProbeResult]:
     """Classify every block-severity scanner in ``profile`` (never silent)."""
-    return [
-        _classify_block_scanner(provider, env=env, loader=loader)
-        for provider in _block_severity_scanners(profile)
-    ]
+    return [_classify_block_scanner(provider, env=env, loader=loader) for provider in _block_severity_scanners(profile)]
 
 
 def _exit_code(results: Sequence[ProbeResult]) -> int:
@@ -418,9 +416,7 @@ def _open_unavailable_alerts(
 
 def _parse_args(argv: Optional[Sequence[str]]) -> argparse.Namespace:
     """Parse the preflight CLI arguments."""
-    parser = argparse.ArgumentParser(
-        description="Token-rotation preflight: probe block-severity scanner tokens."
-    )
+    parser = argparse.ArgumentParser(description="Token-rotation preflight: probe block-severity scanner tokens.")
     parser.add_argument(
         "--profile",
         required=True,
@@ -456,9 +452,7 @@ def _resolve_repo_slug(inventory: Mapping[str, Any], profile: str) -> str:
 def _resolve_profile(profile: str) -> Mapping[str, Any]:
     """Resolve one repo profile via the control plane (default profile loader)."""
     inventory = control_plane.load_inventory()
-    return control_plane.load_repo_profile(
-        inventory, _resolve_repo_slug(inventory, profile)
-    )
+    return control_plane.load_repo_profile(inventory, _resolve_repo_slug(inventory, profile))
 
 
 def main(

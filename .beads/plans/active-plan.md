@@ -22,10 +22,11 @@ profiles + zero-conf onboarding. Design reconstructed, user-confirmed, and
 ## Locked program (design §8/§9 + Addenda A–D)
 
 Three tracks, sequenced so each stands on a non-regressing foundation:
+
 - **Track 1 SUBSYSTEM (TG-1..TG-6):** Truth Source contract (verdict enum
   clean|dirty|unreadable, BOTH count+baseline axes fail-closed → silent-pass
   unrepresentable), token preflight, baseline (deletes `issue_policy.mode:
-  audit`), reconciliation, thin profiles, `qzp onboard`.
+audit`), reconciliation, thin profiles, `qzp onboard`.
 - **Track 2 PLATFORM LITERAL-ZERO (A2):** burn down ~2064 platform findings
   to 0 by escalation_date 2026-09-30; #232 merges at baseline-hold first.
 - **Track 3 FLEET-GREEN (C):** drive all 15 repos green via the subsystem.
@@ -40,7 +41,8 @@ security_path_guard.py + rebase #232 to baseline-hold) → TG-4 (reconcile
 SHA-settle + alert:gate-truth-drift + dashboard grey + exit-2) → TG-5
 (scanner→context map + golden-identical migration, B1/B2 fallback) → TG-6
 (qzp onboard + python -m invocation + deterministic detection + doc lockstep
-+ inventory exclude:) → TG-7 stretch (kotlin-multiplatform → bilbo-app).
+
+- inventory exclude:) → TG-7 stretch (kotlin-multiplatform → bilbo-app).
 
 ## NEXT ACTION
 

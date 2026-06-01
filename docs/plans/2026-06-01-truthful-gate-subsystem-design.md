@@ -673,4 +673,133 @@ Per the synthesis remediation order:
 Each PR: independently green, TDD, 100% line+branch on new modules,
 self-governed, `lizard -C 15`, new scripts added to
 `sonar.coverage.exclusions`, no `--no-verify`.
+
+---
+
+# Addendum B — Round-2 design-review-gate remediation
+
+**Round-2 result:** 5/5 APPROVED_WITH_CONCERNS → synthesis
+`PASS_WITH_REQUIRED_FIXES`. Every Round-1 blocker (CB-1..CB-9) RESOLVED;
+all citations re-verified exact against live code. Two **new HIGH**
+blockers (NB-A1, SEC-N1) + four MEDIUM items + three USER sign-off items.
+This addendum closes the two HIGHs and the MEDIUMs; the sign-off items are
+listed in §B.SIGN-OFF. **Addendum B overrides A and the body on conflict.**
+
+## B.NB-A1 (HIGH) — Wire the baseline-hold verdict into a shared function
+
+CB-6 enumerated the audit *deletion* but not where the baseline-hold
+comparison is *inserted*; after deletion the three verdict functions
+(`check_codacy_zero.py:308` `_codacy_status`, `check_sonar_zero.py:428-429`,
+`check_deepsource_zero.py:303-314` `_resolve_status`) would be bare
+`pass if not findings else fail`. **Resolution — single shared verdict
+function (lands in the SAME PR as the audit deletion, per A.CB-6
+atomicity):**
+
+```python
+# scripts/quality/truth/verdict.py
+def resolve_status(count: int | None, baseline: int, deadline: date,
+                   today: date) -> Literal["clean", "dirty", "unreadable"]:
+    if count is None:               # auth failure / unparseable authenticated read
+        return "unreadable"         # NEVER clean — the CB-5 re-mask guard
+    if count > baseline:            # no new debt over the frozen floor
+        return "dirty"
+    if today > deadline and count > 0:   # forced burn-down to literal zero
+        return "dirty"
+    return "clean"
+```
+
+- **Unification (resolves the A1-vs-A2 tension):** *literal-zero is simply
+  `baseline = 0`*. Strict-zero and ratchet-baseline become one function
+  with a parameter. The platform runs at `baseline = <frozen count at
+  TG-3 merge>` and the A2 burn-down walks that number to 0 by `deadline`,
+  with identical gate code. No separate "audit/ratchet/zero" verdict
+  branches survive.
+- The three `check_*_zero.py` **delegate** to `resolve_status(...)` (count
+  from the adapter's authenticated read; baseline+deadline from
+  `baselines/<slug>/<provider>.json`; `today`/`deadline` passed in — never
+  `date.today()` inside the pure function, for testability).
+- **Contract tests (pinned, in the same PR):**
+  (a) `count==baseline, today<deadline → clean` (#232 merges at baseline-hold);
+  (b) `count==baseline+1 → dirty` (no new debt);
+  (c) `today>deadline, count>0 → dirty` (forced burn-down);
+  (d) `count is None (authenticated unparseable) → unreadable, never clean`
+  (the re-mask guard);
+  (e) `baseline==0, count==0 → clean` and `baseline==0, count==1 → dirty`
+  (literal-zero is baseline-zero).
+
+## B.SEC-N1 (HIGH) — Disambiguate + wire the security-class auto-merge guard
+
+CB-8 clause 2 was ambiguous (could read as *dropping* security contexts)
+and the existing `scripts/quality/security_class_guard.py`
+(`filter_auto_merge_candidates` / `ensure_pr_only_for_security`, finding-
+level) is not wired to `apply_drift_pr.py:113-119`'s unconditional
+`gh pr merge --auto --squash`. **Resolution (restate clause 2 precisely):**
+1. **Security-class required contexts STAY required** — they are NEVER
+   dropped from the required-checks set. (The earlier wording is void.)
+2. A PR is **auto-merge-ineligible** (must not arm `--auto`; requires human
+   approval via CODEOWNERS + required-review) if **either**: its diff
+   touches security-relevant paths, **or** any auto-remediation in it is
+   classified security-class by
+   `security_class_guard.filter_auto_merge_candidates`.
+3. **Wire it:** `apply_drift_pr.py` (and the new gate auto-merge path) must
+   import `security_class_guard` and gate the `gh pr merge --auto` arming
+   through it, so the finding-level guard and the context-level policy
+   **compose** rather than diverge. Auto-merge arms ONLY when every required
+   gate is an **authenticated `clean`** (never `unreadable`/grey — clause 1).
+4. Add a test: a security-class drift PR does NOT get `--auto` armed; a
+   pure-style drift PR does.
+
+## B.MEDIUM items
+
+- **CB-1 deadline (concrete date + process):** the baseline `deadline`
+  field is now a hard date, not a placeholder. **Platform burn-down
+  deadline = 2026-09-30** (90 days from this design, mirroring the design's
+  own `escalation_date` convention). Process: `qzp baseline freeze <slug>`
+  captures `{count, ref, captured_at, deadline}` per provider at TG-3 merge;
+  the default deadline is `captured_at + 90d`, overridable per repo in the
+  profile (`mode.ratchet.target_date`). After `deadline`, `resolve_status`
+  forces `dirty` while `count>0` — baseline-hold cannot silently become
+  permanent (defeating locked A2).
+- **CB-4 (`qzp` install surface):** `pyproject.toml` has no `[project]`/
+  `[build-system]` table today. TG-6 adds a minimal
+  `[build-system]` (setuptools) + `[project]` (name `quality-zero-platform`,
+  version, `[project.scripts] qzp = "scripts.quality.qzp_cli:main"`). The
+  repo-root **`./qzp` shim** (wrapping `python -m scripts.quality.qzp_cli`)
+  is the **primary, zero-install** documented path; `pip install -e .` /
+  `pipx` is the secondary packaged path. Docs pin the shim form.
+- **Doc-lockstep (5th doc):** add **`docs/STRICT-ZERO-CHECKLIST.md`** to the
+  A.10 lockstep set — it carries the literal `issue_policy.mode: audit`
+  value (`:84`) that B.NB-A1/CB-6 deletes and a "no audit mode" promise
+  (`:13`). TG-3 updates it in lockstep with the schema change. Full set:
+  ONBOARDING, QUALITY-GATES, OPERATOR-RUNBOOK, QZP-V2-DESIGN,
+  STRICT-ZERO-CHECKLIST (+ the net-new rotation playbook).
+- **CB-2 exclude mechanism:** `inventory/repos.yml` gains an additive
+  top-level `exclude:` list (slugs never governed, e.g.
+  `Prekzursil/skills-introduction-to-github` with a `reason`). `fleet_inventory.py`
+  treats excluded slugs as intentionally-ungoverned (no
+  `alert:repo-not-profiled`). TG-6 deliverable.
+
+## B.SIGN-OFF — three items surfaced to the user (proceeding unless vetoed)
+
+These are genuine product/sequencing decisions the gate flagged as the
+user's to confirm. They are **reversible**; I proceed with them unless the
+user objects:
+
+1. **M1 "platform green" = baseline-hold green**, not literal-zero green
+   (contingent on the atomic TG-3 audit-delete + floor PR). Literal-zero is
+   the M2 burn-down target by 2026-09-30.
+2. **#232 merges at baseline-hold first**; locked **A2 literal-zero is
+   preserved as the M2 target** behind the shipped subsystem.
+3. **CB-7 expectation adjustment:** onboarding becomes *one command +
+   deterministic detection + inheritance*, but **not** "≤8 lines for every
+   repo" — 4-5 desktop/dotnet/visual profiles stay 30-50 lines (irreducible
+   per-repo fields), and the scanner→context map is **hand-maintained**
+   (checked-in, reviewed), not fully auto-generated. The "no micromanagement"
+   goal holds for the common case and for new-repo onboarding; it is honest
+   about the irreducible per-repo tail.
+
+## B — Revised PR sequence (unchanged from A.11; NB-A1 folds into TG-3, SEC-N1 into TG-2/TG-3)
+
+TG-2 → TG-1 → TG-3 (now includes `truth/verdict.py` + baseline insertion +
+security-guard wiring, atomic) → TG-4 → TG-5 → TG-6 → TG-7 (stretch).
 ```

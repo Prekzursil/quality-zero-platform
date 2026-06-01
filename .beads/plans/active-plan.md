@@ -1,11 +1,13 @@
 ---
 status: in-progress
-phase: design-review-round-2 (round-1 = 5/5 BLOCK -> PASS_WITH_REQUIRED_FIXES; 9 blockers resolved in Addendum A)
+phase: design-review-round-3 (r1=5/5 BLOCK->9 fixed in Addendum A; r2=5/5 APPROVED_WITH_CONCERNS->2 HIGH (NB-A1,SEC-N1)+MEDIUMs fixed in Addendum B)
 task: truthful-gate-subsystem
 branch: feat/truthful-gate-subsystem
 base: origin/main @ c0a5437
-design_doc: docs/plans/2026-06-01-truthful-gate-subsystem-design.md (+ Addendum A)
+design_doc: docs/plans/2026-06-01-truthful-gate-subsystem-design.md (+ Addenda A, B)
 design_review_round1: 5/5 BLOCK, 9 consolidated blockers (CB-1..CB-9), all addressed in Addendum A
+design_review_round2: 5/5 APPROVED_WITH_CONCERNS -> PASS_WITH_REQUIRED_FIXES; NB-A1 (baseline-verdict wiring) + SEC-N1 (auto-merge security guard) + 4 MEDIUMs addressed in Addendum B
+user_signoff_pending: 3 items in Addendum B §B.SIGN-OFF (M1=baseline-hold green; #232 merges at baseline-hold; CB-7 no-micromanagement expectation adjustment) — proceeding unless vetoed
 started: 2026-06-01
 updated: 2026-06-01
 supersedes_active_plan: quality-rollup-v2 (qrv2 PRs already landed; that plan was stale)

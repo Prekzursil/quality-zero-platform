@@ -802,4 +802,108 @@ user objects:
 
 TG-2 → TG-1 → TG-3 (now includes `truth/verdict.py` + baseline insertion +
 security-guard wiring, atomic) → TG-4 → TG-5 → TG-6 → TG-7 (stretch).
+
+---
+
+# Addendum C — Round-3 design-review-gate remediation
+
+**Round-3 result:** NB-A1 + all 4 MEDIUMs RESOLVED, but synthesis `FAIL`
+on two new HIGH blockers (ARCH-B1, SEC-N1-W1) — both *second-axis*
+silent-failure vectors symmetric to ones already fixed. This addendum
+closes them + folds the Designer non-blocking nits. **Addendum C overrides
+A/B and the body on conflict.**
+
+## C.ARCH-B1 (HIGH) — Baseline-READ failure is fail-closed (symmetric to count)
+
+`resolve_status` hardened the count axis but `baseline` was `int` and the
+baseline loader was unspecified — a fail-open loader (missing/corrupt
+`baselines/<slug>/<provider>.json`) would re-mask debt via
+`count ≤ huge_baseline → clean`. **Resolution — make `baseline` the
+symmetric twin of `count`:**
+
+```python
+# scripts/quality/truth/verdict.py  (revises B.NB-A1)
+def resolve_status(count: int | None, baseline: int | None,
+                   deadline: date, today: date) -> Literal["clean","dirty","unreadable"]:
+    if count is None or baseline is None:   # EITHER input unreadable -> fail-closed
+        return "unreadable"                 # never clean — both re-mask axes closed
+    if count > baseline:
+        return "dirty"
+    if today > deadline and count > 0:
+        return "dirty"
+    return "clean"
+```
+
+- **Baseline loader contract (`truth/baseline.py`):** a missing,
+  unparseable, or credential-scrubbed baseline file returns
+  **`baseline = None`** → `unreadable` → exit 2 → BLOCK +
+  `alert:scanner-unavailable`. It **never** skip-gates and **never**
+  defaults to a permissive sentinel. (A repo with no baseline yet is *not*
+  the same as baseline 0 — an explicit `baseline: 0` frozen file means
+  "literal-zero enforced"; a *missing* file means "unknown → BLOCK until
+  frozen".)
+- **Pinned contract tests (added to B.NB-A1's set):** (f) `baseline is
+  None → unreadable` (missing/corrupt file); (g) `count is None AND
+  baseline is None → unreadable`; (h) a credential-scrubbed/garbage
+  baseline JSON → loader returns None → NOT clean.
+
+## C.SEC-N1-W1 (HIGH) — Drift-PR auto-merge uses a PATH classifier, not the finding classifier
+
+B.SEC-N1 clause 3 routed drift PRs through `security_class_guard.filter_auto_merge_candidates`,
+but drift entries (`apply_drift_pr.py` `_collect_out_of_sync` →
+`{status, output_path, proposed_content}`) carry no scanner/category/CWE
+fields, so every drift entry classifies as `auto_merge_ok` — a **no-op** on
+the exact surface it must protect. Drift-sync's primary payload is
+`.github/workflows/` templates, so unreviewed fleet-wide auto-merge of CI
+files would survive. **Resolution — two distinct guards composing:**
+
+- **New path-level guard `scripts/quality/security_path_guard.py`** with an
+  explicit, checked-in `SECURITY_RELEVANT_PATHS` set (a drift PR touching
+  ANY of these is auto-merge-INELIGIBLE → no `--auto`, requires human
+  review via CODEOWNERS + required-review):
+  - `.github/workflows/**`, `.github/actions/**`
+  - `.github/CODEOWNERS`, branch-protection / ruleset config
+    (`generated/rulesets/**`, `.github/*ruleset*`)
+  - gate + truth code: `scripts/quality/check_*_zero.py`,
+    `run_quality_zero_gate.py`, `provider_enforcement.py`,
+    `scripts/quality/truth/**`, `scripts/quality/security_*`
+  - scanner config: `.github/dependabot.yml`, `.github/codeql/**`,
+    `codecov.yml`, `.codacy.yaml`, `sonar-project.properties`,
+    `.semgrep.yml`, `.deepsource.toml`, `.qlty/**`
+- **Wiring:** `apply_drift_pr.py` (and the new gate auto-merge path) gate
+  the `gh pr merge --auto` arming on `security_path_guard.is_auto_merge_safe(changed_paths)`.
+  The two guards **compose by surface**: path-guard for drift/template PRs
+  (clause 2a), finding-level `security_class_guard` for QRv2 finding-driven
+  PRs (clause 2b). Auto-merge arms ONLY when (i) the PR touches no
+  security-relevant path **and** (ii) every required gate is an
+  authenticated `clean` (never `unreadable`/grey).
+- **Pinned test (clause 4):** a drift PR touching `.github/workflows/`
+  does NOT arm `--auto` (asserts the path arm bites where the finding arm
+  no-ops); a docs-only drift PR with all gates authenticated-clean DOES.
+- `CODEOWNERS` is a per-consumer-repo branch-protection control — surfaced
+  as a documented precondition (like `DRIFT_SYNC_PAT`), not assumed.
+
+## C.NITS (Designer, non-blocking — folded for completeness)
+
+- **`qzp baseline freeze` sequencing:** baseline freeze/load logic is a
+  **TG-3 module** (`truth/baseline.py` + a freeze entrypoint), independent
+  of the `qzp` CLI surface (TG-6). TG-6 merely *aliases* it as
+  `qzp baseline freeze`. TG-3 writes/reads baselines directly; no
+  dependency on TG-6.
+- **Windows-first invocation (operator is on Windows 11):** the **canonical
+  documented form is `python -m scripts.quality.qzp_cli ...`** (cross-
+  platform). Companions shipped: `qzp.cmd` + `qzp.ps1` (Windows) and `./qzp`
+  (POSIX). The bare `./qzp` shim is *not* the primary Windows path; docs
+  lead with `python -m`.
+- **Deadline field reuse:** use the **pre-existing `mode.ratchet.escalation_date`**
+  (already in the schema + `alert_triggers.py:139` + `test_profile_schema_v2.py:195`
+  uses `2026-09-30`) as the **hard** burn-down deadline that
+  `resolve_status` enforces. Keep the existing `mode.ratchet.target_date`
+  as the **soft** target. No net-new deadline field; documented split.
+
+## C — Sequence unchanged
+
+TG-2 → TG-1 → TG-3 (audit-delete + `truth/verdict.py` with both axes
+fail-closed + `truth/baseline.py` + `security_path_guard.py` wiring, atomic)
+→ TG-4 → TG-5 → TG-6 → TG-7 (stretch).
 ```

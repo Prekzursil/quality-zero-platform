@@ -1,6 +1,6 @@
 ---
 status: in-progress
-phase: design-review-round-3 (r1=5/5 BLOCK->9 fixed in Addendum A; r2=5/5 APPROVED_WITH_CONCERNS->2 HIGH (NB-A1,SEC-N1)+MEDIUMs fixed in Addendum B)
+phase: design-review-round-4 (r1=9 blockers/Add.A; r2=2 HIGH/Add.B; r3=FAIL 2 HIGH (ARCH-B1 baseline-read fail-closed, SEC-N1-W1 drift-PR path guard)/Add.C; r4=final verify)
 task: truthful-gate-subsystem
 branch: feat/truthful-gate-subsystem
 base: origin/main @ c0a5437

@@ -84,3 +84,24 @@ defect-catcher — do not iterate-to-clean on documents.
 TDD, 100% line+branch on new modules; `.coverage-thresholds.json` is truth;
 lizard -C 15; new scripts → `sonar.coverage.exclusions`; no `--no-verify`;
 never touch main; never silent-pass; 8 git stashes are "prevent loss" — keep.
+
+## CAMPAIGN — drive all 15 repos to absolute-0 + 100% coverage (2026-06-01, user-established)
+
+**Goal:** every governed repo → 0 findings on all APPLICABLE platforms + 100%
+line+branch coverage where allowed; QZP fixed/documented/easy-onboard.
+
+**User-locked decisions:**
+1. Scope = all 15 inventoried repos; per-repo APPLICABLE platforms only (derive from stack).
+2. Coverage = 100% everywhere; exempt only generated/vendored/binary (explicit list, never silent).
+3. Cross-repo writes = via operator gh token (Claude opens PRs, user reviews/merges); DRIFT_SYNC_PAT still absent.
+4. Autofix bot (deepsource-autofix force-pushes formatting) = investigate config + recommend (don't disable yet).
+5. Sequencing = platform-first dogfood (fix pipeline + merge #236 green) → fleet fixers; read-only enumeration in parallel.
+
+**Canary diagnosis (PR #236 red gates — NOT a TG-2 regression):**
+- Coverage 100 Gate fails at the **`Publish Codacy coverage`** step (the coverage CHECK `Run selected lane` PASSES; local=100%). Codacy coverage UPLOAD broken — token (2026-05-31 rotation) or workspace-path bug. #232 has identical red; #225 was green.
+- Sentry Zero fails at the **lane** (10s) — rejected `SENTRY_AUTH_TOKEN` (unreadable) OR real Sentry issues (debt). TBD in fix.
+- Both = platform pipeline/token/debt the strict-zero gates correctly surface → part of Track-2 + pipeline-harden.
+
+**Campaign structure:** Phase-1 establish ground truth (read-only: autofix-bot probe + platform
+canary root-cause + per-repo×platform worklist) → Phase-2 fix platform/canary green + merge #236
+→ Phase-3 fleet fixers (per repo, parallel-capped, gh-token PRs, user merges). Worklist before fixers.

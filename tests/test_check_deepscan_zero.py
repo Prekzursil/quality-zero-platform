@@ -412,14 +412,10 @@ class DeepScanZeroTests(unittest.TestCase):
         ``_evaluate_deepscan_open_issues``: the count is an int and equals 0,
         so neither the unparseable nor the non-zero finding is appended.
         """
-        with patch.object(
-            check_deepscan_zero, "_request_json", return_value={"total": 0}
-        ):
-            open_issues, findings = (
-                check_deepscan_zero._evaluate_deepscan_open_issues(
-                    "https://deepscan.io/project/issues",
-                    _placeholder_token("api"),
-                )
+        with patch.object(check_deepscan_zero, "_request_json", return_value={"total": 0}):
+            open_issues, findings = check_deepscan_zero._evaluate_deepscan_open_issues(
+                "https://deepscan.io/project/issues",
+                _placeholder_token("api"),
             )
 
         self.assertEqual(open_issues, 0)
@@ -434,9 +430,7 @@ class DeepScanZeroTests(unittest.TestCase):
         """
         payload = {"statuses": [{"context": "OtherCheck", "state": "success"}]}
 
-        self.assertIsNone(
-            check_deepscan_zero._find_github_status(payload, "DeepScan")
-        )
+        self.assertIsNone(check_deepscan_zero._find_github_status(payload, "DeepScan"))
 
     def test_status_findings_reports_missing_context_when_status_is_none(
         self,

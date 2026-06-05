@@ -293,6 +293,24 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("ref: ${{ inputs.sha != '' && inputs.sha || github.sha }}", text)
         self.assertEqual(text.count("persist-credentials: false"), 3)
 
+    def test_scanner_matrix_scanner_job_can_read_pull_requests(self) -> None:
+        """Authorize the DeepScan PR-head fallback's ``/commits/<sha>/pulls`` read.
+
+        ``check_deepscan_zero`` resolves the merge commit's pull requests so it
+        can re-read the DeepScan status on the PR head (the App posts there,
+        never on the squash-merge commit). That GitHub API read needs
+        ``pull-requests: read`` on the scanner job's permissions block.
+        """
+        text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
+        scanner_block_start = text.find("  scanner:")
+        self.assertNotEqual(scanner_block_start, -1, "scanner job is missing")
+        steps_start = text.find("    steps:", scanner_block_start)
+        scanner_header = text[scanner_block_start:steps_start]
+        self.assertIn("    permissions:", scanner_header)
+        self.assertIn("      contents: read", scanner_header)
+        self.assertIn("      id-token: write", scanner_header)
+        self.assertIn("      pull-requests: read", scanner_header)
+
     def test_scanner_matrix_uses_configurable_runner_for_coverage_lane(self) -> None:
         """Allow the coverage lane to select its dedicated runner configuration."""
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
@@ -505,6 +523,21 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIsNone(
             directive_match,
             "Codacy publish step must not silently swallow failures via continue-on-error",
+        )
+        # The Codacy publish step must run the reporter in account-token mode
+        # by wiring the already-valid ``CODACY_API_TOKEN`` via ``api-token``
+        # (the project-scoped ``CODACY_PROJECT_TOKEN`` was never provisioned,
+        # so a project-token-only step uploaded with an empty token and the
+        # Coverage 100 Gate stayed red).
+        self.assertIn(
+            "api-token: ${{ secrets.CODACY_API_TOKEN }}",
+            codacy_block,
+            "Codacy publish step must wire api-token from CODACY_API_TOKEN",
+        )
+        self.assertIn(
+            "project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}",
+            codacy_block,
+            "Codacy publish step must keep project-token for project-token mode",
         )
         # The DeepSource publish step must propagate per-file ``deepsource
         # report`` exit codes — ``|| true`` was the previous silent-pass.

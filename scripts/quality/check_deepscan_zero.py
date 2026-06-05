@@ -14,6 +14,7 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.quality.common import (
+    GITHUB_API_BASE,
     github_commit_status_payload,
     utc_timestamp,
     write_report,
@@ -95,6 +96,30 @@ def _request_json(url: str, token: str) -> Dict[str, Any]:
 def _github_status_payload(repo: str, sha: str, token: str) -> Dict[str, Any]:
     """Handle github status payload."""
     return github_commit_status_payload(repo, sha, token)
+
+
+def _commit_pulls(repo: str, sha: str, token: str) -> List[Dict[str, Any]]:
+    """List the pull requests associated with one commit.
+
+    The DeepScan GitHub App is a PR-only reporter: it posts the ``DeepScan``
+    status on the PR head commit, never on the squash-merge commit produced on
+    ``main``. ``GET /repos/<repo>/commits/<sha>/pulls`` resolves that head so
+    the gate can re-read the combined status there. The endpoint returns a JSON
+    array; any non-list payload is treated as "no associated pulls".
+    """
+    payload, _ = load_json_https(
+        f"{GITHUB_API_BASE}/repos/{repo}/commits/{sha}/pulls",
+        allowed_hosts={"api.github.com"},
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "quality-zero-platform",
+        },
+    )
+    if not isinstance(payload, list):
+        return []
+    return [item for item in payload if isinstance(item, dict)]
 
 
 def _render_md(payload: Mapping[str, Any]) -> str:
@@ -232,6 +257,49 @@ def _status_findings(status: Dict[str, Any] | None, context: str) -> List[str]:
     return [f"{context} GitHub status is {state or 'unknown'} (expected success)."]
 
 
+def _status_result(
+    status: Dict[str, Any], context: str
+) -> Tuple[int | None, str, List[str]]:
+    """Build the gate result for a found DeepScan status context."""
+    findings = _status_findings(status, context)
+    open_issues = 0 if not findings else None
+    return open_issues, _status_target_url(status), findings
+
+
+def _missing_status_finding(context: str) -> List[str]:
+    """Return the strict-zero finding for a wholly-absent DeepScan status."""
+    return [
+        f"DeepScan status context '{context}' is missing for the commit "
+        "and for its associated pull-request heads. Install the DeepScan "
+        "GitHub App on the repository so each pull request publishes a "
+        "DeepScan check, or set DEEPSCAN_POLICY_MODE=open_issues + "
+        "DEEPSCAN_OPEN_ISSUES_URL to query the API directly.",
+    ]
+
+
+def _pr_head_status_result(
+    repo: str, sha: str, token: str, context: str
+) -> Tuple[int | None, str, List[str]] | None:
+    """Re-read the DeepScan status on each PR head for a status-less commit.
+
+    The DeepScan App posts the ``DeepScan`` status on the PR head, never on
+    the squash-merge commit. ``/commits/<sha>/pulls`` resolves those heads;
+    the first head that carries a ``DeepScan`` status determines the gate
+    outcome (success → pass, any other state → propagate the finding).
+    Returns ``None`` when no associated head carries a DeepScan status, so the
+    caller emits the strict-zero "missing" finding.
+    """
+    for pull in _commit_pulls(repo, sha, token):
+        head_sha = str((pull.get("head") or {}).get("sha") or "").strip()
+        if not head_sha:
+            continue
+        head_payload = _github_status_payload(repo, head_sha, token)
+        head_status = _find_github_status(head_payload, context)
+        if head_status is not None:
+            return _status_result(head_status, context)
+    return None
+
+
 def _evaluate_github_check_context(
     args: argparse.Namespace, token: str
 ) -> Tuple[int | None, str, List[str]]:
@@ -244,23 +312,27 @@ def _evaluate_github_check_context(
     explicitly called this out: "make sure that depscan properly red
     gated blocked on both PR and main, on this repo and the rest of them
     as well and especially on QZP repo".
+
+    The DeepScan App is a PR-only reporter, so the squash-merge commit on
+    ``main`` carries no ``DeepScan`` status. Before red-blocking we fall back
+    to the commit's associated pull-request heads (where DeepScan does post)
+    and only emit the missing finding when DeepScan is absent on the merge
+    commit AND on every PR head.
     """
-    payload = _github_status_payload(_github_repo(args), _github_sha(args), token)
+    repo = _github_repo(args)
+    sha = _github_sha(args)
+    payload = _github_status_payload(repo, sha, token)
     context = str(
         getattr(args, "github_context", DEEPSCAN_STATUS_CONTEXT)
         or DEEPSCAN_STATUS_CONTEXT
     )
     status = _find_github_status(payload, context)
-    if status is None:
-        return None, "", [
-            f"DeepScan status context '{context}' is missing for the commit. "
-            "Install the DeepScan GitHub App on the repository so each push "
-            "publishes a DeepScan check, or set DEEPSCAN_POLICY_MODE=open_issues "
-            "+ DEEPSCAN_OPEN_ISSUES_URL to query the API directly.",
-        ]
-    findings = _status_findings(status, context)
-    open_issues = 0 if not findings else None
-    return open_issues, _status_target_url(status), findings
+    if status is not None:
+        return _status_result(status, context)
+    fallback = _pr_head_status_result(repo, sha, token, context)
+    if fallback is not None:
+        return fallback
+    return None, "", _missing_status_finding(context)
 
 
 def _evaluate_open_issues_mode(

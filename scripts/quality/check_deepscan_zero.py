@@ -37,9 +37,7 @@ class DeepScanEvaluationInputs:
 
 def _parse_args() -> argparse.Namespace:
     """Handle parse args."""
-    parser = argparse.ArgumentParser(
-        description="Assert DeepScan has zero open issues."
-    )
+    parser = argparse.ArgumentParser(description="Assert DeepScan has zero open issues.")
     parser.add_argument("--policy-mode", default="")
     parser.add_argument("--repo", default="")
     parser.add_argument("--sha", default="")
@@ -140,42 +138,28 @@ def _render_md(payload: Mapping[str, Any]) -> str:
 
 def _policy_mode(args: argparse.Namespace) -> str:
     """Handle policy mode."""
-    return (
-        args.policy_mode or os.environ.get("DEEPSCAN_POLICY_MODE", "")
-    ).strip() or "github_check_context"
+    return (args.policy_mode or os.environ.get("DEEPSCAN_POLICY_MODE", "")).strip() or "github_check_context"
 
 
 def _github_repo(args: argparse.Namespace) -> str:
     """Handle github repo."""
-    return (
-        args.repo
-        or os.environ.get("REPO_SLUG", "")
-        or os.environ.get("GITHUB_REPOSITORY", "")
-    ).strip()
+    return (args.repo or os.environ.get("REPO_SLUG", "") or os.environ.get("GITHUB_REPOSITORY", "")).strip()
 
 
 def _github_sha(args: argparse.Namespace) -> str:
     """Handle github sha."""
-    return (
-        args.sha or os.environ.get("TARGET_SHA", "") or os.environ.get("GITHUB_SHA", "")
-    ).strip()
+    return (args.sha or os.environ.get("TARGET_SHA", "") or os.environ.get("GITHUB_SHA", "")).strip()
 
 
-def _validate_github_check_context_inputs(
-    github_token: str, repo: str, sha: str
-) -> List[str]:
+def _validate_github_check_context_inputs(github_token: str, repo: str, sha: str) -> List[str]:
     """Handle validate github check context inputs."""
     findings: List[str] = []
     if not github_token:
         findings.append("GITHUB_TOKEN is missing for github_check_context mode.")
     if not repo:
-        findings.append(
-            "REPO_SLUG or GITHUB_REPOSITORY is missing for github_check_context mode."
-        )
+        findings.append("REPO_SLUG or GITHUB_REPOSITORY is missing for github_check_context mode.")
     if not sha:
-        findings.append(
-            "TARGET_SHA or GITHUB_SHA is missing for github_check_context mode."
-        )
+        findings.append("TARGET_SHA or GITHUB_SHA is missing for github_check_context mode.")
     return findings
 
 
@@ -203,10 +187,7 @@ def _validate_deepscan_inputs(*args: Any, **kwargs: Any) -> List[str]:
     except KeyError as exc:  # pragma: no cover - defensive contract guard
         raise TypeError(f"Missing required DeepScan parameter: {exc.args[0]}") from exc
     if kwargs:
-        raise TypeError(
-            "Unexpected _validate_deepscan_inputs parameters: "
-            f"{', '.join(sorted(kwargs))}"
-        )
+        raise TypeError(f"Unexpected _validate_deepscan_inputs parameters: {', '.join(sorted(kwargs))}")
     if policy_mode == "github_check_context":
         return _validate_github_check_context_inputs(github_token, repo, sha)
     return _validate_open_issues_mode_inputs(token, open_issues_url)
@@ -217,17 +198,13 @@ def _normalized_open_issues_url(open_issues_url: str) -> str:
     return normalize_https_url(open_issues_url, allowed_host_suffixes={"deepscan.io"})
 
 
-def _evaluate_deepscan_open_issues(
-    open_issues_url: str, token: str
-) -> Tuple[int | None, List[str]]:
+def _evaluate_deepscan_open_issues(open_issues_url: str, token: str) -> Tuple[int | None, List[str]]:
     """Handle evaluate deepscan open issues."""
     findings: List[str] = []
     payload = _request_json(open_issues_url, token)
     open_issues = extract_total_open(payload)
     if open_issues is None:
-        findings.append(
-            "DeepScan response did not include a parseable total issue count."
-        )
+        findings.append("DeepScan response did not include a parseable total issue count.")
     elif open_issues != 0:
         findings.append(f"DeepScan reports {open_issues} open issues (expected 0).")
     return open_issues, findings
@@ -257,9 +234,7 @@ def _status_findings(status: Dict[str, Any] | None, context: str) -> List[str]:
     return [f"{context} GitHub status is {state or 'unknown'} (expected success)."]
 
 
-def _status_result(
-    status: Dict[str, Any], context: str
-) -> Tuple[int | None, str, List[str]]:
+def _status_result(status: Dict[str, Any], context: str) -> Tuple[int | None, str, List[str]]:
     """Build the gate result for a found DeepScan status context."""
     findings = _status_findings(status, context)
     open_issues = 0 if not findings else None
@@ -277,9 +252,7 @@ def _missing_status_finding(context: str) -> List[str]:
     ]
 
 
-def _pr_head_status_result(
-    repo: str, sha: str, token: str, context: str
-) -> Tuple[int | None, str, List[str]] | None:
+def _pr_head_status_result(repo: str, sha: str, token: str, context: str) -> Tuple[int | None, str, List[str]] | None:
     """Re-read the DeepScan status on each PR head for a status-less commit.
 
     The DeepScan App posts the ``DeepScan`` status on the PR head, never on
@@ -300,9 +273,7 @@ def _pr_head_status_result(
     return None
 
 
-def _evaluate_github_check_context(
-    args: argparse.Namespace, token: str
-) -> Tuple[int | None, str, List[str]]:
+def _evaluate_github_check_context(args: argparse.Namespace, token: str) -> Tuple[int | None, str, List[str]]:
     """Evaluate the DeepScan GitHub check status for the current commit.
 
     Strict-zero contract: when no DeepScan status is published for the
@@ -322,10 +293,7 @@ def _evaluate_github_check_context(
     repo = _github_repo(args)
     sha = _github_sha(args)
     payload = _github_status_payload(repo, sha, token)
-    context = str(
-        getattr(args, "github_context", DEEPSCAN_STATUS_CONTEXT)
-        or DEEPSCAN_STATUS_CONTEXT
-    )
+    context = str(getattr(args, "github_context", DEEPSCAN_STATUS_CONTEXT) or DEEPSCAN_STATUS_CONTEXT)
     status = _find_github_status(payload, context)
     if status is not None:
         return _status_result(status, context)
@@ -335,9 +303,7 @@ def _evaluate_github_check_context(
     return None, "", _missing_status_finding(context)
 
 
-def _evaluate_open_issues_mode(
-    open_issues_url: str, token: str
-) -> Tuple[int | None, str, List[str]]:
+def _evaluate_open_issues_mode(open_issues_url: str, token: str) -> Tuple[int | None, str, List[str]]:
     """Handle evaluate open issues mode."""
     normalized_url = _normalized_open_issues_url(open_issues_url)
     open_issues, findings = _evaluate_deepscan_open_issues(normalized_url, token)
@@ -356,14 +322,9 @@ def _evaluate_deepscan_policy(
         github_token = str(kwargs.pop("github_token"))
         open_issues_url = str(kwargs.pop("open_issues_url"))
     except KeyError as exc:  # pragma: no cover - defensive contract guard
-        raise TypeError(
-            f"Missing required DeepScan policy field: {exc.args[0]}"
-        ) from exc
+        raise TypeError(f"Missing required DeepScan policy field: {exc.args[0]}") from exc
     if kwargs:
-        raise TypeError(
-            "Unexpected _evaluate_deepscan_policy parameters: "
-            f"{', '.join(sorted(kwargs))}"
-        )
+        raise TypeError(f"Unexpected _evaluate_deepscan_policy parameters: {', '.join(sorted(kwargs))}")
     if policy_mode == "github_check_context":
         return _evaluate_github_check_context(args, github_token)
     return _evaluate_open_issues_mode(open_issues_url, token)
@@ -373,10 +334,7 @@ def _deepscan_inputs(args: argparse.Namespace) -> DeepScanEvaluationInputs:
     """Return the resolved token inputs for one DeepScan run."""
     return DeepScanEvaluationInputs(
         token=(args.token or os.environ.get("DEEPSCAN_API_TOKEN", "")).strip(),
-        github_token=(
-            os.environ.get("GITHUB_TOKEN", "").strip()
-            or os.environ.get("GH_TOKEN", "").strip()
-        ),
+        github_token=(os.environ.get("GITHUB_TOKEN", "").strip() or os.environ.get("GH_TOKEN", "").strip()),
         policy_mode=_policy_mode(args),
         open_issues_url=os.environ.get("DEEPSCAN_OPEN_ISSUES_URL", "").strip(),
     )

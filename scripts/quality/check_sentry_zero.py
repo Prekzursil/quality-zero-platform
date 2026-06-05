@@ -22,11 +22,7 @@ SENTRY_API_BASE = "https://sentry.io/api/0"
 
 def _parse_args() -> argparse.Namespace:
     """Parse CLI arguments for the Sentry zero gate."""
-    parser = argparse.ArgumentParser(
-        description=(
-            "Assert Sentry has zero unresolved issues for configured projects."
-        )
-    )
+    parser = argparse.ArgumentParser(description=("Assert Sentry has zero unresolved issues for configured projects."))
     parser.add_argument("--org", default="")
     parser.add_argument("--project", action="append", default=[])
     parser.add_argument("--token", default="")
@@ -84,10 +80,7 @@ def _render_md(payload: Mapping[str, Any]) -> str:
         for item in payload["projects"]:
             state = str(item.get("state") or "ok")
             state_suffix = "" if state == "ok" else f" state=`{state}`"
-            lines.append(
-                f"- `{item['project']}` unresolved=`{item['unresolved']}`"
-                f"{state_suffix}"
-            )
+            lines.append(f"- `{item['project']}` unresolved=`{item['unresolved']}`{state_suffix}")
     else:
         lines.append("- None")
     lines.extend(["", "## Findings"])
@@ -157,10 +150,7 @@ def _collect_project_results(
         if unresolved is None:
             unresolved = len(payload)
         if unresolved != 0:
-            findings.append(
-                f"Sentry project {project} has {unresolved} unresolved issues "
-                "(expected 0)."
-            )
+            findings.append(f"Sentry project {project} has {unresolved} unresolved issues (expected 0).")
         project_results.append(
             {
                 "project": project,

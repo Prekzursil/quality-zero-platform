@@ -48,11 +48,6 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _event_name() -> str:
-    """Handle event name."""
-    return os.environ.get("EVENT_NAME", "").strip()
-
-
 def _nested_payload_values(payload: Any) -> List[Any]:
     """Handle nested payload values."""
     if isinstance(payload, dict):

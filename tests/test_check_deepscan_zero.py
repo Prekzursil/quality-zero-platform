@@ -403,6 +403,55 @@ class DeepScanZeroTests(unittest.TestCase):
         self.assertEqual(len(findings), 1)
         self.assertIn("missing", findings[0])
 
+    def test_evaluate_open_issues_reports_no_findings_when_total_is_zero(
+        self,
+    ) -> None:
+        """A parseable total of exactly zero must produce no findings.
+
+        Covers the ``elif open_issues != 0`` fall-through in
+        ``_evaluate_deepscan_open_issues``: the count is an int and equals 0,
+        so neither the unparseable nor the non-zero finding is appended.
+        """
+        with patch.object(
+            check_deepscan_zero, "_request_json", return_value={"total": 0}
+        ):
+            open_issues, findings = (
+                check_deepscan_zero._evaluate_deepscan_open_issues(
+                    "https://deepscan.io/project/issues",
+                    _placeholder_token("api"),
+                )
+            )
+
+        self.assertEqual(open_issues, 0)
+        self.assertEqual(findings, [])
+
+    def test_find_github_status_skips_non_matching_context_entries(self) -> None:
+        """A status whose context does not match is skipped, yielding None.
+
+        Covers the ``context != target`` continue path in
+        ``_find_github_status`` (the loop advances past a non-matching entry
+        rather than returning it).
+        """
+        payload = {"statuses": [{"context": "OtherCheck", "state": "success"}]}
+
+        self.assertIsNone(
+            check_deepscan_zero._find_github_status(payload, "DeepScan")
+        )
+
+    def test_status_findings_reports_missing_context_when_status_is_none(
+        self,
+    ) -> None:
+        """A ``None`` status reports the missing-context finding directly.
+
+        Covers the ``status is None`` defensive guard in ``_status_findings``;
+        internal callers no longer reach it after the ``_status_result``
+        refactor, so it is exercised here at the unit level.
+        """
+        self.assertEqual(
+            check_deepscan_zero._status_findings(None, "DeepScan"),
+            ["DeepScan GitHub status context is missing."],
+        )
+
     def test_validate_deepscan_inputs_accepts_github_check_context_mode(self) -> None:
         """Cover validate deepscan inputs accepts github check context mode."""
         api_token = _placeholder_token("api")

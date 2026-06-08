@@ -91,8 +91,7 @@ def is_blocked_path(path: str) -> bool:
     basename = normalized.rsplit("/", 1)[-1]
     return any(
         fnmatch(normalized, pattern) or fnmatch(basename, pattern)
-        for pattern in BLOCKED_PATTERNS
-    )
+        for pattern in BLOCKED_PATTERNS)
 
 
 def blocked_paths(paths: Iterable[str]) -> List[str]:

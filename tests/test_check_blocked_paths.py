@@ -38,8 +38,7 @@ class IsBlockedPathTests(unittest.TestCase):
     def test_github_dir_deep(self) -> None:
         """``.github/**`` matches nested paths at three+ levels deep."""
         self.assertTrue(
-            cbp.is_blocked_path(".github/workflows/ci/reusable.yml")
-        )
+            cbp.is_blocked_path(".github/workflows/ci/reusable.yml"))
 
     def test_backslash_separators_normalized(self) -> None:
         """Windows separators normalize to POSIX before matching."""
@@ -192,8 +191,8 @@ class MainBaseRefTests(_GitRepoTestCase):
     def test_bad_ref_exits_two(self) -> None:
         """An unknown ref reports a git error and exits 2."""
         rc = cbp.main(
-            ["--base-ref", "no-such-ref", "--repo-dir", str(self.repo_dir)]
-        )
+            ["--base-ref", "no-such-ref", "--repo-dir",
+             str(self.repo_dir)])
         self.assertEqual(rc, 2)
 
 
@@ -206,9 +205,8 @@ class MainPathsTests(unittest.TestCase):
 
     def test_blocked_paths_exit_one(self) -> None:
         """An explicit blocked path exits 1."""
-        self.assertEqual(
-            cbp.main(["--paths", "src/a.py", "pyproject.toml"]), 1
-        )
+        self.assertEqual(cbp.main(["--paths", "src/a.py", "pyproject.toml"]),
+                         1)
 
 
 class MainUsageTests(unittest.TestCase):

@@ -109,9 +109,11 @@ def _changed_files(base_ref: str, repo_dir: str) -> List[str]:
     # Safe by construction: shell=False (list argv), git resolved to an
     # absolute path via ``shutil.which`` at import, and the only dynamic token
     # is a user-supplied ref passed as a plain argument (never interpolated).
-    # ``# nosec`` silences Bandit B603 and ``# noqa: S603`` silences Ruff S603,
-    # both informational warnings about every subprocess call.
-    result = subprocess.run(  # noqa: S603  # nosec
+    # The inline markers acknowledge that single, audited subprocess call:
+    # the Bandit B603 suppression matches the reviewed precedent in
+    # run_coverage_gate.py, and the matching Ruff S603 acknowledgment silences
+    # flake8-bandit's equivalent warning on the same line.
+    result = subprocess.run(  # noqa: S603  # nosec B603
         [_GIT_EXECUTABLE, "diff", "--no-renames", "--name-only", base_ref],
         cwd=repo_dir,
         capture_output=True,

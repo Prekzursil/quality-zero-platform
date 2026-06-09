@@ -9,6 +9,8 @@ source = [
   "scripts.quality.fleet_inventory",
   "scripts.quality.migrate_profiles_to_v2",
   "scripts.quality.ratchet_gate",
+  "scripts.quality.ratchet_diff",
+  "scripts.quality.ratchet_canonical",
 ]
 branch = true
 omit = [

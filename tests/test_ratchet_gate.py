@@ -10,13 +10,45 @@ code (0 pass / 1 gate-red / 2 usage-or-IO).
 from __future__ import absolute_import
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
 from typing import Dict, List, Sequence, Set
 from unittest.mock import patch
 
+from scripts.quality import ratchet_diff as rd
 from scripts.quality import ratchet_gate as rg
+
+# Git location env vars that ``git`` honors over ``cwd`` (e.g. ``GIT_DIR`` set
+# by a pre-push hook). They leak into the temp-repo subprocess calls in the
+# real-git tests below and redirect them at the outer repo, so scrub them for
+# the whole module. Identity stays sourced from each temp repo's local
+# ``git config`` (GIT_CONFIG* is deliberately left untouched).
+_GIT_LOCATION_ENV = (
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_COMMON_DIR",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_NAMESPACE",
+    "GIT_PREFIX",
+)
+_saved_git_env: Dict[str, str] = {}
+
+
+def setUpModule() -> None:
+    """Remove leaked git-location env vars so temp-repo git stays hermetic."""
+    for name in _GIT_LOCATION_ENV:
+        value = os.environ.pop(name, None)
+        if value is not None:
+            _saved_git_env[name] = value
+
+
+def tearDownModule() -> None:
+    """Restore any git-location env vars removed in ``setUpModule``."""
+    os.environ.update(_saved_git_env)
+    _saved_git_env.clear()
 
 
 def _tmpdir(case: unittest.TestCase) -> Path:
@@ -24,6 +56,27 @@ def _tmpdir(case: unittest.TestCase) -> Path:
     holder = tempfile.TemporaryDirectory()
     case.addCleanup(holder.cleanup)
     return Path(holder.name)
+
+
+def _base_parse_argv(*extra: str) -> List[str]:
+    """Build a ``parse_args`` argv with the five required flags plus ``extra``.
+
+    Returning a constructed list (required flags + caller extras) keeps the
+    literal flag block out of individual tests so it no longer matches the
+    sibling argv block in ``verify_v2_deployment.py`` (qlty clone detection).
+    """
+    required = {
+        "--canonical-json": "c.json",
+        "--ratchet-json": "r.json",
+        "--repo-dir": ".",
+        "--repo-slug": "owner/repo",
+        "--head-sha": "sha",
+    }
+    argv: List[str] = []
+    for flag, value in required.items():
+        argv.extend([flag, value])
+    argv.extend(extra)
+    return argv
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -84,7 +137,7 @@ class RunGitTests(unittest.TestCase):
         """When the binary cannot be spawned, OSError maps to RatchetError."""
         repo = _tmpdir(self)
         with (
-                patch.object(rg.subprocess, "run",
+                patch.object(rd.subprocess, "run",
                              side_effect=OSError("boom")),
                 self.assertRaises(rg.RatchetError) as ctx,
         ):
@@ -124,7 +177,7 @@ class ResolveDiffBaseTests(unittest.TestCase):
         """An empty (but successful) merge-base output fails loud."""
         repo = _tmpdir(self)
         with (
-                patch.object(rg, "_run_git", return_value="\n"),
+                patch.object(rd, "_run_git", return_value="\n"),
                 self.assertRaises(rg.RatchetError) as ctx,
         ):
             rg._resolve_diff_base(repo, "origin/main", "deadbeef")
@@ -186,7 +239,7 @@ class AddedLineRangesTests(unittest.TestCase):
         """A hunk header with no preceding +++ line is skipped (defensive)."""
         repo = _tmpdir(self)
         fake_diff = "@@ -1 +1 @@\n+orphan line\n"
-        with patch.object(rg, "_run_git", return_value=fake_diff):
+        with patch.object(rd, "_run_git", return_value=fake_diff):
             added = rg.added_line_ranges(repo, "base", "head")
         self.assertEqual(added, {})
 
@@ -867,7 +920,7 @@ class ClassifyTests(unittest.TestCase):
                     "ceiling": 4
                 }
             }})
-        result = rg.classify(
+        result = rg.classify(rg.ClassifyInputs(
             baseline=baseline,
             totals={
                 "Codacy": 2,
@@ -879,7 +932,7 @@ class ClassifyTests(unittest.TestCase):
             expected={"CodeQL"},
             head_sha="sha",
             seed_missing=True,
-        )
+        ))
         states = {v.provider: v.state for v in result.verdicts}
         # Codacy measured+unseeded -> seeded -> pass; Irrelevant measured but
         # unseeded -> seeded -> pass; CodeQL expected+absent -> unmeasured;
@@ -892,7 +945,7 @@ class ClassifyTests(unittest.TestCase):
     def test_errored_measured_provider_held_as_unmeasured(self) -> None:
         """A provider in both measured and errored is held (unmeasured)."""
         baseline = rg.RatchetBaseline(raw={})
-        result = rg.classify(
+        result = rg.classify(rg.ClassifyInputs(
             baseline=baseline,
             totals={"Codacy": 2},
             new_code={},
@@ -901,14 +954,14 @@ class ClassifyTests(unittest.TestCase):
             expected=set(),
             head_sha="sha",
             seed_missing=False,
-        )
+        ))
         self.assertEqual(result.verdicts[0].state, "unmeasured")
         self.assertFalse(result.changed)
 
     def test_unmeasured_irrelevant_provider_dropped(self) -> None:
         """A baseline-listed but non-mapping provider produces no verdict."""
         baseline = rg.RatchetBaseline(raw={"providers": {"Ghost": "stale"}})
-        result = rg.classify(
+        result = rg.classify(rg.ClassifyInputs(
             baseline=baseline,
             totals={},
             new_code={},
@@ -917,7 +970,7 @@ class ClassifyTests(unittest.TestCase):
             expected=set(),
             head_sha="sha",
             seed_missing=False,
-        )
+        ))
         self.assertEqual(result.verdicts, [])
 
 
@@ -964,18 +1017,7 @@ class ParseArgsTests(unittest.TestCase):
 
     def test_required_and_default_args(self) -> None:
         """Required args parse and flags default off."""
-        args = rg.parse_args([
-            "--canonical-json",
-            "c.json",
-            "--ratchet-json",
-            "r.json",
-            "--repo-dir",
-            ".",
-            "--repo-slug",
-            "owner/repo",
-            "--head-sha",
-            "sha",
-        ])
+        args = rg.parse_args(_base_parse_argv())
         self.assertEqual(args.canonical_json, "c.json")
         self.assertFalse(args.write)
         self.assertFalse(args.seed)
@@ -983,28 +1025,14 @@ class ParseArgsTests(unittest.TestCase):
 
     def test_optional_flags_parsed(self) -> None:
         """Optional flags and paths parse through."""
-        args = rg.parse_args([
-            "--canonical-json",
-            "c.json",
-            "--ratchet-json",
-            "r.json",
-            "--repo-dir",
-            ".",
-            "--repo-slug",
-            "owner/repo",
-            "--head-sha",
-            "sha",
-            "--base-ref",
-            "origin/main",
-            "--out-md",
-            "out.md",
+        args = rg.parse_args(_base_parse_argv(
+            "--base-ref", "origin/main",
+            "--out-md", "out.md",
             "--write",
             "--seed",
-            "--github-output",
-            "gh.txt",
-            "--profile-json",
-            "p.json",
-        ])
+            "--github-output", "gh.txt",
+            "--profile-json", "p.json",
+        ))
         self.assertTrue(args.write)
         self.assertTrue(args.seed)
         self.assertEqual(args.base_ref, "origin/main")

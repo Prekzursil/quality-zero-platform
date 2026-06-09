@@ -46,65 +46,53 @@ from __future__ import absolute_import
 
 import argparse
 import json
-import re
-import subprocess  # nosec B404 -- only invoked with a fixed git argv, no shell
 import sys
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Sequence, Set, Tuple
 
+from scripts.quality.ratchet_canonical import (
+    CONTEXT_PROVIDER_HINTS,
+    KNOWN_PROVIDERS,
+    count_new_code,
+    expected_providers_from_profile,
+    measured_providers_from_canonical,
+    providers_with_errors,
+    read_provider_totals,
+)
+from scripts.quality.ratchet_diff import (
+    RatchetError,
+    _normalize_path,
+    _resolve_diff_base,
+    _run_git,
+    _suffix_path_match,
+    added_line_ranges,
+    is_new_code_finding,
+)
+
+# Re-export the git/new-code detection + canonical-reading helpers so callers
+# and tests can keep using ``scripts.quality.ratchet_gate.<name>`` after those
+# units moved to ``ratchet_diff`` / ``ratchet_canonical`` (keeps each module
+# under its complexity ceiling without changing the public surface).
+__all__ = [
+    "CONTEXT_PROVIDER_HINTS",
+    "KNOWN_PROVIDERS",
+    "RatchetError",
+    "_normalize_path",
+    "_resolve_diff_base",
+    "_run_git",
+    "_suffix_path_match",
+    "added_line_ranges",
+    "count_new_code",
+    "expected_providers_from_profile",
+    "is_new_code_finding",
+    "measured_providers_from_canonical",
+    "providers_with_errors",
+    "read_provider_totals",
+]
+
 RATCHET_SCHEMA_VERSION = "qzp-ratchet/1"
-
-
-class RatchetError(RuntimeError):
-    """Raised when the gate cannot make a safe assertion (e.g. the new-code
-    diff command failed). Fail-loud: a silently-empty diff would disable the
-    clean-as-you-code check and let a 'fix 1 MINOR, add 1 BLOCKER' swap pass.
-    """
-
-
-# Exact provider literal strings emitted by the rollup_v2 normalizers
-# (BaseNormalizer.provider on each normalizer; verified against
-# scripts/quality/rollup_v2/normalizers/*.py). These are the ONLY valid
-# keys under ratchet.json.providers.<name>.
-KNOWN_PROVIDERS: Tuple[str, ...] = (
-    "Applitools",
-    "Chromatic",
-    "Codacy",
-    "CodeQL",
-    "Coverage",
-    "DeepScan",
-    "DeepSource",
-    "Dependabot",
-    "QLTY",
-    "QualitySecrets",
-    "Semgrep",
-    "Sentry",
-    "SonarCloud",
-)
-
-# Maps a required-context substring -> the canonical provider literal.
-# Used to derive the "expected providers" set from a resolved profile's
-# required_contexts so an absent provider is recognised as UNMEASURED
-# (block-lower) rather than a genuine zero.
-CONTEXT_PROVIDER_HINTS: Tuple[Tuple[str, str], ...] = (
-    ("Sonar", "SonarCloud"),
-    ("SonarCloud", "SonarCloud"),
-    ("Codacy", "Codacy"),
-    ("CodeQL", "CodeQL"),
-    ("DeepScan", "DeepScan"),
-    ("DeepSource", "DeepSource"),
-    ("Semgrep", "Semgrep"),
-    ("Sentry", "Sentry"),
-    ("Dependency", "Dependabot"),
-    ("Dependabot", "Dependabot"),
-    ("qlty", "QLTY"),
-    ("QLTY", "QLTY"),
-    ("Coverage", "Coverage"),
-    ("Chromatic", "Chromatic"),
-    ("Applitools", "Applitools"),
-)
 
 
 def utc_now() -> str:
@@ -118,234 +106,30 @@ def today() -> str:
 
 
 # --------------------------------------------------------------------------- #
-# git new-code (diff-scoped) detection
-# --------------------------------------------------------------------------- #
-_HUNK_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
-_DIFF_FILE_RE = re.compile(r"^\+\+\+ b/(.+)$")
-
-
-def _run_git(args: Sequence[str], repo_dir: Path) -> str:
-    """Run ``git`` in ``repo_dir`` and return stdout.
-
-    Raises :class:`RatchetError` when git itself fails (non-zero exit or
-    missing binary). Callers that want "no diff" semantics must check for an
-    empty *base* up front -- a failed git command is NEVER silently treated
-    as an empty diff (that would disable new-code detection).
-    """
-    try:
-        completed = subprocess.run(  # nosec B603 -- fixed argv, shell=False
-            ["git", *args],
-            cwd=str(repo_dir),
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except subprocess.CalledProcessError as exc:
-        raise RatchetError(
-            f"git {' '.join(args)} failed (exit {exc.returncode}): {(exc.stderr or '').strip()}"
-        ) from exc
-    except OSError as exc:
-        raise RatchetError(f"could not run git: {exc}") from exc
-    return completed.stdout
-
-
-def _resolve_diff_base(repo_dir: Path, base_ref: str, head_sha: str) -> str:
-    """Resolve the merge-base of ``base_ref`` and ``head_sha``.
-
-    Raises :class:`RatchetError` if the merge-base cannot be computed (e.g.
-    the head SHA is not present in this checkout -- the classic PR
-    merge-commit-vs-head-ref mismatch). Returns "" only when ``base_ref`` is
-    empty (caller explicitly opted out of new-code detection).
-    """
-    if not base_ref:
-        return ""
-    merge_base = _run_git(["merge-base", base_ref, head_sha or "HEAD"],
-                          repo_dir).strip()
-    if not merge_base:
-        raise RatchetError(
-            f"empty merge-base for {base_ref}..{head_sha or 'HEAD'} -- the "
-            f"checked-out repo at {repo_dir} likely does not contain head SHA "
-            f"{head_sha!r}. Ensure checkout ref == --head-sha and fetch-depth: 0."
-        )
-    return merge_base
-
-
-def added_line_ranges(repo_dir: Path, base_sha: str,
-                      head_sha: str) -> Dict[str, Set[int]]:
-    """Return ``{file_path: {added_line_numbers}}`` for ``base..head``.
-
-    Uses ``git diff --unified=0`` so only genuinely added/changed lines are
-    captured. The line numbers are HEAD-side (matching the finding line
-    numbers, which are anchored to the rollup SHA == head). Raises
-    :class:`RatchetError` if the diff command fails (never returns an empty
-    dict to mask a broken diff).
-    """
-    if not base_sha:
-        return {}
-    diff = _run_git(
-        [
-            "diff", "--unified=0", "--no-color",
-            f"{base_sha}..{head_sha or 'HEAD'}"
-        ],
-        repo_dir,
-    )
-    result: Dict[str, Set[int]] = {}
-    current_file = ""
-    for raw in diff.splitlines():
-        file_match = _DIFF_FILE_RE.match(raw)
-        if file_match:
-            current_file = file_match.group(1)
-            result.setdefault(current_file, set())
-            continue
-        hunk = _HUNK_RE.match(raw)
-        if hunk and current_file:
-            start = int(hunk.group(1))
-            count = int(hunk.group(2)) if hunk.group(2) is not None else 1
-            # count == 0 means pure deletion at this point -> no added lines.
-            for offset in range(count):
-                result[current_file].add(start + offset)
-    return result
-
-
-def _normalize_path(path: str) -> str:
-    """Normalize a finding/diff path for comparison (strip leading ./, slashes)."""
-    return path.replace("\\", "/").lstrip("./").strip()
-
-
-def is_new_code_finding(finding: Mapping[str, Any],
-                        added: Mapping[str, Set[int]]) -> bool:
-    """Return True when a finding lands on an added line in the diff.
-
-    Repo-level / manifest-level / non-positional findings (line <= 0, empty
-    file, or Dependabot's synthetic line==1 manifest pointer) are NOT treated
-    as new-code: they have no meaningful (file, line) anchor in the diff and
-    are governed by the per-provider total ceiling only.
-    """
-    try:
-        line = int(finding.get("line") or 0)
-    except (TypeError, ValueError):
-        return False
-    file_path = _normalize_path(str(finding.get("file") or ""))
-    if line <= 0 or not file_path:
-        return False
-    added_lines = added.get(file_path)
-    if added_lines is not None:
-        return line in added_lines
-    # Exact miss: try a PATH-COMPONENT-boundary suffix match (rollup vs diff
-    # path prefix differences), e.g. "app/api.py" vs "apps/api/app/api.py".
-    # A plain str.endswith would false-match "api.py" against ".../myapi.py";
-    # requiring a leading "/" on the suffix prevents that.
-    for diff_file, lines in added.items():
-        if _suffix_path_match(diff_file, file_path):
-            return line in lines
-    return False
-
-
-def _suffix_path_match(a: str, b: str) -> bool:
-    """True when ``a`` and ``b`` share a path-component-aligned suffix."""
-    if a == b:
-        return True
-    longer, shorter = (a, b) if len(a) >= len(b) else (b, a)
-    return longer.endswith("/" + shorter)
-
-
-# --------------------------------------------------------------------------- #
-# canonical.json reading
-# --------------------------------------------------------------------------- #
-def read_provider_totals(canonical: Mapping[str, Any]) -> Dict[str, int]:
-    """Return ``{provider: total}`` from ``provider_summaries``.
-
-    ``total`` is corroborator-counted (a multi-provider deduped finding
-    increments each of its providers), which is exactly what we want for a
-    per-provider ceiling that mirrors each dashboard. We deliberately do NOT
-    gate on ``sum(totals)`` -- it is not equal to ``total_findings``.
-    """
-    totals: Dict[str, int] = {}
-    for summary in canonical.get("provider_summaries", []):
-        provider = str(summary.get("provider", ""))
-        if summary.get("status") == "not-configured":
-            continue
-        if provider:
-            totals[provider] = int(summary.get("total", 0))
-    return totals
-
-
-def measured_providers_from_canonical(
-        canonical: Mapping[str, Any]) -> Set[str]:
-    """Providers that produced at least one corroborator this run.
-
-    Presence in ``provider_summaries`` (with status != not-configured) means
-    the lane ran and emitted findings. A provider that ran clean (0 findings)
-    will NOT appear here -- that ambiguity is resolved by the
-    ``expected_providers`` set + ``normalizer_errors`` (see ``classify``).
-    """
-    measured: Set[str] = set()
-    for summary in canonical.get("provider_summaries", []):
-        if summary.get("status") == "not-configured":
-            continue
-        provider = str(summary.get("provider", ""))
-        if provider:
-            measured.add(provider)
-    return measured
-
-
-def providers_with_errors(canonical: Mapping[str, Any]) -> Set[str]:
-    """Providers that recorded a normalizer error this run (treat as UNMEASURED)."""
-    errored: Set[str] = set()
-    for err in canonical.get("normalizer_errors", []):
-        provider = str(err.get("provider", "")).strip()
-        # normalizer_errors may carry the lowercase lane key; map both forms.
-        for known in KNOWN_PROVIDERS:
-            if provider and (provider == known
-                             or provider.lower() == known.lower()):
-                errored.add(known)
-    return errored
-
-
-def expected_providers_from_profile(profile: Mapping[str, Any]) -> Set[str]:
-    """Derive the providers a healthy run is EXPECTED to measure.
-
-    Pulled from the resolved profile's ``required_contexts`` (always/target
-    lanes). Any provider in this set that is absent from canonical's
-    ``provider_summaries`` and not in ``normalizer_errors`` is UNMEASURED ->
-    the gate holds the ceiling and fails-closed rather than lowering to 0.
-    """
-    expected: Set[str] = set()
-    contexts: List[str] = []
-    raw = profile.get("required_contexts", {})
-    if isinstance(raw, Mapping):
-        for bucket in ("always", "target", "pull_request_only"):
-            value = raw.get(bucket, [])
-            if isinstance(value, list):
-                contexts.extend(str(item) for item in value)
-    elif isinstance(raw, list):
-        contexts.extend(str(item) for item in raw)
-    contexts.extend(
-        str(item) for item in profile.get("active_required_contexts", []))
-    for context in contexts:
-        for needle, provider in CONTEXT_PROVIDER_HINTS:
-            if needle in context:
-                expected.add(provider)
-    return expected
-
-
-def count_new_code(canonical: Mapping[str, Any],
-                   added: Mapping[str, Set[int]]) -> Dict[str, int]:
-    """Return ``{provider: new_code_finding_count}`` over all canonical findings."""
-    new_by_provider: Dict[str, int] = {p: 0 for p in KNOWN_PROVIDERS}
-    for finding in canonical.get("findings", []):
-        if not is_new_code_finding(finding, added):
-            continue
-        for corroborator in finding.get("corroborators", []):
-            provider = str(corroborator.get("provider", ""))
-            if provider in new_by_provider:
-                new_by_provider[provider] += 1
-    return new_by_provider
-
-
-# --------------------------------------------------------------------------- #
 # ratchet.json (baseline) model
 # --------------------------------------------------------------------------- #
+@dataclass
+class AuditEntry:
+    """One ``audit_log`` record (bundled so ``_log`` takes a single arg)."""
+
+    action: str
+    provider: str
+    ceiling: int
+    sha: str
+    actor: str = "ci-bot"
+
+    def as_dict(self) -> Dict[str, Any]:
+        """Render the record as the JSON-serialisable audit dict."""
+        return {
+            "action": self.action,
+            "provider": self.provider,
+            "ceiling": int(self.ceiling),
+            "sha": self.sha,
+            "actor": self.actor,
+            "at": utc_now(),
+        }
+
+
 @dataclass
 class RatchetBaseline:
     """In-memory view of ``.quality/ratchet.json``."""
@@ -365,7 +149,7 @@ class RatchetBaseline:
         if not entry.get("measured", True):
             return None
         value = entry.get("ceiling")
-        return int(value) if isinstance(value, (int, float)) else None
+        return int(value) if isinstance(value, int | float) else None
 
     def is_seeded(self, provider: str) -> bool:
         """Return True when ``provider`` has a committed, measured ceiling."""
@@ -378,7 +162,8 @@ class RatchetBaseline:
         entry["measured"] = True
         entry["last_lowered_sha"] = head_sha
         entry["last_lowered_at"] = utc_now()
-        self._log("auto-lower", provider, new_ceiling, head_sha)
+        self._log(
+            AuditEntry("auto-lower", provider, new_ceiling, head_sha))
 
     def seed(self, provider: str, ceiling: int, head_sha: str,
              actor: str) -> None:
@@ -389,29 +174,14 @@ class RatchetBaseline:
         entry["measured"] = True
         entry["seeded_at"] = utc_now()
         entry["seeded_by"] = actor
-        action = "raise" if isinstance(old,
-                                       (int,
-                                        float)) and ceiling > old else "seed"
-        self._log(action, provider, ceiling, head_sha, actor=actor)
+        action = ("raise"
+                  if isinstance(old, int | float) and ceiling > old else "seed")
+        self._log(AuditEntry(action, provider, ceiling, head_sha, actor=actor))
 
-    def _log(
-        self,
-        action: str,
-        provider: str,
-        ceiling: int,
-        head_sha: str,
-        actor: str = "ci-bot",
-    ) -> None:
+    def _log(self, record: "AuditEntry") -> None:
         """Append one audit record."""
         log = self.raw.setdefault("audit_log", [])
-        log.append({
-            "action": action,
-            "provider": provider,
-            "ceiling": int(ceiling),
-            "sha": head_sha,
-            "actor": actor,
-            "at": utc_now(),
-        })
+        log.append(record.as_dict())
 
 
 def new_baseline(repo_slug: str, head_sha: str) -> RatchetBaseline:
@@ -499,6 +269,52 @@ def _classify_unmeasured(
     return None
 
 
+def _classify_unseeded_ceiling(
+    *,
+    provider: str,
+    baseline: "RatchetBaseline",
+    current: int | None,
+    current_val: int,
+    new_code: int,
+    head_sha: str,
+    seed_missing: bool,
+) -> Tuple[ProviderVerdict, bool]:
+    """Resolve a measured provider that has no committed ceiling yet."""
+    if seed_missing:
+        baseline.seed(provider, current_val, head_sha, actor="seed-pr")
+        verdict = ProviderVerdict(provider, "pass", current_val, current_val,
+                                  new_code, lowered_to=current_val)
+        return verdict, True
+    return ProviderVerdict(provider, "unseeded", current, None, new_code), False
+
+
+def _classify_against_ceiling(
+    *,
+    provider: str,
+    baseline: "RatchetBaseline",
+    current_val: int,
+    ceiling: int,
+    new_code: int,
+    head_sha: str,
+) -> Tuple[ProviderVerdict, bool]:
+    """Resolve a measured, already-seeded provider against its ceiling."""
+    # Clean-as-you-code: any new-code finding fails regardless of ceiling.
+    if new_code > 0:
+        state = "new-code"
+    elif current_val > ceiling:
+        state = "regression"
+    elif current_val < ceiling:
+        # Below ceiling -> pass + auto-lower (monotone).
+        baseline.lower(provider, current_val, head_sha)
+        verdict = ProviderVerdict(provider, "pass", current_val, ceiling,
+                                  new_code, lowered_to=current_val)
+        return verdict, True
+    else:
+        state = "pass"
+    return ProviderVerdict(provider, state, current_val, ceiling,
+                           new_code), False
+
+
 def _classify_measured(
     *,
     provider: str,
@@ -511,68 +327,75 @@ def _classify_measured(
 ) -> Tuple[ProviderVerdict, bool]:
     """Classify a measured provider. Returns ``(verdict, baseline_changed)``."""
     current_val = int(current or 0)
-
     if ceiling is None:
-        if seed_missing:
-            baseline.seed(provider, current_val, head_sha, actor="seed-pr")
-            return (
-                ProviderVerdict(
-                    provider,
-                    "pass",
-                    current_val,
-                    current_val,
-                    new_code,
-                    lowered_to=current_val,
-                ),
-                True,
-            )
-        return ProviderVerdict(provider, "unseeded", current, None,
-                               new_code), False
-
-    # Clean-as-you-code: any new-code finding fails regardless of ceiling.
-    if new_code > 0:
-        return (
-            ProviderVerdict(provider, "new-code", current_val, ceiling,
-                            new_code),
-            False,
+        return _classify_unseeded_ceiling(
+            provider=provider,
+            baseline=baseline,
+            current=current,
+            current_val=current_val,
+            new_code=new_code,
+            head_sha=head_sha,
+            seed_missing=seed_missing,
         )
+    return _classify_against_ceiling(
+        provider=provider,
+        baseline=baseline,
+        current_val=current_val,
+        ceiling=ceiling,
+        new_code=new_code,
+        head_sha=head_sha,
+    )
 
-    if current_val > ceiling:
-        return (
-            ProviderVerdict(provider, "regression", current_val, ceiling,
-                            new_code),
-            False,
+
+@dataclass
+class ClassifyInputs:
+    """Bundle the per-run inputs to :func:`classify` (one object, few locals)."""
+
+    baseline: RatchetBaseline
+    totals: Mapping[str, int]
+    new_code: Mapping[str, int]
+    measured: Set[str]
+    errored: Set[str]
+    expected: Set[str]
+    head_sha: str
+    seed_missing: bool
+
+    def universe(self) -> List[str]:
+        """Return the sorted provider universe to evaluate."""
+        return sorted(
+            set(self.totals) | self.measured | self.expected
+            | set(self.baseline.providers))
+
+
+def _classify_one(provider: str,
+                  inputs: ClassifyInputs) -> Tuple[ProviderVerdict | None, bool]:
+    """Classify a single provider. Returns ``(verdict_or_none, changed)``."""
+    current = inputs.totals.get(provider)
+    nc = int(inputs.new_code.get(provider, 0))
+    ceiling = inputs.baseline.ceiling(provider)
+    if provider not in inputs.measured or provider in inputs.errored:
+        verdict = _classify_unmeasured(
+            provider=provider,
+            baseline=inputs.baseline,
+            expected=inputs.expected,
+            errored=inputs.errored,
+            current=current,
+            ceiling=ceiling,
+            new_code=nc,
         )
-
-    # current_val <= ceiling -> pass; auto-lower if strictly below.
-    if current_val < ceiling:
-        baseline.lower(provider, current_val, head_sha)
-        return (
-            ProviderVerdict(
-                provider,
-                "pass",
-                current_val,
-                ceiling,
-                new_code,
-                lowered_to=current_val,
-            ),
-            True,
-        )
-    return ProviderVerdict(provider, "pass", current_val, ceiling,
-                           new_code), False
+        return verdict, False
+    return _classify_measured(
+        provider=provider,
+        baseline=inputs.baseline,
+        current=current,
+        ceiling=ceiling,
+        new_code=nc,
+        head_sha=inputs.head_sha,
+        seed_missing=inputs.seed_missing,
+    )
 
 
-def classify(
-    *,
-    baseline: RatchetBaseline,
-    totals: Mapping[str, int],
-    new_code: Mapping[str, int],
-    measured: Set[str],
-    errored: Set[str],
-    expected: Set[str],
-    head_sha: str,
-    seed_missing: bool,
-) -> GateResult:
+def classify(inputs: ClassifyInputs) -> GateResult:
     """Run the ASSERT + AUTO-LOWER state machine and return the verdict.
 
     For each provider in (measured u expected u already-seeded):
@@ -587,37 +410,10 @@ def classify(
                        AUTO-LOWER (monotone) and mark changed.
     """
     result = GateResult()
-    universe = set(totals) | measured | expected | set(baseline.providers)
-    for provider in sorted(universe):
-        current = totals.get(provider)
-        nc = int(new_code.get(provider, 0))
-        ceiling = baseline.ceiling(provider)
-        is_measured = provider in measured and provider not in errored
-
-        if not is_measured:
-            verdict = _classify_unmeasured(
-                provider=provider,
-                baseline=baseline,
-                expected=expected,
-                errored=errored,
-                current=current,
-                ceiling=ceiling,
-                new_code=nc,
-            )
-            if verdict is not None:
-                result.verdicts.append(verdict)
-            continue
-
-        verdict, changed = _classify_measured(
-            provider=provider,
-            baseline=baseline,
-            current=current,
-            ceiling=ceiling,
-            new_code=nc,
-            head_sha=head_sha,
-            seed_missing=seed_missing,
-        )
-        result.verdicts.append(verdict)
+    for provider in inputs.universe():
+        verdict, changed = _classify_one(provider, inputs)
+        if verdict is not None:
+            result.verdicts.append(verdict)
         if changed:
             result.changed = True
     return result
@@ -659,59 +455,40 @@ def write_baseline(path: Path, baseline: RatchetBaseline) -> None:
     )
 
 
-def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """Parse CLI arguments."""
+def _build_arg_parser() -> argparse.ArgumentParser:
+    """Construct the ratchet-gate CLI argument parser."""
     parser = argparse.ArgumentParser(
         description="Layer-1 monotonic ratchet gate.")
-    parser.add_argument("--canonical-json",
-                        required=True,
+    parser.add_argument("--canonical-json", required=True,
                         help="Path to quality-rollup/canonical.json.")
-    parser.add_argument(
-        "--ratchet-json",
-        required=True,
-        help="Path to the consumer repo's .quality/ratchet.json.",
-    )
-    parser.add_argument(
-        "--repo-dir",
-        required=True,
-        help="Path to the checked-out consumer repo (with git history).",
-    )
-    parser.add_argument(
-        "--profile-json",
-        default="",
-        help="Resolved profile.json (for expected-providers derivation).",
-    )
+    parser.add_argument("--ratchet-json", required=True,
+                        help="Path to the consumer repo's .quality/ratchet.json.")
+    parser.add_argument("--repo-dir", required=True,
+                        help="Path to the checked-out consumer repo (with git history).")
+    parser.add_argument("--profile-json", default="",
+                        help="Resolved profile.json (for expected-providers derivation).")
     parser.add_argument("--repo-slug", required=True)
-    parser.add_argument(
-        "--head-sha",
-        required=True,
-        help="Rollup SHA the findings' line numbers are anchored to.",
-    )
-    parser.add_argument(
-        "--base-ref",
-        default="",
-        help="Base branch ref (e.g. origin/main) for new-code diff.",
-    )
-    parser.add_argument("--out-md",
-                        default="",
+    parser.add_argument("--head-sha", required=True,
+                        help="Rollup SHA the findings' line numbers are anchored to.")
+    parser.add_argument("--base-ref", default="",
+                        help="Base branch ref (e.g. origin/main) for new-code diff.")
+    parser.add_argument("--out-md", default="",
                         help="Optional markdown report path.")
     parser.add_argument(
-        "--write",
-        action="store_true",
-        help="Persist auto-lowered/seeded baseline back to --ratchet-json.",
-    )
+        "--write", action="store_true",
+        help="Persist auto-lowered/seeded baseline back to --ratchet-json.")
     parser.add_argument(
-        "--seed",
-        action="store_true",
-        help=
-        "SEED mode: create ceilings for measured-but-unseeded providers (human-reviewed PR only).",
-    )
-    parser.add_argument(
-        "--github-output",
-        default="",
-        help="Optional path to write GITHUB_OUTPUT key/values.",
-    )
-    return parser.parse_args(argv)
+        "--seed", action="store_true",
+        help=("SEED mode: create ceilings for measured-but-unseeded providers "
+              "(human-reviewed PR only)."))
+    parser.add_argument("--github-output", default="",
+                        help="Optional path to write GITHUB_OUTPUT key/values.")
+    return parser
+
+
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """Parse CLI arguments."""
+    return _build_arg_parser().parse_args(argv)
 
 
 def _emit_github_output(path: str, result: GateResult) -> None:
@@ -726,6 +503,43 @@ def _emit_github_output(path: str, result: GateResult) -> None:
         pass
 
 
+def _load_profile(profile_json: str) -> Dict[str, Any]:
+    """Load the resolved profile.json, or an empty dict when absent."""
+    if profile_json and Path(profile_json).is_file():
+        return json.loads(Path(profile_json).read_text(encoding="utf-8"))
+    return {}
+
+
+def _build_classify_inputs(args: argparse.Namespace,
+                           canonical: Mapping[str, Any],
+                           added: Mapping[str, Set[int]]) -> ClassifyInputs:
+    """Assemble the :class:`ClassifyInputs` for one gate run."""
+    return ClassifyInputs(
+        baseline=load_baseline(Path(args.ratchet_json), args.repo_slug,
+                               args.head_sha),
+        totals=read_provider_totals(canonical),
+        new_code=count_new_code(canonical, added),
+        measured=measured_providers_from_canonical(canonical),
+        errored=providers_with_errors(canonical),
+        expected=expected_providers_from_profile(_load_profile(args.profile_json)),
+        head_sha=args.head_sha,
+        seed_missing=args.seed,
+    )
+
+
+def _emit_reports(args: argparse.Namespace, result: GateResult,
+                  inputs: ClassifyInputs) -> None:
+    """Write the markdown report, persist the baseline, and emit CI outputs."""
+    markdown = render_markdown(result, args.repo_slug, args.head_sha)
+    if args.out_md:
+        Path(args.out_md).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out_md).write_text(markdown, encoding="utf-8")
+    sys.stdout.write(markdown)
+    if args.write and (result.changed or args.seed):
+        write_baseline(Path(args.ratchet_json), inputs.baseline)
+    _emit_github_output(args.github_output, result)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the ratchet gate."""
     args = parse_args(argv)
@@ -734,11 +548,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"canonical.json not found: {canonical_path}", file=sys.stderr)
         return 2
     canonical = json.loads(canonical_path.read_text(encoding="utf-8"))
-
-    profile: Dict[str, Any] = {}
-    if args.profile_json and Path(args.profile_json).is_file():
-        profile = json.loads(
-            Path(args.profile_json).read_text(encoding="utf-8"))
 
     repo_dir = Path(args.repo_dir)
     try:
@@ -749,35 +558,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"::error::ratchet new-code diff failed: {exc}", file=sys.stderr)
         return 2
 
-    totals = read_provider_totals(canonical)
-    measured = measured_providers_from_canonical(canonical)
-    errored = providers_with_errors(canonical)
-    expected = expected_providers_from_profile(profile)
-    new_code = count_new_code(canonical, added)
-
-    baseline = load_baseline(Path(args.ratchet_json), args.repo_slug,
-                             args.head_sha)
-    result = classify(
-        baseline=baseline,
-        totals=totals,
-        new_code=new_code,
-        measured=measured,
-        errored=errored,
-        expected=expected,
-        head_sha=args.head_sha,
-        seed_missing=args.seed,
-    )
-
-    markdown = render_markdown(result, args.repo_slug, args.head_sha)
-    if args.out_md:
-        Path(args.out_md).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.out_md).write_text(markdown, encoding="utf-8")
-    sys.stdout.write(markdown)
-
-    if args.write and (result.changed or args.seed):
-        write_baseline(Path(args.ratchet_json), baseline)
-
-    _emit_github_output(args.github_output, result)
+    inputs = _build_classify_inputs(args, canonical, added)
+    result = classify(inputs)
+    _emit_reports(args, result, inputs)
     return 1 if result.failed else 0
 
 

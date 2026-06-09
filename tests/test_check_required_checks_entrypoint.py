@@ -54,7 +54,7 @@ class RequiredChecksEntrypointTests(unittest.TestCase):
             return_value=write_report_result,
         ) as writer:
             result = checks_module.main()
-        return result, cast(MagicMock, writer)
+        return result, cast("MagicMock", writer)
 
     def _assert_entrypoint_requires_contexts(
         self,

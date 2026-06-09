@@ -12,6 +12,8 @@ import yaml  # type: ignore[import-untyped]
 
 from scripts.quality.migrate_profiles_to_v2 import (
     main as migrate_main,
+)
+from scripts.quality.migrate_profiles_to_v2 import (
     migrate_profile,
     migrate_profile_file,
 )
@@ -262,8 +264,8 @@ class MigrateCLITests(unittest.TestCase):
             (profile_dir / "stray.yml").write_text(
                 "- just a list\n- not a dict\n", encoding="utf-8"
             )
-            from contextlib import redirect_stdout
             import io
+            from contextlib import redirect_stdout
 
             buf = io.StringIO()
             with redirect_stdout(buf):

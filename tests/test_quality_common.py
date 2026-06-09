@@ -8,9 +8,19 @@ import json
 import sys
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, List
+
+from tests._quality_common_helpers import (
+    inferred_coverage as _inferred_coverage_helper,
+)
+from tests._quality_common_helpers import (
+    normalized_explicit_coverage as _explicit_coverage_helper,
+)
+from tests._quality_common_helpers import (
+    temporary_cwd as _temporary_cwd,
+)
 
 from scripts.quality.common import (
     ReportSpec,
@@ -23,13 +33,6 @@ from scripts.quality.common import (
     safe_output_path,
     utc_timestamp,
     write_report,
-)
-
-
-from tests._quality_common_helpers import (
-    inferred_coverage as _inferred_coverage_helper,
-    normalized_explicit_coverage as _explicit_coverage_helper,
-    temporary_cwd as _temporary_cwd,
 )
 
 
@@ -97,7 +100,7 @@ class QualityCommonTests(unittest.TestCase):
         timestamp = utc_timestamp()
         parsed = datetime.fromisoformat(timestamp)
         self.assertIsNotNone(parsed.tzinfo)
-        self.assertEqual(parsed.tzinfo, timezone.utc)
+        self.assertEqual(parsed.tzinfo, UTC)
 
     def test_dedupe_strings_trims_skips_empty_and_preserves_first_seen_order(
         self,

@@ -11,13 +11,13 @@ import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
+from typing import List
 from unittest.mock import patch
+
+from tests._sonar_zero_helpers import SonarZeroHelpersMixin, raise_runtime_error
 
 from scripts.quality import check_sonar_zero
 from scripts.quality.check_sonar_zero import load_sonar_findings_with_retry
-from tests._sonar_zero_helpers import SonarZeroHelpersMixin, raise_runtime_error
-from typing import List
-
 
 _raise_runtime_error = raise_runtime_error
 
@@ -269,7 +269,7 @@ class SonarZeroEdgeTests(SonarZeroHelpersMixin, unittest.TestCase):
         """Cover main handles missing token success and report failures."""
         args = Namespace(
             project_key="Prekzursil_quality-zero-platform",
-            token=str(),
+            token="",
             branch="",
             pull_request="5",
             out_json="sonar-zero/sonar.json",

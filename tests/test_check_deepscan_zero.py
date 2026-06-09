@@ -7,12 +7,13 @@ import unittest
 from argparse import Namespace
 from unittest.mock import patch
 
-from scripts.quality import check_deepscan_zero
 from tests.script_entrypoint_support import (
     assert_in_process_entrypoint_failure,
     assert_main_reports_provider_failure,
     run_script_entrypoint_failure,
 )
+
+from scripts.quality import check_deepscan_zero
 
 
 def _placeholder_token(label: str) -> str:
@@ -391,7 +392,7 @@ class DeepScanZeroTests(unittest.TestCase):
             repo="",
             sha="",
             github_context="DeepScan",
-            token=str(),
+            token="",
             out_json="deepscan-zero/deepscan.json",
             out_md="deepscan-zero/deepscan.md",
         )

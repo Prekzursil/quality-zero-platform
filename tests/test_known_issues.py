@@ -8,7 +8,6 @@ from pathlib import Path
 
 from scripts.quality import known_issues as ki
 
-
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _REGISTRY_ROOT = _REPO_ROOT / "known-issues"
 

@@ -22,7 +22,7 @@ def _make_finding(category: str, file: str, line: int, **kwargs) -> Finding:
         file=file,
         line=line,
         end_line=kwargs.get("end_line", line),
-        column=kwargs.get("column", None),
+        column=kwargs.get("column"),
         category=category,
         category_group=kwargs.get("category_group", "quality"),
         severity="medium",

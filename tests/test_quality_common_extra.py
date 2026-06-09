@@ -6,6 +6,13 @@ from __future__ import absolute_import
 import unittest
 from unittest.mock import patch
 
+from tests._quality_common_helpers import (
+    inferred_coverage as _inferred_coverage_helper,
+)
+from tests._quality_common_helpers import (
+    normalized_explicit_coverage as _explicit_coverage_helper,
+)
+
 from scripts.quality import profile_coverage_normalization
 from scripts.quality.common import (
     _deep_merge,
@@ -13,16 +20,10 @@ from scripts.quality.common import (
     normalize_codex_environment,
     normalize_coverage,
     normalize_coverage_assert_mode,
+    normalize_coverage_setup,
     normalize_deps,
     normalize_issue_policy,
-    normalize_coverage_setup,
     normalize_java_setup,
-)
-
-
-from tests._quality_common_helpers import (
-    inferred_coverage as _inferred_coverage_helper,
-    normalized_explicit_coverage as _explicit_coverage_helper,
 )
 
 

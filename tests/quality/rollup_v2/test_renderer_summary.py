@@ -1,11 +1,10 @@
 """Tests for renderer provider summary table + alternate views (per design §4.1 + §A.1.1)."""
 from __future__ import absolute_import
 
-from typing import Tuple
-
 import sys
 import unittest
 from pathlib import Path
+from typing import Tuple
 
 if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))

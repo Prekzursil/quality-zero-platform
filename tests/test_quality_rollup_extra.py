@@ -8,14 +8,15 @@ import unittest
 from argparse import Namespace
 from email.message import Message
 from pathlib import Path
-from urllib.error import HTTPError
 from unittest.mock import patch
+from urllib.error import HTTPError
 
-from scripts.quality import build_quality_rollup, post_pr_quality_comment
 from tests.test_quality_rollup import (
     exercise_wait_for_contexts,
     pending_then_success_contexts,
 )
+
+from scripts.quality import build_quality_rollup, post_pr_quality_comment
 
 FAKE_GITHUB_CREDENTIAL = "gh-auth-placeholder"
 

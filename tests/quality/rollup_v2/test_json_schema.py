@@ -138,6 +138,7 @@ class JsonSchemaTests(unittest.TestCase):
     def test_pipeline_output_validates_against_schema(self) -> None:
         """Integration: run pipeline and validate each finding against schema."""
         import tempfile
+
         from scripts.quality.rollup_v2.pipeline import run_pipeline
 
         schema = _load_schema()

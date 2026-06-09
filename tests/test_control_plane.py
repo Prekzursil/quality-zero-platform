@@ -2,13 +2,14 @@ from __future__ import absolute_import
 
 import unittest
 
+from tests.control_plane_support import ROOT, ControlPlaneAssertions
+
 from scripts.quality.control_plane import (
     active_required_contexts,
     build_ruleset_payload,
     load_inventory,
     load_repo_profile,
 )
-from tests.control_plane_support import ControlPlaneAssertions, ROOT
 
 
 class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):

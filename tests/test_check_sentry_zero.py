@@ -13,8 +13,8 @@ from email.message import Message
 from importlib.machinery import ModuleSpec
 from pathlib import Path
 from typing import cast
-from urllib.error import HTTPError
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 from scripts.quality import check_sentry_zero as sentry_module
 
@@ -32,7 +32,7 @@ class SentryZeroTests(unittest.TestCase):
         )
         if spec is None or spec.loader is None:  # pragma: no cover
             self.fail("Expected a concrete module spec for check_sentry_zero")
-        module = importlib.util.module_from_spec(cast(ModuleSpec, spec))
+        module = importlib.util.module_from_spec(cast("ModuleSpec", spec))
         original_path = list(sys.path)
         sys.path = [entry for entry in sys.path if entry != repo_root]
         try:
@@ -305,9 +305,9 @@ class SentryZeroTests(unittest.TestCase):
     def test_main_returns_failure_payload_for_missing_inputs(self) -> None:
         """Return a failing report when the required Sentry inputs are missing."""
         args = Namespace(
-            org=str(),
+            org="",
             project=[],
-            token=str(),
+            token="",
             out_json="sentry-zero/sentry.json",
             out_md="sentry-zero/sentry.md",
         )

@@ -209,12 +209,12 @@ class DefensiveProfileShapeTests(unittest.TestCase):
         self.assertEqual(len(triggers), 1)
 
 
-_NOW = dt.datetime(2026, 4, 23, tzinfo=dt.timezone.utc)
+_NOW = dt.datetime(2026, 4, 23, tzinfo=dt.UTC)
 
 
 def _utc(year: int, month: int, day: int) -> dt.datetime:
     """Convenience builder for UTC ``dt.datetime`` fixtures."""
-    return dt.datetime(year, month, day, tzinfo=dt.timezone.utc)
+    return dt.datetime(year, month, day, tzinfo=dt.UTC)
 
 
 class _AgeDetectorScenario:

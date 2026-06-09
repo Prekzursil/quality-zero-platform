@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 import yaml
+from tests.control_plane_support import ROOT
 
 from scripts.quality.control_plane import active_required_contexts, load_inventory, load_repo_profile
 from scripts.quality.render_repo_baseline import (
@@ -15,7 +16,6 @@ from scripts.quality.render_repo_baseline import (
     render_repo_baseline,
     render_security_policy,
 )
-from tests.control_plane_support import ROOT
 
 
 class SecurityBaselineProfileTests(unittest.TestCase):

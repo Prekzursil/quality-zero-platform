@@ -12,8 +12,8 @@ from argparse import Namespace
 from email.message import Message
 from pathlib import Path
 from typing import List
-from urllib.error import HTTPError
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 import scripts.quality.check_codacy_zero as check_codacy_zero
 from scripts.quality import codacy_zero_support

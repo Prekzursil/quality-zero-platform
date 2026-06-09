@@ -11,9 +11,8 @@ import datetime as dt
 import unittest
 from unittest.mock import MagicMock
 
-from scripts.quality import alert_dispatch
+from scripts.quality import alert_dispatch, alerts
 from scripts.quality import alert_triggers as at
-from scripts.quality import alerts
 
 
 class DispatchDetectedTriggersTests(unittest.TestCase):
@@ -84,7 +83,7 @@ class BuildTriggersFromFleetStateTests(unittest.TestCase):
         """Coverage regression + deadline missed + flag missing all fire."""
         state = {
             "today": dt.date(2026, 4, 23),
-            "now": dt.datetime(2026, 4, 23, tzinfo=dt.timezone.utc),
+            "now": dt.datetime(2026, 4, 23, tzinfo=dt.UTC),
             "profiles": [
                 {
                     "slug": "org/cov-drop",
@@ -112,7 +111,7 @@ class BuildTriggersFromFleetStateTests(unittest.TestCase):
                 {
                     "slug": "org/stale",
                     "issue_number": 7,
-                    "opened_at": dt.datetime(2026, 4, 10, tzinfo=dt.timezone.utc),
+                    "opened_at": dt.datetime(2026, 4, 10, tzinfo=dt.UTC),
                 },
             ],
             "drift_prs": [],
@@ -130,7 +129,7 @@ class BuildTriggersFromFleetStateTests(unittest.TestCase):
         """All-empty inputs → zero triggers."""
         state = {
             "today": dt.date(2026, 4, 23),
-            "now": dt.datetime(2026, 4, 23, tzinfo=dt.timezone.utc),
+            "now": dt.datetime(2026, 4, 23, tzinfo=dt.UTC),
             "profiles": [],
             "bypass_issues": [],
             "drift_prs": [],
@@ -144,7 +143,7 @@ class BuildTriggersFromFleetStateTests(unittest.TestCase):
         """Empty staging_results → no fleet-bump alert (no wave happened)."""
         state = {
             "today": dt.date(2026, 4, 23),
-            "now": dt.datetime(2026, 4, 23, tzinfo=dt.timezone.utc),
+            "now": dt.datetime(2026, 4, 23, tzinfo=dt.UTC),
             "profiles": [],
             "bypass_issues": [],
             "drift_prs": [],
@@ -161,14 +160,14 @@ class BuildTriggersFromFleetStateTests(unittest.TestCase):
         """Drift PR open > 3 days in state → drift-stuck trigger."""
         state = {
             "today": dt.date(2026, 4, 23),
-            "now": dt.datetime(2026, 4, 23, tzinfo=dt.timezone.utc),
+            "now": dt.datetime(2026, 4, 23, tzinfo=dt.UTC),
             "profiles": [],
             "bypass_issues": [],
             "drift_prs": [
                 {
                     "slug": "org/slow-repo",
                     "pr_number": 77,
-                    "opened_at": dt.datetime(2026, 4, 18, tzinfo=dt.timezone.utc),
+                    "opened_at": dt.datetime(2026, 4, 18, tzinfo=dt.UTC),
                 },
             ],
             "staging_results": [],
@@ -186,7 +185,7 @@ class BuildTriggersFromFleetStateTests(unittest.TestCase):
         """Staging failures + recipe name → bump alert fires."""
         state = {
             "today": dt.date(2026, 4, 23),
-            "now": dt.datetime(2026, 4, 23, tzinfo=dt.timezone.utc),
+            "now": dt.datetime(2026, 4, 23, tzinfo=dt.UTC),
             "profiles": [],
             "bypass_issues": [],
             "drift_prs": [],

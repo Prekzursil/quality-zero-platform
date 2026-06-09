@@ -261,16 +261,15 @@ class MainEntrypointTests(unittest.TestCase):
         self.addCleanup(path.unlink, missing_ok=True)
         with patch.object(
             apr, "_run_drift_pr", return_value=42
-        ) as run_mock:
-            with patch(
-                "sys.argv",
-                [
-                    "apply_drift_pr.py",
-                    "--report", str(path),
-                    "--repo-slug", "x/y",
-                ],
-            ):
-                rc = apr.main()
+        ) as run_mock, patch(
+            "sys.argv",
+            [
+                "apply_drift_pr.py",
+                "--report", str(path),
+                "--repo-slug", "x/y",
+            ],
+        ):
+            rc = apr.main()
         self.assertEqual(rc, 42)
         run_mock.assert_called_once()
 

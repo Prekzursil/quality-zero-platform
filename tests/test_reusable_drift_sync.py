@@ -14,7 +14,6 @@ from pathlib import Path
 
 import yaml  # type: ignore[import-untyped]
 
-
 _WORKFLOW = (
     Path(__file__).resolve().parents[1]
     / ".github" / "workflows" / "reusable-drift-sync.yml"

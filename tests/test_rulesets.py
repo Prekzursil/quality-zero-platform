@@ -9,7 +9,6 @@ from scripts.quality.control_plane import (
     load_repo_profile,
 )
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 

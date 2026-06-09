@@ -10,15 +10,13 @@ from pathlib import Path
 from typing import List
 from unittest.mock import patch
 
-from scripts.quality.common import DEFAULT_COVERAGE_JSON, DEFAULT_COVERAGE_MD
-
-from scripts.quality import run_coverage_gate
-
-
 from tests._run_coverage_gate_helpers import (
     assert_run_shell_invocation,
     make_coverage_assert_fixture,
 )
+
+from scripts.quality import run_coverage_gate
+from scripts.quality.common import DEFAULT_COVERAGE_JSON, DEFAULT_COVERAGE_MD
 
 
 class RunCoverageGateTests(unittest.TestCase):

@@ -16,12 +16,12 @@ from scripts.quality.assert_coverage_100 import (
     _matches_required_source,
     _normalize_source_path,
     _required_source_findings,
-    parse_coverage_xml,
-    parse_lcov,
-    parse_named_path,
     coverage_sources_from_lcov,
     coverage_sources_from_xml,
     evaluate,
+    parse_coverage_xml,
+    parse_lcov,
+    parse_named_path,
 )
 from scripts.quality.coverage_support import (
     _existing_repo_file_candidate,

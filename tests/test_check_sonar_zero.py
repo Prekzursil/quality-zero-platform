@@ -5,12 +5,13 @@ from __future__ import absolute_import
 import argparse
 import unittest
 from argparse import Namespace
+from typing import List
 from unittest.mock import patch
+
+from tests._sonar_zero_helpers import SonarZeroHelpersMixin
 
 from scripts.quality import check_sonar_zero
 from scripts.quality.check_sonar_zero import load_sonar_findings_with_retry
-from tests._sonar_zero_helpers import SonarZeroHelpersMixin
-from typing import List
 
 
 class SonarZeroTests(SonarZeroHelpersMixin, unittest.TestCase):

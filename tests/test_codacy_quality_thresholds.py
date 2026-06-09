@@ -6,8 +6,8 @@ import unittest
 from typing import Any, Dict
 
 from scripts.quality.codacy_quality_thresholds import (
-    CodacyQualitySnapshot,
     DEFAULT_COVERAGE_FLOOR,
+    CodacyQualitySnapshot,
     evaluate_quality_thresholds,
     fetch_repository_quality,
     parse_quality_snapshot,

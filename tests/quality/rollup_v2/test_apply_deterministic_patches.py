@@ -381,9 +381,8 @@ class CLITests(unittest.TestCase):
                         "--repo-dir", ".",
                         "--out-json", "../../escape.json",
                     ],
-                ):
-                    with self.assertRaises(ValueError) as ctx:
-                        main()
+                ), self.assertRaises(ValueError) as ctx:
+                    main()
                 self.assertIn("escapes workspace root", str(ctx.exception))
             finally:
                 os.chdir(original_cwd)

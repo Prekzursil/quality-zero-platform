@@ -121,14 +121,14 @@ class SonarCoverageExclusionsContract(unittest.TestCase):
 
         self.assertFalse(
             missing,
-            f"Files outside tool.coverage.run.source but missing from "
-            f"sonar.coverage.exclusions:\n  "
+            "Files outside tool.coverage.run.source but missing from "
+            "sonar.coverage.exclusions:\n  "
             + "\n  ".join(sorted(missing)),
         )
         self.assertFalse(
             extra,
-            f"sonar.coverage.exclusions has stale entries (file does not exist "
-            f"or is now in tool.coverage.run.source):\n  "
+            "sonar.coverage.exclusions has stale entries (file does not exist "
+            "or is now in tool.coverage.run.source):\n  "
             + "\n  ".join(sorted(extra)),
         )
 

@@ -3,9 +3,9 @@
 from __future__ import absolute_import
 
 import unittest
+from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.parse import urlparse
-from unittest.mock import patch
 
 from scripts import security_helpers
 

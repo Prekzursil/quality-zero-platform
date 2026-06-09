@@ -9,6 +9,7 @@ exit 0 / 1 / 2 arcs plus the git-error fail-loud path.
 
 from __future__ import absolute_import
 
+import os
 import subprocess
 import tempfile
 import unittest
@@ -17,12 +18,41 @@ from typing import List, Sequence
 
 from scripts.quality import check_blocked_paths as cbp
 
+# Environment variables that pin git to an ambient repository, overriding the
+# ``cwd`` of any ``git`` subprocess. They MUST be cleared for these tests: when
+# the suite runs under the pre-push hook (or a CI checkout step) the host
+# exports ``GIT_DIR`` etc., which would redirect both this module's ``_git``
+# helper *and* the production ``check_blocked_paths`` subprocess away from the
+# temp repo and onto the host repo -- silently rewriting the checked-out branch
+# and failing the diff assertions. The fixture scrubs them from ``os.environ``
+# so every git call (test helper and product code alike) stays in the tempdir.
+_GIT_LEAK_VARS: Sequence[str] = (
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_COMMON_DIR",
+    "GIT_NAMESPACE",
+    "GIT_CEILING_DIRECTORIES",
+)
+
 
 def _git(args: Sequence[str], cwd: Path) -> None:
-    """Run a git command in ``cwd``, failing loud on a nonzero exit."""
+    """Run a git command in ``cwd``, failing loud on a nonzero exit.
+
+    Identity is supplied explicitly so ``git commit`` succeeds even on a CI
+    runner with no global git config; the leak vars above are scrubbed by the
+    test fixture before this runs.
+    """
+    env = dict(os.environ)
+    env["GIT_AUTHOR_NAME"] = "Test"
+    env["GIT_AUTHOR_EMAIL"] = "test@test.com"
+    env["GIT_COMMITTER_NAME"] = "Test"
+    env["GIT_COMMITTER_EMAIL"] = "test@test.com"
     subprocess.run(  # noqa: S603
         ["git", *args],  # noqa: S607
         cwd=cwd,
+        env=env,
         capture_output=True,
         check=True,
     )
@@ -125,19 +155,29 @@ class _GitRepoTestCase(unittest.TestCase):
     """Base case providing an initialised temp git repo with one commit."""
 
     def setUp(self) -> None:
-        """Create a temp git repo with a benign committed baseline."""
+        """Create a temp git repo with a benign committed baseline.
+
+        Leak vars are stripped from ``os.environ`` first (and restored in
+        :meth:`tearDown`) so neither the ``_git`` helper nor the production
+        ``check_blocked_paths`` subprocess can escape the tempdir onto the host
+        repository.
+        """
+        self._saved_env = {
+            name: os.environ.pop(name)
+            for name in _GIT_LEAK_VARS
+            if name in os.environ
+        }
         self._tmpdir = tempfile.TemporaryDirectory()
         self.repo_dir = Path(self._tmpdir.name)
         _git(["init"], self.repo_dir)
-        _git(["config", "user.email", "test@test.com"], self.repo_dir)
-        _git(["config", "user.name", "Test"], self.repo_dir)
         (self.repo_dir / "keep.txt").write_text("seed\n", encoding="utf-8")
         _git(["add", "."], self.repo_dir)
         _git(["commit", "-m", "init"], self.repo_dir)
 
     def tearDown(self) -> None:
-        """Remove the temp repo."""
+        """Remove the temp repo and restore the scrubbed environment."""
         self._tmpdir.cleanup()
+        os.environ.update(self._saved_env)
 
 
 class ChangedFilesTests(_GitRepoTestCase):

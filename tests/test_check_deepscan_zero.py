@@ -78,10 +78,12 @@ class DeepScanZeroTests(unittest.TestCase):
             self.assertEqual(
                 check_deepscan_zero._evaluate_deepscan_policy(
                     args,
-                    policy_mode="github_check_context",
-                    token="-".join(["service", "credential"]),
-                    github_token=github_token,
-                    open_issues_url="https://deepscan.io/project/issues",
+                    check_deepscan_zero.DeepScanEvaluationInputs(
+                        token="-".join(["service", "credential"]),
+                        github_token=github_token,
+                        policy_mode="github_check_context",
+                        open_issues_url="https://deepscan.io/project/issues",
+                    ),
                 ),
                 (0, "https://deepscan.io", []),
             )
@@ -93,10 +95,12 @@ class DeepScanZeroTests(unittest.TestCase):
             self.assertEqual(
                 check_deepscan_zero._evaluate_deepscan_policy(
                     args,
-                    policy_mode="open_issues_url",
-                    token=_placeholder_token("api"),
-                    github_token=github_token,
-                    open_issues_url="https://deepscan.io/project/issues",
+                    check_deepscan_zero.DeepScanEvaluationInputs(
+                        token=_placeholder_token("api"),
+                        github_token=github_token,
+                        policy_mode="open_issues_url",
+                        open_issues_url="https://deepscan.io/project/issues",
+                    ),
                 ),
                 (0, "https://deepscan.io/project/issues", []),
             )
@@ -280,6 +284,7 @@ class DeepScanZeroTests(unittest.TestCase):
         api_token = _placeholder_token("api")
 
         def _status_by_sha(repo: str, sha: str, token: str) -> dict:
+            """Return a successful DeepScan status only for the PR head SHA."""
             if sha == "head-sha":
                 return {
                     "statuses": [
@@ -317,6 +322,7 @@ class DeepScanZeroTests(unittest.TestCase):
         api_token = _placeholder_token("api")
 
         def _status_by_sha(repo: str, sha: str, token: str) -> dict:
+            """Return a failing DeepScan status only for the PR head SHA."""
             if sha == "head-sha":
                 return {
                     "statuses": [
@@ -357,6 +363,7 @@ class DeepScanZeroTests(unittest.TestCase):
         api_token = _placeholder_token("api")
 
         def _status_by_sha(repo: str, sha: str, token: str) -> dict:
+            """Return a successful DeepScan status only for the second PR head."""
             if sha == "head-two":
                 return {
                     "statuses": [
@@ -420,15 +427,30 @@ class DeepScanZeroTests(unittest.TestCase):
         """Cover validate deepscan inputs accepts github check context mode."""
         api_token = _placeholder_token("api")
         findings = check_deepscan_zero._validate_deepscan_inputs(
-            token=api_token,
-            policy_mode="github_check_context",
-            open_issues_url="",
-            github_token=_placeholder_token("github"),
-            repo="Prekzursil/quality-zero-platform",
-            sha="abc123",
+            check_deepscan_zero.DeepScanEvaluationInputs(
+                token=api_token,
+                github_token=_placeholder_token("github"),
+                policy_mode="github_check_context",
+                open_issues_url="",
+            ),
+            "Prekzursil/quality-zero-platform",
+            "abc123",
         )
 
         self.assertEqual(findings, [])
+
+        open_issue_findings = check_deepscan_zero._validate_deepscan_inputs(
+            check_deepscan_zero.DeepScanEvaluationInputs(
+                token=api_token,
+                github_token="",
+                policy_mode="open_issues_url",
+                open_issues_url="https://deepscan.io/project/issues",
+            ),
+            "",
+            "",
+        )
+
+        self.assertEqual(open_issue_findings, [])
 
     def test_extract_total_open_request_json_and_repo_sha_helpers_cover_edge_cases(
         self,
@@ -507,47 +529,6 @@ class DeepScanZeroTests(unittest.TestCase):
             findings,
             ["DeepScan response did not include a parseable total issue count."],
         )
-
-    def test_keyword_only_guards_reject_positional_and_unexpected_arguments(
-        self,
-    ) -> None:
-        """Cover keyword only guards reject positional and unexpected arguments."""
-        with self.assertRaisesRegex(TypeError, "expects keyword arguments only"):
-            check_deepscan_zero._validate_deepscan_inputs("unexpected")
-
-        with self.assertRaisesRegex(
-            TypeError, "Unexpected _validate_deepscan_inputs parameters: extra"
-        ):
-            check_deepscan_zero._validate_deepscan_inputs(
-                token=_placeholder_token("api"),
-                policy_mode="open_issues_url",
-                open_issues_url="https://deepscan.io/project/issues",
-                github_token=_placeholder_token("github"),
-                repo="Prekzursil/quality-zero-platform",
-                sha="abc123",
-                extra=True,
-            )
-
-        args = Namespace(
-            policy_mode="",
-            repo="Prekzursil/quality-zero-platform",
-            sha="abc123",
-            github_context="DeepScan",
-        )
-        with self.assertRaisesRegex(TypeError, "expects keyword arguments only"):
-            check_deepscan_zero._evaluate_deepscan_policy(args, "unexpected")
-
-        with self.assertRaisesRegex(
-            TypeError, "Unexpected _evaluate_deepscan_policy parameters: extra"
-        ):
-            check_deepscan_zero._evaluate_deepscan_policy(
-                args,
-                policy_mode="open_issues_url",
-                token=_placeholder_token("api"),
-                github_token=_placeholder_token("github"),
-                open_issues_url="https://deepscan.io/project/issues",
-                extra=True,
-            )
 
     def test_status_helpers_and_policy_dispatch_cover_failure_branches(self) -> None:
         """Cover status helpers and policy dispatch cover failure branches."""

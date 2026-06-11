@@ -67,9 +67,10 @@ class CliExitCodeTests(unittest.TestCase):
     def _run_capture(argv: list):
         """Invoke ``main()`` capturing ``(rc, stdout, stderr)``."""
         out, err = io.StringIO(), io.StringIO()
-        with patch.object(sys, "argv", ["verify_v2_deployment.py", *argv]):
-            with redirect_stdout(out), redirect_stderr(err):
-                rc = vv.main()
+        with patch.object(
+            sys, "argv", ["verify_v2_deployment.py", *argv]
+        ), redirect_stdout(out), redirect_stderr(err):
+            rc = vv.main()
         return rc, out.getvalue(), err.getvalue()
 
     def test_missing_repo_root_returns_2(self) -> None:

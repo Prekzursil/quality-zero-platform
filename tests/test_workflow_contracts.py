@@ -558,12 +558,16 @@ class WorkflowContractTests(unittest.TestCase):
             "DeepSource JavaScript coverage report must not be ||true-suppressed",
         )
         # Both steps should fail loud when their respective secrets are
-        # missing — preflight checks emit ``::error::`` and exit 1.
-        self.assertIn(
-            "CODACY_PROJECT_TOKEN secret is missing",
-            text,
-            "Workflow must emit an actionable error when CODACY_PROJECT_TOKEN is missing",
-        ) if "set -euo pipefail" in codacy_block else None  # action-based step path
+        # missing — preflight checks emit ``::error::`` and exit 1. The
+        # Codacy preflight message is only required on the script-based
+        # step path; the action-based path has no shell preflight.
+        if "set -euo pipefail" in codacy_block:
+            self.assertIn(
+                "CODACY_PROJECT_TOKEN secret is missing",
+                text,
+                "Workflow must emit an actionable error when "
+                "CODACY_PROJECT_TOKEN is missing",
+            )
         self.assertIn(
             "DEEPSOURCE_DSN secret is missing",
             text,

@@ -79,10 +79,12 @@ class DeepScanZeroTests(unittest.TestCase):
             self.assertEqual(
                 check_deepscan_zero._evaluate_deepscan_policy(
                     args,
-                    policy_mode="github_check_context",
-                    token="-".join(["service", "credential"]),
-                    github_token=github_token,
-                    open_issues_url="https://deepscan.io/project/issues",
+                    check_deepscan_zero.DeepScanEvaluationInputs(
+                        token="-".join(["service", "credential"]),
+                        github_token=github_token,
+                        policy_mode="github_check_context",
+                        open_issues_url="https://deepscan.io/project/issues",
+                    ),
                 ),
                 (0, "https://deepscan.io", []),
             )
@@ -94,10 +96,12 @@ class DeepScanZeroTests(unittest.TestCase):
             self.assertEqual(
                 check_deepscan_zero._evaluate_deepscan_policy(
                     args,
-                    policy_mode="open_issues_url",
-                    token=_placeholder_token("api"),
-                    github_token=github_token,
-                    open_issues_url="https://deepscan.io/project/issues",
+                    check_deepscan_zero.DeepScanEvaluationInputs(
+                        token=_placeholder_token("api"),
+                        github_token=github_token,
+                        policy_mode="open_issues_url",
+                        open_issues_url="https://deepscan.io/project/issues",
+                    ),
                 ),
                 (0, "https://deepscan.io/project/issues", []),
             )
@@ -173,7 +177,13 @@ class DeepScanZeroTests(unittest.TestCase):
     def test_github_check_context_mode_fails_when_deepscan_status_is_missing(
         self,
     ) -> None:
-        """Missing DeepScan status must red-block (strict-zero contract)."""
+        """Missing DeepScan status (and no PR head) must red-block.
+
+        The DeepScan App is a PR-only reporter, so a squash-merge commit
+        never carries a ``DeepScan`` status. The gate first falls back to the
+        commit's associated pull requests; when there are none either, the
+        strict-zero contract still red-blocks.
+        """
         args = Namespace(repo="Prekzursil/quality-zero-platform", sha="abc123")
         api_token = _placeholder_token("api")
 
@@ -181,6 +191,10 @@ class DeepScanZeroTests(unittest.TestCase):
             check_deepscan_zero,
             "_github_status_payload",
             return_value={"statuses": []},
+        ), patch.object(
+            check_deepscan_zero,
+            "_commit_pulls",
+            return_value=[],
         ):
             open_issues, source_url, findings = (
                 check_deepscan_zero._evaluate_github_check_context(
@@ -199,8 +213,9 @@ class DeepScanZeroTests(unittest.TestCase):
 
         Previously the gate silently passed when no DeepScan status was
         published for a push/workflow_dispatch event. The user explicitly
-        asked for the inverse — a missing status means DeepScan isn't
-        integrated and the lane must red-block until it is.
+        asked for the inverse — a missing status (and no PR head carrying one)
+        means DeepScan isn't integrated and the lane must red-block until it
+        is.
         """
         args = Namespace(repo="Prekzursil/quality-zero-platform", sha="abc123")
         api_token = _placeholder_token("api")
@@ -211,6 +226,192 @@ class DeepScanZeroTests(unittest.TestCase):
             check_deepscan_zero,
             "_github_status_payload",
             return_value={"statuses": []},
+        ), patch.object(
+            check_deepscan_zero,
+            "_commit_pulls",
+            return_value=[],
+        ):
+            open_issues, source_url, findings = (
+                check_deepscan_zero._evaluate_github_check_context(
+                    args, token=api_token
+                )
+            )
+
+        self.assertIsNone(open_issues)
+        self.assertEqual(source_url, "")
+        self.assertEqual(len(findings), 1)
+        self.assertIn("missing", findings[0])
+
+    def test_commit_pulls_returns_list_payload_and_guards_non_list(self) -> None:
+        """Resolve the commit's pull requests via the GitHub API (list-guarded)."""
+        api_token = _placeholder_token("api")
+        with patch(
+            "scripts.quality.check_deepscan_zero.load_json_https",
+            return_value=([{"number": 7}], {}),
+        ) as loader:
+            pulls = check_deepscan_zero._commit_pulls(
+                "Prekzursil/quality-zero-platform", "merge-sha", api_token
+            )
+        self.assertEqual(pulls, [{"number": 7}])
+        self.assertEqual(
+            loader.call_args.args[0],
+            "https://api.github.com/repos/Prekzursil/quality-zero-platform"
+            "/commits/merge-sha/pulls",
+        )
+        self.assertEqual(loader.call_args.kwargs["allowed_hosts"], {"api.github.com"})
+
+        with patch(
+            "scripts.quality.check_deepscan_zero.load_json_https",
+            return_value=({"unexpected": "dict"}, {}),
+        ):
+            self.assertEqual(
+                check_deepscan_zero._commit_pulls(
+                    "Prekzursil/quality-zero-platform", "merge-sha", api_token
+                ),
+                [],
+            )
+
+    def test_github_check_context_falls_back_to_pr_head_when_merge_missing(
+        self,
+    ) -> None:
+        """Merge SHA missing DeepScan must pass when the PR head carries it.
+
+        The DeepScan App posts ``DeepScan`` on the PR head, never the
+        squash-merge commit. The gate resolves the commit's pulls and reuses
+        the combined-status read against each head; a successful DeepScan
+        status on the head passes the gate.
+        """
+        args = Namespace(repo="Prekzursil/quality-zero-platform", sha="merge-sha")
+        api_token = _placeholder_token("api")
+
+        def _status_by_sha(repo: str, sha: str, token: str) -> dict:
+            """Return a successful DeepScan status only for the PR head SHA."""
+            if sha == "head-sha":
+                return {
+                    "statuses": [
+                        {
+                            "context": "DeepScan",
+                            "state": "success",
+                            "target_url": "https://deepscan.io/head",
+                        }
+                    ]
+                }
+            return {"statuses": []}
+
+        with patch.object(
+            check_deepscan_zero,
+            "_github_status_payload",
+            side_effect=_status_by_sha,
+        ), patch.object(
+            check_deepscan_zero,
+            "_commit_pulls",
+            return_value=[{"head": {"sha": "head-sha"}}],
+        ):
+            open_issues, source_url, findings = (
+                check_deepscan_zero._evaluate_github_check_context(
+                    args, token=api_token
+                )
+            )
+
+        self.assertEqual(open_issues, 0)
+        self.assertEqual(source_url, "https://deepscan.io/head")
+        self.assertEqual(findings, [])
+
+    def test_github_check_context_propagates_pr_head_failure_state(self) -> None:
+        """A non-success DeepScan status on the PR head propagates its finding."""
+        args = Namespace(repo="Prekzursil/quality-zero-platform", sha="merge-sha")
+        api_token = _placeholder_token("api")
+
+        def _status_by_sha(repo: str, sha: str, token: str) -> dict:
+            """Return a failing DeepScan status only for the PR head SHA."""
+            if sha == "head-sha":
+                return {
+                    "statuses": [
+                        {
+                            "context": "DeepScan",
+                            "state": "failure",
+                            "target_url": "https://deepscan.io/head",
+                        }
+                    ]
+                }
+            return {"statuses": []}
+
+        with patch.object(
+            check_deepscan_zero,
+            "_github_status_payload",
+            side_effect=_status_by_sha,
+        ), patch.object(
+            check_deepscan_zero,
+            "_commit_pulls",
+            return_value=[{"head": {"sha": "head-sha"}}],
+        ):
+            open_issues, source_url, findings = (
+                check_deepscan_zero._evaluate_github_check_context(
+                    args, token=api_token
+                )
+            )
+
+        self.assertIsNone(open_issues)
+        self.assertEqual(source_url, "https://deepscan.io/head")
+        self.assertEqual(
+            findings,
+            ["DeepScan GitHub status is failure (expected success)."],
+        )
+
+    def test_github_check_context_scans_multiple_pr_heads_for_deepscan(self) -> None:
+        """The fallback continues past heads without DeepScan to one that has it."""
+        args = Namespace(repo="Prekzursil/quality-zero-platform", sha="merge-sha")
+        api_token = _placeholder_token("api")
+
+        def _status_by_sha(repo: str, sha: str, token: str) -> dict:
+            """Return a successful DeepScan status only for the second PR head."""
+            if sha == "head-two":
+                return {
+                    "statuses": [
+                        {
+                            "context": "DeepScan",
+                            "state": "success",
+                            "target_url": "https://deepscan.io/two",
+                        }
+                    ]
+                }
+            return {"statuses": []}
+
+        with patch.object(
+            check_deepscan_zero,
+            "_github_status_payload",
+            side_effect=_status_by_sha,
+        ), patch.object(
+            check_deepscan_zero,
+            "_commit_pulls",
+            return_value=[
+                {"head": {"sha": "head-one"}},
+                {"head": {"sha": "head-two"}},
+            ],
+        ):
+            open_issues, source_url, findings = (
+                check_deepscan_zero._evaluate_github_check_context(
+                    args, token=api_token
+                )
+            )
+
+        self.assertEqual(open_issues, 0)
+        self.assertEqual(source_url, "https://deepscan.io/two")
+        self.assertEqual(findings, [])
+
+    def test_github_check_context_skips_pulls_without_head_sha(self) -> None:
+        """A pull entry lacking a head sha is skipped, then missing red-blocks."""
+        args = Namespace(repo="Prekzursil/quality-zero-platform", sha="merge-sha")
+        api_token = _placeholder_token("api")
+
+        with patch.object(
+            check_deepscan_zero,
+            "_github_status_payload",
+            return_value={"statuses": []},
+        ), patch.object(
+            check_deepscan_zero,
+            "_commit_pulls",
+            return_value=[{"head": {}}, {}],
         ):
             open_issues, source_url, findings = (
                 check_deepscan_zero._evaluate_github_check_context(
@@ -227,15 +428,30 @@ class DeepScanZeroTests(unittest.TestCase):
         """Cover validate deepscan inputs accepts github check context mode."""
         api_token = _placeholder_token("api")
         findings = check_deepscan_zero._validate_deepscan_inputs(
-            token=api_token,
-            policy_mode="github_check_context",
-            open_issues_url="",
-            github_token=_placeholder_token("github"),
-            repo="Prekzursil/quality-zero-platform",
-            sha="abc123",
+            check_deepscan_zero.DeepScanEvaluationInputs(
+                token=api_token,
+                github_token=_placeholder_token("github"),
+                policy_mode="github_check_context",
+                open_issues_url="",
+            ),
+            "Prekzursil/quality-zero-platform",
+            "abc123",
         )
 
         self.assertEqual(findings, [])
+
+        open_issue_findings = check_deepscan_zero._validate_deepscan_inputs(
+            check_deepscan_zero.DeepScanEvaluationInputs(
+                token=api_token,
+                github_token="",
+                policy_mode="open_issues_url",
+                open_issues_url="https://deepscan.io/project/issues",
+            ),
+            "",
+            "",
+        )
+
+        self.assertEqual(open_issue_findings, [])
 
     def test_extract_total_open_request_json_and_repo_sha_helpers_cover_edge_cases(
         self,
@@ -314,47 +530,6 @@ class DeepScanZeroTests(unittest.TestCase):
             findings,
             ["DeepScan response did not include a parseable total issue count."],
         )
-
-    def test_keyword_only_guards_reject_positional_and_unexpected_arguments(
-        self,
-    ) -> None:
-        """Cover keyword only guards reject positional and unexpected arguments."""
-        with self.assertRaisesRegex(TypeError, "expects keyword arguments only"):
-            check_deepscan_zero._validate_deepscan_inputs("unexpected")
-
-        with self.assertRaisesRegex(
-            TypeError, "Unexpected _validate_deepscan_inputs parameters: extra"
-        ):
-            check_deepscan_zero._validate_deepscan_inputs(
-                token=_placeholder_token("api"),
-                policy_mode="open_issues_url",
-                open_issues_url="https://deepscan.io/project/issues",
-                github_token=_placeholder_token("github"),
-                repo="Prekzursil/quality-zero-platform",
-                sha="abc123",
-                extra=True,
-            )
-
-        args = Namespace(
-            policy_mode="",
-            repo="Prekzursil/quality-zero-platform",
-            sha="abc123",
-            github_context="DeepScan",
-        )
-        with self.assertRaisesRegex(TypeError, "expects keyword arguments only"):
-            check_deepscan_zero._evaluate_deepscan_policy(args, "unexpected")
-
-        with self.assertRaisesRegex(
-            TypeError, "Unexpected _evaluate_deepscan_policy parameters: extra"
-        ):
-            check_deepscan_zero._evaluate_deepscan_policy(
-                args,
-                policy_mode="open_issues_url",
-                token=_placeholder_token("api"),
-                github_token=_placeholder_token("github"),
-                open_issues_url="https://deepscan.io/project/issues",
-                extra=True,
-            )
 
     def test_status_helpers_and_policy_dispatch_cover_failure_branches(self) -> None:
         """Cover status helpers and policy dispatch cover failure branches."""

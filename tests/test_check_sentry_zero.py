@@ -135,16 +135,26 @@ class SentryZeroTests(unittest.TestCase):
             ],
         )
 
-    def test_issues_url_and_render_md_cover_empty_state_reporting(self) -> None:
-        """Render the zero-findings markdown shape for empty project results."""
+    def test_issues_url_targets_org_scoped_unresolved_endpoint(self) -> None:
+        """Build the org-scoped unresolved-issues endpoint (org token valid here).
+
+        The legacy project-slug endpoint
+        ``/projects/<org>/<project>/issues/`` 401s for a valid ORG-scoped
+        token, so the gate migrated to ``/organizations/<org>/issues/``
+        which the platform's already-valid SENTRY_AUTH_TOKEN can read. The
+        org endpoint keys ``project`` by NUMERIC id, so we omit it and count
+        org-wide (the platform org hosts a single project).
+        """
         self.assertEqual(
-            sentry_module._issues_url("prek/zursil", "event link"),
+            sentry_module._issues_url("prek/zursil"),
             (
-                "https://sentry.io/api/0/projects/prek%2Fzursil/"
-                "event%20link/issues/?query=is%3Aunresolved&limit=1"
-                "&project=event%2520link"
+                "https://sentry.io/api/0/organizations/prek%2Fzursil/"
+                "issues/?query=is%3Aunresolved&limit=1"
             ),
         )
+
+    def test_render_md_covers_empty_state_reporting(self) -> None:
+        """Render the zero-findings markdown shape for empty project results."""
         markdown = sentry_module._render_md(
             {
                 "status": "fail",

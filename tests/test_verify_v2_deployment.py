@@ -2,10 +2,12 @@
 
 from __future__ import absolute_import
 
+import io
 import json
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -60,6 +62,16 @@ class CliExitCodeTests(unittest.TestCase):
         with patch.object(sys, "argv", ["verify_v2_deployment.py", *argv]):
             return vv.main()
 
+    @staticmethod
+    def _run_capture(argv: list):
+        """Invoke ``main()`` capturing ``(rc, stdout, stderr)``."""
+        out, err = io.StringIO(), io.StringIO()
+        with patch.object(
+            sys, "argv", ["verify_v2_deployment.py", *argv]
+        ), redirect_stdout(out), redirect_stderr(err):
+            rc = vv.main()
+        return rc, out.getvalue(), err.getvalue()
+
     def test_missing_repo_root_returns_2(self) -> None:
         """Exit 2 when ``--repo-root`` doesn't resolve to a directory."""
         rc = self._run(["--repo-root", "/does/not/exist"])
@@ -68,8 +80,36 @@ class CliExitCodeTests(unittest.TestCase):
     def test_all_mode_fails_when_phase1_missing(self) -> None:
         """``--all`` exits 1 when any required artefact is absent."""
         with tempfile.TemporaryDirectory() as tmp:
-            rc = self._run(["--repo-root", tmp, "--all"])
+            rc, _stdout, _stderr = self._run_capture(["--repo-root", tmp, "--all"])
         self.assertEqual(rc, 1)
+
+    def test_missing_default_does_not_leak_workflow_commands_to_stdout(self) -> None:
+        """Regression: ``--all`` without ``--emit-annotations`` keeps stdout clean.
+
+        The Coverage 100 Gate ran red because this test module's
+        ``main()`` call leaked ``::error::`` workflow commands into the
+        coverage lane's stdout, which GitHub Actions then attached as
+        check-run annotations. Diagnostics must stay on stderr and must
+        not use the workflow-command prefix unless explicitly requested.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            rc, stdout, stderr = self._run_capture(["--repo-root", tmp, "--all"])
+        self.assertEqual(rc, 1)
+        self.assertNotIn("::error::", stdout)
+        self.assertIn("missing deliverable:", stderr)
+        self.assertNotIn("::error::", stderr)
+        # stdout still carries the machine-readable summary only.
+        self.assertIn('"missing_count"', stdout)
+
+    def test_emit_annotations_writes_workflow_commands_to_stderr(self) -> None:
+        """``--emit-annotations`` opts in to ``::error::`` commands on stderr."""
+        with tempfile.TemporaryDirectory() as tmp:
+            rc, stdout, stderr = self._run_capture(
+                ["--repo-root", tmp, "--all", "--emit-annotations"]
+            )
+        self.assertEqual(rc, 1)
+        self.assertIn("::error::missing deliverable:", stderr)
+        self.assertNotIn("::error::", stdout)
 
     def test_all_mode_passes_on_complete_repo(self) -> None:
         """The current platform checkout should audit clean in ``--all`` mode."""

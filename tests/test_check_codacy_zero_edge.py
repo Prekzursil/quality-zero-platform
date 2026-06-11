@@ -432,6 +432,9 @@ class CodacyZeroEdgeTests(unittest.TestCase):
                 return_value=(0, [], None),
             ),
             patch.object(
+                check_codacy_zero, "_quality_threshold_findings", return_value=[],
+            ),
+            patch.object(
                 check_codacy_zero, "write_report", return_value=0
             ) as write_report_mock,
         ):
@@ -445,6 +448,9 @@ class CodacyZeroEdgeTests(unittest.TestCase):
                 "_query_codacy_open_issues",
                 return_value=(0, [], None),
             ),
+            patch.object(
+                check_codacy_zero, "_quality_threshold_findings", return_value=[],
+            ),
             patch.object(check_codacy_zero, "write_report", return_value=7),
         ):
             self.assertEqual(check_codacy_zero.main(), 7)
@@ -456,6 +462,9 @@ class CodacyZeroEdgeTests(unittest.TestCase):
                 check_codacy_zero,
                 "_query_codacy_open_issues",
                 return_value=(5, ["Codacy reports 5 open issues (expected 0)."], None),
+            ),
+            patch.object(
+                check_codacy_zero, "_quality_threshold_findings", return_value=[],
             ),
             patch.object(check_codacy_zero, "write_report", return_value=0),
         ):

@@ -34,7 +34,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, List, Mapping, Tuple
+from typing import Any, FrozenSet, Iterable, List, Mapping, Set, Tuple
 
 
 def _ensure_platform_on_syspath() -> None:
@@ -46,7 +46,6 @@ def _ensure_platform_on_syspath() -> None:
 
 
 _ensure_platform_on_syspath()
-
 
 SECURITY_SCANNERS: Tuple[str, ...] = (
     "dependabot",
@@ -60,6 +59,11 @@ SECURITY_SCANNERS: Tuple[str, ...] = (
     "trivy",
     "bandit",
 )
+
+# Frozenset for O(1) membership. Canonical rollup findings carry the security
+# GROUP in ``category_group`` (the rollup_v2 taxonomy), not a flat ``category``.
+_SECURITY_SCANNERS_SET: FrozenSet[str] = frozenset(SECURITY_SCANNERS)
+_SECURITY_CATEGORY_GROUPS: FrozenSet[str] = frozenset({"security"})
 
 _CWE_RE = re.compile(r"\bCWE-\d+\b", re.IGNORECASE)
 _OWASP_RE = re.compile(r"\bA0\d:\d{4}\b", re.IGNORECASE)
@@ -77,25 +81,70 @@ class ClassifiedFindings:
     must_open_pr: List[Mapping[str, Any]]
 
 
-def _scanner_name(finding: Mapping[str, Any]) -> str:
-    """Extract a scanner identifier from a finding record."""
+def _iter_corroborators(
+        finding: Mapping[str, Any]) -> Iterable[Mapping[str, Any]]:
+    """Yield each canonical ``corroborators[]`` entry that is a mapping.
+
+    Centralises the rollup_v2 list-shape guard so callers stay flat: they
+    iterate the yielded mappings directly instead of re-nesting the
+    ``isinstance(list | tuple)`` + ``isinstance(Mapping)`` checks.
+    """
+    corroborators = finding.get("corroborators")
+    if isinstance(corroborators, list | tuple):
+        for corroborator in corroborators:
+            if isinstance(corroborator, Mapping):
+                yield corroborator
+
+
+def _scanner_names(finding: Mapping[str, Any]) -> Set[str]:
+    """Collect every scanner identifier on a finding (flat AND canonical).
+
+    The flat shape uses ``scanner``/``source``/``tool``/``analyzer``; the
+    rollup_v2 canonical shape puts each provider under
+    ``corroborators[].provider``. We gather ALL of them so a security scanner in
+    any corroborator is recognised (not just the first).
+    """
+    names: Set[str] = set()
     for key in ("scanner", "source", "tool", "analyzer"):
         value = finding.get(key)
         if isinstance(value, str) and value.strip():
-            return value.strip().lower()
-    return ""
+            names.add(value.strip().lower())
+    for corroborator in _iter_corroborators(finding):
+        provider = corroborator.get("provider")
+        if isinstance(provider, str) and provider.strip():
+            names.add(provider.strip().lower())
+    return names
+
+
+def _corroborator_texts(finding: Mapping[str, Any]) -> List[str]:
+    """Collect ``corroborators[].rule_id``/``original_message`` strings."""
+    texts: List[str] = []
+    for corroborator in _iter_corroborators(finding):
+        for sub_key in ("rule_id", "original_message"):
+            sub_value = corroborator.get(sub_key)
+            if isinstance(sub_value, str):
+                texts.append(sub_value)
+    return texts
 
 
 def _has_security_tag(finding: Mapping[str, Any]) -> bool:
-    """Return True when any finding text references a CWE / OWASP entry."""
+    """Return True when any finding text references a CWE / OWASP entry.
+
+    Reads both flat keys and the canonical shape: ``primary_message`` (the
+    canonical message), the dedicated ``cwe`` field, and each
+    ``corroborators[].rule_id``/``original_message`` — so e.g. ``cwe="CWE-22"``
+    on a CodeQL canonical finding matches.
+    """
     haystack_parts: List[str] = []
-    for key in ("id", "rule", "message", "category", "title"):
+    for key in ("id", "rule", "message", "primary_message", "category",
+                "title", "cwe"):
         value = finding.get(key)
         if isinstance(value, str):
             haystack_parts.append(value)
     tags = finding.get("tags")
     if isinstance(tags, list | tuple):
         haystack_parts.extend(str(t) for t in tags if isinstance(t, str))
+    haystack_parts.extend(_corroborator_texts(finding))
     haystack = " | ".join(haystack_parts)
     if _CWE_RE.search(haystack):
         return True
@@ -107,17 +156,18 @@ def is_security_finding(finding: Mapping[str, Any]) -> bool:
     if not isinstance(finding, Mapping):
         return False
     category = str(finding.get("category", "")).strip().lower()
+    category_group = str(finding.get("category_group", "")).strip().lower()
     return any((
         bool(finding.get("is_security")),
-        _scanner_name(finding) in SECURITY_SCANNERS,
+        bool(_scanner_names(finding) & _SECURITY_SCANNERS_SET),
         category in {"security", "vulnerability", "secret"},
+        category_group in _SECURITY_CATEGORY_GROUPS,
         _has_security_tag(finding),
     ))
 
 
 def filter_auto_merge_candidates(
-    findings: Iterable[Mapping[str, Any]],
-) -> ClassifiedFindings:
+    findings: Iterable[Mapping[str, Any]], ) -> ClassifiedFindings:
     """Split ``findings`` into auto-merge-safe vs must-open-pr groups."""
     ok: List[Mapping[str, Any]] = []
     pr: List[Mapping[str, Any]] = []
@@ -147,12 +197,10 @@ def ensure_pr_only_for_security(
     if classified.must_open_pr:
         ids = ", ".join(
             str(f.get("id") or f.get("rule") or "<anonymous>")
-            for f in classified.must_open_pr
-        )
+            for f in classified.must_open_pr)
         raise SecurityAutoMergeRefusedError(
             f"QRv2 refused to auto-merge: security-class findings present "
-            f"({ids}). Security-class remediations must open a PR."
-        )
+            f"({ids}). Security-class remediations must open a PR.")
 
 
 if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
@@ -160,7 +208,11 @@ if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
 
     _findings = json.loads(sys.stdin.read() or "[]")
     _classified = filter_auto_merge_candidates(_findings)
-    print(json.dumps({
-        "auto_merge_ok": _classified.auto_merge_ok,
-        "must_open_pr": _classified.must_open_pr,
-    }, indent=2))
+    print(
+        json.dumps(
+            {
+                "auto_merge_ok": _classified.auto_merge_ok,
+                "must_open_pr": _classified.must_open_pr,
+            },
+            indent=2,
+        ))

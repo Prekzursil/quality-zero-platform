@@ -19,70 +19,74 @@ class IsSecurityFindingTests(unittest.TestCase):
     def test_dependabot_source_is_security(self) -> None:
         """A synthetic Dependabot finding is recognised by its scanner name."""
         self.assertTrue(
-            sg.is_security_finding({"scanner": "dependabot", "id": "DEP-1"})
-        )
+            sg.is_security_finding({
+                "scanner": "dependabot",
+                "id": "DEP-1"
+            }))
 
     def test_case_insensitive_scanner_match(self) -> None:
         """Scanner name matching is case-insensitive."""
         self.assertTrue(
-            sg.is_security_finding({"scanner": "Semgrep", "id": "sem-1"})
-        )
+            sg.is_security_finding({
+                "scanner": "Semgrep",
+                "id": "sem-1"
+            }))
 
     def test_is_security_flag_overrides(self) -> None:
         """Explicit ``is_security: True`` is enough to flag the finding."""
         self.assertTrue(
-            sg.is_security_finding({"scanner": "custom", "is_security": True})
-        )
+            sg.is_security_finding({
+                "scanner": "custom",
+                "is_security": True
+            }))
 
     def test_category_security_flag(self) -> None:
         """``category: security`` (and synonyms) flag the finding."""
         for category in ("security", "Security", "vulnerability", "secret"):
             with self.subTest(category=category):
                 self.assertTrue(
-                    sg.is_security_finding(
-                        {"scanner": "misc", "category": category}
-                    )
-                )
+                    sg.is_security_finding({
+                        "scanner": "misc",
+                        "category": category
+                    }))
 
     def test_cwe_reference_in_id(self) -> None:
         """CWE-<n> in the finding id flags it as security-class."""
         self.assertTrue(
-            sg.is_security_finding(
-                {"scanner": "custom", "id": "run-shell-injection CWE-78"}
-            )
-        )
+            sg.is_security_finding({
+                "scanner": "custom",
+                "id": "run-shell-injection CWE-78"
+            }))
 
     def test_cwe_reference_in_tags(self) -> None:
         """CWE references inside ``tags`` are also recognised."""
         self.assertTrue(
-            sg.is_security_finding(
-                {"scanner": "custom", "tags": ["style", "CWE-79"]}
-            )
-        )
+            sg.is_security_finding({
+                "scanner": "custom",
+                "tags": ["style", "CWE-79"]
+            }))
 
     def test_owasp_reference_in_message(self) -> None:
         """``A01:2021`` style OWASP refs flag the finding."""
         self.assertTrue(
-            sg.is_security_finding(
-                {"scanner": "custom", "message": "maps to A03:2021 Injection"}
-            )
-        )
+            sg.is_security_finding({
+                "scanner": "custom",
+                "message": "maps to A03:2021 Injection"
+            }))
 
     def test_non_security_finding_returns_false(self) -> None:
         """Style/formatting findings with no security signal → False."""
         self.assertFalse(
-            sg.is_security_finding(
-                {
-                    "scanner": "prettier",
-                    "id": "max-line-length",
-                    "category": "style",
-                }
-            )
-        )
+            sg.is_security_finding({
+                "scanner": "prettier",
+                "id": "max-line-length",
+                "category": "style",
+            }))
 
     def test_non_mapping_input_returns_false(self) -> None:
         """Defensive: ``None`` / lists don't crash."""
-        self.assertFalse(sg.is_security_finding(None))  # type: ignore[arg-type]
+        self.assertFalse(
+            sg.is_security_finding(None))  # type: ignore[arg-type]
         self.assertFalse(sg.is_security_finding([]))  # type: ignore[arg-type]
 
     def test_alternate_scanner_keys_recognised(self) -> None:
@@ -102,9 +106,18 @@ class FilterAutoMergeCandidatesTests(unittest.TestCase):
     def test_security_findings_go_to_pr_list(self) -> None:
         """Dependabot + CWE entries land in ``must_open_pr``."""
         findings = [
-            {"scanner": "dependabot", "id": "DEP-1"},
-            {"scanner": "eslint", "id": "no-unused-vars"},
-            {"scanner": "custom", "id": "CWE-78 path"},
+            {
+                "scanner": "dependabot",
+                "id": "DEP-1"
+            },
+            {
+                "scanner": "eslint",
+                "id": "no-unused-vars"
+            },
+            {
+                "scanner": "custom",
+                "id": "CWE-78 path"
+            },
         ]
         result = sg.filter_auto_merge_candidates(findings)
         self.assertEqual(len(result.must_open_pr), 2)
@@ -118,14 +131,20 @@ class EnsurePrOnlyGuardTests(unittest.TestCase):
     def test_no_auto_merge_intent_is_silent(self) -> None:
         """When caller doesn't intend auto-merge, the guard never raises."""
         sg.ensure_pr_only_for_security(
-            [{"scanner": "dependabot"}], intends_auto_merge=False,
+            [{
+                "scanner": "dependabot"
+            }],
+            intends_auto_merge=False,
         )  # no exception expected
 
     def test_auto_merge_with_security_raises(self) -> None:
         """A Dependabot-class finding blocks auto-merge."""
         with self.assertRaises(sg.SecurityAutoMergeRefusedError) as ctx:
             sg.ensure_pr_only_for_security(
-                [{"scanner": "dependabot", "id": "DEP-42"}],
+                [{
+                    "scanner": "dependabot",
+                    "id": "DEP-42"
+                }],
                 intends_auto_merge=True,
             )
         self.assertIn("DEP-42", str(ctx.exception))
@@ -134,8 +153,14 @@ class EnsurePrOnlyGuardTests(unittest.TestCase):
         """Style-only findings don't trip the guard."""
         sg.ensure_pr_only_for_security(
             [
-                {"scanner": "eslint", "id": "no-unused-vars"},
-                {"scanner": "prettier", "id": "max-line-length"},
+                {
+                    "scanner": "eslint",
+                    "id": "no-unused-vars"
+                },
+                {
+                    "scanner": "prettier",
+                    "id": "max-line-length"
+                },
             ],
             intends_auto_merge=True,
         )  # no exception expected
@@ -145,8 +170,14 @@ class EnsurePrOnlyGuardTests(unittest.TestCase):
         with self.assertRaises(sg.SecurityAutoMergeRefusedError) as ctx:
             sg.ensure_pr_only_for_security(
                 [
-                    {"scanner": "codeql", "id": "py/injection"},
-                    {"scanner": "semgrep", "id": "xss.reflected"},
+                    {
+                        "scanner": "codeql",
+                        "id": "py/injection"
+                    },
+                    {
+                        "scanner": "semgrep",
+                        "id": "xss.reflected"
+                    },
                 ],
                 intends_auto_merge=True,
             )
@@ -166,13 +197,119 @@ class EnsurePrOnlyGuardTests(unittest.TestCase):
             "id": "GHSA-xxxx-yyyy-zzzz",
             "category": "security",
             "is_security": True,
-            "message": "Regular Expression Denial of Service (ReDoS) (CWE-1333)",
+            "message":
+            "Regular Expression Denial of Service (ReDoS) (CWE-1333)",
         }
         classified = sg.filter_auto_merge_candidates([synthetic])
         self.assertEqual(len(classified.must_open_pr), 1)
         self.assertEqual(classified.auto_merge_ok, [])
         with self.assertRaises(sg.SecurityAutoMergeRefusedError):
-            sg.ensure_pr_only_for_security([synthetic], intends_auto_merge=True)
+            sg.ensure_pr_only_for_security([synthetic],
+                                           intends_auto_merge=True)
+
+
+def _canonical_finding(**overrides: object) -> dict:
+    """A rollup_v2 canonical finding (``_finding_to_dict`` shape).
+
+    Provider lives under ``corroborators[].provider``; the security GROUP is
+    ``category_group`` (``category`` holds the SPECIFIC category); the CWE is a
+    dedicated ``cwe`` field; the message is ``primary_message``. None of these
+    are the flat keys the original guard read — this fixture pins the canonical
+    shape so the guard cannot regress to a no-op on it.
+    """
+    finding: dict = {
+        "finding_id":
+        "f-1",
+        "file":
+        "apps/api/app/api.py",
+        "line":
+        2860,
+        "category":
+        "path-injection",
+        "category_group":
+        "quality",
+        "severity":
+        "high",
+        "primary_message":
+        "a finding",
+        "corroborators": [{
+            "provider": "codacy",
+            "rule_id": "MD032",
+            "rule_url": "",
+            "original_message": "lists should be blank-line surrounded",
+            "provider_priority_rank": 5,
+        }],
+        "cwe":
+        None,
+        "tags": [],
+    }
+    finding.update(overrides)
+    return finding
+
+
+class CanonicalFindingTests(unittest.TestCase):
+    """The guard must classify rollup_v2 canonical findings, not just flat ones.
+
+    Regression guard for the no-op bug: the canonical shape carries the provider
+    in ``corroborators[].provider``, the security group in ``category_group``,
+    and the CWE in a dedicated ``cwe`` field — the original guard read none of
+    these, so a CodeQL ``py/path-injection`` was wrongly auto-merge-eligible.
+    """
+
+    def test_canonical_codeql_path_injection_is_security(self) -> None:
+        """The exact 123-finding cluster: category_group=security + CWE-22 + codeql."""
+        finding = _canonical_finding(
+            category_group="security",
+            cwe="CWE-22",
+            corroborators=[{
+                "provider": "codeql",
+                "rule_id": "py/path-injection",
+                "rule_url": "",
+                "original_message": "path injection",
+                "provider_priority_rank": 1,
+            }],
+        )
+        self.assertTrue(sg.is_security_finding(finding))
+
+    def test_canonical_security_via_category_group_only(self) -> None:
+        """``category_group == 'security'`` alone flags it (no CWE, non-sec provider)."""
+        self.assertTrue(
+            sg.is_security_finding(
+                _canonical_finding(category_group="security")))
+
+    def test_canonical_security_via_cwe_field_only(self) -> None:
+        """A dedicated ``cwe`` field flags it even when category_group=quality."""
+        self.assertTrue(
+            sg.is_security_finding(_canonical_finding(cwe="CWE-79")))
+
+    def test_canonical_security_via_corroborator_provider_only(self) -> None:
+        """A security scanner in ``corroborators[].provider`` flags it."""
+        finding = _canonical_finding(corroborators=[{
+            "provider":
+            "semgrep",
+            "rule_id":
+            "x",
+            "rule_url":
+            "",
+            "original_message":
+            "m",
+            "provider_priority_rank":
+            2,
+        }], )
+        self.assertTrue(sg.is_security_finding(finding))
+
+    def test_canonical_quality_finding_is_not_security(self) -> None:
+        """A markdownlint canonical finding (quality/codacy/no CWE) stays auto-merge-ok."""
+        self.assertFalse(sg.is_security_finding(_canonical_finding()))
+
+    def test_canonical_path_injection_forced_to_pr(self) -> None:
+        """End-to-end: the security finding lands in must_open_pr and trips the guard."""
+        finding = _canonical_finding(category_group="security", cwe="CWE-22")
+        classified = sg.filter_auto_merge_candidates([finding])
+        self.assertEqual(len(classified.must_open_pr), 1)
+        self.assertEqual(classified.auto_merge_ok, [])
+        with self.assertRaises(sg.SecurityAutoMergeRefusedError):
+            sg.ensure_pr_only_for_security([finding], intends_auto_merge=True)
 
 
 if __name__ == "__main__":  # pragma: no cover

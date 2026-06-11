@@ -19,6 +19,10 @@ on:
         type: string
         required: false
         default: main
+      safe_classes_only:
+        type: boolean
+        required: false
+        default: true
     secrets:
       CODEX_AUTH_JSON:
         required: false
@@ -62,6 +66,11 @@ jobs:
     needs: resolve-profile
     if: ${{ needs.resolve-profile.outputs.github_mutation_lane == 'codex-private-runner' }}
     runs-on: ${{ fromJSON(needs.resolve-profile.outputs.codex_runner_labels_json) }}
+    # Repo-level mutation lock (charter §5): shared with the remediation
+    # loop so only one Codex mutation run per consumer repo at a time.
+    concurrency:
+      group: qzp-remediation-runner-${{ inputs.repo_slug }}
+      cancel-in-progress: false
     permissions:
       contents: write
       pull-requests: write
@@ -76,6 +85,10 @@ jobs:
           ref: ${{ inputs.platform_ref }}
           path: platform
           persist-credentials: false
+      - name: Record backlog base SHA
+        id: base
+        working-directory: repo
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -111,6 +124,19 @@ jobs:
             --prompt-file "$RUNNER_TEMP/backlog-prompt.md" \
             --output-last-message "$RUNNER_TEMP/codex-last-message.txt" \
             --json-log "$RUNNER_TEMP/codex-events.jsonl"
+      - name: Backlog safety guards (charter §5)
+        env:
+          BASE_SHA: ${{ steps.base.outputs.sha }}
+          SAFE_CLASSES_ONLY: ${{ inputs.safe_classes_only }}
+        run: |
+          # Chokepoint before any PR push: blocked-paths SSOT, tree-shrink
+          # refusal (scaffold-clobber signature), and the formatter-only
+          # safe-class diff validation. Any violation aborts the job before
+          # the PR step can push anything.
+          python platform/scripts/quality/remediation_guards.py \
+            --repo-dir repo \
+            --base-ref "$BASE_SHA" \
+            --safe-classes-only "$SAFE_CLASSES_ONLY"
       - name: Upload Codex execution artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -128,6 +154,8 @@ jobs:
           branch: codex/backlog/${{ inputs.lane }}
           title: "[codex] Backlog sweep: ${{ inputs.lane }}"
           delete-branch: false
+          author: qzp-remediation-bot <qzp-remediation@users.noreply.github.com>
+          committer: qzp-remediation-bot <qzp-remediation@users.noreply.github.com>
           commit-message: |
             chore: backlog sweep ${{ inputs.lane }}
 

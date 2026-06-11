@@ -2,10 +2,17 @@ name: Quality Zero Backlog
 
 permissions: {}
 
+# Charter §5: nightly schedule, mechanically-safe fix classes only. Shares
+# the qzp-remediation-lock concurrency group with Quality Zero Remediation so
+# only one mutation-lane run per repo executes at a time.
 on:
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
+
+concurrency:
+  group: qzp-remediation-lock-${{ github.repository }}
+  cancel-in-progress: false
 
 jobs:
   shared-backlog-sweep:
@@ -18,5 +25,6 @@ jobs:
       lane: quality
       platform_repository: ${{ github.repository }}
       platform_ref: ${{ github.sha }}
+      safe_classes_only: true
     secrets:
       CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}

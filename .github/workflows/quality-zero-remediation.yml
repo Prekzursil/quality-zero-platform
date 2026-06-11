@@ -2,24 +2,32 @@ name: Quality Zero Remediation
 
 permissions: {}
 
+# Charter §5: the remediation lane runs on a nightly schedule restricted to
+# mechanically-safe fix classes — never on gate failure (gates stay honestly
+# red during burndown, so a failure trigger would loop forever). The shared
+# concurrency group is the repo-level lock: at most one mutation-lane run
+# (remediation OR backlog) at a time.
 on:
-  workflow_run: # zizmor: ignore[dangerous-triggers] -- trusted private runner remediation only responds to internal gate failures.
-    workflows: ["Quality Zero Gate"]
-    types: [completed]
+  schedule:
+    - cron: "0 3 * * *"
   workflow_dispatch:
+
+concurrency:
+  group: qzp-remediation-lock-${{ github.repository }}
+  cancel-in-progress: false
 
 jobs:
   shared-remediation-loop:
     permissions:
       contents: write
       pull-requests: write
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'failure' }}
     uses: ./.github/workflows/reusable-remediation-loop.yml
     with:
       repo_slug: Prekzursil/quality-zero-platform
       failure_context: Quality Zero Gate
-      sha: ${{ github.event.workflow_run.head_sha || github.sha }}
+      sha: ${{ github.sha }}
       platform_repository: ${{ github.repository }}
-      platform_ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      platform_ref: ${{ github.sha }}
+      safe_classes_only: true
     secrets:
       CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}

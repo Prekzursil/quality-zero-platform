@@ -28,6 +28,10 @@ on:
         type: string
         required: false
         default: main
+      safe_classes_only:
+        type: boolean
+        required: false
+        default: true
     secrets:
       CODEX_AUTH_JSON:
         required: false
@@ -98,6 +102,11 @@ jobs:
     needs: resolve-profile
     if: ${{ needs.resolve-profile.outputs.github_mutation_lane == 'codex-private-runner' }}
     runs-on: ${{ fromJSON(needs.resolve-profile.outputs.codex_runner_labels_json) }}
+    # Repo-level mutation lock (charter §5): remediation and backlog share
+    # this group so only one Codex mutation run per consumer repo at a time.
+    concurrency:
+      group: qzp-remediation-runner-${{ inputs.repo_slug }}
+      cancel-in-progress: false
     permissions:
       contents: write
       pull-requests: write
@@ -119,6 +128,10 @@ jobs:
           ref: ${{ inputs.platform_ref }}
           path: platform
           persist-credentials: false
+      - name: Record remediation base SHA
+        id: base
+        working-directory: repo
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -161,11 +174,27 @@ jobs:
         if: ${{ hashFiles(format('{0}/applied-patches.json', runner.temp)) != '' }}
         working-directory: repo
         run: |
-          git add -A
-          APPLIED_COUNT=$(python -c "import json,sys; print(json.load(open(sys.argv[1]))['applied_count'])" "$RUNNER_TEMP/applied-patches.json")
-          if [ "$APPLIED_COUNT" -gt 0 ]; then
-            git diff --cached --quiet || \
-              git commit -m "fix: auto-apply $APPLIED_COUNT deterministic patches from rollup_v2"
+          # Stage ONLY the files the patcher reports — never add-all
+          # staging, which swept the fixture scaffold into the clobber
+          # incident — and commit as the real bot identity, never a
+          # leaked test one.
+          python - "$RUNNER_TEMP/applied-patches.json" "$RUNNER_TEMP/applied-files.txt" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          entries = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")).get("applied", [])
+          files = sorted({entry.get("file", "").strip() for entry in entries} - {""})
+          Path(sys.argv[2]).write_text("\n".join(files) + ("\n" if files else ""), encoding="utf-8")
+          PY
+          if [ -s "$RUNNER_TEMP/applied-files.txt" ]; then
+            git add --pathspec-from-file="$RUNNER_TEMP/applied-files.txt" --
+            if ! git diff --cached --quiet; then
+              APPLIED_COUNT=$(python -c "import json,sys; print(json.load(open(sys.argv[1]))['applied_count'])" "$RUNNER_TEMP/applied-patches.json")
+              git -c user.name="qzp-remediation-bot" \
+                  -c user.email="qzp-remediation@users.noreply.github.com" \
+                  commit -m "fix: auto-apply $APPLIED_COUNT deterministic patches from rollup_v2"
+            fi
           fi
       - name: Render remediation prompt
         env:
@@ -194,45 +223,19 @@ jobs:
             --prompt-file "$RUNNER_TEMP/remediation-prompt.md" \
             --output-last-message "$RUNNER_TEMP/codex-last-message.txt" \
             --json-log "$RUNNER_TEMP/codex-events.jsonl"
-      - name: Post-remediation blocked-paths check (§B.3.17)
-        working-directory: repo
+      - name: Remediation safety guards (charter §5)
+        env:
+          BASE_SHA: ${{ steps.base.outputs.sha }}
+          SAFE_CLASSES_ONLY: ${{ inputs.safe_classes_only }}
         run: |
-          BLOCKED_PATTERNS=(
-            ".github/**"
-            "Dockerfile"
-            "docker-compose*.yml"
-            "requirements*.txt"
-            "pyproject.toml"
-            "setup.py"
-            ".npmrc"
-            ".pip/pip.conf"
-          )
-          VIOLATIONS=""
-          CHANGED=$(git diff --no-renames --name-only HEAD 2>/dev/null || true)
-          if [ -z "$CHANGED" ]; then
-            echo "No file changes detected after remediation."
-            exit 0
-          fi
-          for pattern in "${BLOCKED_PATTERNS[@]}"; do
-            MATCHES=$(echo "$CHANGED" | python3 -c "
-          import fnmatch, sys
-          pattern = '$pattern'
-          for line in sys.stdin:
-              line = line.strip()
-              if fnmatch.fnmatch(line, pattern):
-                  print(line)
-          " || true)
-            if [ -n "$MATCHES" ]; then
-              VIOLATIONS="${VIOLATIONS}${MATCHES}"$'\n'
-            fi
-          done
-          if [ -n "$VIOLATIONS" ]; then
-            echo "::error::Post-remediation blocked-paths violation (§B.3.17):"
-            echo "$VIOLATIONS" | sort -u
-            echo "Codex remediation touched protected infrastructure files. Aborting PR creation."
-            exit 1
-          fi
-          echo "Post-remediation blocked-paths check passed."
+          # Chokepoint before any PR push: blocked-paths SSOT (§B.3.17 and
+          # PR #241), tree-shrink refusal (scaffold-clobber signature), and
+          # the formatter-only safe-class diff validation. Any violation
+          # aborts the job before the PR step can push anything.
+          python platform/scripts/quality/remediation_guards.py \
+            --repo-dir repo \
+            --base-ref "$BASE_SHA" \
+            --safe-classes-only "$SAFE_CLASSES_ONLY"
       - name: Upload Codex execution artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -251,6 +254,8 @@ jobs:
           branch: ${{ needs.resolve-profile.outputs.branch }}
           title: ${{ needs.resolve-profile.outputs.title }}
           delete-branch: false
+          author: qzp-remediation-bot <qzp-remediation@users.noreply.github.com>
+          committer: qzp-remediation-bot <qzp-remediation@users.noreply.github.com>
           commit-message: |
             fix: remediate ${{ inputs.failure_context }}
 

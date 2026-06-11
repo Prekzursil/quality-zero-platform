@@ -133,10 +133,57 @@ class WorkflowContractTests(unittest.TestCase):
             for expected in expected_lines:
                 self.assertIn(expected, text, name)
 
-    def test_self_remediation_wrapper_documents_trusted_workflow_run_trigger(self) -> None:
-        """Document the trusted workflow_run trigger for the self-remediation wrapper."""
-        text = (ROOT / ".github" / "workflows" / "quality-zero-remediation.yml").read_text(encoding="utf-8")
-        self.assertIn("workflow_run: # zizmor: ignore[dangerous-triggers]", text)
+    def test_self_mutation_wrappers_run_nightly_with_repo_level_lock(self) -> None:
+        """Charter §5: nightly schedule (never gate-failure) plus a shared repo lock.
+
+        The old ``workflow_run``-on-gate-failure trigger is wrong for the
+        burndown phase (gates stay red for weeks) and re-triggered the lane
+        that force-pushed a scaffold tree over PR branches. Both mutation
+        wrappers must run on a nightly cron + manual dispatch only, share
+        one concurrency group (the repo-level mutation lock), and pin the
+        reusable lanes to mechanically-safe fix classes.
+        """
+        for name in ("quality-zero-remediation.yml", "quality-zero-backlog.yml"):
+            text = (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
+            self.assertNotIn("workflow_run", text, name)
+            self.assertIn("schedule:", text, name)
+            self.assertIn("workflow_dispatch:", text, name)
+            self.assertIn("concurrency:", text, name)
+            self.assertIn("group: qzp-remediation-lock-${{ github.repository }}", text, name)
+            self.assertIn("cancel-in-progress: false", text, name)
+            self.assertIn("safe_classes_only: true", text, name)
+
+    def test_reusable_mutation_workflows_run_safety_guards_before_pr_creation(self) -> None:
+        """Charter §5: every candidate change passes the guard chokepoint pre-PR.
+
+        Both reusable mutation lanes must record the pre-remediation base
+        SHA, run ``remediation_guards.py`` (blocked-paths SSOT, tree-shrink
+        refusal, formatter-only safe-class validation) before the PR step,
+        take a per-repo runner concurrency lock, expose the
+        ``safe_classes_only`` input, commit/push as the real bot identity
+        (never the leaked ``Test <test@test.com>`` fixture identity), and
+        never stage with ``git add -A``.
+        """
+        for name in ("reusable-remediation-loop.yml", "reusable-backlog-sweep.yml"):
+            text = (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
+            self.assertIn("remediation_guards.py", text, name)
+            self.assertIn('--base-ref "$BASE_SHA"', text, name)
+            self.assertIn('--safe-classes-only "$SAFE_CLASSES_ONLY"', text, name)
+            self.assertIn("BASE_SHA: ${{ steps.base.outputs.sha }}", text, name)
+            self.assertIn("SAFE_CLASSES_ONLY: ${{ inputs.safe_classes_only }}", text, name)
+            self.assertIn("safe_classes_only:", text, name)
+            self.assertIn("group: qzp-remediation-runner-${{ inputs.repo_slug }}", text, name)
+            self.assertIn(
+                "author: qzp-remediation-bot <qzp-remediation@users.noreply.github.com>", text, name
+            )
+            self.assertIn(
+                "committer: qzp-remediation-bot <qzp-remediation@users.noreply.github.com>", text, name
+            )
+            self.assertNotIn("test@test.com", text, name)
+            self.assertNotIn("git add -A", text, name)
+            guard_index = text.index("remediation_guards.py")
+            pr_index = text.index("peter-evans/create-pull-request@")
+            self.assertLess(guard_index, pr_index, f"{name}: guards must run before PR creation")
 
     def test_self_wrapper_workflows_use_current_ref_for_platform_checkout(self) -> None:
         """Check self-hosted wrappers out at the current controller ref for the running event."""
@@ -145,7 +192,7 @@ class WorkflowContractTests(unittest.TestCase):
             "quality-zero-gate.yml": "platform_ref: ${{ github.event.pull_request.head.sha || github.sha }}",
             "codecov-analytics.yml": "platform_ref: ${{ github.event.pull_request.head.sha || github.sha }}",
             "codeql.yml": "platform_ref: ${{ github.event.pull_request.head.sha || github.sha }}",
-            "quality-zero-remediation.yml": "platform_ref: ${{ github.event.workflow_run.head_sha || github.sha }}",
+            "quality-zero-remediation.yml": "platform_ref: ${{ github.sha }}",
             "quality-zero-backlog.yml": "platform_ref: ${{ github.sha }}",
         }
 

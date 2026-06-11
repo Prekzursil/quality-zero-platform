@@ -54,6 +54,8 @@ on:
         required: false
       CODACY_API_TOKEN:
         required: false
+      CODACY_PROJECT_TOKEN:
+        required: false
       CODECOV_TOKEN:
         required: false
       CHROMATIC_PROJECT_TOKEN:
@@ -76,6 +78,11 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      # The DeepScan Zero lane resolves the merge commit's pull requests
+      # (GET /repos/<repo>/commits/<sha>/pulls) so it can re-read the
+      # DeepScan status on the PR head — the DeepScan App posts there, never
+      # on the squash-merge commit. That read needs pull-requests: read.
+      pull-requests: read
     strategy:
       fail-fast: false
       matrix:
@@ -320,7 +327,51 @@ jobs:
             run(cmd, cwd=repo_dir)
           elif lane == "semgrep":
             run([sys.executable, "-m", "pip", "install", "semgrep"], cwd=repo_dir)
-            run(["semgrep", "ci"], cwd=repo_dir)
+            sarif_path = repo_dir / "semgrep.sarif"
+            # ``semgrep ci`` only exits non-zero on findings whose rule
+            # severity is marked "blocking" on Semgrep Cloud; non-blocking
+            # findings appear on the dashboard while the lane reports green
+            # (the silent-pass shape we are closing). Capture the SARIF and
+            # let the zero-gate count ALL findings regardless of severity.
+            # check=False keeps us going when semgrep itself exits 1 so the
+            # SARIF gate can produce the lane's report; the gate then fails
+            # the lane on any finding count > 0.
+            #
+            # When SEMGREP_APP_TOKEN is unset, ``semgrep ci`` refuses to run
+            # ("run `semgrep login`...") and writes no SARIF, leaving the
+            # gate with nothing to count. Fall back to ``semgrep scan
+            # --config auto`` which uses the public ruleset without auth so
+            # the gate still produces a meaningful report. Repos with a
+            # token keep their cloud-configured policy + dashboard sync.
+            if os.environ.get("SEMGREP_APP_TOKEN"):
+                subprocess.run(
+                    ["semgrep", "ci", "--sarif-output", str(sarif_path)],
+                    cwd=repo_dir,
+                    check=False,
+                )
+            if not sarif_path.exists():
+                subprocess.run(
+                    [
+                        "semgrep", "scan",
+                        "--config", "auto",
+                        "--sarif", "--output", str(sarif_path),
+                    ],
+                    cwd=repo_dir,
+                    check=False,
+                )
+            run(
+                [
+                    sys.executable,
+                    str(platform_dir / "scripts/quality/check_semgrep_zero.py"),
+                    "--sarif",
+                    str(sarif_path),
+                    "--out-json",
+                    "semgrep-zero/semgrep.json",
+                    "--out-md",
+                    "semgrep-zero/semgrep.md",
+                ],
+                cwd=repo_dir,
+            )
           elif lane == "sentry":
             sentry = profile["vendors"]["sentry"]
             cmd = [
@@ -394,7 +445,13 @@ jobs:
             --workflows-dir platform/.github/workflows
       - name: SonarCloud scan
         if: matrix.lane == 'coverage' && env.SONAR_TOKEN != ''
-        # nosemgrep: generic.secrets.security.detected-sonarqube-docs-api-key.detected-sonarqube-docs-api-key
+        # The Sonar action SHA pin (40-char hex) trips
+        # generic.secrets.security.detected-sonarqube-docs-api-key on the
+        # public auto-config; on Semgrep Cloud this was triaged as a
+        # false positive. Bare ``nosemgrep`` (no rule suffix) suppresses
+        # any rule on the line below — the rule-id form was being
+        # ignored by --config auto so we drop the suffix.
+        # nosem
         uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602  # v6 pinned per §A.2.4
         with:
           projectBaseDir: repo
@@ -524,39 +581,50 @@ jobs:
           done
 
       - name: Publish Codacy coverage
-        # ``continue-on-error`` because Codacy's coverage reporter needs a
-        # project-scoped token (``CODACY_PROJECT_TOKEN``) that's distinct
-        # from the account-level ``CODACY_API_TOKEN`` used by the Codacy
-        # Zero gate. When only the API token is available, the reporter
-        # emits ``Request URL not found. Check if the API Token you are
-        # using and the API base URL are valid.`` and exits 1 — which
-        # shouldn't gate the PR because coverage enforcement happens
-        # locally via ``assert_coverage_100.py`` (that step already ran
-        # and passed before this upload). The Codacy dashboard upload is
-        # cosmetic; if the project token isn't wired, log the failure
-        # and move on.
+        # Codacy's coverage reporter accepts EITHER a project-scoped
+        # ``CODACY_PROJECT_TOKEN`` or an account-level ``api-token``. The
+        # project token was never provisioned on this repo, so a
+        # project-token-only step uploaded with an empty token and left the
+        # Coverage 100 Gate permanently red. We wire ``api-token`` from the
+        # already-valid ``CODACY_API_TOKEN`` (the same secret the Codacy Zero
+        # lane authenticates with — proven live in the same run) so the
+        # reporter runs in account-token mode and auto-derives the repo from
+        # ``GITHUB_REPOSITORY``. ``project-token`` is kept so a repo that does
+        # provision it still works. Per strict-zero contract — missing
+        # coverage on the dashboard must red-block — we keep
+        # ``continue-on-error`` removed so a failed upload fails the lane.
         if: matrix.lane == 'coverage' && steps.profile.outputs.codacy_enabled == 'true' && steps.profile.outputs.coverage_input_files != ''
-        continue-on-error: true
         uses: codacy/codacy-coverage-reporter-action@89d6c85cfafaec52c72b6c5e8b2878d33104c699
         with:
-          project-token: ${{ secrets.CODACY_API_TOKEN }}
+          api-token: ${{ secrets.CODACY_API_TOKEN }}
+          project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
           coverage-reports: ${{ steps.profile.outputs.coverage_input_files }}
 
       - name: Publish DeepSource coverage
+        # Strict-zero: each lcov/xml upload propagates its exit code so
+        # missing ``DEEPSOURCE_DSN`` or transient API failures red-block
+        # the lane instead of being swallowed by ``|| true``. Set the DSN
+        # in Settings → Secrets → Actions on each repo.
         if: matrix.lane == 'coverage' && steps.profile.outputs.deepsource_enabled == 'true' && steps.profile.outputs.coverage_input_files != ''
         working-directory: repo
         env:
           DEEPSOURCE_DSN: ${{ secrets.DEEPSOURCE_DSN }}
         run: |
+          set -euo pipefail
+          if [ -z "${DEEPSOURCE_DSN:-}" ]; then
+            echo "::error::DEEPSOURCE_DSN secret is missing — coverage cannot be uploaded to DeepSource."
+            echo "::error::Add it via Settings → Secrets → Actions. Strict-zero requires every repo to publish coverage to every cloud platform."
+            exit 1
+          fi
           curl -sSL https://deepsource.io/cli | sh
           IFS=',' read -ra FILES <<< "${{ steps.profile.outputs.coverage_input_files }}"
           for f in "${FILES[@]}"; do
             f=$(echo "$f" | xargs)
             [ -z "$f" ] && continue
             if echo "$f" | grep -qE '\.xml$'; then
-              ./bin/deepsource report --analyzer test-coverage --key python --value-file "$f" || true
+              ./bin/deepsource report --analyzer test-coverage --key python --value-file "$f"
             elif echo "$f" | grep -qE 'lcov'; then
-              ./bin/deepsource report --analyzer test-coverage --key javascript --value-file "$f" || true
+              ./bin/deepsource report --analyzer test-coverage --key javascript --value-file "$f"
             fi
           done
 
@@ -571,8 +639,11 @@ jobs:
             repo/qlty-zero
             repo/sonar-zero
             repo/codacy-zero
+            repo/semgrep-zero
+            repo/semgrep.sarif
             repo/sentry-zero
             repo/deepscan-zero
+            repo/deepsource-visible-zero
             repo/deps-zero
 
   quality-rollup:

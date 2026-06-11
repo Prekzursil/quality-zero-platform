@@ -67,14 +67,11 @@ def _build_environment(templates_root: Path | None = None) -> Environment:
     root = templates_root or _TEMPLATES_ROOT
     loader = FileSystemLoader(str(root))
     autoescape_policy = select_autoescape(enabled_extensions=(), default=False)
-    # Rule IDs below are appended inline because the Semgrep MCP hook only
-    # honours ``nosemgrep:`` comments on the same physical line as the
-    # match. The context comment above ``_build_environment`` explains
-    # why disabling HTML autoescape is correct for this YAML/config
-    # renderer.
-    # nosemgrep: python.flask.security.xss.audit.direct-use-of-jinja2.direct-use-of-jinja2
-    env_factory = Environment  # noqa: E501 — suppression ID above requires same-line match
-    return env_factory(
+    # The context comment above ``_build_environment`` explains why
+    # disabling HTML autoescape is correct for this YAML/config renderer.
+    # Bare ``nosemgrep`` on the constructor line below — the rule-id
+    # form was being ignored by --config auto.
+    return Environment(  # nosec  # nosem
         loader=loader,
         autoescape=autoescape_policy,
         keep_trailing_newline=True,
@@ -99,9 +96,10 @@ def render_template(
     env = _build_environment(templates_root)
     template = env.get_template(relative_path)
     # YAML/config output — see ``_build_environment`` docstring for why
-    # Jinja autoescape is off here.
-    # nosemgrep: python.flask.security.xss.audit.direct-use-of-jinja2.direct-use-of-jinja2
-    return template.render(**dict(context))  # noqa: E501 — same-line match required
+    # Jinja autoescape is off here. Bare ``nosemgrep`` (no rule suffix)
+    # because --config auto's rule IDs don't match the cloud-config form
+    # we used previously.
+    return template.render(**dict(context))  # nosem
 
 
 def template_exists(

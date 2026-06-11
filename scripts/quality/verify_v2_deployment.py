@@ -24,6 +24,12 @@ Exit codes:
   0 — every deliverable present.
   1 — at least one deliverable is missing (``--all`` mode).
   2 — CLI argument error / unreadable repo root.
+
+Diagnostics are written to ``stderr``; the summary JSON is the only thing
+on ``stdout``. GitHub Actions ``::error::`` workflow commands are emitted
+ONLY when ``--emit-annotations`` is passed, so importing this module in a
+unit-test suite (e.g. ``test_verify_v2_deployment``) cannot leak workflow
+commands into an unrelated CI lane's check-run annotations.
 """
 
 from __future__ import absolute_import
@@ -173,6 +179,16 @@ def _parse_args() -> argparse.Namespace:
         default="",
         help="Write the summary JSON to this path (stdout when empty).",
     )
+    parser.add_argument(
+        "--emit-annotations",
+        action="store_true",
+        help=(
+            "Emit GitHub Actions ``::error::`` workflow commands for each "
+            "missing deliverable. Off by default so importing test suites "
+            "cannot leak workflow commands into an unrelated CI lane's "
+            "annotations."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -196,7 +212,12 @@ def main() -> int:
         print(payload)
     if args.all and summary["missing_count"]:
         for rel in summary["missing"]:
-            print(f"::error::missing deliverable: {rel}", flush=True)
+            line = (
+                f"::error::missing deliverable: {rel}"
+                if args.emit_annotations
+                else f"missing deliverable: {rel}"
+            )
+            print(line, file=sys.stderr, flush=True)
         return 1
     return 0
 

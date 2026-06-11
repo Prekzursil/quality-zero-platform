@@ -293,6 +293,24 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("ref: ${{ inputs.sha != '' && inputs.sha || github.sha }}", text)
         self.assertEqual(text.count("persist-credentials: false"), 3)
 
+    def test_scanner_matrix_scanner_job_can_read_pull_requests(self) -> None:
+        """Authorize the DeepScan PR-head fallback's ``/commits/<sha>/pulls`` read.
+
+        ``check_deepscan_zero`` resolves the merge commit's pull requests so it
+        can re-read the DeepScan status on the PR head (the App posts there,
+        never on the squash-merge commit). That GitHub API read needs
+        ``pull-requests: read`` on the scanner job's permissions block.
+        """
+        text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
+        scanner_block_start = text.find("  scanner:")
+        self.assertNotEqual(scanner_block_start, -1, "scanner job is missing")
+        steps_start = text.find("    steps:", scanner_block_start)
+        scanner_header = text[scanner_block_start:steps_start]
+        self.assertIn("    permissions:", scanner_header)
+        self.assertIn("      contents: read", scanner_header)
+        self.assertIn("      id-token: write", scanner_header)
+        self.assertIn("      pull-requests: read", scanner_header)
+
     def test_scanner_matrix_uses_configurable_runner_for_coverage_lane(self) -> None:
         """Allow the coverage lane to select its dedicated runner configuration."""
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
@@ -327,11 +345,31 @@ class WorkflowContractTests(unittest.TestCase):
         ]:
             self.assertIn(expected, template_text)
 
-    def test_semgrep_lane_uses_supported_cli_invocation(self) -> None:
-        """Keep Semgrep on the supported CLI invocation shape."""
+    def test_semgrep_lane_hard_blocks_via_sarif_zero_gate(self) -> None:
+        """Semgrep lane must hard-block on any finding via the SARIF zero gate.
+
+        ``semgrep ci`` exits 0 when findings are tagged non-blocking on
+        Semgrep Cloud — the gate would silently pass while findings sit on
+        the dashboard. The lane writes SARIF and runs the zero-finding gate
+        which counts ALL findings (blocking + non-blocking) and fails the
+        lane when the count is non-zero. ``semgrep ci`` also refuses to
+        run without ``SEMGREP_APP_TOKEN``, so the lane falls back to
+        ``semgrep scan --config auto`` to keep producing SARIF without
+        auth. This contract locks in the SARIF gate + fallback so a
+        future refactor can't reintroduce the silent-pass / no-SARIF forms.
+        """
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
-        self.assertIn('run(["semgrep", "ci"], cwd=repo_dir)', text)
-        self.assertNotIn('run(["semgrep", "ci", "--error"], cwd=repo_dir)', text)
+        self.assertIn('"semgrep", "ci", "--sarif-output", str(sarif_path)', text)
+        # The unauthenticated fallback must use ``semgrep scan --config auto``
+        # so the SARIF still gets produced when SEMGREP_APP_TOKEN is unset.
+        self.assertIn('"semgrep", "scan"', text)
+        self.assertIn('"--config", "auto"', text)
+        self.assertIn('"scripts/quality/check_semgrep_zero.py"', text)
+        # Reject the silent-pass invocation: bare ``semgrep ci`` without
+        # SARIF capture, and the broken ``--error`` form (not a valid
+        # ``semgrep ci`` flag — ``ci`` rejects it as ``unknown option``).
+        self.assertNotIn('run(["semgrep", "ci"], cwd=repo_dir)', text)
+        self.assertNotIn('run(["semgrep", "ci", "--error"', text)
 
     def test_reusable_workflows_do_not_inline_inputs_inside_run_blocks(self) -> None:
         """Reject direct GitHub expression interpolation inside reusable workflow shell blocks."""
@@ -456,3 +494,82 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("ADMIN_REPO_SLUG: ${{ inputs.repo_slug }}", admin_text)
         self.assertIn('--repo-slug "$ADMIN_REPO_SLUG"', admin_text)
         self.assertNotIn('--repo-slug "${{ inputs.repo_slug }}"', admin_text)
+
+    def test_coverage_publish_steps_have_no_silent_pass_mechanisms(self) -> None:
+        """Lock in the strict-zero contract for coverage publishes.
+
+        After PR #223, the Codacy + DeepSource publish steps no longer use
+        ``continue-on-error: true`` or ``|| true`` to swallow upload
+        failures. These were the silent-pass shapes that left fleet repos
+        showing "no coverage" on cloud dashboards while the workflow
+        reported green. Lock the contract so a future refactor can't
+        reintroduce either pattern in the publish steps.
+        """
+        text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
+        # The Codacy publish step must not silently swallow failures via
+        # the action's continue-on-error attribute.
+        codacy_block_start = text.find("Publish Codacy coverage")
+        self.assertNotEqual(codacy_block_start, -1, "Publish Codacy coverage step is missing")
+        codacy_block_end = text.find("Publish DeepSource coverage", codacy_block_start)
+        codacy_block = text[codacy_block_start:codacy_block_end]
+        # Match the directive at YAML-key level (leading whitespace +
+        # bare key:value), not a reference inside a comment.
+        import re as _re
+        directive_match = _re.search(
+            r"^\s+continue-on-error:\s*true\s*$",
+            codacy_block,
+            _re.MULTILINE,
+        )
+        self.assertIsNone(
+            directive_match,
+            "Codacy publish step must not silently swallow failures via continue-on-error",
+        )
+        # The Codacy publish step must run the reporter in account-token mode
+        # by wiring the already-valid ``CODACY_API_TOKEN`` via ``api-token``
+        # (the project-scoped ``CODACY_PROJECT_TOKEN`` was never provisioned,
+        # so a project-token-only step uploaded with an empty token and the
+        # Coverage 100 Gate stayed red).
+        self.assertIn(
+            "api-token: ${{ secrets.CODACY_API_TOKEN }}",
+            codacy_block,
+            "Codacy publish step must wire api-token from CODACY_API_TOKEN",
+        )
+        self.assertIn(
+            "project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}",
+            codacy_block,
+            "Codacy publish step must keep project-token for project-token mode",
+        )
+        # The DeepSource publish step must propagate per-file ``deepsource
+        # report`` exit codes — ``|| true`` was the previous silent-pass.
+        deepsource_block_start = text.find("Publish DeepSource coverage")
+        self.assertNotEqual(deepsource_block_start, -1, "Publish DeepSource coverage step is missing")
+        # Look for the next step boundary or end of step list.
+        deepsource_block_end = text.find("- name:", deepsource_block_start + 1)
+        deepsource_block = text[deepsource_block_start:deepsource_block_end]
+        # Reject ``|| true`` on the per-file report invocations specifically.
+        self.assertNotIn(
+            "deepsource report --analyzer test-coverage --key python --value-file \"$f\" || true",
+            deepsource_block,
+            "DeepSource Python coverage report must not be ||true-suppressed",
+        )
+        self.assertNotIn(
+            "deepsource report --analyzer test-coverage --key javascript --value-file \"$f\" || true",
+            deepsource_block,
+            "DeepSource JavaScript coverage report must not be ||true-suppressed",
+        )
+        # Both steps should fail loud when their respective secrets are
+        # missing — preflight checks emit ``::error::`` and exit 1. The
+        # Codacy preflight message is only required on the script-based
+        # step path; the action-based path has no shell preflight.
+        if "set -euo pipefail" in codacy_block:
+            self.assertIn(
+                "CODACY_PROJECT_TOKEN secret is missing",
+                text,
+                "Workflow must emit an actionable error when "
+                "CODACY_PROJECT_TOKEN is missing",
+            )
+        self.assertIn(
+            "DEEPSOURCE_DSN secret is missing",
+            text,
+            "Workflow must emit an actionable error when DEEPSOURCE_DSN is missing",
+        )

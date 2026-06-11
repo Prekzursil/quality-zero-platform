@@ -19,6 +19,9 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.quality import codacy_zero_helpers, codacy_zero_support
+from scripts.quality.codacy_quality_thresholds import (
+    DEFAULT_COVERAGE_FLOOR, evaluate_quality_thresholds, fetch_repository_quality,
+)
 from scripts.quality.common import utc_timestamp, write_report
 from scripts.security_helpers import load_json_https
 
@@ -454,6 +457,55 @@ def load_codacy_findings_with_retry(
     )
 
 
+def _quality_threshold_findings_for_provider(
+    query: CodacyQuery, token: str, provider: str,
+) -> Tuple[List[str], Exception | None]:
+    """Try one provider candidate and return ``(findings, exception)``.
+
+    A provider-not-found (404) is treated as recoverable so the caller can
+    try the next alias; other failures bubble up immediately as a finding.
+    """
+    url = build_repository_analysis_url(provider, query.owner, query.repo)
+    try:
+        snapshot = fetch_repository_quality(url, token, request_json=_request_json)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return [], exc
+        return [f"Codacy quality-threshold fetch failed: {exc}"], exc
+    # OSError covers urllib.error.URLError (a subclass) and raw socket
+    # failures (DNS / connect / read) — listing both would be redundant.
+    except (OSError, RuntimeError, ValueError) as exc:
+        return [f"Codacy quality-threshold fetch failed: {exc}"], exc
+    return (
+        evaluate_quality_thresholds(snapshot, coverage_floor=DEFAULT_COVERAGE_FLOOR),
+        None,
+    )
+
+
+def _quality_threshold_findings(
+    query: CodacyQuery, token: str, *, provider_candidates: Sequence[str],
+) -> List[str]:
+    """Return findings for complexity/duplication/coverage drift on the repo branch.
+
+    Tries each provider alias (``gh``/``github``) so a 404 on the first
+    candidate doesn't mask the same metrics under a different alias.
+    Errors other than 404 are surfaced as a single fetch-failed finding
+    (including ``OSError`` from the underlying socket layer) so an outage
+    on this endpoint does not mask the primary issue-count gate.
+    """
+    last_exc: Exception | None = None
+    for provider in provider_candidates:
+        findings, exc = _quality_threshold_findings_for_provider(query, token, provider)
+        if exc is None:
+            return findings
+        if findings:
+            return findings
+        last_exc = exc
+    if last_exc is not None:
+        return [f"Codacy quality-threshold fetch failed: {last_exc}"]
+    return []
+
+
 def _resolve_codacy_status(args: argparse.Namespace) -> CodacyStatusResult:
     """Resolve the final Codacy gate status for the current invocation."""
     token = _preferred_text(args.token, os.environ.get("CODACY_API_TOKEN", ""))
@@ -471,6 +523,10 @@ def _resolve_codacy_status(args: argparse.Namespace) -> CodacyStatusResult:
     fallback = _commit_scope_fallback(base, token, providers, findings)
     if fallback is not None:
         open_issues, findings = fallback
+    threshold_findings = _quality_threshold_findings(
+        base, token, provider_candidates=providers,
+    )
+    findings = list(findings) + threshold_findings
     return CodacyStatusResult(
         status=_codacy_status(findings, getattr(args, "policy_mode", "ratchet")),
         findings=findings, open_issues=open_issues, pull_request=pull_request,

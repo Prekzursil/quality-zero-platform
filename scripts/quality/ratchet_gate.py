@@ -348,8 +348,13 @@ def _classify_measured(
 
 
 @dataclass
-class ClassifyInputs:
-    """Bundle the per-run inputs to :func:`classify` (one object, few locals)."""
+class ClassifyInputs:  # pylint: disable=too-many-instance-attributes
+    """Bundle the per-run inputs to :func:`classify` (one object, few locals).
+
+    This is a deliberate parameter-object: bundling the eight per-run inputs
+    into one frozen dataclass keeps :func:`classify` and its helpers to a
+    handful of locals each, so the >7-attribute count here is by design.
+    """
 
     baseline: RatchetBaseline
     totals: Mapping[str, int]

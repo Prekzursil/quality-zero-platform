@@ -790,7 +790,9 @@ class ClassifyUnmeasuredTests(unittest.TestCase):
 class ClassifyMeasuredTests(unittest.TestCase):
     """``_classify_measured`` runs the per-provider assert/lower machine."""
 
-    def _baseline(self, ceiling: int) -> rg.RatchetBaseline:
+    @staticmethod
+    def _baseline(ceiling: int) -> rg.RatchetBaseline:
+        """Build a baseline whose Codacy provider carries ``ceiling``."""
         return rg.RatchetBaseline(
             raw={"providers": {
                 "Codacy": {
@@ -1041,7 +1043,8 @@ class ParseArgsTests(unittest.TestCase):
 class EmitGithubOutputTests(unittest.TestCase):
     """``_emit_github_output`` appends key/values or no-ops."""
 
-    def test_empty_path_is_noop(self) -> None:
+    @staticmethod
+    def test_empty_path_is_noop() -> None:
         """An empty path writes nothing and does not raise."""
         rg._emit_github_output("", rg.GateResult())
 
@@ -1069,13 +1072,15 @@ class MainTests(unittest.TestCase):
     def _workspace(self) -> Path:
         return _tmpdir(self)
 
-    def _write_canonical(self, root: Path, payload: Dict[str, object]) -> Path:
+    @staticmethod
+    def _write_canonical(root: Path, payload: Dict[str, object]) -> Path:
+        """Write ``payload`` to ``root/canonical.json`` and return its path."""
         path = root / "canonical.json"
         path.write_text(json.dumps(payload), encoding="utf-8")
         return path
 
+    @staticmethod
     def _argv(
-            self,
             *,
             canonical: Path,
             ratchet: Path,
@@ -1083,6 +1088,7 @@ class MainTests(unittest.TestCase):
             head_sha: str,
             extra: Sequence[str] = (),
     ) -> List[str]:
+        """Build a ``main`` argv from the given paths plus ``extra`` flags."""
         argv = [
             "--canonical-json",
             str(canonical),

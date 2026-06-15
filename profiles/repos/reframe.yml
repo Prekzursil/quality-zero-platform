@@ -47,6 +47,8 @@ required_contexts:
   - shared-scanner-matrix / Semgrep Zero
   - shared-scanner-matrix / Sentry Zero
   - shared-scanner-matrix / DeepScan Zero
+  - shared-scanner-matrix / DeepSource Visible Zero
+  - shared-scanner-matrix / QLTY Zero
   - SonarCloud Code Analysis
   - Python API & worker checks
   - Web build
@@ -70,6 +72,8 @@ required_contexts:
   - shared-scanner-matrix / Semgrep Zero
   - shared-scanner-matrix / Sentry Zero
   - shared-scanner-matrix / DeepScan Zero
+  - shared-scanner-matrix / DeepSource Visible Zero
+  - shared-scanner-matrix / QLTY Zero
   - SonarCloud Code Analysis
   - DeepScan
   - Python API & worker checks

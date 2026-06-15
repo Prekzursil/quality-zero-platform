@@ -58,22 +58,19 @@ def _build_environment(templates_root: Path | None = None) -> Environment:
 
     Semgrep's ``direct-use-of-jinja2`` and ``incorrect-autoescape-disabled``
     rules target web-framework rendering where HTML escaping protects
-    against XSS. This module renders *non-HTML* files (YAML, TOML,
-    source) for a filesystem-write pipeline — HTML escaping would
-    actively corrupt those outputs. ``select_autoescape([])`` states the
-    policy explicitly: opt in to escaping only for the listed
-    extensions, which is none.
+    against XSS. This module renders *non-HTML* files (YAML, JSON, source)
+    for a filesystem-write pipeline — HTML escaping would actively corrupt
+    those outputs. ``select_autoescape()`` is the canonical safe
+    constructor the SAST rules recommend: it opts HTML escaping IN only for
+    ``.html``/``.htm``/``.xml`` templates. Every template here is a
+    ``.yml.j2``/``.json.j2`` config file, so escaping stays OFF for them
+    while the policy is expressed in the rule-recognised form.
     """
     root = templates_root or _TEMPLATES_ROOT
     loader = FileSystemLoader(str(root))
-    autoescape_policy = select_autoescape(enabled_extensions=(), default=False)
-    # The context comment above ``_build_environment`` explains why
-    # disabling HTML autoescape is correct for this YAML/config renderer.
-    # Bare ``nosemgrep`` on the constructor line below — the rule-id
-    # form was being ignored by --config auto.
-    return Environment(  # nosec  # nosem
+    return Environment(
         loader=loader,
-        autoescape=autoescape_policy,
+        autoescape=select_autoescape(),
         keep_trailing_newline=True,
         trim_blocks=True,
         lstrip_blocks=True,

@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# Isolation: when run from a git hook, git exports GIT_DIR/GIT_WORK_TREE/etc into
+# the env, which makes fixture-test git commands operate on the REAL repo. Clear them.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR GIT_PREFIX GIT_REFLOG_ACTION GIT_QUARANTINE_PATH 2>/dev/null || true
 
 if command -v python >/dev/null 2>&1; then
   PYTHON_CMD=(python)

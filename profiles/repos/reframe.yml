@@ -37,6 +37,12 @@ coverage:
     name: desktop-ts
     path: apps/desktop/coverage/lcov.info
     flag: desktop-ts
+  - format: xml
+    name: python
+    path: coverage/python-coverage.xml
+  - format: lcov
+    name: desktop-rust
+    path: coverage/desktop-rust.lcov
 required_contexts:
   always:
   - shared-scanner-matrix / Coverage 100 Gate

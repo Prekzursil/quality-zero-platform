@@ -1,0 +1,440 @@
+# Instincts generated from https://github.com/Prekzursil/quality-zero-platform
+# Generated: 2026-06-15T18:42:17.713Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: quality-zero-platform-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Commit Length
+
+## Action
+
+Write moderate-length commit messages (~68 characters)
+
+## Evidence
+
+- Average commit message length: 68 chars
+- Based on 4 commits
+
+---
+id: quality-zero-platform-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Naming Files
+
+## Action
+
+Use snake_case naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: snake_case
+
+---
+id: quality-zero-platform-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: quality-zero-platform-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: quality-zero-platform-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: quality-zero-platform-test-naming
+trigger: "when creating a test file"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Test Naming
+
+## Action
+
+Name test files using the pattern: *.test.ts
+
+## Evidence
+
+- File pattern: *.test.ts
+- Consistent across test files
+
+---
+id: quality-zero-platform-test-types
+trigger: "when planning tests for a feature"
+confidence: 0.7
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Test Types
+
+## Action
+
+Write unit, integration tests to match project standards
+
+## Evidence
+
+- Test types detected: unit, integration
+- Coverage config: yes
+
+---
+id: quality-zero-platform-workflow-merge-main-into-feature-branch
+trigger: "when doing merge main into feature branch"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Workflow Merge Main Into Feature Branch
+
+## Action
+
+Follow the merge-main-into-feature-branch workflow:
+1. Checkout the feature branch.
+2. Merge main into the feature branch.
+3. Resolve any conflicts.
+4. Update affected scripts and tests as needed.
+5. Commit the merge.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: scripts/quality/*.py, tests/*.py, .github/workflows/*.yml
+
+---
+id: quality-zero-platform-instinct-file-naming
+trigger: "When creating a new Python file"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct File Naming
+
+## Action
+
+Name the file using snake_case
+
+## Evidence
+
+- Pattern in namingConventions.files: snake_case
+
+---
+id: quality-zero-platform-instinct-function-naming
+trigger: "When defining a new function"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Function Naming
+
+## Action
+
+Name the function using camelCase
+
+## Evidence
+
+- Pattern in namingConventions.functions: camelCase
+
+---
+id: quality-zero-platform-instinct-class-naming
+trigger: "When defining a new class"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Class Naming
+
+## Action
+
+Name the class using PascalCase
+
+## Evidence
+
+- Pattern in namingConventions.classes: PascalCase
+
+---
+id: quality-zero-platform-instinct-constant-naming
+trigger: "When defining a constant"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Constant Naming
+
+## Action
+
+Name the constant using SCREAMING_SNAKE_CASE
+
+## Evidence
+
+- Pattern in namingConventions.constants: SCREAMING_SNAKE_CASE
+
+---
+id: quality-zero-platform-instinct-import-style
+trigger: "When importing modules in Python code"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Import Style
+
+## Action
+
+Use relative imports
+
+## Evidence
+
+- Pattern in importStyle: relative
+
+---
+id: quality-zero-platform-instinct-export-style
+trigger: "When exporting functions or classes"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Export Style
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Pattern in exportStyle: named
+
+---
+id: quality-zero-platform-instinct-test-location
+trigger: "When adding new tests"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Test Location
+
+## Action
+
+Place test files in the separate 'tests' folder
+
+## Evidence
+
+- Pattern in folderStructure.testLocation: separate
+- Common folder: tests
+
+---
+id: quality-zero-platform-instinct-test-types
+trigger: "When writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Test Types
+
+## Action
+
+Include both unit and integration tests as appropriate
+
+## Evidence
+
+- Pattern in testTypes: unit, integration
+
+---
+id: quality-zero-platform-instinct-test-pattern
+trigger: "When naming test files"
+confidence: 0.7
+domain: testing
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Test Pattern
+
+## Action
+
+Use the pattern '*.test.ts' for test file names
+
+## Evidence
+
+- Pattern in filePattern: *.test.ts
+
+---
+id: quality-zero-platform-instinct-coverage-config
+trigger: "When configuring tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Coverage Config
+
+## Action
+
+Ensure test coverage is configured
+
+## Evidence
+
+- Pattern in coverageConfig: true
+
+---
+id: quality-zero-platform-instinct-commit-prefix-fix
+trigger: "When making a commit that fixes a bug"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Commit Prefix Fix
+
+## Action
+
+Prefix the commit message with 'fix'
+
+## Evidence
+
+- Seen in commit: fix(verify): unset inherited GIT_* ...
+
+---
+id: quality-zero-platform-instinct-commit-prefix-style
+trigger: "When making a commit that changes code style"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Commit Prefix Style
+
+## Action
+
+Prefix the commit message with 'style'
+
+## Evidence
+
+- Seen in commit: style: apply SAFE ruff autofixes ...
+
+---
+id: quality-zero-platform-instinct-commit-length
+trigger: "When writing a commit message"
+confidence: 0.7
+domain: git
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Commit Length
+
+## Action
+
+Keep the commit message concise, around 68 characters on average
+
+## Evidence
+
+- Pattern in averageLength: 68
+
+---
+id: quality-zero-platform-instinct-merge-main-workflow
+trigger: "When a feature or fix branch needs to be synchronized with main before further development or merging"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Merge Main Workflow
+
+## Action
+
+Run the 'merge-main-into-feature-branch' workflow: checkout the feature branch, merge main, resolve conflicts, update scripts/tests, commit the merge
+
+## Evidence
+
+- Workflow: merge-main-into-feature-branch
+- Example commit sequence in workflow
+

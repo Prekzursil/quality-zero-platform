@@ -58,6 +58,12 @@
             "context": "shared-scanner-matrix / DeepScan Zero"
           },
           {
+            "context": "shared-scanner-matrix / DeepSource Visible Zero"
+          },
+          {
+            "context": "shared-scanner-matrix / QLTY Zero"
+          },
+          {
             "context": "SonarCloud Code Analysis"
           },
           {

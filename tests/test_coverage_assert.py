@@ -16,12 +16,12 @@ from scripts.quality.assert_coverage_100 import (
     _matches_required_source,
     _normalize_source_path,
     _required_source_findings,
-    parse_coverage_xml,
-    parse_lcov,
-    parse_named_path,
     coverage_sources_from_lcov,
     coverage_sources_from_xml,
     evaluate,
+    parse_coverage_xml,
+    parse_lcov,
+    parse_named_path,
 )
 from scripts.quality.coverage_support import (
     _existing_repo_file_candidate,
@@ -109,6 +109,82 @@ class CoverageAssertTests(unittest.TestCase):
 
         self.assertEqual((stats.covered, stats.total), (3, 4))
         self.assertEqual((stats.branch_covered, stats.branch_total), (4, 6))
+
+    def test_lcov_resolves_app_relative_sources_via_report_base_dir(self) -> None:
+        """Cover lcov resolves app-relative SF paths via the report base dir."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "apps" / "web" / "src").mkdir(parents=True)
+            (root / "apps" / "web" / "src" / "main.ts").write_text(
+                "export const x = 1;\n", encoding="utf-8"
+            )
+            (root / "apps" / "web" / "coverage").mkdir(parents=True)
+            lcov_path = root / "apps" / "web" / "coverage" / "lcov.info"
+            lcov_path.write_text(
+                "\n".join(
+                    [
+                        "SF:src/main.ts",
+                        "DA:1,1",
+                        "LF:1",
+                        "LH:1",
+                        "BRF:2",
+                        "BRH:2",
+                        "end_of_record",
+                        "SF:node_modules/shim.ts",
+                        "DA:1,1",
+                        "LF:1",
+                        "LH:1",
+                        "end_of_record",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            with _temporary_cwd(root):
+                sources = coverage_sources_from_lcov(lcov_path)
+                stats = parse_lcov("web", lcov_path)
+
+        # (a) app-relative SF resolves to the real nested file AND is counted.
+        self.assertEqual(sources, {"apps/web/src/main.ts"})
+        self.assertEqual((stats.covered, stats.total), (1, 1))
+        self.assertEqual((stats.branch_covered, stats.branch_total), (2, 2))
+
+    def test_lcov_repo_root_relative_and_untrackable_sources(self) -> None:
+        """Cover lcov repo-root-relative SF still resolves; untrackable excluded."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "apps" / "web" / "src").mkdir(parents=True)
+            (root / "apps" / "web" / "src" / "x.ts").write_text(
+                "export const x = 1;\n", encoding="utf-8"
+            )
+            lcov_path = root / "lcov.info"
+            lcov_path.write_text(
+                "\n".join(
+                    [
+                        # (b) already repo-root-relative SF keeps working.
+                        "SF:apps/web/src/x.ts",
+                        "DA:1,1",
+                        "LF:1",
+                        "LH:1",
+                        "end_of_record",
+                        # (c) untrackable SF (nonexistent) stays excluded.
+                        "SF:apps/web/src/missing.ts",
+                        "DA:1,1",
+                        "LF:1",
+                        "LH:1",
+                        "end_of_record",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            with _temporary_cwd(root):
+                sources = coverage_sources_from_lcov(lcov_path)
+                stats = parse_lcov("web", lcov_path)
+
+        self.assertEqual(sources, {"apps/web/src/x.ts"})
+        # Only the trackable record is counted; the missing one is excluded.
+        self.assertEqual((stats.covered, stats.total), (1, 1))
 
     def test_coverage_sources_from_xml_and_lcov_are_workspace_relative(self) -> None:
         """Cover coverage sources from xml and lcov are workspace relative."""

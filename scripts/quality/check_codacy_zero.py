@@ -20,7 +20,9 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
 
 from scripts.quality import codacy_zero_helpers, codacy_zero_support
 from scripts.quality.codacy_quality_thresholds import (
-    DEFAULT_COVERAGE_FLOOR, evaluate_quality_thresholds, fetch_repository_quality,
+    DEFAULT_COVERAGE_FLOOR,
+    evaluate_quality_thresholds,
+    fetch_repository_quality,
 )
 from scripts.quality.common import utc_timestamp, write_report
 from scripts.security_helpers import load_json_https

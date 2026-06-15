@@ -8,7 +8,6 @@ from typing import List, Optional, Set, Tuple
 
 from scripts.quality.coverage_paths import (
     _coverage_source_candidates,
-    _normalize_source_path,
     _should_track_coverage_source,
 )
 from scripts.quality.coverage_types import CoverageStats
@@ -39,15 +38,46 @@ def coverage_sources_from_xml(path: Path) -> Set[str]:
     return covered_sources
 
 
+def _lcov_base_dir(path: Path) -> str:
+    """Derive the report base dir from an lcov file path.
+
+    LCOV ``SF:`` values are frequently relative to the package that owns
+    the report (e.g. ``apps/web/coverage/lcov.info`` records ``SF:src/main.ts``
+    for ``apps/web/src/main.ts``). The base dir is the report's parent with a
+    trailing ``coverage`` segment stripped. Repo-root reports yield ``""`` so
+    the historical repo-root-relative resolution is preserved unchanged.
+    """
+    parent = path.parent
+    base = parent.parent if parent.name == "coverage" else parent
+    base_text = base.as_posix()
+    return "" if base_text == "." else base_text
+
+
+def _resolve_lcov_source(raw_sf: str, base_dir: str) -> Optional[str]:
+    """Resolve one ``SF:`` value to the first trackable repo source path.
+
+    Mirrors the XML parser: candidates are the raw-normalized value FIRST
+    (backward compatible with repo-root-relative ``SF:`` paths) and then the
+    base-dir-prefixed value. Returns ``None`` when nothing trackable matches.
+    """
+    for candidate in _coverage_source_candidates(raw_sf, [base_dir]):
+        if _should_track_coverage_source(candidate):
+            return candidate
+    return None
+
+
 def coverage_sources_from_lcov(path: Path) -> Set[str]:
     """Handle coverage sources from lcov."""
-    return {
-        filename
-        for raw in path.read_text(encoding="utf-8").splitlines()
-        if (line := raw.strip()).startswith("SF:")
-        if (filename := _normalize_source_path(line.split(":", 1)[1]))
-        if _should_track_coverage_source(filename)
-    }
+    base_dir = _lcov_base_dir(path)
+    covered_sources: Set[str] = set()
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line.startswith("SF:"):
+            continue
+        resolved = _resolve_lcov_source(line.split(":", 1)[1], base_dir)
+        if resolved is not None:
+            covered_sources.add(resolved)
+    return covered_sources
 
 
 def parse_coverage_xml(name: str, path: Path) -> CoverageStats:
@@ -105,13 +135,15 @@ def _lcov_counter_key(line: str) -> Optional[str]:
 
 def _iter_included_lcov_lines(path: Path) -> List[str]:
     """Handle iter included lcov lines."""
+    base_dir = _lcov_base_dir(path)
     included_lines: List[str] = []
     include_record = False
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if line.startswith("SF:"):
-            source_path = _normalize_source_path(line.split(":", 1)[1])
-            include_record = _should_track_coverage_source(source_path)
+            include_record = (
+                _resolve_lcov_source(line.split(":", 1)[1], base_dir) is not None
+            )
             continue
         if line == "end_of_record":
             include_record = False

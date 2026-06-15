@@ -43,6 +43,12 @@ coverage:
     name: desktop-ts
     path: apps/desktop/coverage/lcov.info
     flag: desktop-ts
+  - format: xml
+    name: python
+    path: coverage/python-coverage.xml
+  - format: lcov
+    name: desktop-rust
+    path: coverage/desktop-rust.lcov
 # Whole provider context set enforced on push AND pull_request: native
 # DeepScan/Codacy/qlty + CodeRabbit moved out of pull_request_only into
 # always, and the QLTY Zero aggregator added.
@@ -60,6 +66,8 @@ required_contexts:
   - shared-scanner-matrix / Semgrep Zero
   - shared-scanner-matrix / Sentry Zero
   - shared-scanner-matrix / DeepScan Zero
+  - shared-scanner-matrix / DeepSource Visible Zero
+  - shared-scanner-matrix / QLTY Zero
   - SonarCloud Code Analysis
   - DeepScan
   - CodeRabbit
@@ -82,6 +90,8 @@ required_contexts:
   - shared-scanner-matrix / Semgrep Zero
   - shared-scanner-matrix / Sentry Zero
   - shared-scanner-matrix / DeepScan Zero
+  - shared-scanner-matrix / DeepSource Visible Zero
+  - shared-scanner-matrix / QLTY Zero
   - SonarCloud Code Analysis
   - DeepScan
   - CodeRabbit

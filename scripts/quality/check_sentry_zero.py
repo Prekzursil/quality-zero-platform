@@ -95,18 +95,26 @@ def _render_md(payload: Mapping[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _issues_url(org: str, project_slug: str) -> str:
-    """Build the unresolved-issues endpoint for a Sentry project."""
+def _issues_url(org: str) -> str:
+    """Build the org-scoped unresolved-issues endpoint for a Sentry org.
+
+    The legacy project-slug endpoint ``/projects/<org>/<project>/issues/``
+    rejects a valid ORG-scoped ``SENTRY_AUTH_TOKEN`` with HTTP 401, so the
+    gate queries ``/organizations/<org>/issues/`` instead — the same
+    org-scoped endpoint ``scripts/quality/truth/preflight.py`` already trusts.
+    The org endpoint keys ``project`` by NUMERIC id (not slug), so we omit it
+    and count the org-wide unresolved total; the platform org hosts a single
+    project, so the org-wide total equals that project's total. The ``x-hits``
+    response header still carries the unresolved count.
+    """
     org_slug = urllib.parse.quote(org, safe="")
-    project_param = urllib.parse.quote(project_slug, safe="")
     query = urllib.parse.urlencode(
         [
             ("query", "is:unresolved"),
             ("limit", "1"),
-            ("project", project_param),
         ]
     )
-    return f"{SENTRY_API_BASE}/projects/{org_slug}/{project_param}/issues/?{query}"
+    return f"{SENTRY_API_BASE}/organizations/{org_slug}/issues/?{query}"
 
 
 def _validate_sentry_inputs(token: str, org: str, projects: List[str]) -> List[str]:
@@ -131,7 +139,7 @@ def _collect_project_results(
     project_results: List[Dict[str, Any]] = []
     for project in projects:
         try:
-            payload, headers = _request_json(_issues_url(org, project), token)
+            payload, headers = _request_json(_issues_url(org), token)
         except HTTPError as exc:
             if exc.code == 404:
                 project_results.append(

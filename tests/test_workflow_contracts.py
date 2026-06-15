@@ -206,7 +206,7 @@ class WorkflowContractTests(unittest.TestCase):
     def test_scanner_matrix_pins_qlty_actions_to_full_sha(self) -> None:
         """Pin QLTY and PR creation actions to immutable full SHAs."""
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
-        self.assertIn("qltysh/qlty-action/install@a19242102d17e497f437d7466aa01b528537e899", text)
+        self.assertIn("qltysh/qlty-action/install@fd52dc852530a708d68c3b7342f8d33d1df4cd55", text)
         self.assertIn(
             "matrix.lane == 'qlty_zero' || (matrix.lane == 'coverage' && steps.profile.outputs.qlty_coverage_files != '' && runner.os != 'Windows')",
             text,

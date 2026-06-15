@@ -110,7 +110,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: qltysh/qlty-action/install@a19242102d17e497f437d7466aa01b528537e899
+      - uses: qltysh/qlty-action/install@fd52dc852530a708d68c3b7342f8d33d1df4cd55
 """)
         violations = scan_workflow(wf)
         self.assertEqual(len(violations), 0)

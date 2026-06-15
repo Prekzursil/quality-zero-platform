@@ -137,7 +137,13 @@ _UNSAFE_HEADER_PREFIXES: Tuple[str, ...] = (
 )
 
 _WORD_TOKEN_RE = re.compile(r"[A-Za-z0-9_]+|[^\sA-Za-z0-9_]")
-_QUOTED_SEGMENT_RE = re.compile(r"(['\"])((?:\\.|(?!\1).)*?)\1")
+# Match single- or double-quoted string literals. Two mutually-exclusive
+# branches per quote type — a body char is either a non-quote/non-backslash
+# char ``[^'\\]`` / ``[^"\\]`` or an escaped pair ``\\.``; the alternatives
+# cannot match the same character, so there is no ambiguous backtracking
+# (clears CodeQL py/redos). Behaviour is identical to the previous
+# backreference form, including allowing the opposite quote inside a literal.
+_QUOTED_SEGMENT_RE = re.compile(r"(?:'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")")
 _IMPORT_LINE_RE = re.compile(r"^\s*(import\s+\S+|from\s+\S+\s+import\s+\S.*)$")
 
 

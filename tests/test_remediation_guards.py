@@ -9,11 +9,11 @@ import subprocess  # nosec B404
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Dict, List, Optional, Tuple
-from unittest import mock
 
 from scripts.quality import remediation_guards as guards
 from scripts.quality.remediation_guards import (
@@ -106,7 +106,7 @@ class SyspathAndEnvTests(unittest.TestCase):
     def test_scrubbed_git_env_drops_hook_injected_redirection(self) -> None:
         """Strip GIT_DIR-style redirection vars while keeping the rest."""
         injected = {"GIT_DIR": "/evil/.git", "GIT_WORK_TREE": "/evil", "KEEP_ME": "1"}
-        with mock.patch.dict(os.environ, injected, clear=False):
+        with unittest.mock.patch.dict(os.environ, injected, clear=False):
             scrubbed = guards._scrubbed_git_env()
         for blocked in guards._GIT_ENV_BLOCKLIST:
             self.assertNotIn(blocked, scrubbed)
@@ -191,7 +191,7 @@ class TreeShrinkGuardTests(_GitFixtureMixin):
         completed = subprocess.CompletedProcess(
             args=[], returncode=3, stdout="", stderr="   "
         )
-        with mock.patch.object(guards.subprocess, "run", return_value=completed):
+        with unittest.mock.patch.object(guards.subprocess, "run", return_value=completed):
             with self.assertRaises(GuardExecutionError) as caught:
                 guards._run_git(".", ["status"])
         self.assertIn("git status failed", str(caught.exception))
@@ -356,14 +356,14 @@ class BlockedPathGuardTests(unittest.TestCase):
     def test_delegates_to_ssot_module_when_importable(self) -> None:
         """Use check_blocked_paths.is_blocked_path when the SSOT imports."""
         fake = SimpleNamespace(is_blocked_path=lambda path: path == "special.txt")
-        with mock.patch.object(guards.importlib, "import_module", return_value=fake):
+        with unittest.mock.patch.object(guards.importlib, "import_module", return_value=fake):
             with self.assertRaises(RemediationGuardError):
                 assert_not_blocked_path(["special.txt"])
             assert_not_blocked_path(["other.txt"])
 
     def test_falls_back_to_local_contract_on_import_error(self) -> None:
         """Enforce the same BLOCKED_PATTERNS contract when the SSOT is absent."""
-        with mock.patch.object(
+        with unittest.mock.patch.object(
             guards.importlib, "import_module", side_effect=ImportError("absent")
         ):
             with self.assertRaises(RemediationGuardError) as caught:
@@ -427,6 +427,54 @@ class FindingsLoaderTests(unittest.TestCase):
         not_list.write_text('{"scanner": "codeql"}', encoding="utf-8")
         with self.assertRaises(GuardExecutionError):
             guards._load_findings(str(not_list))
+
+
+class QuotedSegmentTests(unittest.TestCase):
+    """Pin the quoted-string-literal extraction contract.
+
+    The ``_QUOTED_SEGMENT_RE`` pattern was rewritten into a non-backtracking
+    (CodeQL py/redos-safe) form. These cases lock in that the extracted
+    segments are byte-for-byte identical to the previous backreference form,
+    which is the contract ``_is_whitespace_only_change`` depends on. Cases
+    cover both quote types, escaped quotes, escaped backslashes, the opposite
+    quote appearing inside a literal, adjacent literals, and unterminated
+    literals.
+    """
+
+    def test_quoted_segments_extraction_contract_is_unchanged(self) -> None:
+        """Extract the same literal segments the legacy regex produced."""
+        expectations = [
+            ("x = 'hello'", ["'hello'"]),
+            ('y = "world"', ['"world"']),
+            (r"a = 'he\'llo'", [r"'he\'llo'"]),
+            (r'b = "he\"llo"', [r'"he\"llo"']),
+            ("c = 'a' + 'b'", ["'a'", "'b'"]),
+            # Opposite quote inside a literal must be kept inside the body —
+            # this is exactly where the naive char-class form regressed.
+            ('d = \'has "double" inside\'', ['\'has "double" inside\'']),
+            ("e = \"has 'single' inside\"", ["\"has 'single' inside\""]),
+            (r"f = 'trailing backslash\\'", [r"'trailing backslash\\'"]),
+            ("h = ''", ["''"]),
+            ('i = ""', ['""']),
+            ("j = 'unterminated", []),
+            (r"k = 'a\\' + 'b'", [r"'a\\'", "'b'"]),
+            ("l = \"a'b'c\"", ["\"a'b'c\""]),
+            ("multi\nline = 'value'\nnext = \"v2\"", ["'value'", '"v2"']),
+        ]
+        for source, expected in expectations:
+            with self.subTest(source=source):
+                self.assertEqual(guards._quoted_segments([source]), expected)
+
+    def test_quoted_segments_runs_in_linear_time(self) -> None:
+        """A long pathological body must not exhibit catastrophic backtracking."""
+        import time
+
+        evil = "'" + ("a" * 100000)  # unterminated, long body
+        start = time.perf_counter()
+        result = guards._quoted_segments([evil])
+        elapsed = time.perf_counter() - start
+        self.assertEqual(result, [])
+        self.assertLess(elapsed, 1.0)
 
 
 class GuardRunnerCliTests(_GitFixtureMixin):

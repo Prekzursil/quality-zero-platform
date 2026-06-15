@@ -37,6 +37,12 @@ coverage:
     name: desktop-ts
     path: apps/desktop/coverage/lcov.info
     flag: desktop-ts
+  - format: xml
+    name: python
+    path: coverage/python-coverage.xml
+  - format: lcov
+    name: desktop-rust
+    path: coverage/desktop-rust.lcov
 required_contexts:
   always:
   - shared-scanner-matrix / Coverage 100 Gate
@@ -47,6 +53,8 @@ required_contexts:
   - shared-scanner-matrix / Semgrep Zero
   - shared-scanner-matrix / Sentry Zero
   - shared-scanner-matrix / DeepScan Zero
+  - shared-scanner-matrix / DeepSource Visible Zero
+  - shared-scanner-matrix / QLTY Zero
   - SonarCloud Code Analysis
   - Python API & worker checks
   - Web build
@@ -70,6 +78,8 @@ required_contexts:
   - shared-scanner-matrix / Semgrep Zero
   - shared-scanner-matrix / Sentry Zero
   - shared-scanner-matrix / DeepScan Zero
+  - shared-scanner-matrix / DeepSource Visible Zero
+  - shared-scanner-matrix / QLTY Zero
   - SonarCloud Code Analysis
   - DeepScan
   - Python API & worker checks

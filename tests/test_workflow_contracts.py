@@ -12,9 +12,7 @@ MUTATION_TEMPLATE_REF = "@7268fee30f1cf796938d97fe460259f27386a8cd"
 class WorkflowContractTests(unittest.TestCase):
     """Protect the platform's workflow wrapper and reusable contract invariants."""
 
-    def test_reusable_mutation_workflows_do_not_reference_openai_api_key_lane(
-        self,
-    ) -> None:
+    def test_reusable_mutation_workflows_do_not_reference_openai_api_key_lane(self) -> None:
         """Keep mutation workflows on Codex auth instead of deprecated OpenAI secret lanes."""
         workflow_paths = [
             ROOT / ".github" / "workflows" / "reusable-remediation-loop.yml",
@@ -50,9 +48,7 @@ class WorkflowContractTests(unittest.TestCase):
                 self.assertIn("merge_group:", text, path.name)
                 self.assertIn("security-events: write", text, path.name)
 
-    def test_repo_template_parity_wrappers_pin_controller_release_and_do_not_inherit_all_secrets(
-        self,
-    ) -> None:
+    def test_repo_template_parity_wrappers_pin_controller_release_and_do_not_inherit_all_secrets(self) -> None:
         """Keep repo templates pinned to the controller release with explicit secrets only."""
         workflow_paths = [
             ROOT / "templates" / "repo" / ".github" / "workflows" / "quality-zero-platform.yml",
@@ -64,15 +60,15 @@ class WorkflowContractTests(unittest.TestCase):
         for path in workflow_paths:
             text = path.read_text(encoding="utf-8")
             self.assertNotIn("secrets: inherit", text, path.name)
-            self.assertIn("@d7a94db4ab57df42940832cf67b730c673af7da6", text, path.name)
+            self.assertIn(
+                "@d7a94db4ab57df42940832cf67b730c673af7da6", text, path.name
+            )
             self.assertIn("platform_repository: Prekzursil/quality-zero-platform", text, path.name)
             self.assertIn("platform_ref: main", text, path.name)
             self.assertIn("merge_group:", text, path.name)
             self.assertIn("checks_requested", text, path.name)
 
-    def test_repo_template_parity_wrappers_set_explicit_top_level_permissions(
-        self,
-    ) -> None:
+    def test_repo_template_parity_wrappers_set_explicit_top_level_permissions(self) -> None:
         """Require the published repo templates to declare explicit wrapper permissions."""
         workflow_expectations = {
             "quality-zero-platform.yml": [
@@ -104,9 +100,7 @@ class WorkflowContractTests(unittest.TestCase):
             for expected in expected_lines:
                 self.assertIn(expected, text, name)
 
-    def test_repo_template_mutation_wrappers_pin_controller_and_pass_only_required_inputs_and_secrets(
-        self,
-    ) -> None:
+    def test_repo_template_mutation_wrappers_pin_controller_and_pass_only_required_inputs_and_secrets(self) -> None:
         """Verify mutation templates stay pinned and expose only trusted inputs and secrets."""
         workflow_expectations = {
             "quality-zero-backlog.yml": [
@@ -139,9 +133,7 @@ class WorkflowContractTests(unittest.TestCase):
             for expected in expected_lines:
                 self.assertIn(expected, text, name)
 
-    def test_self_remediation_wrapper_documents_trusted_workflow_run_trigger(
-        self,
-    ) -> None:
+    def test_self_remediation_wrapper_documents_trusted_workflow_run_trigger(self) -> None:
         """Document the trusted workflow_run trigger for the self-remediation wrapper."""
         text = (ROOT / ".github" / "workflows" / "quality-zero-remediation.yml").read_text(encoding="utf-8")
         self.assertIn("workflow_run: # zizmor: ignore[dangerous-triggers]", text)
@@ -190,9 +182,7 @@ class WorkflowContractTests(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             self.assertNotIn("workflow_dispatch:\n    inputs:", text, path.name)
 
-    def test_mutation_workflows_sanitize_user_controlled_inputs_in_run_blocks(
-        self,
-    ) -> None:
+    def test_mutation_workflows_sanitize_user_controlled_inputs_in_run_blocks(self) -> None:
         """Reject direct interpolation of untrusted workflow inputs inside shell commands."""
         workflow_paths = [
             ROOT / ".github" / "workflows" / "reusable-remediation-loop.yml",
@@ -233,17 +223,9 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7", text)
 
         backlog_text = (ROOT / ".github" / "workflows" / "reusable-backlog-sweep.yml").read_text(encoding="utf-8")
-        remediation_text = (ROOT / ".github" / "workflows" / "reusable-remediation-loop.yml").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn(
-            "peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c",
-            backlog_text,
-        )
-        self.assertIn(
-            "peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c",
-            remediation_text,
-        )
+        remediation_text = (ROOT / ".github" / "workflows" / "reusable-remediation-loop.yml").read_text(encoding="utf-8")
+        self.assertIn("peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c", backlog_text)
+        self.assertIn("peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c", remediation_text)
 
     def test_scanner_matrix_pins_codecov_upload_and_keeps_token_optional(self) -> None:
         """Codecov upload removed from scanner-matrix per §7.3 — kept in reusable-codecov-analytics.yml only."""
@@ -277,14 +259,8 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("upload-process", reusable_text)
         self.assertIn("validate_codecov_flags.py", reusable_text)
         self.assertEqual(reusable_text.count("persist-credentials: false"), 2)
-        self.assertIn(
-            'profile_path = Path(os.environ["RUNNER_TEMP"]) / "profile.json"',
-            reusable_text,
-        )
-        self.assertIn(
-            'coverage = json.loads(profile_path.read_text(encoding="utf-8")).get("coverage", {})',
-            reusable_text,
-        )
+        self.assertIn('profile_path = Path(os.environ["RUNNER_TEMP"]) / "profile.json"', reusable_text)
+        self.assertIn('coverage = json.loads(profile_path.read_text(encoding="utf-8")).get("coverage", {})', reusable_text)
 
     def test_scanner_matrix_exports_provider_credentials_to_lane_runtime(self) -> None:
         """Expose the provider credentials and repo metadata required by scanner lanes."""
@@ -342,17 +318,12 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("coverage_runner", text)
         self.assertIn("windows-latest", text)
 
-    def test_scanner_matrix_scopes_sonar_and_codacy_zero_to_the_current_pull_request(
-        self,
-    ) -> None:
+    def test_scanner_matrix_scopes_sonar_and_codacy_zero_to_the_current_pull_request(self) -> None:
         """Scope PR-aware scanners to the current PR metadata when that context exists."""
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
-        self.assertIn(
-            'pull_request_number = os.environ.get("PULL_REQUEST_NUMBER", "").strip()',
-            text,
-        )
+        self.assertIn('pull_request_number = os.environ.get("PULL_REQUEST_NUMBER", "").strip()', text)
         self.assertIn('branch_name = os.environ.get("BRANCH_NAME", "").strip()', text)
-        self.assertIn("if pull_request_number:", text)
+        self.assertIn('if pull_request_number:', text)
         self.assertIn('cmd.extend(["--pull-request", pull_request_number])', text)
         self.assertIn('cmd.extend(["--branch", branch_name])', text)
         self.assertNotIn('if pull_request_number and pr_issue_behavior == "introduced_only":', text)
@@ -365,9 +336,7 @@ class WorkflowContractTests(unittest.TestCase):
         ]:
             self.assertIn(expected, wrapper_text)
 
-        template_text = (ROOT / "templates" / "repo" / ".github" / "workflows" / "quality-zero-platform.yml").read_text(
-            encoding="utf-8"
-        )
+        template_text = (ROOT / "templates" / "repo" / ".github" / "workflows" / "quality-zero-platform.yml").read_text(encoding="utf-8")
         for expected in [
             "branch_name: ${{ github.head_ref || github.ref_name }}",
             "pull_request_number: ${{ github.event.pull_request.number || '' }}",
@@ -431,9 +400,7 @@ class WorkflowContractTests(unittest.TestCase):
             for snippet in forbidden_snippets:
                 self.assertNotIn(snippet, text, f"{name}: {snippet}")
 
-    def test_quality_zero_gate_exports_github_token_to_required_check_probe(
-        self,
-    ) -> None:
+    def test_quality_zero_gate_exports_github_token_to_required_check_probe(self) -> None:
         """Provide the GitHub token to the required-check probe without inline Python blocks."""
         text = (ROOT / ".github" / "workflows" / "reusable-quality-zero-gate.yml").read_text(encoding="utf-8")
         self.assertIn("GITHUB_TOKEN: ${{ github.token }}", text)
@@ -467,16 +434,8 @@ class WorkflowContractTests(unittest.TestCase):
 
         for path in workflow_paths:
             text = path.read_text(encoding="utf-8")
-            self.assertNotIn(
-                '--auth-file "${{ needs.resolve-profile.outputs.codex_auth_file }}"',
-                text,
-                path.name,
-            )
-            self.assertIn(
-                "CODEX_AUTH_FILE: ${{ needs.resolve-profile.outputs.codex_auth_file }}",
-                text,
-                path.name,
-            )
+            self.assertNotIn('--auth-file "${{ needs.resolve-profile.outputs.codex_auth_file }}"', text, path.name)
+            self.assertIn("CODEX_AUTH_FILE: ${{ needs.resolve-profile.outputs.codex_auth_file }}", text, path.name)
             self.assertIn('--auth-file "$CODEX_AUTH_FILE"', text, path.name)
 
     def test_parity_wrappers_list_push_pull_request_and_manual_triggers(self) -> None:
@@ -497,9 +456,7 @@ class WorkflowContractTests(unittest.TestCase):
             self.assertIn("workflow_dispatch:", text, path.name)
             self.assertIn("branches: [main, master]", text, path.name)
 
-    def test_scanner_matrix_builds_quality_rollup_and_posts_sticky_pr_comment(
-        self,
-    ) -> None:
+    def test_scanner_matrix_builds_quality_rollup_and_posts_sticky_pr_comment(self) -> None:
         """Preserve the quality rollup artifact and sticky PR comment publishing steps."""
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
         self.assertIn("quality-rollup", text)
@@ -510,9 +467,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn('lane == "deps"', text)
         self.assertIn("check_dependabot_alerts.py", text)
 
-    def test_admin_dashboard_and_control_plane_admin_workflows_exist_with_expected_triggers(
-        self,
-    ) -> None:
+    def test_admin_dashboard_and_control_plane_admin_workflows_exist_with_expected_triggers(self) -> None:
         """Assert the admin dashboard and control-plane admin workflows keep their expected controls."""
         dashboard_text = (ROOT / ".github" / "workflows" / "publish-admin-dashboard.yml").read_text(encoding="utf-8")
         self.assertIn("schedule:", dashboard_text)
@@ -560,7 +515,6 @@ class WorkflowContractTests(unittest.TestCase):
         # Match the directive at YAML-key level (leading whitespace +
         # bare key:value), not a reference inside a comment.
         import re as _re
-
         directive_match = _re.search(
             r"^\s+continue-on-error:\s*true\s*$",
             codacy_block,
@@ -594,26 +548,26 @@ class WorkflowContractTests(unittest.TestCase):
         deepsource_block = text[deepsource_block_start:deepsource_block_end]
         # Reject ``|| true`` on the per-file report invocations specifically.
         self.assertNotIn(
-            'deepsource report --analyzer test-coverage --key python --value-file "$f" || true',
+            "deepsource report --analyzer test-coverage --key python --value-file \"$f\" || true",
             deepsource_block,
             "DeepSource Python coverage report must not be ||true-suppressed",
         )
         self.assertNotIn(
-            'deepsource report --analyzer test-coverage --key javascript --value-file "$f" || true',
+            "deepsource report --analyzer test-coverage --key javascript --value-file \"$f\" || true",
             deepsource_block,
             "DeepSource JavaScript coverage report must not be ||true-suppressed",
         )
         # Both steps should fail loud when their respective secrets are
-        # missing — preflight checks emit ``::error::`` and exit 1.
-        (
+        # missing — preflight checks emit ``::error::`` and exit 1. The
+        # Codacy preflight message is only required on the script-based
+        # step path; the action-based path has no shell preflight.
+        if "set -euo pipefail" in codacy_block:
             self.assertIn(
                 "CODACY_PROJECT_TOKEN secret is missing",
                 text,
-                "Workflow must emit an actionable error when CODACY_PROJECT_TOKEN is missing",
+                "Workflow must emit an actionable error when "
+                "CODACY_PROJECT_TOKEN is missing",
             )
-            if "set -euo pipefail" in codacy_block
-            else None
-        )  # action-based step path
         self.assertIn(
             "DEEPSOURCE_DSN secret is missing",
             text,

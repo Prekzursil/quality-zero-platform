@@ -13,8 +13,8 @@ from email.message import Message
 from importlib.machinery import ModuleSpec
 from pathlib import Path
 from typing import cast
-from unittest.mock import patch
 from urllib.error import HTTPError
+from unittest.mock import patch
 
 from scripts.quality import check_sentry_zero as sentry_module
 
@@ -110,7 +110,9 @@ class SentryZeroTests(unittest.TestCase):
             },
             clear=False,
         ):
-            projects = sentry_module._collect_projects(["quality-zero-platform", "quality-zero-platform"])
+            projects = sentry_module._collect_projects(
+                ["quality-zero-platform", "quality-zero-platform"]
+            )
 
         self.assertEqual(
             projects,
@@ -145,7 +147,10 @@ class SentryZeroTests(unittest.TestCase):
         """
         self.assertEqual(
             sentry_module._issues_url("prek/zursil"),
-            ("https://sentry.io/api/0/organizations/prek%2Fzursil/issues/?query=is%3Aunresolved&limit=1"),
+            (
+                "https://sentry.io/api/0/organizations/prek%2Fzursil/"
+                "issues/?query=is%3Aunresolved&limit=1"
+            ),
         )
 
     def test_render_md_covers_empty_state_reporting(self) -> None:
@@ -240,23 +245,23 @@ class SentryZeroTests(unittest.TestCase):
         )
         self.assertEqual(
             findings,
-            ["Sentry project quality-zero-platform has 2 unresolved issues (expected 0)."],
+            [
+                "Sentry project quality-zero-platform has 2 unresolved issues "
+                "(expected 0)."
+            ],
         )
 
     def test_collect_project_results_validates_payload_and_reraises_non_404_http_errors(
         self,
     ) -> None:
         """Reject invalid payload shapes and surface non-404 provider failures."""
-        with (
-            patch.object(
-                sentry_module,
-                "_request_json",
-                return_value=({"bad": "payload"}, {"x-hits": "0"}),
-            ),
-            self.assertRaisesRegex(
-                RuntimeError,
-                "Unexpected Sentry issues response payload",
-            ),
+        with patch.object(
+            sentry_module,
+            "_request_json",
+            return_value=({"bad": "payload"}, {"x-hits": "0"}),
+        ), self.assertRaisesRegex(
+            RuntimeError,
+            "Unexpected Sentry issues response payload",
         ):
             sentry_module._collect_project_results(
                 "prekzursil",
@@ -264,20 +269,17 @@ class SentryZeroTests(unittest.TestCase):
                 "token-123",
             )
 
-        with (
-            patch.object(
-                sentry_module,
-                "_request_json",
-                side_effect=HTTPError(
-                    "https://sentry.io/api/0/projects/prekzursil/app/issues/",
-                    500,
-                    "Server Error",
-                    hdrs=Message(),
-                    fp=None,
-                ),
+        with patch.object(
+            sentry_module,
+            "_request_json",
+            side_effect=HTTPError(
+                "https://sentry.io/api/0/projects/prekzursil/app/issues/",
+                500,
+                "Server Error",
+                hdrs=Message(),
+                fp=None,
             ),
-            self.assertRaises(HTTPError),
-        ):
+        ), self.assertRaises(HTTPError):
             sentry_module._collect_project_results(
                 "prekzursil",
                 ["quality-zero-platform"],
@@ -319,23 +321,19 @@ class SentryZeroTests(unittest.TestCase):
             out_json="sentry-zero/sentry.json",
             out_md="sentry-zero/sentry.md",
         )
-        with (
-            patch.dict(
-                "os.environ",
-                {},
-                clear=True,
-            ),
-            patch.object(
-                sentry_module,
-                "_parse_args",
-                return_value=args,
-            ),
-            patch.object(
-                sentry_module,
-                "write_report",
-                return_value=0,
-            ) as write_report_mock,
-        ):
+        with patch.dict(
+            "os.environ",
+            {},
+            clear=True,
+        ), patch.object(
+            sentry_module,
+            "_parse_args",
+            return_value=args,
+        ), patch.object(
+            sentry_module,
+            "write_report",
+            return_value=0,
+        ) as write_report_mock:
             result = sentry_module.main()
 
         self.assertEqual(result, 1)
@@ -355,23 +353,19 @@ class SentryZeroTests(unittest.TestCase):
             out_json="sentry-zero/sentry.json",
             out_md="sentry-zero/sentry.md",
         )
-        with (
-            patch.object(
-                sentry_module,
-                "_parse_args",
-                return_value=ok_args,
-            ),
-            patch.object(
-                sentry_module,
-                "_collect_project_results",
-                side_effect=RuntimeError("provider down"),
-            ),
-            patch.object(
-                sentry_module,
-                "write_report",
-                return_value=0,
-            ) as write_report_mock,
-        ):
+        with patch.object(
+            sentry_module,
+            "_parse_args",
+            return_value=ok_args,
+        ), patch.object(
+            sentry_module,
+            "_collect_project_results",
+            side_effect=RuntimeError("provider down"),
+        ), patch.object(
+            sentry_module,
+            "write_report",
+            return_value=0,
+        ) as write_report_mock:
             result = sentry_module.main()
 
         self.assertEqual(result, 1)
@@ -392,32 +386,28 @@ class SentryZeroTests(unittest.TestCase):
             out_json="sentry-zero/sentry.json",
             out_md="sentry-zero/sentry.md",
         )
-        with (
-            patch.object(
-                sentry_module,
-                "_parse_args",
-                return_value=args,
+        with patch.object(
+            sentry_module,
+            "_parse_args",
+            return_value=args,
+        ), patch.object(
+            sentry_module,
+            "_collect_project_results",
+            return_value=(
+                [
+                    {
+                        "project": "quality-zero-platform",
+                        "unresolved": 0,
+                        "state": "ok",
+                    }
+                ],
+                [],
             ),
-            patch.object(
-                sentry_module,
-                "_collect_project_results",
-                return_value=(
-                    [
-                        {
-                            "project": "quality-zero-platform",
-                            "unresolved": 0,
-                            "state": "ok",
-                        }
-                    ],
-                    [],
-                ),
-            ),
-            patch.object(
-                sentry_module,
-                "write_report",
-                return_value=0,
-            ) as write_report_mock,
-        ):
+        ), patch.object(
+            sentry_module,
+            "write_report",
+            return_value=0,
+        ) as write_report_mock:
             result = sentry_module.main()
 
         self.assertEqual(result, 0)
@@ -444,57 +434,50 @@ class SentryZeroTests(unittest.TestCase):
             out_json="sentry-zero/sentry.json",
             out_md="sentry-zero/sentry.md",
         )
-        with (
-            patch.object(
-                sentry_module,
-                "_parse_args",
-                return_value=args,
+        with patch.object(
+            sentry_module,
+            "_parse_args",
+            return_value=args,
+        ), patch.object(
+            sentry_module,
+            "_collect_project_results",
+            return_value=(
+                [
+                    {
+                        "project": "quality-zero-platform",
+                        "unresolved": 0,
+                        "state": "ok",
+                    }
+                ],
+                [],
             ),
-            patch.object(
-                sentry_module,
-                "_collect_project_results",
-                return_value=(
-                    [
-                        {
-                            "project": "quality-zero-platform",
-                            "unresolved": 0,
-                            "state": "ok",
-                        }
-                    ],
-                    [],
-                ),
-            ),
-            patch.object(
-                sentry_module,
-                "write_report",
-                return_value=9,
-            ),
+        ), patch.object(
+            sentry_module,
+            "write_report",
+            return_value=9,
         ):
             self.assertEqual(sentry_module.main(), 9)
 
     def test_run_as_main_raises_system_exit(self) -> None:
         """Execute the script entrypoint to cover the __main__ guard."""
         module_path = Path(sentry_module.__file__).resolve()
-        with (
-            tempfile.TemporaryDirectory(dir=str(Path.cwd())) as tmpdir,
-            patch.object(
-                sys,
-                "argv",
-                [
-                    str(module_path),
-                    "--out-json",
-                    str(Path(tmpdir) / "sentry.json"),
-                    "--out-md",
-                    str(Path(tmpdir) / "sentry.md"),
-                ],
-            ),
-            patch.dict(
-                os.environ,
-                {},
-                clear=True,
-            ),
-            self.assertRaises(SystemExit) as exc_info,
-        ):
+        with tempfile.TemporaryDirectory(dir=str(Path.cwd())) as tmpdir, patch.object(
+            sys,
+            "argv",
+            [
+                str(module_path),
+                "--out-json",
+                str(Path(tmpdir) / "sentry.json"),
+                "--out-md",
+                str(Path(tmpdir) / "sentry.md"),
+            ],
+        ), patch.dict(
+            os.environ,
+            {},
+            clear=True,
+        ), self.assertRaises(
+            SystemExit
+        ) as exc_info:
             runpy.run_path(str(module_path), run_name="__main__")
 
         self.assertEqual(exc_info.exception.code, 1)

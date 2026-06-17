@@ -1,0 +1,82 @@
+# LEAN 6-GATE CHARTER (decided 2026-06-16; supersedes the 10-SaaS QZP model).
+#
+# Single source of truth for the closed set of quality gates. The charter-check
+# (.quality/charter_check.sh, run in CI by reusable-quality.yml) FAILS if the
+# active gate set drifts from this list — either a charter gate is missing from
+# the reusable workflow, or a DELETED (banned) gate has crept back in.
+#
+# Model: Prevent(auto-fix) | Binary green/red | Ratchet-retired:100%-everywhere
+# Closed set — exactly these six gates, nothing more, nothing less.
+
+charter_version: "2026-06-16"
+model:
+  prevent: true        # auto-fix at write time (gate 1 + pre-commit)
+  binary: true         # every gate is pass/fail, no soft scores
+  ratchet_retired: true # 100% coverage everywhere; no ratcheting baseline
+
+# The six gates. `workflow_step` is the substring the charter-check greps for in
+# .github/workflows/reusable-quality.yml to confirm the gate is wired.
+gates:
+  - id: 1
+    name: lint-format-imports-seclint
+    autofix: true
+    workflow_step: "gate-lint-format-secrets"
+    tools:
+      python: [ruff]
+      ts_js: [oxlint, oxfmt]
+      rust: [clippy, rustfmt]
+      go: ["golangci-lint-v2"]
+      java: [errorprone, spotless]
+      csharp: [roslyn, dotnet-format]
+      c_cpp: [clang-tidy, clang-format]
+  - id: 2
+    name: types
+    workflow_step: "gate-types"
+    tools:
+      ts: ["tsc --noEmit"]
+      python: [basedpyright]
+  - id: 3
+    name: tests-coverage
+    workflow_step: "gate-tests-coverage"
+    policy: "STRICT 100% line+branch; reasoned greppable pragma only"
+  - id: 4
+    name: sast
+    workflow_step: "gate-sast"
+    tools: [opengrep]   # Semgrep CE acceptable (rule-compatible)
+    note: "small pinned in-repo ruleset (.quality/opengrep)"
+  - id: 5
+    name: secrets
+    workflow_step: "gate-secrets"        # via pre-commit (gate-lint-format-secrets) or standalone
+    tools: [gitleaks]
+    note: "pinned + allowlist + push-protection"
+  - id: 6
+    name: deps
+    workflow_step: "gate-deps"
+    tools: [osv-scanner, dependabot]      # NO Renovate
+
+# DELETED as gates (must NOT appear as enforced gate steps in the reusable
+# workflow). The charter-check fails if any of these names is wired as a gate.
+deleted_gates:
+  - sonar
+  - codacy
+  - deepsource
+  - deepscan
+  - qlty
+  - codecov        # codecov-as-gate
+  - snyk
+  - applitools
+  - chromatic
+  - percy
+  - sentry         # sentry-as-gate
+  - pylint
+  - bandit         # standalone bandit
+  - eslint         # eslint-classic
+  - biome
+  - trivy          # trivy-for-app-deps
+  - renovate
+
+# CodeQL is NOT a charter gate. Allowed ONLY as a nightly scan on PUBLIC repos
+# (never a required PR status check).
+codeql:
+  as_gate: false
+  allowed: "nightly, public repos only"

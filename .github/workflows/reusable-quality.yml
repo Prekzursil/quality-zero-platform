@@ -1,0 +1,207 @@
+# Lean 6-gate quality template (workflow_call reusable workflow).
+#
+# This is the ADDITIVE thin template adopted by the lean-gate charter
+# (decided 2026-06-16). It is the multi-language generalization of the PROVEN
+# lean gate running in Prekzursil/Reframe (.github/workflows/quality.yml) — same
+# tool pins, same single-job binary green/red model.
+#
+# It does NOT replace the existing fleet reusable workflows; the 13 enrolled
+# repos still call those. The ~80% deletion of the old SaaS machinery is
+# deferred to the migration runbook until the fleet moves off it.
+#
+# ── Adoption (≈5 lines in the caller repo) ──────────────────────────────────
+#   # .github/workflows/quality.yml in the CALLER repo
+#   name: quality
+#   on:
+#     push: { branches: [main] }
+#     pull_request: { branches: [main] }
+#   permissions: { contents: read }
+#   jobs:
+#     quality:
+#       uses: Prekzursil/quality-zero-platform/.github/workflows/reusable-quality.yml@main
+#
+# ── The closed 6-gate charter this workflow enforces ────────────────────────
+#   1. Lint+format+imports+sec-lint (AUTOFIX, via pre-commit):
+#        Ruff[py] · Oxlint+Oxfmt[ts/js] · clippy+rustfmt[rust] ·
+#        golangci-lint v2[go] · ErrorProne+Spotless[java] ·
+#        Roslyn+dotnet-format[c#] · clang-tidy+clang-format[c/c++]
+#   2. Types:        tsc --noEmit[ts] · basedpyright[py]
+#   3. Tests+cov:    STRICT 100% line+branch (standing policy; ratchet retired)
+#   4. SAST:         Opengrep (Semgrep CE acceptable), pinned in-repo ruleset
+#   5. Secrets:      gitleaks (pinned + allowlist) + push-protection
+#   6. Deps:         osv-scanner + Dependabot (no Renovate)
+#
+# Auto-detection: the single `quality` job inspects the CALLER's checked-out
+# tree and runs ONLY the lanes whose language is present. A repo with no Python
+# skips the Python lanes, a repo with no JS/TS skips tsc, etc. Lane 1 (pre-commit)
+# and lanes 4/5/6 (opengrep/gitleaks/osv) run whenever their config is present.
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: "Python toolchain version for the Python lanes."
+        type: string
+        required: false
+        default: "3.12"
+      node-version:
+        description: "Node toolchain version for the JS/TS lanes."
+        type: string
+        required: false
+        default: "20"
+      opengrep-paths:
+        description: "Space-separated paths the SAST gate scans (default: repo root '.')."
+        type: string
+        required: false
+        default: "."
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      # ── Language detection ────────────────────────────────────────────────
+      # Sets boolean outputs consumed by the per-lane `if:` guards below.
+      - name: Detect languages present in caller
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+          has() { [ -n "$(git ls-files "$@" 2>/dev/null | head -1)" ] && echo true || echo false; }
+          file_exists() { [ -f "$1" ] && echo true || echo false; }
+          {
+            echo "python=$(has '*.py')"
+            echo "ts=$(has '*.ts' '*.tsx')"
+            echo "jsts=$(has '*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs' '*.cjs')"
+            echo "rust=$(file_exists Cargo.toml)"
+            echo "go=$(file_exists go.mod)"
+            echo "precommit=$(file_exists .pre-commit-config.yaml)"
+            echo "opengrep=$([ -d .quality/opengrep ] && echo true || echo false)"
+            echo "gitleaks=$(file_exists .gitleaks.toml)"
+            echo "osv=$(file_exists osv-scanner.toml)"
+            echo "charter=$([ -f .quality/charter.yml ] && echo true || echo false)"
+          } >> "$GITHUB_OUTPUT"
+          echo "Detected:"; cat "$GITHUB_OUTPUT"
+
+      # ── Toolchains (set up only what the caller needs) ────────────────────
+      - name: Set up Python
+        if: steps.detect.outputs.python == 'true' || steps.detect.outputs.precommit == 'true'
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: ${{ inputs.python-version }}
+          cache: pip
+
+      - name: Set up Node
+        if: steps.detect.outputs.jsts == 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Set up Go
+        if: steps.detect.outputs.go == 'true'
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: stable
+
+      # ── Pinned scanner CLIs (only when their config is present) ───────────
+      - name: Install pre-commit
+        if: steps.detect.outputs.precommit == 'true'
+        run: pip install pre-commit==4.6.0
+
+      - name: Install basedpyright
+        if: steps.detect.outputs.python == 'true'
+        run: pip install basedpyright==1.39.8
+
+      - name: Install opengrep
+        if: steps.detect.outputs.opengrep == 'true'
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh | bash -s -- -v v1.22.0
+          echo "$HOME/.opengrep/cli/latest" >> "$GITHUB_PATH"
+
+      - name: Install gitleaks
+        if: steps.detect.outputs.gitleaks == 'true'
+        run: |
+          curl -sSL -o /tmp/gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
+          chmod +x /usr/local/bin/gitleaks
+
+      - name: Install osv-scanner
+        if: steps.detect.outputs.osv == 'true'
+        run: |
+          curl -sSL -o /usr/local/bin/osv-scanner \
+            https://github.com/google/osv-scanner/releases/download/v2.3.8/osv-scanner_linux_amd64
+          chmod +x /usr/local/bin/osv-scanner
+
+      # ── GATE 1 + GATE 5 — lint/format/imports/sec-lint autofixers + secrets ─
+      # All lane-1 fixers (ruff / oxlint+oxfmt / clippy+rustfmt / golangci-lint /
+      # spotless / clang-format / ...) AND the gitleaks secrets hook are wired in
+      # the caller's .pre-commit-config.yaml and verified clean here.
+      - name: gate-lint-format-secrets (pre-commit run --all-files)
+        if: steps.detect.outputs.precommit == 'true'
+        run: pre-commit run --all-files --show-diff-on-failure
+
+      # ── GATE 2 — types ────────────────────────────────────────────────────
+      - name: gate-types tsc
+        if: steps.detect.outputs.ts == 'true'
+        run: |
+          if [ -f package.json ]; then npm ci || npm install; fi
+          npx --yes tsc --noEmit
+
+      - name: gate-types basedpyright
+        if: steps.detect.outputs.python == 'true'
+        run: basedpyright
+
+      # ── GATE 3 — tests + coverage (STRICT 100% line+branch) ───────────────
+      # Python via coverage.py; JS/TS via the caller's `test:coverage` script.
+      - name: gate-tests-coverage python
+        if: steps.detect.outputs.python == 'true' && hashFiles('pyproject.toml', 'setup.cfg', 'tox.ini') != ''
+        run: |
+          if grep -rqs 'pytest' pyproject.toml setup.cfg tox.ini 2>/dev/null; then
+            pip install pytest pytest-cov
+            python -m pytest --cov --cov-branch --cov-fail-under=100
+          else
+            python -m coverage run -m unittest discover
+            python -m coverage report --fail-under=100 --show-missing
+          fi
+
+      - name: gate-tests-coverage jsts
+        if: steps.detect.outputs.jsts == 'true' && hashFiles('package.json') != ''
+        run: |
+          if node -e "process.exit((require('./package.json').scripts||{})['test:coverage']?0:1)"; then
+            npm ci || npm install
+            npm run test:coverage
+          else
+            echo "No 'test:coverage' npm script — JS/TS coverage lane skipped (configure it to enforce 100%)."
+          fi
+
+      # ── GATE 4 — SAST (opengrep, curated in-repo ruleset, clean-zero) ─────
+      - name: gate-sast opengrep
+        if: steps.detect.outputs.opengrep == 'true'
+        run: |
+          opengrep scan --config .quality/opengrep --error \
+            --exclude .venv --exclude node_modules --exclude dist --exclude out --exclude build \
+            ${{ inputs.opengrep-paths }}
+
+      # ── GATE 5 (verify) — secrets, gitleaks over working tree (0 findings) ─
+      # The autofixer-side secrets hook runs in pre-commit (gate 1+5); this is the
+      # standalone gitleaks verify when no pre-commit config is present.
+      - name: gate-secrets gitleaks
+        if: steps.detect.outputs.gitleaks == 'true' && steps.detect.outputs.precommit == 'false'
+        run: gitleaks detect --no-banner --redact --config .gitleaks.toml
+
+      # ── GATE 6 — deps (osv-scanner, 0 actionable CVEs) ───────────────────
+      - name: gate-deps osv-scanner
+        if: steps.detect.outputs.osv == 'true'
+        run: osv-scanner scan source --config=osv-scanner.toml --recursive .
+
+      # ── Charter ↔ active-gate consistency (fails if gate set != 6-charter) ─
+      - name: charter-check
+        if: steps.detect.outputs.charter == 'true'
+        run: bash .quality/charter_check.sh

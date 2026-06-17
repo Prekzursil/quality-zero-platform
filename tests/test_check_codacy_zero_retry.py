@@ -405,7 +405,7 @@ class CodacyZeroRetryTests(unittest.TestCase):
         threshold_findings = [
             "Codacy complex-files percentage is 15% (goal: <= 10%).",
             "Codacy coverage is missing — no coverage report was uploaded "
-            "(strict-zero floor: 100% line+branch).",
+            + "(strict-zero floor: 100% line+branch).",
         ]
         with (
             patch.object(

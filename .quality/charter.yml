@@ -39,6 +39,11 @@ gates:
     name: tests-coverage
     workflow_step: "gate-tests-coverage"
     policy: "STRICT 100% line+branch; reasoned greppable pragma only"
+    # No silent-pass: a language with source AND test files but no coverage
+    # config/script FAILS (the 100% gate cannot pass unmeasured). The ONLY skip
+    # is the narrow "no test surface by design" case — source present with ZERO
+    # test files (e.g. type-stub-only / generated-only package).
+    no_silent_pass: true
   - id: 4
     name: sast
     workflow_step: "gate-sast"

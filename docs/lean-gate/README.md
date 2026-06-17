@@ -30,7 +30,7 @@ Model: **Prevent (auto-fix) - Binary green/red - Ratchet-retired (100% everywher
 
 1. **Lint + format + imports + sec-lint** (AUTOFIX): Ruff [py] - Oxlint+Oxfmt [ts/js] - clippy+rustfmt [rust] - golangci-lint v2 [go] - ErrorProne+Spotless [java] - Roslyn+dotnet-format [c#] - clang-tidy+clang-format [c/c++].
 2. **Types**: `tsc --noEmit` [ts] - basedpyright [py].
-3. **Tests + coverage**: STRICT **100% line+branch** (standing user policy; ratchet retired). Reasoned, greppable pragma only.
+3. **Tests + coverage**: STRICT **100% line+branch** (standing user policy; ratchet retired). Reasoned, greppable pragma only. **No silent-pass** — a language with source *and* test files but no coverage config/script **FAILS** (the 100% gate cannot pass unmeasured); the only skip is the narrow *no-test-surface-by-design* case (source present with **zero** test files).
 4. **SAST**: Opengrep (Semgrep CE acceptable), small pinned in-repo ruleset (`.quality/opengrep`).
 5. **Secrets**: gitleaks (pinned + allowlist) + push-protection.
 6. **Deps**: osv-scanner + Dependabot (**no** Renovate).
@@ -67,6 +67,22 @@ Then add the per-language config the gates read:
 Language auto-detection means a caller with no Python skips the Python lanes,
 a caller with no JS/TS skips `tsc`, and so on — each lane is guarded by an
 `if:` keyed off the detected language / present config.
+
+### Robustness on edge-shaped callers
+
+The detection step is hardened so toolchain setup and the deps/types lanes never
+hard-fail *before* a gate can run:
+
+- **Dep-less Python repos** — the `pip` cache is enabled only when a resolvable
+  Python manifest (`requirements*.txt` / `pyproject.toml` / `setup.py` /
+  `setup.cfg` / `Pipfile`) exists. Without one, `setup-python` runs **without**
+  the cache instead of erroring on "no file matched".
+- **Zero-dependency repos** — `osv-scanner` is invoked only when at least one
+  scannable manifest/lockfile exists; otherwise the deps gate **passes**
+  (nothing to scan) rather than exiting 128 ("no package sources found").
+- **Monorepo / nested TypeScript** — `tsc` runs per `tsconfig.json`: the root
+  config if present, otherwise every discovered nested config (e.g. a `ui/`
+  subproject). A repo with nested-only configs is checked, not hard-failed.
 
 ## Charter drift guard
 

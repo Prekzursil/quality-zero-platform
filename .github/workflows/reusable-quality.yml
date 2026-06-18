@@ -22,7 +22,7 @@
 #
 # ── The closed 6-gate charter this workflow enforces ────────────────────────
 #   1. Lint+format+imports+sec-lint (AUTOFIX, via pre-commit):
-#        Ruff[py] · Oxlint+Oxfmt[ts/js] · clippy+rustfmt[rust] ·
+#        Ruff[py] · Oxlint+Biome[ts/js] · clippy+rustfmt[rust] ·
 #        golangci-lint v2[go] · ErrorProne+Spotless[java] ·
 #        Roslyn+dotnet-format[c#] · clang-tidy+clang-format[c/c++]
 #   2. Types:        tsc --noEmit[ts] · basedpyright[py]
@@ -47,7 +47,7 @@
 # Gate 3 installs the CALLER's Python runtime deps (requirements*/pyproject/
 # setup.*) before pytest so tests importing a runtime dep don't ModuleNotFoundError,
 # and runs `npm ci` before any node coverage. Gate 1's ts/js lint/format runs the
-# workflow's OWN pinned oxlint+oxfmt SELF-CONTAINED, so a caller-local
+# workflow's OWN pinned oxlint+biome SELF-CONTAINED, so a caller-local
 # frontend-eslint pre-commit hook (exit 127) cannot abort the lean gate.
 
 on:
@@ -86,7 +86,17 @@ jobs:
         id: detect
         shell: bash
         run: |
-          set -euo pipefail
+          set -eu
+          # SIGPIPE-SAFE detection (round-3 FIX 2): the detection helpers pipe
+          # `git ls-files ... | head -1`; `head` closes the pipe after the first
+          # line, so `git` (the writer) is killed with SIGPIPE and exits 141. Under
+          # `set -o pipefail` that 141 becomes the pipeline's exit and aborts the
+          # whole step (observed: event-link). Detection must NEVER hard-fail — it
+          # only sets boolean outputs — so pipefail is DISABLED for this step. Each
+          # helper already tolerates an empty result (treated as "absent"), and the
+          # `2>/dev/null` keeps stderr quiet. We do NOT set pipefail here; a head-
+          # closed-early SIGPIPE can therefore never red the gate before any lane runs.
+          set +o pipefail
           has() { [ -n "$(git ls-files "$@" 2>/dev/null | head -1)" ] && echo true || echo false; }
           any() { [ -n "${1:-}" ] && echo true || echo false; }
           file_exists() { [ -f "$1" ] && echo true || echo false; }
@@ -96,6 +106,20 @@ jobs:
             requirements.txt requirements*.txt '**/requirements.txt' '**/requirements*.txt' \
             pyproject.toml '**/pyproject.toml' setup.py '**/setup.py' \
             setup.cfg '**/setup.cfg' Pipfile '**/Pipfile' 2>/dev/null | head -1)"
+          # ALL resolvable Python manifests, one per line — used verbatim as
+          # setup-python's `cache-dependency-path` (round-3 FIX 3). actions/setup-
+          # python's `cache: pip` default hash glob is ONLY `**/requirements.txt`
+          # OR `**/pyproject.toml`; a repo whose only manifest is non-standard
+          # (e.g. requirements-dev.txt / requirements/*.txt) matches NEITHER, so
+          # setup-python hard-fails "No file matched to [**/requirements.txt or
+          # **/pyproject.toml]" BEFORE any gate runs (observed: codeblocks). We
+          # therefore feed it the ACTUAL detected manifest paths so the cache key
+          # always has a real file to hash.
+          py_manifest_paths="$(git ls-files \
+            requirements.txt requirements*.txt '**/requirements.txt' '**/requirements*.txt' \
+            'requirements/*.txt' '**/requirements/*.txt' \
+            pyproject.toml '**/pyproject.toml' setup.py '**/setup.py' \
+            setup.cfg '**/setup.cfg' Pipfile '**/Pipfile' 2>/dev/null | sort -u)"
           # Any dependency manifest OR lockfile osv-scanner can actually scan. With
           # NONE of these, `osv-scanner scan source` exits 128 ("no package sources").
           osv_sources="$(git ls-files \
@@ -134,6 +158,14 @@ jobs:
             echo "pytests=$(any "$py_tests")"
             echo "jststests=$(any "$jsts_tests")"
           } >> "$GITHUB_OUTPUT"
+          # Multiline output (round-3 FIX 3): the newline-separated manifest paths
+          # for setup-python's cache-dependency-path. Heredoc delimiter form is
+          # required for multiline GITHUB_OUTPUT values.
+          {
+            echo "pymanifestpaths<<__QZT_EOF__"
+            printf '%s\n' "$py_manifest_paths"
+            echo "__QZT_EOF__"
+          } >> "$GITHUB_OUTPUT"
           echo "Detected:"; cat "$GITHUB_OUTPUT"
 
       # ── Toolchains (set up only what the caller needs) ────────────────────
@@ -142,12 +174,22 @@ jobs:
       # hard-fails setup-python ("No file matched ...") BEFORE any gate runs — the
       # observed fleet red on dep-less Python repos (codeblocks/devextreme/swfoc/
       # tanks). Cached path for manifest repos; plain path otherwise.
+      #
+      # round-3 FIX 3: even WITH a manifest, `cache: pip`'s DEFAULT hash glob is
+      # only `**/requirements.txt` OR `**/pyproject.toml`. A repo whose sole
+      # manifest is non-standard (requirements-dev.txt, requirements/*.txt) matches
+      # neither and setup-python still hard-fails "No file matched ..." (observed:
+      # codeblocks). We pass `cache-dependency-path` set to the ACTUAL detected
+      # manifest paths so the cache key always hashes a real file. (Belt-and-braces:
+      # the `if:` still requires pymanifest == 'true', so this only runs when at
+      # least one manifest exists; setup-python cannot hard-fail before the gates.)
       - name: Set up Python (cached)
         if: (steps.detect.outputs.python == 'true' || steps.detect.outputs.precommit == 'true') && steps.detect.outputs.pymanifest == 'true'
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ inputs.python-version }}
           cache: pip
+          cache-dependency-path: ${{ steps.detect.outputs.pymanifestpaths }}
 
       - name: Set up Python (no cache)
         if: (steps.detect.outputs.python == 'true' || steps.detect.outputs.precommit == 'true') && steps.detect.outputs.pymanifest == 'false'
@@ -197,20 +239,31 @@ jobs:
             https://github.com/google/osv-scanner/releases/download/v2.3.8/osv-scanner_linux_amd64
           chmod +x /usr/local/bin/osv-scanner
 
-      # ── GATE 1 (ts/js) — SELF-CONTAINED lint + format (Oxlint + Oxfmt) ───────
-      # GAP 2 FIX — the lean charter's gate-1 for ts/js is Oxlint + Oxfmt (the Oxc
-      # toolchain), which are SELF-CONTAINED in THIS workflow (the Reframe pattern),
-      # NOT the caller's ad-hoc eslint. A caller .pre-commit-config.yaml that
-      # contains a repo-LOCAL `frontend-eslint`-style hook shelling out to a
-      # not-yet-installed tool ("sh: 1: eslint: not found", exit 127) used to
-      # short-circuit the whole gate-1 step (observed: momentstudio). We therefore
-      # run the workflow's OWN pinned oxlint + oxfmt over the caller's ts/js
-      # directly, independent of the caller's local hooks. They need nothing from
-      # the caller (npx fetches the pinned CLIs). Both honor the caller's
-      # .oxlintrc.json / .oxfmtrc.json if present and respect .gitignore; oxfmt
-      # skips node_modules by default. Pins: oxlint 1.69.0 (mirrors Reframe), oxfmt
-      # 0.55.0. Keep in sync with docs/lean-gate/pre-commit-config.template.yaml.
-      - name: gate-lint-format-jsts (self-contained oxlint + oxfmt)
+      # ── GATE 1 (ts/js) — SELF-CONTAINED lint + format (Oxlint + Biome) ───────
+      # GAP 2 FIX — the lean charter's gate-1 for ts/js runs SELF-CONTAINED in THIS
+      # workflow (the Reframe pattern), NOT the caller's ad-hoc eslint. A caller
+      # .pre-commit-config.yaml that contains a repo-LOCAL `frontend-eslint`-style
+      # hook shelling out to a not-yet-installed tool ("sh: 1: eslint: not found",
+      # exit 127) used to short-circuit the whole gate-1 step (observed:
+      # momentstudio). We therefore run the workflow's OWN pinned linter + formatter
+      # over the caller's ts/js directly, independent of the caller's local hooks.
+      # They need nothing from the caller (npx fetches the pinned CLIs).
+      #
+      # round-3 FIX 1 — FORMATTER SWAP (decided design): the format check is now
+      # BIOME (formatter-only; linting stays with Oxlint), mirroring the PROVEN
+      # Reframe lean gate (Prekzursil/Reframe .github/workflows/quality.yml +
+      # biome.json: biome 2.5.0, `formatter.enabled`, `linter.enabled:false`,
+      # `assist.enabled:false`). `biome ci --formatter-enabled --linter-enabled=false
+      # --assist-enabled=false` is check-only (no writes) and exits non-zero on any
+      # unformatted file. If the caller ships its OWN biome.json/biome.jsonc we honor
+      # it (biome auto-discovers it from cwd); otherwise we point biome at the
+      # template's bundled minimal config (docs/lean-gate/biome.template.json, the
+      # same style as Reframe's: 2-space, single quotes, trailingCommas all,
+      # semicolons always, lineWidth 100, lf) via --config-path so formatting is
+      # deterministic across callers. Oxlint linting is unchanged. Pins: oxlint
+      # 1.69.0 (mirrors Reframe), biome 2.5.0 (mirrors Reframe). Keep in sync with
+      # docs/lean-gate/pre-commit-config.template.yaml + docs/lean-gate/biome.template.json.
+      - name: gate-lint-format-jsts (self-contained oxlint + biome)
         if: steps.detect.outputs.jsts == 'true'
         shell: bash
         run: |
@@ -225,11 +278,32 @@ jobs:
             --ignore-pattern '**/vendor/**' \
             .
           echo "::endgroup::"
-          echo "::group::oxfmt@0.55.0 (--check)"
-          # `oxfmt --check` exits non-zero on any unformatted file (skips
-          # node_modules; honors .gitignore/.prettierignore).
-          npx --yes oxfmt@0.55.0 --check . || {
-            echo "FAIL gate-lint-format-jsts: oxfmt found unformatted ts/js (run 'oxfmt' / the oxfmt pre-commit hook to fix)." >&2
+          echo "::group::biome@2.5.0 (format --check, formatter-only)"
+          # Honor a caller-shipped biome config if present (biome auto-discovers
+          # biome.json/biome.jsonc from cwd); otherwise use the template's bundled
+          # minimal config so formatting is deterministic across callers.
+          biome_cfg_args=()
+          if [ ! -f biome.json ] && [ ! -f biome.jsonc ]; then
+            tmp_biome_dir="$(mktemp -d)"
+            # Bundled minimal config (single-line printf to avoid any YAML/heredoc
+            # indentation pitfalls). Mirrors Reframe's biome.json style.
+            # NB: NO "vcs.useIgnoreFile" here — biome errors ("couldn't find an
+            # ignore file") on a caller without a .gitignore; we exclude vendored
+            # trees explicitly via files.includes negations instead. The config dir
+            # is a mktemp dir OUTSIDE the scanned tree, so biome does not treat it
+            # as a "nested root configuration".
+            printf '%s' '{"$schema":"https://biomejs.dev/schemas/2.5.0/schema.json","files":{"includes":["**/*.ts","**/*.tsx","**/*.js","**/*.jsx","**/*.mjs","**/*.cjs","!**/node_modules/**","!**/dist/**","!**/build/**","!**/out/**","!**/.venv/**","!**/vendor/**"]},"formatter":{"enabled":true,"indentStyle":"space","indentWidth":2,"lineWidth":100,"lineEnding":"lf"},"javascript":{"formatter":{"quoteStyle":"single","trailingCommas":"all","semicolons":"always"}},"linter":{"enabled":false},"assist":{"enabled":false}}' > "$tmp_biome_dir/biome.json"
+            biome_cfg_args=(--config-path "$tmp_biome_dir")
+            echo "No caller biome.json/biome.jsonc - using the lean template's bundled biome config."
+          else
+            echo "Honoring caller-shipped biome config."
+          fi
+          # `biome ci` is the non-mutating check command; restrict it to the
+          # formatter (linting is Oxlint's job, assist disabled).
+          npx --yes @biomejs/biome@2.5.0 ci \
+            --formatter-enabled=true --linter-enabled=false --assist-enabled=false \
+            "${biome_cfg_args[@]}" . || {
+            echo "FAIL gate-lint-format-jsts: biome found unformatted ts/js (run 'biome format --write' / the biome pre-commit hook to fix)." >&2
             exit 1
           }
           echo "::endgroup::"
@@ -372,33 +446,72 @@ jobs:
       # documented narrow case — ts/js source with ZERO test files = "no test
       # surface by design". A ts/js repo with code + tests but no coverage script
       # must NOT pass unmeasured.
+      #
+      # round-3 FIX 5 — NESTED-MONOREPO DISCOVERY: the coverage lane used to inspect
+      # ONLY the ROOT package.json, so a nested project (the package.json lives in a
+      # subdir, root has none — observed: webcoder, package.json in frontend/
+      # webcoder_ui) hard-FAILED "no coverage script" even though the nested project
+      # has one. Mirror the tsc lane (round-1 FIX): if there is a root package.json
+      # use it; otherwise DISCOVER every nested package.json (excluding vendored
+      # trees) and run coverage in each project dir that has a coverage script /
+      # vitest|jest --coverage test script. The silent-pass hole stays closed: a
+      # nested project with test files but NO coverage runner FAILS; the only skip
+      # is the documented "no test surface by design" (zero ts/js test files).
       - name: gate-tests-coverage jsts
         if: steps.detect.outputs.jsts == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          has_pkg=false; [ -f package.json ] && has_pkg=true
-          has_cov_script=false
-          if [ "$has_pkg" = "true" ] && node -e "process.exit((require('./package.json').scripts||{})['test:coverage']?0:1)" 2>/dev/null; then
-            has_cov_script=true
+          # has_cov_lane: does <dir>/package.json define a runnable coverage lane?
+          # Echoes "script" (test:coverage) | "runner" (vitest/jest --coverage in
+          # `test`) | "" (none). Reads only that dir's package.json.
+          has_cov_lane() {
+            # NB: node's require() treats a bare path ('dir/package.json') as a
+            # MODULE lookup, not a relative file - it MUST be './'-prefixed. With
+            # d='.' this yields './././package.json' (valid); with a nested dir it
+            # yields './frontend/ui/package.json' (valid).
+            local d="./$1"
+            if node -e "process.exit((require('$d/package.json').scripts||{})['test:coverage']?0:1)" 2>/dev/null; then
+              echo "script"; return 0
+            fi
+            if node -e "const s=(require('$d/package.json').scripts||{}).test||'';process.exit(/(vitest|jest).*--coverage|--coverage.*(vitest|jest)/.test(s)?0:1)" 2>/dev/null; then
+              echo "runner"; return 0
+            fi
+            echo ""; return 0
+          }
+          run_cov_in_dir() { # $1 dir, $2 lane-kind
+            echo "::group::coverage in $1 ($2)"
+            ( cd "$1" && { npm ci || npm install; } \
+              && if [ "$2" = "script" ]; then npm run test:coverage; else npm test; fi )
+            echo "::endgroup::"
+          }
+          # Build the candidate project dir list: root if it has package.json,
+          # otherwise every nested package.json dir (excluding vendored trees).
+          declare -a proj_dirs=()
+          if [ -f package.json ]; then
+            proj_dirs=(.)
+          else
+            mapfile -t pkgs < <(git ls-files '**/package.json' \
+              | grep -Ev '(^|/)(node_modules|dist|out|build|\.venv|vendor)/' || true)
+            for p in "${pkgs[@]}"; do proj_dirs+=("$(dirname "$p")"); done
           fi
-          # Fallback: a coverage-capable runner (vitest/jest) wired into the `test`
-          # script with a --coverage flag also counts as a configured coverage lane.
-          has_cov_runner=false
-          if [ "$has_pkg" = "true" ] && node -e "const s=(require('./package.json').scripts||{}).test||'';process.exit(/(vitest|jest).*--coverage|--coverage.*(vitest|jest)/.test(s)?0:1)" 2>/dev/null; then
-            has_cov_runner=true
+          ran_any=false
+          if [ "${#proj_dirs[@]}" -gt 0 ]; then
+            for d in "${proj_dirs[@]}"; do
+              lane="$(has_cov_lane "$d")"
+              if [ -n "$lane" ]; then
+                run_cov_in_dir "$d" "$lane"
+                ran_any=true
+              fi
+            done
           fi
-          if [ "$has_cov_script" = "true" ]; then
-            npm ci || npm install
-            npm run test:coverage
-          elif [ "$has_cov_runner" = "true" ]; then
-            npm ci || npm install
-            npm test
+          if [ "$ran_any" = "true" ]; then
+            echo "PASS gate-tests-coverage jsts: ran coverage in ${#proj_dirs[@]} project dir(s)."
           elif [ "${{ steps.detect.outputs.jststests }}" != "true" ]; then
             echo "ts/js source present with NO test files and no coverage script - no test surface by design; coverage lane skipped."
             exit 0
           else
-            echo "FAIL gate-tests-coverage jsts: ts/js present (with test files) but no coverage script - the 100% gate cannot pass unmeasured. Add a 'test:coverage' npm script (or a vitest/jest '--coverage' test script)." >&2
+            echo "FAIL gate-tests-coverage jsts: ts/js present (with test files) but no coverage script in any project dir (root or nested) - the 100% gate cannot pass unmeasured. Add a 'test:coverage' npm script (or a vitest/jest '--coverage' test script) in the project package.json." >&2
             exit 1
           fi
 
@@ -419,9 +532,17 @@ jobs:
 
       # ── GATE 6 — deps (osv-scanner, 0 actionable CVEs) ───────────────────
       # osv-scanner exits 128 ("no package sources found") on a zero-dependency
-      # repo (observed fleet red: star-wars). Treat "no manifests/lockfiles to
-      # scan" as PASS — nothing to scan is not a failure — and only invoke the
-      # scanner when there is at least one scannable source.
+      # repo. Round-1 added an `osvsources` pre-check (skip when no manifest glob
+      # matched). Round-3 FIX 4: that pre-check alone was NOT enough — a repo can
+      # match a manifest glob yet still have NOTHING osv-scanner recognizes as a
+      # scannable package source (e.g. a `pom.xml`/`pyproject.toml` with no
+      # resolvable deps, or only files osv treats as non-lockfiles), so the scanner
+      # still exits 128 (observed fleet red: star-wars, a zero-dependency repo).
+      # The authoritative "nothing to scan" signal is osv-scanner's OWN exit 128.
+      # We therefore: (1) keep the cheap pre-check skip, AND (2) run the scanner
+      # without aborting the step on its exit, then map exit 128 ("no package
+      # sources found") to PASS. Any OTHER non-zero exit (e.g. 1 = vulnerabilities
+      # found) still fails the gate. "Nothing to scan" is not a failure.
       - name: gate-deps osv-scanner
         if: steps.detect.outputs.osv == 'true'
         shell: bash
@@ -431,7 +552,16 @@ jobs:
             echo "No dependency manifests or lockfiles present - nothing for osv-scanner to scan; deps gate passes."
             exit 0
           fi
-          osv-scanner scan source --config=osv-scanner.toml --recursive .
+          rc=0
+          osv-scanner scan source --config=osv-scanner.toml --recursive . || rc=$?
+          if [ "$rc" -eq 0 ]; then
+            echo "PASS gate-deps: osv-scanner found 0 actionable CVEs."
+          elif [ "$rc" -eq 128 ]; then
+            echo "osv-scanner exited 128 (no package sources found) - nothing to scan; deps gate passes."
+          else
+            echo "FAIL gate-deps: osv-scanner exited $rc (vulnerabilities found or scanner error)." >&2
+            exit "$rc"
+          fi
 
       # ── Charter ↔ active-gate consistency (fails if gate set != 6-charter) ─
       - name: charter-check

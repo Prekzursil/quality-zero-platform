@@ -23,7 +23,7 @@ gates:
     workflow_step: "gate-lint-format-secrets"
     tools:
       python: [ruff]
-      ts_js: [oxlint, oxfmt]
+      ts_js: [oxlint, biome]   # oxlint = lint; biome = formatter-only (mirrors Reframe; round-3 swapped from oxfmt)
       rust: [clippy, rustfmt]
       go: ["golangci-lint-v2"]
       java: [errorprone, spotless]
@@ -76,7 +76,10 @@ deleted_gates:
   - pylint
   - bandit         # standalone bandit
   - eslint         # eslint-classic
-  - biome
+  # NOTE: biome was removed from deleted_gates (2026-06-18, round-3). The lean
+  # charter's gate-1 ts/js FORMATTER is now Biome (formatter-only), mirroring the
+  # proven Reframe gate; Oxlint remains the ts/js linter. Biome is therefore an
+  # ENROLLED gate-1 tool, not a banned standalone gate.
   - trivy          # trivy-for-app-deps
   - renovate
 

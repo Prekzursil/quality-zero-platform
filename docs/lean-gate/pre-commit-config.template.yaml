@@ -1,0 +1,117 @@
+# Lean 6-gate autofix lane (gate 1 lint/format/imports/sec-lint + gate 5 secrets).
+#
+# TEMPLATE — copy to `.pre-commit-config.yaml` in the CALLER repo and keep only
+# the hooks for languages it actually has (uncomment the relevant blocks).
+#
+# `pre-commit run --all-files` is the gate-1/gate-5 entrypoint used by the
+# reusable workflow (.github/workflows/reusable-quality.yml). Every rev is
+# PINNED; bump versions here together with docs/lean-gate/README.md, .quality/
+# charter.yml, and reusable-quality.yml so the charter-check stays green. The
+# pins mirror the PROVEN lean gate in Prekzursil/Reframe. Pre-commit's own
+# `language` runners handle each tool's toolchain install.
+minimum_pre_commit_version: "3.5.0"
+
+default_language_version:
+  python: python3
+
+exclude: |-
+  (?x)^(
+    node_modules/|
+    \.venv/|
+    venv/|
+    dist/|
+    build/|
+    out/|
+    vendor/|
+    target/|
+    generated/|
+    .*\.egg-info/
+  )
+
+repos:
+  # ── Gate 1: Python lint + format + import-sort (Ruff) ──────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.17
+    hooks:
+      - id: ruff
+        name: ruff (lint --fix, incl. import-sort I rules)
+        args: ["--fix"]
+      - id: ruff-format
+        name: ruff (format)
+
+  # ── Gate 1: JS/TS lint + format (Oxlint + Oxfmt) ───────────────────────────
+  # Uncomment in a JS/TS caller. Oxc bundles the linter and formatter (oxfmt).
+  # - repo: https://github.com/oxc-project/mirrors-oxlint
+  #   rev: v1.69.0
+  #   hooks:
+  #     - id: oxlint
+  #       name: oxlint (--fix, --deny-warnings)
+  #       args: ["--fix", "--deny-warnings"]
+  #       files: '\.(ts|tsx|js|jsx|mjs|cjs)$'
+  # - repo: local
+  #   hooks:
+  #     - id: oxfmt
+  #       name: oxfmt (format)
+  #       language: node
+  #       additional_dependencies: ["oxfmt@0.55.0"]
+  #       entry: oxfmt
+  #       files: '\.(ts|tsx|js|jsx|mjs|cjs)$'
+
+  # ── Gate 1: Rust lint + format (clippy + rustfmt) ─────────────────────────
+  # Uncomment in a Rust caller (requires the rust toolchain on the runner).
+  # - repo: local
+  #   hooks:
+  #     - id: cargo-clippy
+  #       name: clippy (-D warnings)
+  #       language: system
+  #       entry: cargo clippy --all-targets --all-features -- -D warnings
+  #       pass_filenames: false
+  #       files: '\.rs$'
+  #     - id: cargo-fmt
+  #       name: rustfmt
+  #       language: system
+  #       entry: cargo fmt --all
+  #       pass_filenames: false
+  #       files: '\.rs$'
+
+  # ── Gate 1: Go lint + format (golangci-lint v2) ───────────────────────────
+  # - repo: https://github.com/golangci/golangci-lint
+  #   rev: v2.6.0
+  #   hooks:
+  #     - id: golangci-lint-full
+
+  # ── Gate 1: Java lint + format (Spotless + Error Prone) ───────────────────
+  # Error Prone runs in the Java build (Gradle/Maven); Spotless applies format.
+  # - repo: local
+  #   hooks:
+  #     - id: spotless-apply
+  #       name: spotless (format)
+  #       language: system
+  #       entry: ./gradlew spotlessApply
+  #       pass_filenames: false
+  #       files: '\.java$'
+
+  # ── Gate 1: C# lint + format (Roslyn analyzers + dotnet-format) ───────────
+  # - repo: local
+  #   hooks:
+  #     - id: dotnet-format
+  #       name: dotnet format
+  #       language: system
+  #       entry: dotnet format --verify-no-changes
+  #       pass_filenames: false
+  #       files: '\.cs$'
+
+  # ── Gate 1: C/C++ lint + format (clang-tidy + clang-format) ───────────────
+  # - repo: https://github.com/pre-commit/mirrors-clang-format
+  #   rev: v20.1.0
+  #   hooks:
+  #     - id: clang-format
+  #       files: '\.(c|cc|cpp|cxx|h|hpp)$'
+
+  # ── Gate 5: secrets (gitleaks) ────────────────────────────────────────────
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+        name: gitleaks (secrets)
+        args: ["--config", ".gitleaks.toml"]

@@ -53,7 +53,7 @@ repos:
   #     - id: oxfmt
   #       name: oxfmt (format)
   #       language: node
-  #       additional_dependencies: ["oxfmt@0.1.0"]
+  #       additional_dependencies: ["oxfmt@0.55.0"]
   #       entry: oxfmt
   #       files: '\.(ts|tsx|js|jsx|mjs|cjs)$'
 

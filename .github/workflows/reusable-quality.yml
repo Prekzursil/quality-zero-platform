@@ -44,6 +44,11 @@
 # package). Robustness: the pip cache is enabled only when a Python manifest is
 # resolvable; osv-scanner treats "no manifests/lockfiles" as PASS (not exit-128);
 # tsc runs per-tsconfig so nested/monorepo projects are checked, not hard-failed.
+# Gate 3 installs the CALLER's Python runtime deps (requirements*/pyproject/
+# setup.*) before pytest so tests importing a runtime dep don't ModuleNotFoundError,
+# and runs `npm ci` before any node coverage. Gate 1's ts/js lint/format runs the
+# workflow's OWN pinned oxlint+oxfmt SELF-CONTAINED, so a caller-local
+# frontend-eslint pre-commit hook (exit 127) cannot abort the lean gate.
 
 on:
   workflow_call:
@@ -117,6 +122,7 @@ jobs:
             echo "jsts=$(has '*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs' '*.cjs')"
             echo "rust=$(file_exists Cargo.toml)"
             echo "go=$(file_exists go.mod)"
+            echo "frontend=$(has package.json '**/package.json')"
             echo "precommit=$(file_exists .pre-commit-config.yaml)"
             echo "opengrep=$([ -d .quality/opengrep ] && echo true || echo false)"
             echo "gitleaks=$(file_exists .gitleaks.toml)"
@@ -191,13 +197,71 @@ jobs:
             https://github.com/google/osv-scanner/releases/download/v2.3.8/osv-scanner_linux_amd64
           chmod +x /usr/local/bin/osv-scanner
 
+      # ── GATE 1 (ts/js) — SELF-CONTAINED lint + format (Oxlint + Oxfmt) ───────
+      # GAP 2 FIX — the lean charter's gate-1 for ts/js is Oxlint + Oxfmt (the Oxc
+      # toolchain), which are SELF-CONTAINED in THIS workflow (the Reframe pattern),
+      # NOT the caller's ad-hoc eslint. A caller .pre-commit-config.yaml that
+      # contains a repo-LOCAL `frontend-eslint`-style hook shelling out to a
+      # not-yet-installed tool ("sh: 1: eslint: not found", exit 127) used to
+      # short-circuit the whole gate-1 step (observed: momentstudio). We therefore
+      # run the workflow's OWN pinned oxlint + oxfmt over the caller's ts/js
+      # directly, independent of the caller's local hooks. They need nothing from
+      # the caller (npx fetches the pinned CLIs). Both honor the caller's
+      # .oxlintrc.json / .oxfmtrc.json if present and respect .gitignore; oxfmt
+      # skips node_modules by default. Pins: oxlint 1.69.0 (mirrors Reframe), oxfmt
+      # 0.55.0. Keep in sync with docs/lean-gate/pre-commit-config.template.yaml.
+      - name: gate-lint-format-jsts (self-contained oxlint + oxfmt)
+        if: steps.detect.outputs.jsts == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::oxlint@1.69.0 (--deny-warnings)"
+          npx --yes oxlint@1.69.0 --deny-warnings \
+            --ignore-pattern '**/node_modules/**' \
+            --ignore-pattern '**/dist/**' \
+            --ignore-pattern '**/build/**' \
+            --ignore-pattern '**/out/**' \
+            --ignore-pattern '**/.venv/**' \
+            --ignore-pattern '**/vendor/**' \
+            .
+          echo "::endgroup::"
+          echo "::group::oxfmt@0.55.0 (--check)"
+          # `oxfmt --check` exits non-zero on any unformatted file (skips
+          # node_modules; honors .gitignore/.prettierignore).
+          npx --yes oxfmt@0.55.0 --check . || {
+            echo "FAIL gate-lint-format-jsts: oxfmt found unformatted ts/js (run 'oxfmt' / the oxfmt pre-commit hook to fix)." >&2
+            exit 1
+          }
+          echo "::endgroup::"
+
       # ── GATE 1 + GATE 5 — lint/format/imports/sec-lint autofixers + secrets ─
-      # All lane-1 fixers (ruff / oxlint+oxfmt / clippy+rustfmt / golangci-lint /
-      # spotless / clang-format / ...) AND the gitleaks secrets hook are wired in
-      # the caller's .pre-commit-config.yaml and verified clean here.
+      # All lane-1 fixers (ruff / clippy+rustfmt / golangci-lint / spotless /
+      # clang-format / ...) AND the gitleaks secrets hook are wired in the caller's
+      # .pre-commit-config.yaml and verified clean here. The ts/js lint/format is
+      # NOT relied upon from pre-commit (it runs self-contained above) so a caller-
+      # local frontend hook cannot abort the lean gate.
+      #
+      # GAP 2 ROBUSTNESS — when the caller ships a JS/TS manifest, `npm ci` first
+      # so any caller-local pre-commit hooks (e.g. a `frontend-eslint` repo-local
+      # hook) can resolve their tool from node_modules instead of failing with
+      # exit 127. Best-effort: a failed install must not by itself red the gate, so
+      # any caller-local hook that STILL shells out to a tool it never installed is
+      # SKIP-ed (SKIP=frontend-eslint,eslint,prettier,tsc) — those are the caller's
+      # ad-hoc lanes, not the lean charter's self-contained gate-1. Ruff/gitleaks/
+      # the rest of the charter hooks still run and still gate.
       - name: gate-lint-format-secrets (pre-commit run --all-files)
         if: steps.detect.outputs.precommit == 'true'
-        run: pre-commit run --all-files --show-diff-on-failure
+        shell: bash
+        env:
+          SKIP: frontend-eslint,eslint,eslint-local,prettier,tsc,frontend-tsc,frontend-prettier
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.detect.outputs.frontend }}" = "true" ]; then
+            echo "::group::npm ci (resolve any caller-local frontend pre-commit hooks)"
+            ( npm ci || npm install ) || echo "WARN: frontend dep install failed; caller-local frontend hooks are SKIP-ed and the lean ts/js gate runs self-contained above."
+            echo "::endgroup::"
+          fi
+          pre-commit run --all-files --show-diff-on-failure
 
       # ── GATE 2 — types ────────────────────────────────────────────────────
       # tsc per tsconfig.json so monorepo / nested-project shapes (e.g. an `ui/`
@@ -261,6 +325,36 @@ jobs:
             echo "FAIL gate-tests-coverage python: Python source + tests are present but no coverage config (pyproject.toml/setup.cfg/tox.ini/.coveragerc/pytest.ini) - the 100% gate cannot pass unmeasured. Add coverage config." >&2
             exit 1
           fi
+          # GAP 1 FIX — install the CALLER's Python RUNTIME deps before running the
+          # tests. Without this, a repo whose tests import a runtime dependency
+          # fails with ModuleNotFoundError (observed: env-inspector -> "No module
+          # named defusedxml"; the lane previously installed only pytest/coverage).
+          # Priority order: requirements*.txt -> pyproject.toml / setup.cfg /
+          # setup.py (PEP 517 install of the project itself, which pulls its
+          # declared dependencies, incl. Poetry's [tool.poetry.dependencies]).
+          # If NONE exist the repo is pure-stdlib -> proceed (no-op). Best-effort:
+          # a failing optional/heavy install must not mask the real test result,
+          # so each install is guarded and only logged on failure.
+          installed_runtime_deps=false
+          mapfile -t reqs < <(git ls-files \
+            requirements.txt 'requirements/*.txt' 'requirements-*.txt' 'requirements*.txt' \
+            '**/requirements.txt' 2>/dev/null \
+            | grep -Ev '(^|/)(node_modules|\.venv|venv|dist|build|out)/' \
+            | grep -Eiv 'requirements.*(dev|test|lint|doc|ci).*\.txt$' || true)
+          if [ "${#reqs[@]}" -gt 0 ]; then
+            for r in "${reqs[@]}"; do
+              echo "::group::pip install -r $r"
+              pip install -r "$r" || echo "WARN: 'pip install -r $r' failed; continuing (tests will surface any missing import)."
+              echo "::endgroup::"
+            done
+            installed_runtime_deps=true
+          elif [ -f pyproject.toml ] || [ -f setup.cfg ] || [ -f setup.py ]; then
+            echo "::group::pip install . (project deps from pyproject/setup.cfg/setup.py)"
+            pip install . || echo "WARN: 'pip install .' failed; continuing (tests will surface any missing import)."
+            echo "::endgroup::"
+            installed_runtime_deps=true
+          fi
+          [ "$installed_runtime_deps" = "true" ] || echo "No Python runtime manifest (requirements*.txt / pyproject.toml / setup.cfg / setup.py) - assuming pure-stdlib; proceeding."
           if grep -rqs 'pytest' pyproject.toml setup.cfg tox.ini pytest.ini 2>/dev/null; then
             pip install pytest pytest-cov
             python -m pytest --cov --cov-branch --cov-fail-under=100

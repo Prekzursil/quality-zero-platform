@@ -83,6 +83,35 @@ hard-fail *before* a gate can run:
 - **Monorepo / nested TypeScript** — `tsc` runs per `tsconfig.json`: the root
   config if present, otherwise every discovered nested config (e.g. a `ui/`
   subproject). A repo with nested-only configs is checked, not hard-failed.
+- **Tests that import a runtime dependency** — gate 3 installs the caller's
+  Python **runtime** deps before `pytest`/`coverage`, in priority order:
+  `requirements.txt` / `requirements/*.txt` / `requirements*.txt`
+  (`pip install -r`, dev/test/lint/doc/ci-only requirements excluded), then
+  `pyproject.toml` / `setup.cfg` / `setup.py` (`pip install .`, which pulls the
+  project's declared deps incl. Poetry's `[tool.poetry.dependencies]`). With no
+  manifest the repo is treated as pure-stdlib and the lane proceeds. This closes
+  the `ModuleNotFoundError` red on repos whose tests import a runtime dependency
+  (observed: `env-inspector` → `No module named defusedxml`, when the lane had
+  installed only `pytest`/`pytest-cov`). The JS/TS test lane already runs
+  `npm ci` (or `npm install` if no lockfile) before any vitest/jest coverage so
+  `node_modules` exists. The strict `--cov-fail-under=100` / 100% gate is
+  unchanged.
+- **Caller-local frontend pre-commit hook (`eslint: not found`)** — gate 1's
+  ts/js lint+format is **self-contained in this workflow**: a dedicated
+  `gate-lint-format-jsts` step runs the workflow's OWN pinned **oxlint 1.69.0**
+  + **oxfmt 0.55.0** over the caller's ts/js (the Reframe pattern), independent
+  of the caller's `.pre-commit-config.yaml`. A caller repo-local
+  `frontend-eslint`-style hook that shells out to a not-yet-installed tool
+  (`sh: 1: eslint: not found`, exit 127) can therefore no longer abort the lean
+  ts/js gate (observed: `momentstudio`). The `pre-commit run --all-files` step is
+  additionally hardened: when a JS/TS manifest is present it runs `npm ci` first
+  so legitimate caller-local hooks resolve their tool from `node_modules`, and
+  any still-unresolvable ad-hoc frontend hooks are `SKIP`-ed
+  (`SKIP=frontend-eslint,eslint,…,prettier,tsc`) — those are the caller's ad-hoc
+  lanes, not the lean charter's gate-1; ruff, gitleaks, and the rest of the
+  charter hooks still run and still gate. **Chosen approach: (b) self-contained
+  oxlint/oxfmt run directly + (a) `npm ci` before pre-commit** — both, so the
+  lean gate is correct whether or not the caller's local hooks resolve.
 
 ## Charter drift guard
 

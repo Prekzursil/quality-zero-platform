@@ -20,7 +20,7 @@ green/red model.
 | File | Role |
 |------|------|
 | `../../.github/workflows/reusable-quality.yml` | ONE `workflow_call` reusable workflow, single job `quality`, auto-detects the caller's languages and runs only the relevant lean lanes. |
-| `pre-commit-config.template.yaml` | The gate-1/gate-5 autofix lane (copy to the caller as `.pre-commit-config.yaml`, keep the hooks for languages present). |
+| `pre-commit-config.template.yaml` | LOCAL developer write-time auto-fix lane (copy to the caller as `.pre-commit-config.yaml`, keep the hooks for languages present). round-6: this is no longer the CI gate entrypoint — CI runs the SAME lean tools self-contained; keep this file for local `pre-commit install` auto-fix and keep its pins in sync with CI. |
 | `biome.template.json` | The bundled minimal Biome formatter config (the same style as Reframe's `biome.json`). A JS/TS caller may copy it to `biome.json`; if absent, the reusable workflow falls back to this config in-process for the gate-1 format check. |
 | `../../.quality/charter.yml` | The single source of truth for the closed 6-gate set + the banned (deleted) gates. |
 | `../../.quality/charter_check.sh` | Pure-bash check that FAILS CI if the active gate set drifts from the charter. |
@@ -29,11 +29,11 @@ green/red model.
 
 Model: **Prevent (auto-fix) - Binary green/red - Ratchet-retired (100% everywhere)**.
 
-1. **Lint + format + imports + sec-lint** (AUTOFIX): Ruff [py] - Oxlint+Biome [ts/js] (Oxlint = linter, Biome = formatter-only) - clippy+rustfmt [rust] - golangci-lint v2 [go] - ErrorProne+Spotless [java] - Roslyn+dotnet-format [c#] - clang-tidy+clang-format [c/c++].
+1. **Lint + format** (SELF-CONTAINED in CI — the workflow's OWN pinned CLIs, NOT the caller's pre-commit): Ruff [py] (`gate-lint-format-py`: `ruff check` + `ruff format --check`, honoring a caller `[tool.ruff]`/`ruff.toml`) - Oxlint+Biome [ts/js] (`gate-lint-format-jsts`; Oxlint = linter, Biome = formatter-only). The other-language autofixers (clippy+rustfmt [rust], golangci-lint v2 [go], ErrorProne+Spotless [java], Roslyn+dotnet-format [c#], clang-tidy+clang-format [c/c++]) run in the LOCAL pre-commit only; they are not yet self-contained in CI (round-6).
 2. **Types**: `tsc --noEmit` [ts] - basedpyright at the **standard** `typeCheckingMode` [py] (honors a caller basedpyright/pyright config when present; otherwise `--typecheckingmode standard`, mirroring Reframe).
 3. **Tests + coverage**: STRICT **100% line+branch** (standing user policy; ratchet retired). Reasoned, greppable pragma only. **No silent-pass** — a language with source *and* test files but no coverage config/script **FAILS** (the 100% gate cannot pass unmeasured); the only skip is the narrow *no-test-surface-by-design* case (source present with **zero** test files).
 4. **SAST**: Opengrep (Semgrep CE acceptable), small pinned in-repo ruleset (`.quality/opengrep`).
-5. **Secrets**: gitleaks (pinned + allowlist) + push-protection.
+5. **Secrets**: gitleaks (pinned + allowlist) + push-protection. round-6: SELF-CONTAINED — `gate-secrets` runs gitleaks directly whenever a `.gitleaks.toml` is present (no longer via the caller pre-commit).
 6. **Deps**: osv-scanner + Dependabot (**no** Renovate).
 
 **Deleted as gates** (must NOT reappear): Sonar, Codacy, DeepSource, DeepScan,
@@ -123,23 +123,28 @@ hard-fail *before* a gate can run:
   `npm ci` (or `npm install` if no lockfile) before any vitest/jest coverage so
   `node_modules` exists. The strict `--cov-fail-under=100` / 100% gate is
   unchanged.
-- **Caller-local frontend pre-commit hook (`eslint: not found`)** — gate 1's
-  ts/js lint+format is **self-contained in this workflow**: a dedicated
-  `gate-lint-format-jsts` step runs the workflow's OWN pinned **oxlint 1.69.0**
-  (linter) + **biome 2.5.0** (formatter-only) over the caller's ts/js (the
-  Reframe pattern), independent of the caller's `.pre-commit-config.yaml`. A
-  caller repo-local `frontend-eslint`-style hook that shells out to a
-  not-yet-installed tool (`sh: 1: eslint: not found`, exit 127) can therefore no
-  longer abort the lean ts/js gate (observed: `momentstudio`). The
-  `pre-commit run --all-files` step is additionally hardened: when a JS/TS
-  manifest is present it runs `npm ci` first so legitimate caller-local hooks
-  resolve their tool from `node_modules`, and any still-unresolvable ad-hoc
-  frontend hooks are `SKIP`-ed (`SKIP=frontend-eslint,eslint,…,prettier,tsc`) —
-  those are the caller's ad-hoc lanes, not the lean charter's gate-1; ruff,
-  gitleaks, and the rest of the charter hooks still run and still gate. **Chosen
-  approach: (b) self-contained oxlint/biome run directly + (a) `npm ci` before
-  pre-commit** — both, so the lean gate is correct whether or not the caller's
-  local hooks resolve.
+- **Caller pre-commit dependency removed (round-6 FIX).** Gate 1 (lint/format)
+  and gate 5 (secrets) NO LONGER run the caller's `.pre-commit-config.yaml` via
+  `pre-commit run --all-files`. That depended on each repo's BESPOKE pre-commit
+  hooks + environment (a root npm lockfile for a `frontend-eslint` hook's
+  `npm ci`, the .NET SDK for `dotnet-format`, caller-local eslint/tsc/prettier),
+  so it red-failed for caller-ENVIRONMENT reasons even when the repo's real lean
+  quality was fine. The workflow now runs the lean charter's OWN tools directly:
+  - `gate-lint-format-py` — `ruff check` + `ruff format --check` over the repo,
+    honoring a caller `[tool.ruff]` / `ruff.toml` when present (else ruff
+    defaults). Pinned **ruff 0.15.17** (mirrors Reframe).
+  - `gate-lint-format-jsts` — the workflow's OWN pinned **oxlint 1.69.0** (linter)
+    + **biome 2.5.0** (formatter-only) over the caller's ts/js (already
+    self-contained pre-round-6; unchanged).
+  - `gate-secrets` — **gitleaks 8.30.1** (mirrors Reframe) over the working tree
+    whenever a `.gitleaks.toml` allowlist is present.
+  This is **not** a weakening: the SAME lean charter tools still gate (ruff
+  issues + gitleaks findings still FAIL); they just no longer drag in the
+  caller's pre-commit env. The old `npm-ci-before-pre-commit` block and the
+  `SKIP=frontend-eslint,eslint,…,prettier,tsc` list were removed (no caller
+  pre-commit runs, so nothing to skip). A caller repo-local `frontend-eslint`
+  hook that shelled out to a not-yet-installed tool (`sh: 1: eslint: not found`,
+  exit 127; observed: `momentstudio`) can no longer affect the gate at all.
   - **No first-party lintable JS (round-4 FIX).** oxlint runs with
     `--no-error-on-unmatched-pattern` so a caller whose JS is entirely
     ignored/vendored (empty match set) PASSes (exit 0) instead of failing with
@@ -171,19 +176,18 @@ hard-fail *before* a gate can run:
   uses the proven standard bar instead of basedpyright's stricter default. This is
   **not** a weakening — standard is the proven bar and reportAny-everywhere is
   gold-plating; **real** type errors at standard level still **FAIL**.
-- **Per-language toolchain setup (round-5 FIX B).** A gate that runs language X's
-  linter/formatter must install X's toolchain first, or it hard-fails (observed:
-  `codex-session` — `dotnet-format` → *"Restore operation failed"*, no .NET SDK).
-  Using the detect step's language flags, the workflow now sets up — **only when
-  that language is detected**, and **before** gate-1 (pre-commit) runs its
-  per-language autofixers — the missing toolchains: **C#/.NET** (detected via
-  `global.json`/`*.csproj`/`*.sln`/`*.cs`) → `actions/setup-dotnet` (SDK version
-  read from `global.json` when the caller pins one, else 8.0.x); **Java/Kotlin**
-  (`pom.xml`/`build.gradle*`/`*.java`/`*.kt`) → `actions/setup-java` (temurin 21);
-  **Rust** (`Cargo.toml`/`*.rs`) → `dtolnay/rust-toolchain` (clippy+rustfmt). **Go**
-  (`go.mod`/`*.go`) was already set up via `actions/setup-go`; Python and Node too.
-  All new actions are SHA-pinned (`actions/setup-dotnet@…# v5.3.0`,
-  `actions/setup-java@…# v5.3.0`, `dtolnay/rust-toolchain@…# stable`).
+- **Per-language toolchain setup (round-5 FIX B) — RETIRED in round-6.** Round-5
+  added `actions/setup-dotnet` / `actions/setup-java` / `dtolnay/rust-toolchain` /
+  `actions/setup-go` so the caller pre-commit's per-language autofixers
+  (`dotnet-format` / spotless / clippy+rustfmt / golangci-lint) had a toolchain
+  (observed: `codex-session` — `dotnet-format` → *"Restore operation failed"*, no
+  .NET SDK). Round-6 stopped running the caller pre-commit, and **no remaining
+  gate step invokes go/.NET/java/rust** (gate-3 coverage is Python + Node only),
+  so those four toolchain setups were **dropped as dead weight**. Only **Python**
+  and **Node** are set up now — they back gate-2 (basedpyright / tsc), gate-3
+  (coverage), and the self-contained gate-1 lint/format (ruff / oxlint+biome). To
+  re-enable a dropped language in CI, add a self-contained gate-1 step for it
+  (like `gate-lint-format-py`) AND restore its toolchain setup.
 
 ## Charter drift guard
 

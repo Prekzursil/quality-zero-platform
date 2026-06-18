@@ -140,6 +140,14 @@ hard-fail *before* a gate can run:
   approach: (b) self-contained oxlint/biome run directly + (a) `npm ci` before
   pre-commit** — both, so the lean gate is correct whether or not the caller's
   local hooks resolve.
+  - **No first-party lintable JS (round-4 FIX).** oxlint runs with
+    `--no-error-on-unmatched-pattern` so a caller whose JS is entirely
+    ignored/vendored (empty match set) PASSes (exit 0) instead of failing with
+    `No files found to lint` (exit 1). This does **not** weaken the gate: when
+    lintable JS exists, `--deny-warnings` still runs and still fails on any
+    warning. The oxlint ignore set also excludes `**/*.min.js` (alongside
+    `node_modules`/`dist`/`build`/`out`/`.venv`/`vendor`) so obvious minified
+    build artifacts are never linted — real source is **not** broadly ignored.
   - **Formatter = Biome (round-3 FIX 1).** The CI format check runs
     `biome ci --formatter-enabled=true --linter-enabled=false --assist-enabled=false`
     (check-only, no writes). It honors a caller-shipped `biome.json` / `biome.jsonc`

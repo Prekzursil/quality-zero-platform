@@ -269,13 +269,22 @@ jobs:
         run: |
           set -euo pipefail
           echo "::group::oxlint@1.69.0 (--deny-warnings)"
+          # --no-error-on-unmatched-pattern: when a caller has NO first-party
+          # lintable JS (everything ignored/vendored), oxlint otherwise exits 1
+          # with "No files found to lint" — a false FAIL. With the flag, an empty
+          # match set exits 0 (PASS). This does NOT weaken the gate: when lintable
+          # JS exists, --deny-warnings still runs and still fails on any warning.
+          # **/*.min.js (and node_modules above) are obvious build artifacts that
+          # must never be linted; real source is NOT broadly ignored.
           npx --yes oxlint@1.69.0 --deny-warnings \
+            --no-error-on-unmatched-pattern \
             --ignore-pattern '**/node_modules/**' \
             --ignore-pattern '**/dist/**' \
             --ignore-pattern '**/build/**' \
             --ignore-pattern '**/out/**' \
             --ignore-pattern '**/.venv/**' \
             --ignore-pattern '**/vendor/**' \
+            --ignore-pattern '**/*.min.js' \
             .
           echo "::endgroup::"
           echo "::group::biome@2.5.0 (format --check, formatter-only)"

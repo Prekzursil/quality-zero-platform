@@ -21,20 +21,32 @@
 #       uses: Prekzursil/quality-zero-platform/.github/workflows/reusable-quality.yml@main
 #
 # ── The closed 6-gate charter this workflow enforces ────────────────────────
-#   1. Lint+format+imports+sec-lint (AUTOFIX, via pre-commit):
-#        Ruff[py] · Oxlint+Biome[ts/js] · clippy+rustfmt[rust] ·
-#        golangci-lint v2[go] · ErrorProne+Spotless[java] ·
-#        Roslyn+dotnet-format[c#] · clang-tidy+clang-format[c/c++]
+#   1. Lint+format (SELF-CONTAINED — the workflow's OWN pinned CLIs, NOT the
+#      caller's pre-commit): Ruff[py] · Oxlint+Biome[ts/js]
 #   2. Types:        tsc --noEmit[ts] · basedpyright (standard mode)[py]
 #   3. Tests+cov:    STRICT 100% line+branch (standing policy; ratchet retired)
 #   4. SAST:         Opengrep (Semgrep CE acceptable), pinned in-repo ruleset
-#   5. Secrets:      gitleaks (pinned + allowlist) + push-protection
+#   5. Secrets:      gitleaks (pinned + allowlist) — SELF-CONTAINED (always)
 #   6. Deps:         osv-scanner + Dependabot (no Renovate)
+#
+# round-6 FIX (self-contained gate 1+5): gate-1 lint/format and gate-5 secrets
+# NO LONGER run the caller's `.pre-commit-config.yaml` via `pre-commit run
+# --all-files`. That depended on each repo's BESPOKE hooks + environment (a root
+# npm lockfile for npm ci, the .NET SDK for dotnet-format, caller-local
+# eslint/tsc/prettier, ...), so it red-failed for CALLER-ENVIRONMENT reasons even
+# when the repo's REAL lean quality was fine. Instead the workflow now runs the
+# lean charter's OWN tools directly: ruff check + ruff format --check for Python
+# (honoring a caller [tool.ruff] / ruff.toml when present), and gitleaks for
+# secrets (honoring a caller .gitleaks.toml allowlist). oxlint + biome for ts/js
+# were ALREADY self-contained (gate-lint-format-jsts) and are unchanged. This is
+# NOT weakening: the SAME lean charter tools still gate (ruff issues + gitleaks
+# findings still FAIL) — they just no longer drag in the caller's pre-commit env.
 #
 # Auto-detection: the single `quality` job inspects the CALLER's checked-out
 # tree and runs ONLY the lanes whose language is present. A repo with no Python
-# skips the Python lanes, a repo with no JS/TS skips tsc, etc. Lane 1 (pre-commit)
-# and lanes 4/5/6 (opengrep/gitleaks/osv) run whenever their config is present.
+# skips the Python lanes, a repo with no JS/TS skips tsc, etc. The lint lanes run
+# whenever their language is present; gitleaks/opengrep/osv run when their config
+# is present (gitleaks runs whenever a .gitleaks.toml allowlist is shipped).
 #
 # No silent-pass: the coverage lane (gate 3) NEVER passes a language green
 # without measuring it. If a language has source AND test files but no coverage
@@ -46,9 +58,10 @@
 # tsc runs per-tsconfig so nested/monorepo projects are checked, not hard-failed.
 # Gate 3 installs the CALLER's Python runtime deps (requirements*/pyproject/
 # setup.*) before pytest so tests importing a runtime dep don't ModuleNotFoundError,
-# and runs `npm ci` before any node coverage. Gate 1's ts/js lint/format runs the
-# workflow's OWN pinned oxlint+biome SELF-CONTAINED, so a caller-local
-# frontend-eslint pre-commit hook (exit 127) cannot abort the lean gate.
+# and runs `npm ci` before any node coverage. Gate 1's lint/format runs the
+# workflow's OWN pinned CLIs SELF-CONTAINED (ruff[py], oxlint+biome[ts/js]), so a
+# caller-local frontend-eslint / dotnet-format / etc. pre-commit hook cannot abort
+# the lean gate — the caller's `.pre-commit-config.yaml` is no longer executed.
 #
 # round-5 FIX A (basedpyright standard): basedpyright's DEFAULT mode is stricter
 # than pyright (reportAny/reportUnknown*/reportUnusedCallResult), flooding untyped
@@ -58,13 +71,15 @@
 # basedpyrightconfig.json / pyproject [tool.(based)pyright]) when present, else
 # passes `--typecheckingmode standard`. Real type errors at standard still FAIL.
 #
-# round-5 FIX B (per-language toolchain setup): a gate that runs language X's
-# linter/formatter must install X's toolchain first or it hard-fails (codex-session:
-# dotnet-format -> "Restore operation failed", no .NET SDK). Conditional, detection-
-# gated setup is added BEFORE the gates: C#/.NET -> actions/setup-dotnet (SDK from
-# global.json when pinned); Java/Kotlin -> actions/setup-java (temurin); Rust ->
-# dtolnay/rust-toolchain (clippy+rustfmt). Go was already set up; python+node too.
-# Each runs ONLY when its language is detected; all new actions are SHA-pinned.
+# round-5 FIX B (per-language toolchain setup) — RETIRED in round-6: those setups
+# (setup-go / setup-dotnet / setup-java / rust-toolchain) existed ONLY so the
+# caller pre-commit's per-language autofixers (golangci-lint / dotnet-format /
+# spotless / clippy+rustfmt) had a toolchain. round-6 stopped running the caller
+# pre-commit, and NO remaining gate step invokes go/.NET/java/rust, so those four
+# toolchain setups were dropped as dead weight. Only Python and Node are set up —
+# they back gate-2 (basedpyright / tsc), gate-3 (coverage) and the self-contained
+# gate-1 lint/format (ruff / oxlint+biome). Each runs ONLY when its language is
+# detected; all actions are SHA-pinned.
 
 on:
   workflow_call:
@@ -166,12 +181,9 @@ jobs:
           # C#/.NET, Java/Kotlin, Rust and Go each need their toolchain set up
           # BEFORE the gate that runs their linter/formatter, else the lane hard-fails
           # (observed: codex-session — dotnet-format -> "Restore operation failed", no
-          # .NET SDK). The existing root-only `rust`/`go` detectors are broadened here
-          # to also catch sources/manifests anywhere in the tree.
-          csharp="$(has global.json '**/global.json' '*.csproj' '**/*.csproj' '*.sln' '**/*.sln' '*.cs' '**/*.cs')"
-          javakotlin="$(has pom.xml '**/pom.xml' 'build.gradle' '**/build.gradle' 'build.gradle.kts' '**/build.gradle.kts' '*.java' '**/*.java' '*.kt' '**/*.kt')"
-          # A global.json pins the .NET SDK version; feed it to setup-dotnet when present.
-          dotnet_globaljson="$(git ls-files global.json '**/global.json' 2>/dev/null | head -1)"
+          # .NET SDK). round-6 RETIRED those toolchains (the caller pre-commit that
+          # used them no longer runs), so the go/rust/csharp/javakotlin/dotnet detect
+          # outputs were dropped — no surviving gate step consumes them.
           # Test surface — if a language has source but ZERO test files, a missing
           # coverage config is "no test surface by design" (skip), not a hole (fail).
           py_tests="$(git ls-files 'test_*.py' '*_test.py' '**/test_*.py' '**/*_test.py' \
@@ -184,14 +196,7 @@ jobs:
             echo "python=$(has '*.py')"
             echo "ts=$(has '*.ts' '*.tsx')"
             echo "jsts=$(has '*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs' '*.cjs')"
-            echo "rust=$(has Cargo.toml '**/Cargo.toml' '*.rs' '**/*.rs')"
-            echo "go=$(has go.mod '**/go.mod' '*.go' '**/*.go')"
-            echo "csharp=$csharp"
-            echo "javakotlin=$javakotlin"
-            echo "dotnetglobaljson=$(any "$dotnet_globaljson")"
             echo "pyrightcfg=$(any "$py_pyright_cfg")"
-            echo "frontend=$(has package.json '**/package.json')"
-            echo "precommit=$(file_exists .pre-commit-config.yaml)"
             echo "opengrep=$([ -d .quality/opengrep ] && echo true || echo false)"
             echo "gitleaks=$(file_exists .gitleaks.toml)"
             echo "osv=$(file_exists osv-scanner.toml)"
@@ -201,9 +206,6 @@ jobs:
             echo "pycovcfg=$(any "$py_cov_cfg")"
             echo "pytests=$(any "$py_tests")"
             echo "jststests=$(any "$jsts_tests")"
-            # round-5 FIX B: the global.json path (single value) for setup-dotnet's
-            # global-json-file input, so the SDK version is read from the caller's pin.
-            echo "dotnetglobaljsonpath=$dotnet_globaljson"
           } >> "$GITHUB_OUTPUT"
           # Multiline output (round-3 FIX 3): the newline-separated manifest paths
           # for setup-python's cache-dependency-path. Heredoc delimiter form is
@@ -231,7 +233,7 @@ jobs:
       # the `if:` still requires pymanifest == 'true', so this only runs when at
       # least one manifest exists; setup-python cannot hard-fail before the gates.)
       - name: Set up Python (cached)
-        if: (steps.detect.outputs.python == 'true' || steps.detect.outputs.precommit == 'true') && steps.detect.outputs.pymanifest == 'true'
+        if: steps.detect.outputs.python == 'true' && steps.detect.outputs.pymanifest == 'true'
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ inputs.python-version }}
@@ -239,7 +241,7 @@ jobs:
           cache-dependency-path: ${{ steps.detect.outputs.pymanifestpaths }}
 
       - name: Set up Python (no cache)
-        if: (steps.detect.outputs.python == 'true' || steps.detect.outputs.precommit == 'true') && steps.detect.outputs.pymanifest == 'false'
+        if: steps.detect.outputs.python == 'true' && steps.detect.outputs.pymanifest == 'false'
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ inputs.python-version }}
@@ -250,44 +252,19 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
 
-      - name: Set up Go
-        if: steps.detect.outputs.go == 'true'
-        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
-        with:
-          go-version: stable
+      # round-6: setup-go / setup-dotnet / setup-java / rust-toolchain were REMOVED.
+      # They were added in round-5 FIX B solely so the caller pre-commit's
+      # per-language autofixers (golangci-lint / dotnet-format / spotless /
+      # clippy+rustfmt) had a toolchain. round-6 stopped running the caller
+      # pre-commit and no remaining gate step invokes go/.NET/java/rust, so those
+      # setups are dead weight. Python + Node (above) are the only toolchains the
+      # surviving gates need (basedpyright/tsc/coverage + the self-contained ruff
+      # and oxlint+biome lint/format lanes).
 
-      # round-5 FIX B — a gate that runs language X's linter/formatter MUST install
-      # X's toolchain first, else it hard-fails (observed: codex-session —
-      # dotnet-format -> "Restore operation failed", no .NET SDK). Each toolchain is
-      # set up ONLY when that language is detected, BEFORE gate-1 (pre-commit) runs
-      # its per-language autofixers. python + node are already set up above.
-      - name: Set up .NET (C#)
-        if: steps.detect.outputs.csharp == 'true'
-        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5.3.0
-        with:
-          # Read the SDK version from the caller's global.json when it pins one;
-          # otherwise install the current LTS. (global-json-file is ignored by the
-          # action when the path is empty, so this is a no-op for callers w/o one.)
-          dotnet-version: ${{ steps.detect.outputs.dotnetglobaljson == 'true' && '' || '8.0.x' }}
-          global-json-file: ${{ steps.detect.outputs.dotnetglobaljson == 'true' && steps.detect.outputs.dotnetglobaljsonpath || '' }}
-
-      - name: Set up Java/Kotlin
-        if: steps.detect.outputs.javakotlin == 'true'
-        uses: actions/setup-java@ad2b38190b15e4d6bdf0c97fb4fca8412226d287 # v5.3.0
-        with:
-          distribution: temurin
-          java-version: "21"
-
-      - name: Set up Rust
-        if: steps.detect.outputs.rust == 'true'
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
-        with:
-          components: clippy, rustfmt
-
-      # ── Pinned scanner CLIs (only when their config is present) ───────────
-      - name: Install pre-commit
-        if: steps.detect.outputs.precommit == 'true'
-        run: pip install pre-commit==4.6.0
+      # ── Pinned scanner CLIs (only when their language/config is present) ──────
+      - name: Install ruff
+        if: steps.detect.outputs.python == 'true'
+        run: pip install ruff==0.15.17
 
       - name: Install basedpyright
         if: steps.detect.outputs.python == 'true'
@@ -392,34 +369,38 @@ jobs:
           }
           echo "::endgroup::"
 
-      # ── GATE 1 + GATE 5 — lint/format/imports/sec-lint autofixers + secrets ─
-      # All lane-1 fixers (ruff / clippy+rustfmt / golangci-lint / spotless /
-      # clang-format / ...) AND the gitleaks secrets hook are wired in the caller's
-      # .pre-commit-config.yaml and verified clean here. The ts/js lint/format is
-      # NOT relied upon from pre-commit (it runs self-contained above) so a caller-
-      # local frontend hook cannot abort the lean gate.
-      #
-      # GAP 2 ROBUSTNESS — when the caller ships a JS/TS manifest, `npm ci` first
-      # so any caller-local pre-commit hooks (e.g. a `frontend-eslint` repo-local
-      # hook) can resolve their tool from node_modules instead of failing with
-      # exit 127. Best-effort: a failed install must not by itself red the gate, so
-      # any caller-local hook that STILL shells out to a tool it never installed is
-      # SKIP-ed (SKIP=frontend-eslint,eslint,prettier,tsc) — those are the caller's
-      # ad-hoc lanes, not the lean charter's self-contained gate-1. Ruff/gitleaks/
-      # the rest of the charter hooks still run and still gate.
-      - name: gate-lint-format-secrets (pre-commit run --all-files)
-        if: steps.detect.outputs.precommit == 'true'
+      # ── GATE 1 (py) — SELF-CONTAINED lint + format (Ruff) ───────────────────
+      # round-6 FIX — the lean charter's Python lint/format runs the workflow's OWN
+      # pinned ruff directly, NOT the caller's `.pre-commit-config.yaml`. The old
+      # `gate-lint-format-secrets` step ran `pre-commit run --all-files`, which
+      # dragged in each repo's BESPOKE pre-commit env (a root npm lockfile for the
+      # frontend-eslint hook's `npm ci`, the .NET SDK for dotnet-format, caller-
+      # local eslint/tsc/prettier, ...) and red-failed for caller-ENVIRONMENT
+      # reasons even when the repo's real lean quality was fine. We now run ruff
+      # ourselves: `ruff check` (lint) + `ruff format --check` (format), honoring a
+      # caller [tool.ruff] in pyproject.toml or a ruff.toml/.ruff.toml when present
+      # (ruff auto-discovers it from cwd); otherwise ruff's own defaults apply.
+      # This is NOT weakening — ruff is the SAME charter tool the pre-commit hook
+      # ran (pinned to Reframe's ruff 0.15.17); ruff lint issues or unformatted
+      # Python still FAIL. Pin: ruff 0.15.17 (mirrors Reframe). Keep in sync with
+      # docs/lean-gate/pre-commit-config.template.yaml.
+      - name: gate-lint-format-py (self-contained ruff)
+        if: steps.detect.outputs.python == 'true'
         shell: bash
-        env:
-          SKIP: frontend-eslint,eslint,eslint-local,prettier,tsc,frontend-tsc,frontend-prettier
         run: |
           set -euo pipefail
-          if [ "${{ steps.detect.outputs.frontend }}" = "true" ]; then
-            echo "::group::npm ci (resolve any caller-local frontend pre-commit hooks)"
-            ( npm ci || npm install ) || echo "WARN: frontend dep install failed; caller-local frontend hooks are SKIP-ed and the lean ts/js gate runs self-contained above."
-            echo "::endgroup::"
-          fi
-          pre-commit run --all-files --show-diff-on-failure
+          echo "::group::ruff check (lint)"
+          # --output-format=github surfaces findings as GH annotations. ruff honors
+          # a caller [tool.ruff]/ruff.toml automatically (cwd discovery); no caller
+          # pre-commit/eslint/SDK environment is touched.
+          ruff check --output-format=github .
+          echo "::endgroup::"
+          echo "::group::ruff format --check"
+          ruff format --check . || {
+            echo "FAIL gate-lint-format-py: ruff found unformatted Python (run 'ruff format' / the ruff pre-commit hook to fix)." >&2
+            exit 1
+          }
+          echo "::endgroup::"
 
       # ── GATE 2 — types ────────────────────────────────────────────────────
       # tsc per tsconfig.json so monorepo / nested-project shapes (e.g. an `ui/`
@@ -629,10 +610,13 @@ jobs:
             ${{ inputs.opengrep-paths }}
 
       # ── GATE 5 (verify) — secrets, gitleaks over working tree (0 findings) ─
-      # The autofixer-side secrets hook runs in pre-commit (gate 1+5); this is the
-      # standalone gitleaks verify when no pre-commit config is present.
-      - name: gate-secrets gitleaks
-        if: steps.detect.outputs.gitleaks == 'true' && steps.detect.outputs.precommit == 'false'
+      # round-6 FIX — gitleaks is now ALWAYS self-contained: it runs whenever the
+      # caller ships a .gitleaks.toml allowlist, regardless of any pre-commit config
+      # (the caller pre-commit is no longer executed). Honors the caller's
+      # .gitleaks.toml allowlist. Findings still FAIL the gate. Pin: gitleaks
+      # 8.30.1 (mirrors Reframe), installed above.
+      - name: gate-secrets gitleaks (self-contained)
+        if: steps.detect.outputs.gitleaks == 'true'
         run: gitleaks detect --no-banner --redact --config .gitleaks.toml
 
       # ── GATE 6 — deps (osv-scanner, 0 actionable CVEs) ───────────────────

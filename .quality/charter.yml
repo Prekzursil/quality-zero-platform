@@ -10,7 +10,7 @@
 
 charter_version: "2026-06-16"
 model:
-  prevent: true        # auto-fix at write time (gate 1 + pre-commit)
+  prevent: true        # auto-fix at write time (gate 1 + the caller's local pre-commit; CI gate 1 is self-contained ruff/oxlint/biome)
   binary: true         # every gate is pass/fail, no soft scores
   ratchet_retired: true # 100% coverage everywhere; no ratcheting baseline
 
@@ -20,15 +20,17 @@ gates:
   - id: 1
     name: lint-format-imports-seclint
     autofix: true
-    workflow_step: "gate-lint-format-secrets"
+    # round-6: gate 1 is now SELF-CONTAINED — the workflow runs its OWN pinned
+    # ruff (py) + oxlint+biome (ts/js) directly, NOT the caller's pre-commit.
+    # Steps: gate-lint-format-py (ruff) + gate-lint-format-jsts (oxlint+biome).
+    # The charter-check greps the `gate-lint-format` prefix, matching both.
+    workflow_step: "gate-lint-format"
     tools:
-      python: [ruff]
+      python: [ruff]           # ruff 0.15.17 (mirrors Reframe), self-contained
       ts_js: [oxlint, biome]   # oxlint = lint; biome = formatter-only (mirrors Reframe; round-3 swapped from oxfmt)
-      rust: [clippy, rustfmt]
-      go: ["golangci-lint-v2"]
-      java: [errorprone, spotless]
-      csharp: [roslyn, dotnet-format]
-      c_cpp: [clang-tidy, clang-format]
+    # round-6: rust/go/java/csharp/c_cpp lane-1 autofixers ran ONLY via the caller
+    # pre-commit, which is no longer executed; their toolchain setups were dropped.
+    # Re-add a self-contained step (like ruff/oxlint) before re-listing a language.
   - id: 2
     name: types
     workflow_step: "gate-types"
@@ -51,9 +53,9 @@ gates:
     note: "small pinned in-repo ruleset (.quality/opengrep)"
   - id: 5
     name: secrets
-    workflow_step: "gate-secrets"        # via pre-commit (gate-lint-format-secrets) or standalone
+    workflow_step: "gate-secrets"        # round-6: self-contained gitleaks (always; no longer via caller pre-commit)
     tools: [gitleaks]
-    note: "pinned + allowlist + push-protection"
+    note: "gitleaks 8.30.1 (mirrors Reframe) + caller .gitleaks.toml allowlist; self-contained"
   - id: 6
     name: deps
     workflow_step: "gate-deps"

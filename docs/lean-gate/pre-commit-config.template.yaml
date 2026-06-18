@@ -39,8 +39,11 @@ repos:
       - id: ruff-format
         name: ruff (format)
 
-  # ── Gate 1: JS/TS lint + format (Oxlint + Oxfmt) ───────────────────────────
-  # Uncomment in a JS/TS caller. Oxc bundles the linter and formatter (oxfmt).
+  # ── Gate 1: JS/TS lint (Oxlint) + format (Biome, format-only) ──────────────
+  # Uncomment in a JS/TS caller. Oxlint = linter; Biome = formatter (the proven
+  # Reframe split; round-3 swapped the formatter from Oxfmt to Biome so local
+  # pre-commit matches the CI check, which runs `biome ci --formatter-enabled
+  # --linter-enabled=false`). The biome-format hook autofixes on commit.
   # - repo: https://github.com/oxc-project/mirrors-oxlint
   #   rev: v1.69.0
   #   hooks:
@@ -48,14 +51,13 @@ repos:
   #       name: oxlint (--fix, --deny-warnings)
   #       args: ["--fix", "--deny-warnings"]
   #       files: '\.(ts|tsx|js|jsx|mjs|cjs)$'
-  # - repo: local
+  # - repo: https://github.com/biomejs/pre-commit
+  #   rev: v2.5.0
   #   hooks:
-  #     - id: oxfmt
-  #       name: oxfmt (format)
-  #       language: node
-  #       additional_dependencies: ["oxfmt@0.55.0"]
-  #       entry: oxfmt
-  #       files: '\.(ts|tsx|js|jsx|mjs|cjs)$'
+  #     - id: biome-format
+  #       name: biome (format)
+  #       additional_dependencies: ["@biomejs/biome@2.5.0"]
+  #       files: '\.(ts|tsx|js|jsx|mjs|cjs|css|json)$'
 
   # ── Gate 1: Rust lint + format (clippy + rustfmt) ─────────────────────────
   # Uncomment in a Rust caller (requires the rust toolchain on the runner).

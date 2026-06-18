@@ -25,7 +25,7 @@
 #        Ruff[py] · Oxlint+Biome[ts/js] · clippy+rustfmt[rust] ·
 #        golangci-lint v2[go] · ErrorProne+Spotless[java] ·
 #        Roslyn+dotnet-format[c#] · clang-tidy+clang-format[c/c++]
-#   2. Types:        tsc --noEmit[ts] · basedpyright[py]
+#   2. Types:        tsc --noEmit[ts] · basedpyright (standard mode)[py]
 #   3. Tests+cov:    STRICT 100% line+branch (standing policy; ratchet retired)
 #   4. SAST:         Opengrep (Semgrep CE acceptable), pinned in-repo ruleset
 #   5. Secrets:      gitleaks (pinned + allowlist) + push-protection
@@ -49,6 +49,22 @@
 # and runs `npm ci` before any node coverage. Gate 1's ts/js lint/format runs the
 # workflow's OWN pinned oxlint+biome SELF-CONTAINED, so a caller-local
 # frontend-eslint pre-commit hook (exit 127) cannot abort the lean gate.
+#
+# round-5 FIX A (basedpyright standard): basedpyright's DEFAULT mode is stricter
+# than pyright (reportAny/reportUnknown*/reportUnusedCallResult), flooding untyped
+# utility scripts with thousands of non-bug errors (momentstudio 2774, swfoc 39,
+# pbinfo 11). Reframe runs it at typeCheckingMode = "standard". So gate-2 now
+# HONORS a caller basedpyright/pyright config (pyrightconfig.json /
+# basedpyrightconfig.json / pyproject [tool.(based)pyright]) when present, else
+# passes `--typecheckingmode standard`. Real type errors at standard still FAIL.
+#
+# round-5 FIX B (per-language toolchain setup): a gate that runs language X's
+# linter/formatter must install X's toolchain first or it hard-fails (codex-session:
+# dotnet-format -> "Restore operation failed", no .NET SDK). Conditional, detection-
+# gated setup is added BEFORE the gates: C#/.NET -> actions/setup-dotnet (SDK from
+# global.json when pinned); Java/Kotlin -> actions/setup-java (temurin); Rust ->
+# dtolnay/rust-toolchain (clippy+rustfmt). Go was already set up; python+node too.
+# Each runs ONLY when its language is detected; all new actions are SHA-pinned.
 
 on:
   workflow_call:
@@ -132,6 +148,30 @@ jobs:
             '**/pom.xml' pom.xml '**/gradle.lockfile' gradle.lockfile 2>/dev/null | head -1)"
           # A Python coverage configuration (pytest/coverage settings live here).
           py_cov_cfg="$(git ls-files pyproject.toml setup.cfg tox.ini '.coveragerc' 'pytest.ini' 2>/dev/null | head -1)"
+          # round-5 FIX A — a basedpyright / pyright config supplied BY THE CALLER.
+          # When present we honor it verbatim (run basedpyright as-is); when ABSENT
+          # we pass `--typecheckingmode standard` so the type gate uses the proven
+          # standard bar (mirroring Reframe's [tool.basedpyright] typeCheckingMode =
+          # "standard") instead of basedpyright's STRICTER default, which floods
+          # untyped utility scripts with reportAny/reportUnknown*/reportUnusedCallResult
+          # (observed: momentstudio 2774, swfoc 39, pbinfo 11 — all from scripts/utils,
+          # none real bugs). A pyproject.toml counts only if it actually carries a
+          # `[tool.basedpyright]` or `[tool.pyright]` table.
+          py_pyright_cfg="$(git ls-files pyrightconfig.json basedpyrightconfig.json 2>/dev/null | head -1)"
+          if [ -z "$py_pyright_cfg" ] && [ -f pyproject.toml ] \
+            && grep -Eq '^\[tool\.(based)?pyright\]' pyproject.toml 2>/dev/null; then
+            py_pyright_cfg=pyproject.toml
+          fi
+          # round-5 FIX B — per-language toolchain detection (source OR manifest).
+          # C#/.NET, Java/Kotlin, Rust and Go each need their toolchain set up
+          # BEFORE the gate that runs their linter/formatter, else the lane hard-fails
+          # (observed: codex-session — dotnet-format -> "Restore operation failed", no
+          # .NET SDK). The existing root-only `rust`/`go` detectors are broadened here
+          # to also catch sources/manifests anywhere in the tree.
+          csharp="$(has global.json '**/global.json' '*.csproj' '**/*.csproj' '*.sln' '**/*.sln' '*.cs' '**/*.cs')"
+          javakotlin="$(has pom.xml '**/pom.xml' 'build.gradle' '**/build.gradle' 'build.gradle.kts' '**/build.gradle.kts' '*.java' '**/*.java' '*.kt' '**/*.kt')"
+          # A global.json pins the .NET SDK version; feed it to setup-dotnet when present.
+          dotnet_globaljson="$(git ls-files global.json '**/global.json' 2>/dev/null | head -1)"
           # Test surface — if a language has source but ZERO test files, a missing
           # coverage config is "no test surface by design" (skip), not a hole (fail).
           py_tests="$(git ls-files 'test_*.py' '*_test.py' '**/test_*.py' '**/*_test.py' \
@@ -144,8 +184,12 @@ jobs:
             echo "python=$(has '*.py')"
             echo "ts=$(has '*.ts' '*.tsx')"
             echo "jsts=$(has '*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs' '*.cjs')"
-            echo "rust=$(file_exists Cargo.toml)"
-            echo "go=$(file_exists go.mod)"
+            echo "rust=$(has Cargo.toml '**/Cargo.toml' '*.rs' '**/*.rs')"
+            echo "go=$(has go.mod '**/go.mod' '*.go' '**/*.go')"
+            echo "csharp=$csharp"
+            echo "javakotlin=$javakotlin"
+            echo "dotnetglobaljson=$(any "$dotnet_globaljson")"
+            echo "pyrightcfg=$(any "$py_pyright_cfg")"
             echo "frontend=$(has package.json '**/package.json')"
             echo "precommit=$(file_exists .pre-commit-config.yaml)"
             echo "opengrep=$([ -d .quality/opengrep ] && echo true || echo false)"
@@ -157,6 +201,9 @@ jobs:
             echo "pycovcfg=$(any "$py_cov_cfg")"
             echo "pytests=$(any "$py_tests")"
             echo "jststests=$(any "$jsts_tests")"
+            # round-5 FIX B: the global.json path (single value) for setup-dotnet's
+            # global-json-file input, so the SDK version is read from the caller's pin.
+            echo "dotnetglobaljsonpath=$dotnet_globaljson"
           } >> "$GITHUB_OUTPUT"
           # Multiline output (round-3 FIX 3): the newline-separated manifest paths
           # for setup-python's cache-dependency-path. Heredoc delimiter form is
@@ -208,6 +255,34 @@ jobs:
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version: stable
+
+      # round-5 FIX B — a gate that runs language X's linter/formatter MUST install
+      # X's toolchain first, else it hard-fails (observed: codex-session —
+      # dotnet-format -> "Restore operation failed", no .NET SDK). Each toolchain is
+      # set up ONLY when that language is detected, BEFORE gate-1 (pre-commit) runs
+      # its per-language autofixers. python + node are already set up above.
+      - name: Set up .NET (C#)
+        if: steps.detect.outputs.csharp == 'true'
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5.3.0
+        with:
+          # Read the SDK version from the caller's global.json when it pins one;
+          # otherwise install the current LTS. (global-json-file is ignored by the
+          # action when the path is empty, so this is a no-op for callers w/o one.)
+          dotnet-version: ${{ steps.detect.outputs.dotnetglobaljson == 'true' && '' || '8.0.x' }}
+          global-json-file: ${{ steps.detect.outputs.dotnetglobaljson == 'true' && steps.detect.outputs.dotnetglobaljsonpath || '' }}
+
+      - name: Set up Java/Kotlin
+        if: steps.detect.outputs.javakotlin == 'true'
+        uses: actions/setup-java@ad2b38190b15e4d6bdf0c97fb4fca8412226d287 # v5.3.0
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Rust
+        if: steps.detect.outputs.rust == 'true'
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          components: clippy, rustfmt
 
       # ── Pinned scanner CLIs (only when their config is present) ───────────
       - name: Install pre-commit
@@ -382,9 +457,30 @@ jobs:
             done
           fi
 
+      # round-5 FIX A — basedpyright at the STANDARD bar (consistency with Reframe).
+      # basedpyright's DEFAULT mode is stricter than upstream pyright: it turns on
+      # reportAny / reportUnknown* / reportUnusedCallResult, which flood untyped
+      # utility scripts with thousands of non-bug "errors" (observed: momentstudio
+      # 2774, swfoc 39, pbinfo 11 — all from scripts/utils). Reframe runs basedpyright
+      # at typeCheckingMode = "standard" via [tool.basedpyright]. So: if the CALLER
+      # ships a basedpyright/pyright config (pyrightconfig.json, basedpyrightconfig.json,
+      # or a pyproject.toml with a [tool.(based)pyright] table) we honor it verbatim
+      # (run basedpyright as-is); otherwise we pass `--typecheckingmode standard` so
+      # the gate uses the proven standard bar instead of basedpyright's stricter
+      # default. This is NOT weakening — standard is the proven bar and reportAny-
+      # everywhere is gold-plating; REAL type errors at standard level still FAIL.
       - name: gate-types basedpyright
         if: steps.detect.outputs.python == 'true'
-        run: basedpyright
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.detect.outputs.pyrightcfg }}" = "true" ]; then
+            echo "Honoring caller-shipped basedpyright/pyright config (running as-is)."
+            basedpyright
+          else
+            echo "No caller basedpyright/pyright config - using standard typeCheckingMode (mirrors Reframe)."
+            basedpyright --typecheckingmode standard
+          fi
 
       # ── GATE 3 — tests + coverage (STRICT 100% line+branch) ───────────────
       # Python via coverage.py; JS/TS via the caller's `test:coverage` script.

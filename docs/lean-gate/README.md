@@ -30,7 +30,7 @@ green/red model.
 Model: **Prevent (auto-fix) - Binary green/red - Ratchet-retired (100% everywhere)**.
 
 1. **Lint + format + imports + sec-lint** (AUTOFIX): Ruff [py] - Oxlint+Biome [ts/js] (Oxlint = linter, Biome = formatter-only) - clippy+rustfmt [rust] - golangci-lint v2 [go] - ErrorProne+Spotless [java] - Roslyn+dotnet-format [c#] - clang-tidy+clang-format [c/c++].
-2. **Types**: `tsc --noEmit` [ts] - basedpyright [py].
+2. **Types**: `tsc --noEmit` [ts] - basedpyright at the **standard** `typeCheckingMode` [py] (honors a caller basedpyright/pyright config when present; otherwise `--typecheckingmode standard`, mirroring Reframe).
 3. **Tests + coverage**: STRICT **100% line+branch** (standing user policy; ratchet retired). Reasoned, greppable pragma only. **No silent-pass** — a language with source *and* test files but no coverage config/script **FAILS** (the 100% gate cannot pass unmeasured); the only skip is the narrow *no-test-surface-by-design* case (source present with **zero** test files).
 4. **SAST**: Opengrep (Semgrep CE acceptable), small pinned in-repo ruleset (`.quality/opengrep`).
 5. **Secrets**: gitleaks (pinned + allowlist) + push-protection.
@@ -158,6 +158,32 @@ hard-fail *before* a gate can run:
     The local pre-commit hook (`biomejs/pre-commit@v2.5.0` `biome-format`) autofixes
     on commit so local and CI agree. (Earlier rounds used Oxfmt 0.55.0; round-3
     swapped to Biome to match the proven Reframe gate.)
+- **basedpyright at the standard bar (round-5 FIX A).** basedpyright's *default*
+  mode is stricter than upstream pyright — it enables
+  `reportAny`/`reportUnknown*`/`reportUnusedCallResult`, which flood untyped utility
+  scripts with thousands of non-bug "errors" (observed: `momentstudio` 2774,
+  `swfoc` 39, `pbinfo` 11 — all from `scripts`/`utils`). Reframe runs basedpyright
+  at `typeCheckingMode = "standard"` via `[tool.basedpyright]`. The gate-2
+  basedpyright step now **honors a caller-shipped basedpyright/pyright config**
+  (`pyrightconfig.json`, `basedpyrightconfig.json`, or a `pyproject.toml` carrying a
+  `[tool.basedpyright]` / `[tool.pyright]` table) by running `basedpyright` as-is;
+  when **no** such config exists it passes `--typecheckingmode standard` so the gate
+  uses the proven standard bar instead of basedpyright's stricter default. This is
+  **not** a weakening — standard is the proven bar and reportAny-everywhere is
+  gold-plating; **real** type errors at standard level still **FAIL**.
+- **Per-language toolchain setup (round-5 FIX B).** A gate that runs language X's
+  linter/formatter must install X's toolchain first, or it hard-fails (observed:
+  `codex-session` — `dotnet-format` → *"Restore operation failed"*, no .NET SDK).
+  Using the detect step's language flags, the workflow now sets up — **only when
+  that language is detected**, and **before** gate-1 (pre-commit) runs its
+  per-language autofixers — the missing toolchains: **C#/.NET** (detected via
+  `global.json`/`*.csproj`/`*.sln`/`*.cs`) → `actions/setup-dotnet` (SDK version
+  read from `global.json` when the caller pins one, else 8.0.x); **Java/Kotlin**
+  (`pom.xml`/`build.gradle*`/`*.java`/`*.kt`) → `actions/setup-java` (temurin 21);
+  **Rust** (`Cargo.toml`/`*.rs`) → `dtolnay/rust-toolchain` (clippy+rustfmt). **Go**
+  (`go.mod`/`*.go`) was already set up via `actions/setup-go`; Python and Node too.
+  All new actions are SHA-pinned (`actions/setup-dotnet@…# v5.3.0`,
+  `actions/setup-java@…# v5.3.0`, `dtolnay/rust-toolchain@…# stable`).
 
 ## Charter drift guard
 

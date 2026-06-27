@@ -165,10 +165,14 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
         self.assertNotIn("qlty coverage", pr_contexts)
         self.assertNotIn("qlty coverage diff", pr_contexts)
 
-    def test_quality_zero_platform_requires_qlty_zero_context_on_push_and_ruleset(
+    def test_quality_zero_platform_requires_lean_contexts_on_push_and_ruleset(
         self,
     ) -> None:
-        """QLTY Zero must remain required on push and rulesets."""
+        """Lean gate (Control Plane Verify + CodeQL) must be required on push/ruleset.
+
+        Lean-gate migration (2026-06-27): the retired SaaS strict-zero contexts
+        are no longer required branch-protection checks on the platform's own main.
+        """
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
 
@@ -190,14 +194,21 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
         )
 
         self._assert_quality_zero_platform_contexts(
-            "shared-codecov-analytics / Codecov Analytics",
-            "shared-scanner-matrix / QLTY Zero",
-            "shared-scanner-matrix / DeepSource Visible Zero",
+            "Control Plane Verify",
+            "codeql / CodeQL",
             push_contexts=push_contexts,
             ruleset_contexts=ruleset_contexts,
             target_contexts=profile["required_contexts"]["target"],
             ruleset_status_checks=ruleset_status_checks,
         )
+        for retired in (
+            "shared-scanner-matrix / QLTY Zero",
+            "shared-codecov-analytics / Codecov Analytics",
+            "shared-scanner-matrix / Sonar Zero",
+            "shared-scanner-matrix / DeepSource Visible Zero",
+            "SonarCloud Code Analysis",
+        ):
+            self.assertNotIn(retired, ruleset_status_checks)
         self.assertEqual(ruleset_contexts, merge_group_contexts)
         self.assertNotIn("qlty coverage diff", ruleset_contexts)
         self.assertEqual(
@@ -210,8 +221,8 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
             ]
         )
 
-    def test_quality_zero_platform_requires_qlty_zero(self) -> None:
-        """The control-plane target contexts should keep the governed QLTY lane."""
+    def test_quality_zero_platform_requires_lean_gate(self) -> None:
+        """The control-plane target contexts are the lean gate, not the SaaS lanes."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
 
@@ -219,25 +230,19 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
         pr_contexts = active_required_contexts(profile, event_name="pull_request")
         target_contexts = set(profile["required_contexts"]["target"])
 
-        self.assertIn("shared-codecov-analytics / Codecov Analytics", push_contexts)
-        self.assertIn("shared-codecov-analytics / Codecov Analytics", pr_contexts)
-        self.assertIn(
-            "shared-codecov-analytics / Codecov Analytics", target_contexts
-        )
-        self.assertIn("shared-scanner-matrix / QLTY Zero", push_contexts)
-        self.assertIn("shared-scanner-matrix / QLTY Zero", pr_contexts)
-        self.assertIn("shared-scanner-matrix / QLTY Zero", target_contexts)
-        self.assertIn(
-            "shared-scanner-matrix / DeepSource Visible Zero", push_contexts
-        )
-        self.assertIn(
-            "shared-scanner-matrix / DeepSource Visible Zero", pr_contexts
-        )
-        self.assertIn(
-            "shared-scanner-matrix / DeepSource Visible Zero", target_contexts
-        )
-        self.assertNotIn("Codacy Static Code Analysis", target_contexts)
-        self.assertNotIn("DeepScan", target_contexts)
+        for lean in ("Control Plane Verify", "codeql / CodeQL"):
+            self.assertIn(lean, push_contexts)
+            self.assertIn(lean, pr_contexts)
+            self.assertIn(lean, target_contexts)
+        for retired in (
+            "shared-codecov-analytics / Codecov Analytics",
+            "shared-scanner-matrix / QLTY Zero",
+            "shared-scanner-matrix / DeepSource Visible Zero",
+            "shared-scanner-matrix / Sonar Zero",
+            "Codacy Static Code Analysis",
+            "DeepScan",
+        ):
+            self.assertNotIn(retired, target_contexts)
 
     def test_airline_target_contexts_include_deepsource_contracts(self) -> None:
         """Airline should enforce the owned DeepSource contexts in target rulesets."""

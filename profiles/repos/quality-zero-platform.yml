@@ -33,33 +33,25 @@ scanners:
   qlty_check: { severity: block }
 overrides: []
 verify_command: bash scripts/verify
+# LEAN GATE MIGRATION (2026-06-27): the retired SaaS strict-zero contexts
+# (Sonar/SonarCloud, Codacy, DeepScan, DeepSource, QLTY, Sentry, Codecov-as-gate
+# and the legacy "Coverage 100 Gate" scanner-matrix lane) are NO LONGER required
+# branch-protection checks on the platform's own main. The platform self-governs
+# via "Control Plane Verify" (bash scripts/verify = unittest + STRICT 100%
+# line+branch coverage + control-plane self-validation) and CodeQL code-scanning.
+# Archive of the full SaaS control plane: branch+tag archive/qzp-full-saas-control-plane.
+# The shared reusable SaaS workflows are kept (still consumed by enrolled repos
+# per the lean-gate charter migration runbook) — only the SELF required contexts
+# are migrated here.
 required_contexts_mode: replace
 required_contexts:
   always:
-  - shared-scanner-matrix / Coverage 100 Gate
-  - shared-codecov-analytics / Codecov Analytics
+  - Control Plane Verify
   - codeql / CodeQL
-  - shared-scanner-matrix / QLTY Zero
-  - shared-scanner-matrix / Sonar Zero
-  - shared-scanner-matrix / Codacy Zero
-  - shared-scanner-matrix / Semgrep Zero
-  - shared-scanner-matrix / Sentry Zero
-  - shared-scanner-matrix / DeepScan Zero
-  - shared-scanner-matrix / DeepSource Visible Zero
-  pull_request_only:
-  - SonarCloud Code Analysis
+  pull_request_only: []
   target:
-  - shared-scanner-matrix / Coverage 100 Gate
-  - shared-codecov-analytics / Codecov Analytics
+  - Control Plane Verify
   - codeql / CodeQL
-  - shared-scanner-matrix / QLTY Zero
-  - shared-scanner-matrix / Sonar Zero
-  - shared-scanner-matrix / Codacy Zero
-  - shared-scanner-matrix / Semgrep Zero
-  - shared-scanner-matrix / Sentry Zero
-  - shared-scanner-matrix / DeepScan Zero
-  - shared-scanner-matrix / DeepSource Visible Zero
-  - SonarCloud Code Analysis
 enabled_scanners:
   deepsource_visible: true
 coverage:

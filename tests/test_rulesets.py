@@ -123,5 +123,7 @@ class RulesetPayloadTests(unittest.TestCase):
             "DeepScan",
             profile["required_contexts"]["target"],
         )
-        self.assertIn("shared-codecov-analytics / Codecov Analytics", contexts)
-        self.assertIn("shared-scanner-matrix / QLTY Zero", contexts)
+        self.assertNotIn("shared-codecov-analytics / Codecov Analytics", contexts)
+        self.assertNotIn("shared-scanner-matrix / QLTY Zero", contexts)
+        self.assertIn("Control Plane Verify", contexts)
+        self.assertIn("codeql / CodeQL", contexts)

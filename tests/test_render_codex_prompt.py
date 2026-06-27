@@ -228,7 +228,7 @@ class RenderCodexPromptTests(unittest.TestCase):
                 os.chdir(previous)
 
         self.assertEqual(result.exception.code, 0)
-        self.assertIn("Coverage 100 Gate", buffer.getvalue())
+        self.assertIn("Control Plane Verify", buffer.getvalue())
 
     def test_parse_args_accepts_canonical_json(self) -> None:
         """Cover --canonical-json argument is accepted."""

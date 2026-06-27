@@ -152,10 +152,13 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
             },
         )
 
-    def test_quality_zero_platform_requires_codecov_in_push_pr_and_target(
+    def test_quality_zero_platform_requires_lean_gate_in_push_pr_and_target(
         self,
     ) -> None:
-        """Codecov should be part of the self-governed merge and push contract."""
+        """The lean gate (not Codecov-as-gate) is the self-governed merge/push contract.
+
+        Lean-gate migration (2026-06-27): Codecov is retired as a required gate.
+        """
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
 
@@ -163,9 +166,11 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
         pr_contexts = active_required_contexts(profile, event_name="pull_request")
         target_contexts = profile["required_contexts"]["target"]
 
-        self.assertIn("shared-codecov-analytics / Codecov Analytics", push_contexts)
-        self.assertIn("shared-codecov-analytics / Codecov Analytics", pr_contexts)
-        self.assertIn(
+        for lean in ("Control Plane Verify", "codeql / CodeQL"):
+            self.assertIn(lean, push_contexts)
+            self.assertIn(lean, pr_contexts)
+            self.assertIn(lean, target_contexts)
+        self.assertNotIn(
             "shared-codecov-analytics / Codecov Analytics", target_contexts
         )
 

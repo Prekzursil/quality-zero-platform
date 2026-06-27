@@ -146,8 +146,16 @@ jobs:
           PY
 
       - name: Commit audit log
-        if: ${{ secrets.BYPASS_AUDIT_PAT != '' }}
+        # The ``secrets`` context is NOT available in step ``if:`` conditions
+        # (only github/needs/strategy/matrix/job/runner/env/vars/steps/inputs
+        # are). Referencing ``secrets.*`` here made the workflow fail to
+        # compile (startup_failure on every event). Mirror the proven in-repo
+        # pattern (see ``SonarCloud scan`` in reusable-scanner-matrix.yml):
+        # surface the secret's presence as a step-level ``env`` boolean and
+        # gate on ``env.*`` instead.
+        if: ${{ env.HAS_AUDIT_PAT == 'true' }}
         env:
+          HAS_AUDIT_PAT: ${{ secrets.BYPASS_AUDIT_PAT != '' }}
           QZ_AUDIT_PATH: ${{ steps.evaluate.outputs.audit_path }}
           QZ_LABEL: ${{ inputs.label }}
           QZ_PR_SLUG: ${{ inputs.pr_slug }}

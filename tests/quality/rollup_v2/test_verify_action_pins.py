@@ -102,6 +102,40 @@ jobs:
         violations = scan_workflow(wf)
         self.assertEqual(len(violations), 0)
 
+    def test_commented_floating_reference_is_ignored(self):
+        # A ``uses: ...@main`` token inside a ``#`` comment (e.g. an adoption
+        # example in a workflow docstring) is documentation, not a real action
+        # invocation, so it must not be flagged as unpinned.
+        wf = self._write_workflow("""
+name: Test
+# Example for callers:
+#   jobs:
+#     quality:
+#       uses: some-owner/some-action@main
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: good-owner/good-action@abc123def456abc123def456abc123def456abc1
+""")
+        violations = scan_workflow(wf)
+        self.assertEqual(len(violations), 0)
+
+    def test_indented_commented_floating_reference_is_ignored(self):
+        wf = self._write_workflow("""
+name: Test
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # - uses: some-owner/some-action@v4
+      - uses: actions/checkout@v4
+""")
+        violations = scan_workflow(wf)
+        self.assertEqual(len(violations), 0)
+
     def test_sub_action_path_handled(self):
         wf = self._write_workflow("""
 name: Test

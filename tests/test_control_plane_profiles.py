@@ -271,7 +271,13 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
             quality_zero_platform["vendors"]["qlty"]["check_names_actual"],
             ["qlty check", "qlty coverage", "qlty coverage diff"],
         )
-        self.assertTrue(quality_zero_platform["enabled_scanners"]["deepsource_visible"])
+        # Lean-gate migration (2026-06-27): the platform's OWN self-CI retired
+        # the fail-closed SaaS coverage *publish* legs (Codacy / DeepSource),
+        # so these toggles are disabled here. The shared scanner-matrix steps
+        # and the enrolled fleet's profiles are unaffected; the 100% coverage
+        # MEASURE stays in Control Plane Verify (scripts/verify --fail-under=100).
+        self.assertFalse(quality_zero_platform["enabled_scanners"]["deepsource_visible"])
+        self.assertFalse(quality_zero_platform["enabled_scanners"]["codacy"])
         self.assertEqual(
             quality_zero_platform["vendors"]["qlty"]["gate_context"],
             "qlty check",

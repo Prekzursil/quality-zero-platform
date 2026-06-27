@@ -41,6 +41,14 @@ def scan_workflow(path: Path) -> List[Dict[str, str]]:
     text = path.read_text(encoding="utf-8")
 
     for line_num, line in enumerate(text.splitlines(), start=1):
+        # Skip whole-line YAML comments: a ``uses:`` token inside a ``#``
+        # comment (e.g. an adoption example in a docstring) is documentation,
+        # not a real action invocation, so it must not be flagged as an
+        # unpinned reference. YAML has no block comments, so every comment
+        # line begins with ``#`` after stripping leading whitespace.
+        if line.lstrip().startswith("#"):
+            continue
+
         match = _USES_RE.search(line)
         if match is None:
             continue

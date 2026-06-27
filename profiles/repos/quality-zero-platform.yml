@@ -53,7 +53,24 @@ required_contexts:
   - Control Plane Verify
   - codeql / CodeQL
 enabled_scanners:
-  deepsource_visible: true
+  # LEAN GATE MIGRATION (2026-06-27): retire the retired-tier SaaS coverage
+  # *publish* legs on the platform's OWN self-CI. These are fail-closed
+  # without an operator secret and are no longer required branch-protection
+  # contexts (self-governance moved to Control Plane Verify + CodeQL, which
+  # still enforce the STRICT 100% line+branch coverage MEASURE via
+  # ``coverage report --fail-under=100`` in scripts/verify). Disabling these
+  # toggles only skips the publish STEPS in the shared scanner matrix's
+  # coverage lane (the scan "Zero" lanes run unconditionally via the lane
+  # dispatcher, so the rollup still receives every lane's artifact); the
+  # shared reusable workflows are untouched so the enrolled fleet is
+  # unaffected.
+  #   - codacy: Codacy coverage upload fails "No Write permission on Project"
+  #     with the account-level CODACY_API_TOKEN (a project-scoped
+  #     CODACY_PROJECT_TOKEN was never provisioned).
+  #   - deepsource_visible: "Publish DeepSource coverage" is fail-closed
+  #     without DEEPSOURCE_DSN (never forwarded to this repo's wrapper).
+  codacy: false
+  deepsource_visible: false
 coverage:
   setup:
     node: "22"

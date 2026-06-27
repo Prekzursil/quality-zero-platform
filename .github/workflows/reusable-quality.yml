@@ -616,8 +616,11 @@ jobs:
           OPENGREP_PATHS: ${{ inputs.opengrep-paths }}
         run: |
           # OPENGREP_PATHS is an optional space-separated list of scan paths.
-          # Passed via env (not ${{ }} inline) to avoid GitHub Actions run-step
-          # expression injection, then split into a bash ARRAY so each path is a
+          # Passed via env (NOT an inline GHA expression in this run block) to
+          # avoid GitHub Actions run-step expression injection -- note that GHA
+          # expands expression tokens textually over the whole run string,
+          # comments included, so even a literal token here is a real sink.
+          # The value is then split into a bash ARRAY so each path is a
           # distinct argument WITHOUT an unquoted expansion (an unquoted $VAR of an
           # injectable input still trips CodeQL actions/code-injection). Empty
           # value => zero extra args (default = scan repo root via the config).

@@ -453,9 +453,11 @@ jobs:
       - name: gate-types basedpyright
         if: steps.detect.outputs.python == 'true'
         shell: bash
+        env:
+          PYRIGHTCFG: ${{ steps.detect.outputs.pyrightcfg }}
         run: |
           set -euo pipefail
-          if [ "${{ steps.detect.outputs.pyrightcfg }}" = "true" ]; then
+          if [ "$PYRIGHTCFG" = "true" ]; then
             echo "Honoring caller-shipped basedpyright/pyright config (running as-is)."
             basedpyright
           else
@@ -475,13 +477,16 @@ jobs:
       - name: gate-tests-coverage python
         if: steps.detect.outputs.python == 'true'
         shell: bash
+        env:
+          PYCOVCFG: ${{ steps.detect.outputs.pycovcfg }}
+          PYTESTS: ${{ steps.detect.outputs.pytests }}
         run: |
           set -euo pipefail
-          if [ "${{ steps.detect.outputs.pycovcfg }}" != "true" ] && [ "${{ steps.detect.outputs.pytests }}" != "true" ]; then
+          if [ "$PYCOVCFG" != "true" ] && [ "$PYTESTS" != "true" ]; then
             echo "Python source present with NO test files and NO coverage config - no test surface by design; coverage lane skipped."
             exit 0
           fi
-          if [ "${{ steps.detect.outputs.pycovcfg }}" != "true" ] && [ "${{ steps.detect.outputs.pytests }}" == "true" ]; then
+          if [ "$PYCOVCFG" != "true" ] && [ "$PYTESTS" == "true" ]; then
             echo "FAIL gate-tests-coverage python: Python source + tests are present but no coverage config (pyproject.toml/setup.cfg/tox.ini/.coveragerc/pytest.ini) - the 100% gate cannot pass unmeasured. Add coverage config." >&2
             exit 1
           fi
@@ -546,6 +551,8 @@ jobs:
       - name: gate-tests-coverage jsts
         if: steps.detect.outputs.jsts == 'true'
         shell: bash
+        env:
+          JSTSTESTS: ${{ steps.detect.outputs.jststests }}
         run: |
           set -euo pipefail
           # has_cov_lane: does <dir>/package.json define a runnable coverage lane?
@@ -593,7 +600,7 @@ jobs:
           fi
           if [ "$ran_any" = "true" ]; then
             echo "PASS gate-tests-coverage jsts: ran coverage in ${#proj_dirs[@]} project dir(s)."
-          elif [ "${{ steps.detect.outputs.jststests }}" != "true" ]; then
+          elif [ "$JSTSTESTS" != "true" ]; then
             echo "ts/js source present with NO test files and no coverage script - no test surface by design; coverage lane skipped."
             exit 0
           else
@@ -604,10 +611,17 @@ jobs:
       # ── GATE 4 — SAST (opengrep, curated in-repo ruleset, clean-zero) ─────
       - name: gate-sast opengrep
         if: steps.detect.outputs.opengrep == 'true'
+        shell: bash
+        env:
+          OPENGREP_PATHS: ${{ inputs.opengrep-paths }}
         run: |
+          # OPENGREP_PATHS is an optional space-separated list of scan paths; left
+          # unquoted on purpose so each path becomes a separate argument (default
+          # empty = scan repo root via the config). Passed via env (not ${{ }}
+          # inline) to avoid GitHub Actions run-step expression injection.
           opengrep scan --config .quality/opengrep --error \
             --exclude .venv --exclude node_modules --exclude dist --exclude out --exclude build \
-            ${{ inputs.opengrep-paths }}
+            $OPENGREP_PATHS
 
       # ── GATE 5 (verify) — secrets, gitleaks over working tree (0 findings) ─
       # round-6 FIX — gitleaks is now ALWAYS self-contained: it runs whenever the
@@ -635,9 +649,11 @@ jobs:
       - name: gate-deps osv-scanner
         if: steps.detect.outputs.osv == 'true'
         shell: bash
+        env:
+          OSVSOURCES: ${{ steps.detect.outputs.osvsources }}
         run: |
           set -euo pipefail
-          if [ "${{ steps.detect.outputs.osvsources }}" != "true" ]; then
+          if [ "$OSVSOURCES" != "true" ]; then
             echo "No dependency manifests or lockfiles present - nothing for osv-scanner to scan; deps gate passes."
             exit 0
           fi

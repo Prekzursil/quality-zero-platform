@@ -615,13 +615,16 @@ jobs:
         env:
           OPENGREP_PATHS: ${{ inputs.opengrep-paths }}
         run: |
-          # OPENGREP_PATHS is an optional space-separated list of scan paths; left
-          # unquoted on purpose so each path becomes a separate argument (default
-          # empty = scan repo root via the config). Passed via env (not ${{ }}
-          # inline) to avoid GitHub Actions run-step expression injection.
+          # OPENGREP_PATHS is an optional space-separated list of scan paths.
+          # Passed via env (not ${{ }} inline) to avoid GitHub Actions run-step
+          # expression injection, then split into a bash ARRAY so each path is a
+          # distinct argument WITHOUT an unquoted expansion (an unquoted $VAR of an
+          # injectable input still trips CodeQL actions/code-injection). Empty
+          # value => zero extra args (default = scan repo root via the config).
+          read -ra opengrep_paths <<< "$OPENGREP_PATHS"
           opengrep scan --config .quality/opengrep --error \
             --exclude .venv --exclude node_modules --exclude dist --exclude out --exclude build \
-            $OPENGREP_PATHS
+            "${opengrep_paths[@]}"
 
       # ── GATE 5 (verify) — secrets, gitleaks over working tree (0 findings) ─
       # round-6 FIX — gitleaks is now ALWAYS self-contained: it runs whenever the

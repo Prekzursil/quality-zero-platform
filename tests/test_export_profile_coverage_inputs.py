@@ -144,6 +144,25 @@ class ProfileOutputLinesCoverageInputsTests(unittest.TestCase):
         self.assertIn("backend/coverage.xml", matches[0])
         self.assertIn("ui/coverage/lcov.info", matches[0])
 
+    def test_sonar_coverage_enabled_defaults_true(self) -> None:
+        """Absent ``sonar_coverage`` toggle keeps the legacy on-by-token default.
+
+        The shared scanner-matrix SonarCloud scan step historically ran
+        whenever ``SONAR_TOKEN`` was present (no profile gate). Emitting
+        ``sonar_coverage_enabled=true`` by default preserves that behaviour
+        for the enrolled fleet; only profiles that opt out flip it to false.
+        """
+        profile = self._minimum_profile()
+        lines = _profile_output_lines(profile, event_name="pull_request")
+        self.assertIn("sonar_coverage_enabled=true", lines)
+
+    def test_sonar_coverage_enabled_respects_false(self) -> None:
+        """An explicit ``sonar_coverage: false`` toggle skips the scan step."""
+        profile = self._minimum_profile()
+        profile["enabled_scanners"]["sonar_coverage"] = False
+        lines = _profile_output_lines(profile, event_name="pull_request")
+        self.assertIn("sonar_coverage_enabled=false", lines)
+
 
 class GithubActionsOutputFileTests(unittest.TestCase):
     """Full end-to-end: profile → GitHub Actions output file format."""

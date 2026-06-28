@@ -76,8 +76,22 @@ class ReusableBypassWorkflowTests(unittest.TestCase):
         self.assertIn("from scripts.quality import bypass_labels", self.text)
 
     def test_commit_step_guarded_by_pat_presence(self) -> None:
-        """Audit log is committed only when ``BYPASS_AUDIT_PAT`` is set."""
+        """Audit log is committed only when ``BYPASS_AUDIT_PAT`` is set.
+
+        The ``secrets`` context is not allowed in a step ``if:`` (it triggers
+        a workflow startup_failure), so presence is surfaced via a step-level
+        ``env`` boolean and the gate reads ``env`` instead.
+        """
         self.assertIn(
+            "HAS_AUDIT_PAT: ${{ secrets.BYPASS_AUDIT_PAT != '' }}",
+            self.text,
+        )
+        self.assertIn(
+            "if: ${{ env.HAS_AUDIT_PAT == 'true' }}",
+            self.text,
+        )
+        # Guard against regressing to the invalid secrets-in-if form.
+        self.assertNotIn(
             "if: ${{ secrets.BYPASS_AUDIT_PAT != '' }}",
             self.text,
         )

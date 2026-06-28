@@ -444,7 +444,14 @@ jobs:
           python platform/scripts/quality/rollup_v2/verify_action_pins.py \
             --workflows-dir platform/.github/workflows
       - name: SonarCloud scan
-        if: matrix.lane == 'coverage' && env.SONAR_TOKEN != ''
+        # Profile-gated (default on) so a repo can retire the SonarCloud
+        # coverage scan without touching this shared workflow. The platform's
+        # own lean self-CI sets ``sonar_coverage: false`` because SonarCloud is
+        # a retired-tier tool there and CI analysis is rejected while
+        # Automatic Analysis is enabled on the project — the 100% coverage
+        # MEASURE stays in Control Plane Verify (scripts/verify --fail-under=100).
+        # The enrolled fleet (no toggle) keeps the legacy on-by-token behaviour.
+        if: matrix.lane == 'coverage' && env.SONAR_TOKEN != '' && steps.profile.outputs.sonar_coverage_enabled != 'false'
         # The Sonar action SHA pin (40-char hex) trips
         # generic.secrets.security.detected-sonarqube-docs-api-key on the
         # public auto-config; on Semgrep Cloud this was triaged as a

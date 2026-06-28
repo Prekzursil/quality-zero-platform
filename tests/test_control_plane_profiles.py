@@ -278,6 +278,11 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
         # MEASURE stays in Control Plane Verify (scripts/verify --fail-under=100).
         self.assertFalse(quality_zero_platform["enabled_scanners"]["deepsource_visible"])
         self.assertFalse(quality_zero_platform["enabled_scanners"]["codacy"])
+        # Lean-gate migration: the coverage-lane "SonarCloud scan" step is
+        # retired on the platform's own self-CI (SonarCloud is retired-tier and
+        # rejects CI analysis while Automatic Analysis is enabled). The 100%
+        # coverage MEASURE stays in Control Plane Verify (scripts/verify).
+        self.assertFalse(quality_zero_platform["enabled_scanners"]["sonar_coverage"])
         self.assertEqual(
             quality_zero_platform["vendors"]["qlty"]["gate_context"],
             "qlty check",

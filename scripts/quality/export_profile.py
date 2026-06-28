@@ -180,6 +180,14 @@ def _coverage_output_lines(
             "deepsource_enabled="
             f"{str(bool(enabled_scanners.get('deepsource_visible', False))).lower()}"
         ),
+        # SonarCloud's coverage-lane scan ran historically whenever
+        # ``SONAR_TOKEN`` was set (no profile gate), so default to True to keep
+        # the enrolled fleet unaffected. A profile opting out (e.g. the
+        # platform's own lean self-CI) sets ``sonar_coverage: false``.
+        (
+            "sonar_coverage_enabled="
+            f"{str(bool(enabled_scanners.get('sonar_coverage', True))).lower()}"
+        ),
         f"coverage_input_files={coverage_input_files}",
         _json_output("coverage_inputs_json", coverage_inputs_payload),
         f"qlty_enabled={qlty_enabled}",

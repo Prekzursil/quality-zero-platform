@@ -69,8 +69,15 @@ enabled_scanners:
   #     CODACY_PROJECT_TOKEN was never provisioned).
   #   - deepsource_visible: "Publish DeepSource coverage" is fail-closed
   #     without DEEPSOURCE_DSN (never forwarded to this repo's wrapper).
+  #   - sonar_coverage: the "SonarCloud scan" step in the coverage lane ran
+  #     whenever SONAR_TOKEN was present and is now rejected by SonarCloud
+  #     ("CI analysis while Automatic Analysis is enabled"), keeping the
+  #     legacy "Coverage 100 Gate" lane red. SonarCloud is retired-tier on the
+  #     lean self-CI, so retire this scan; the 100% coverage MEASURE is
+  #     enforced by Control Plane Verify (scripts/verify --fail-under=100).
   codacy: false
   deepsource_visible: false
+  sonar_coverage: false
 coverage:
   setup:
     node: "22"

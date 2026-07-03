@@ -44,13 +44,6 @@ export const PROVIDERS = Object.freeze({
     supportsRepoTarget: false,
     loginHint: 'Verify the repository appears under the GitHub organization and the expected status checks are enabled.'
   }),
-  deepscan: Object.freeze({
-    key: 'deepscan',
-    label: 'DeepScan',
-    homeUrl: 'https://deepscan.io/dashboard',
-    supportsRepoTarget: false,
-    loginHint: 'Verify the repository project exists and that the GitHub check integration is healthy.'
-  }),
   sentry: Object.freeze({
     key: 'sentry',
     label: 'Sentry',

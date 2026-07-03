@@ -68,8 +68,6 @@ on:
         required: false
       DEEPSOURCE_DSN:
         required: false
-      DEEPSCAN_API_TOKEN:
-        required: false
 
 jobs:
   scanner:
@@ -78,11 +76,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-      # The DeepScan Zero lane resolves the merge commit's pull requests
-      # (GET /repos/<repo>/commits/<sha>/pulls) so it can re-read the
-      # DeepScan status on the PR head — the DeepScan App posts there, never
-      # on the squash-merge commit. That read needs pull-requests: read.
-      pull-requests: read
     strategy:
       fail-fast: false
       matrix:
@@ -101,8 +94,6 @@ jobs:
             lane: semgrep
           - job_name: Sentry Zero
             lane: sentry
-          - job_name: DeepScan Zero
-            lane: deepscan
           - job_name: DeepSource Visible Zero
             lane: deepsource_visible
           - job_name: Dependency Alerts
@@ -200,11 +191,8 @@ jobs:
           APPLITOOLS_API_KEY: ${{ secrets.APPLITOOLS_API_KEY }}
           CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          DEEPSCAN_API_TOKEN: ${{ secrets.DEEPSCAN_API_TOKEN }}
           SENTRY_ORG: ${{ vars.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
-          DEEPSCAN_POLICY_MODE: ${{ vars.DEEPSCAN_POLICY_MODE }}
-          DEEPSCAN_OPEN_ISSUES_URL: ${{ vars.DEEPSCAN_OPEN_ISSUES_URL }}
         run: |
           python - <<'PY'
           import json
@@ -388,16 +376,6 @@ jobs:
               value = os.environ.get(project_var, "").strip()
               if value:
                 cmd.extend(["--project", value])
-            run(cmd, cwd=repo_dir)
-          elif lane == "deepscan":
-            cmd = [
-              sys.executable,
-              str(platform_dir / "scripts/quality/check_deepscan_zero.py"),
-              "--out-json",
-              "deepscan-zero/deepscan.json",
-              "--out-md",
-              "deepscan-zero/deepscan.md",
-            ]
             run(cmd, cwd=repo_dir)
           elif lane == "deepsource_visible":
             if not profile.get("enabled_scanners", {}).get("deepsource_visible", False):
@@ -649,7 +627,6 @@ jobs:
             repo/semgrep-zero
             repo/semgrep.sarif
             repo/sentry-zero
-            repo/deepscan-zero
             repo/deepsource-visible-zero
             repo/deps-zero
 

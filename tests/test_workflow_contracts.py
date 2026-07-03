@@ -269,7 +269,6 @@ class WorkflowContractTests(unittest.TestCase):
             "SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}",
             "CODACY_API_TOKEN: ${{ secrets.CODACY_API_TOKEN }}",
             "SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}",
-            "DEEPSCAN_API_TOKEN: ${{ secrets.DEEPSCAN_API_TOKEN }}",
             "GITHUB_TOKEN: ${{ github.token }}",
             "REPO_SLUG: ${{ inputs.repo_slug }}",
             "TARGET_SHA: ${{ inputs.sha != '' && inputs.sha || github.sha }}",
@@ -277,8 +276,6 @@ class WorkflowContractTests(unittest.TestCase):
             "PULL_REQUEST_NUMBER: ${{ inputs.pull_request_number }}",
             "SENTRY_ORG: ${{ vars.SENTRY_ORG }}",
             "SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}",
-            "DEEPSCAN_POLICY_MODE: ${{ vars.DEEPSCAN_POLICY_MODE }}",
-            "DEEPSCAN_OPEN_ISSUES_URL: ${{ vars.DEEPSCAN_OPEN_ISSUES_URL }}",
         ]:
             self.assertIn(expected, text)
         self.assertIn("PULL_REQUEST_AUTHOR: ${{ inputs.pull_request_author }}", text)
@@ -292,24 +289,6 @@ class WorkflowContractTests(unittest.TestCase):
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
         self.assertIn("ref: ${{ inputs.sha != '' && inputs.sha || github.sha }}", text)
         self.assertEqual(text.count("persist-credentials: false"), 3)
-
-    def test_scanner_matrix_scanner_job_can_read_pull_requests(self) -> None:
-        """Authorize the DeepScan PR-head fallback's ``/commits/<sha>/pulls`` read.
-
-        ``check_deepscan_zero`` resolves the merge commit's pull requests so it
-        can re-read the DeepScan status on the PR head (the App posts there,
-        never on the squash-merge commit). That GitHub API read needs
-        ``pull-requests: read`` on the scanner job's permissions block.
-        """
-        text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
-        scanner_block_start = text.find("  scanner:")
-        self.assertNotEqual(scanner_block_start, -1, "scanner job is missing")
-        steps_start = text.find("    steps:", scanner_block_start)
-        scanner_header = text[scanner_block_start:steps_start]
-        self.assertIn("    permissions:", scanner_header)
-        self.assertIn("      contents: read", scanner_header)
-        self.assertIn("      id-token: write", scanner_header)
-        self.assertIn("      pull-requests: read", scanner_header)
 
     def test_scanner_matrix_uses_configurable_runner_for_coverage_lane(self) -> None:
         """Allow the coverage lane to select its dedicated runner configuration."""

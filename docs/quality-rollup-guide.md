@@ -4,7 +4,7 @@
 
 The Quality Rollup is an aggregated report produced by the `rollup_v2` pipeline.
 It normalizes findings from multiple static analysis providers (QLTY, SonarCloud,
-Codacy, DeepSource, DeepScan, Sentry, Dependabot, and secrets scanning) into a
+Codacy, DeepSource, Sentry, Dependabot, and secrets scanning) into a
 single canonical format, deduplicates them, generates patches where possible, and
 renders a multi-view markdown report suitable for PR comments.
 

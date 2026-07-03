@@ -28,7 +28,7 @@ class RulesetPayloadTests(unittest.TestCase):
         self.assertEqual(payload["name"], "quality-zero-platform / pbinfo-get-unsolved")
         self.assertTrue(all(entry == {"context": entry["context"]} for entry in required))
         self.assertIn("shared-scanner-matrix / Coverage 100 Gate", contexts)
-        self.assertIn("DeepScan", contexts)
+        self.assertNotIn("DeepScan", contexts)
         self.assertEqual(
             payload["rules"][0]["parameters"]["required_approving_review_count"],
             0,

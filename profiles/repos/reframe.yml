@@ -52,7 +52,6 @@ required_contexts:
   - shared-scanner-matrix / Codacy Zero
   - shared-scanner-matrix / Semgrep Zero
   - shared-scanner-matrix / Sentry Zero
-  - shared-scanner-matrix / DeepScan Zero
   - shared-scanner-matrix / DeepSource Visible Zero
   - shared-scanner-matrix / QLTY Zero
   - SonarCloud Code Analysis
@@ -61,7 +60,6 @@ required_contexts:
   - Chromatic Playwright
   - Applitools Visual
   pull_request_only:
-  - DeepScan
   - CodeRabbit
   - Codacy Static Code Analysis
   - qlty check
@@ -77,11 +75,9 @@ required_contexts:
   - shared-scanner-matrix / Codacy Zero
   - shared-scanner-matrix / Semgrep Zero
   - shared-scanner-matrix / Sentry Zero
-  - shared-scanner-matrix / DeepScan Zero
   - shared-scanner-matrix / DeepSource Visible Zero
   - shared-scanner-matrix / QLTY Zero
   - SonarCloud Code Analysis
-  - DeepScan
   - Python API & worker checks
   - Web build
   - Chromatic Playwright

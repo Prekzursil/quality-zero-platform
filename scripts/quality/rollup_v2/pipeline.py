@@ -18,7 +18,6 @@ from scripts.quality.rollup_v2.normalizers.chromatic import ChromaticNormalizer
 from scripts.quality.rollup_v2.normalizers.codacy import CodacyNormalizer
 from scripts.quality.rollup_v2.normalizers.codeql import CodeQLNormalizer
 from scripts.quality.rollup_v2.normalizers.coverage import CoverageNormalizer
-from scripts.quality.rollup_v2.normalizers.deepscan import DeepScanNormalizer
 from scripts.quality.rollup_v2.normalizers.deepsource import DeepSourceNormalizer
 from scripts.quality.rollup_v2.normalizers.dependabot import DependabotNormalizer
 from scripts.quality.rollup_v2.normalizers.qlty import QLTYNormalizer
@@ -37,7 +36,6 @@ NORMALIZER_REGISTRY: Dict[str, BaseNormalizer] = {
     "codacy": CodacyNormalizer(),
     "codeql": CodeQLNormalizer(),
     "coverage": CoverageNormalizer(),
-    "deepscan": DeepScanNormalizer(),
     "deepsource": DeepSourceNormalizer(),
     "dependabot": DependabotNormalizer(),
     "qlty": QLTYNormalizer(),

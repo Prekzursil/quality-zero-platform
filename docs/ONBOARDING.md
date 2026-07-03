@@ -93,7 +93,6 @@ scanners:
   dependabot: { severity: block }
   sonarcloud: { severity: block }
   codacy_issues: { severity: ratchet }   # 'ratchet' = block only on NEW issues
-  deepscan: { severity: block }
   semgrep: { severity: block }
 overrides: []
 verify_command: bash scripts/verify     # consumer-side smoke-test entrypoint

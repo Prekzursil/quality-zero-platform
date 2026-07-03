@@ -1,5 +1,0 @@
----
-provider: DeepScan
-mapping:
-  DS_UNUSED_VAR: unused-variable
-  DS_UNREACHABLE: dead-code

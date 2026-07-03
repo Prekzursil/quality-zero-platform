@@ -196,7 +196,6 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
                 "shared-scanner-matrix / Codacy Zero",
                 "shared-scanner-matrix / Semgrep Zero",
                 "shared-scanner-matrix / Sentry Zero",
-                "shared-scanner-matrix / DeepScan Zero",
             ],
         )
         self._assert_context_subset(
@@ -205,7 +204,6 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
             | {
                 "SonarCloud Code Analysis",
                 "Codacy Static Code Analysis",
-                "DeepScan",
                 "qlty check",
                 "qlty coverage",
                 "qlty coverage diff",

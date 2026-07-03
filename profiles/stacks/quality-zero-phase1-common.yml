@@ -14,7 +14,6 @@ codex_environment:
 required_secrets:
   - SONAR_TOKEN
   - CODACY_API_TOKEN
-  - DEEPSCAN_API_TOKEN
   - SENTRY_AUTH_TOKEN
 conditional_secrets:
   - CODECOV_TOKEN
@@ -29,7 +28,6 @@ enabled_scanners:
   codacy: true
   semgrep: true
   sentry: true
-  deepscan: true
   qlty: true
 issue_policy:
   mode: zero
@@ -46,11 +44,9 @@ required_contexts:
     - shared-scanner-matrix / Codacy Zero
     - shared-scanner-matrix / Semgrep Zero
     - shared-scanner-matrix / Sentry Zero
-    - shared-scanner-matrix / DeepScan Zero
     - SonarCloud Code Analysis
   pull_request_only:
     - Codacy Static Code Analysis
-    - DeepScan
     - qlty check
     - qlty coverage
     - qlty coverage diff
@@ -66,10 +62,8 @@ required_contexts:
     - shared-scanner-matrix / Codacy Zero
     - shared-scanner-matrix / Semgrep Zero
     - shared-scanner-matrix / Sentry Zero
-    - shared-scanner-matrix / DeepScan Zero
     - SonarCloud Code Analysis
     - Codacy Static Code Analysis
-    - DeepScan
 coverage:
   runner: ubuntu-latest
   command_shell: bash
@@ -106,8 +100,6 @@ vendors:
       - qlty coverage diff
     diff_coverage_percent: 100
     total_coverage_policy: fail_on_any_drop
-  deepscan:
-    open_issues_url_var: DEEPSCAN_OPEN_ISSUES_URL
   sentry:
     org_var: SENTRY_ORG
     project_vars:

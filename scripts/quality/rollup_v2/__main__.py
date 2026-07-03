@@ -13,7 +13,6 @@ from scripts.quality.rollup_v2.pipeline import run_pipeline
 _ARTIFACT_LOCATIONS: Dict[str, Tuple[str, str]] = {
     "codacy": ("codacy", "codacy.json"),
     "coverage": ("coverage", "coverage.json"),
-    "deepscan": ("deepscan", "deepscan.json"),
     "deepsource": ("deepsource", "deepsource.json"),
     "dependabot": ("dependabot", "dependabot.json"),
     "qlty": ("qlty", "qlty.json"),

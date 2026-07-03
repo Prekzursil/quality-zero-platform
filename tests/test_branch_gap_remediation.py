@@ -9,14 +9,13 @@ import unittest
 from argparse import Namespace
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict, Tuple, cast
+from typing import Tuple
 from urllib.parse import urlparse
 from unittest.mock import patch
 
 from scripts import security_helpers
 from scripts.quality import (
     check_codacy_zero,
-    check_deepscan_zero,
     check_required_checks,
 )
 from scripts.quality import check_sonar_zero, control_plane_admin, control_plane_vendors
@@ -335,8 +334,8 @@ class BranchGapRemediationTests(unittest.TestCase):
         self.assertEqual(stdout.getvalue(), "")
         self.assertEqual(stderr.getvalue(), "warn")
 
-    def test_codacy_and_deepscan_helpers_cover_remaining_branches(self) -> None:
-        """Cover codacy and deepscan helpers cover remaining branches."""
+    def test_codacy_helpers_cover_remaining_branches(self) -> None:
+        """Cover codacy helpers cover remaining branches."""
         open_issues, findings, exc = check_codacy_zero._not_found_findings(["gh"], None)
         self.assertIsNone(open_issues)
         self.assertEqual(
@@ -363,32 +362,6 @@ class BranchGapRemediationTests(unittest.TestCase):
         self.assertIn("Codacy API endpoint was not found for providers: gh.", findings)
         self.assertIsInstance(exc, RuntimeError)
         query_mock.assert_called_once()
-
-        with patch.object(
-            check_deepscan_zero, "_request_json", return_value={"total": 0}
-        ):
-            open_issues, source_url, findings = (
-                check_deepscan_zero._evaluate_open_issues_mode(
-                    "https://deepscan.io/project/issues",
-                    "token",
-                )
-            )
-        self.assertEqual(open_issues, 0)
-        self.assertEqual(source_url, "https://deepscan.io/project/issues")
-        self.assertEqual(findings, [])
-
-        status = check_deepscan_zero._find_github_status(
-            {
-                "statuses": [
-                    {"context": "Other", "state": "success"},
-                    {"context": "DeepScan", "state": "success"},
-                ]
-            },
-            "DeepScan",
-        )
-        self.assertIsNotNone(status)
-        status_payload = cast(Dict[str, Any], status)
-        self.assertEqual(status_payload["context"], "DeepScan")
 
     def test_required_checks_and_sonar_helpers_cover_remaining_branches(self) -> None:
         """Cover required checks and sonar helpers cover remaining branches."""

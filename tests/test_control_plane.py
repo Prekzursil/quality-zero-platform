@@ -58,7 +58,6 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
                 "shared-scanner-matrix / Codacy Zero",
                 "shared-scanner-matrix / Semgrep Zero",
                 "shared-scanner-matrix / Sentry Zero",
-                "shared-scanner-matrix / DeepScan Zero",
                 "SonarCloud Code Analysis",
                 "Chromatic Playwright",
                 "Applitools Visual",
@@ -118,8 +117,8 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
             ["self-hosted", "codex-trusted"],
         )
 
-    def test_airline_keeps_deepscan_contexts_pr_only(self) -> None:
-        """Airline should keep native DeepScan and related cloud contexts PR-only."""
+    def test_airline_keeps_native_cloud_contexts_pr_only(self) -> None:
+        """Airline should keep native DeepSource and related cloud contexts PR-only."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/Airline-Reservations-System")
 
@@ -142,8 +141,8 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
         self.assertNotIn("qlty coverage", push_contexts)
         self.assertNotIn("qlty coverage diff", push_contexts)
         self.assertIn("shared-scanner-matrix / QLTY Zero", push_contexts)
-        self.assertIn("shared-scanner-matrix / DeepScan Zero", pr_contexts)
-        self.assertIn("DeepScan", pr_contexts)
+        self.assertNotIn("shared-scanner-matrix / DeepScan Zero", pr_contexts)
+        self.assertNotIn("DeepScan", pr_contexts)
         self.assertIn("Codacy Static Code Analysis", pr_contexts)
         self.assertIn("shared-scanner-matrix / QLTY Zero", pr_contexts)
         self.assertIn("qlty check", pr_contexts)

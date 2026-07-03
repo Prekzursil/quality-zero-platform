@@ -24,7 +24,6 @@ scanners:
   codacy_complexity: { severity: block }
   codacy_clones: { severity: block }
   codacy_coverage: { severity: block }
-  deepscan: { severity: block }
   deepsource_visible: { severity: block }
   semgrep: { severity: block }
   sentry: { severity: block }

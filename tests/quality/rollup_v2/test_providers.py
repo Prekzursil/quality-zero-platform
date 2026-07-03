@@ -33,7 +33,6 @@ class ProviderPriorityTests(unittest.TestCase):
             "DeepSource",
             "Semgrep",
             "QLTY",
-            "DeepScan",
         )
         for index, name in enumerate(expected_order):
             self.assertEqual(PROVIDER_PRIORITY_RANK[name], index)

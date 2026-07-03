@@ -52,16 +52,10 @@
             "context": "shared-scanner-matrix / Sentry Zero"
           },
           {
-            "context": "shared-scanner-matrix / DeepScan Zero"
-          },
-          {
             "context": "SonarCloud Code Analysis"
           },
           {
             "context": "Codacy Static Code Analysis"
-          },
-          {
-            "context": "DeepScan"
           },
           {
             "context": "qlty check"

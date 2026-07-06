@@ -1,0 +1,434 @@
+# Instincts generated from https://github.com/Prekzursil/quality-zero-platform
+# Generated: 2026-07-06T07:38:52.802Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: quality-zero-platform-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: ci
+
+## Evidence
+
+- 1 commits analyzed
+- Detected conventional commit pattern
+- Examples: ci: migrate QZP self-CI to the lean deterministic quality gate
+
+---
+id: quality-zero-platform-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Commit Length
+
+## Action
+
+Write moderate-length commit messages (~62 characters)
+
+## Evidence
+
+- Average commit message length: 62 chars
+- Based on 1 commits
+
+---
+id: quality-zero-platform-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Naming Files
+
+## Action
+
+Use snake_case naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: snake_case
+
+---
+id: quality-zero-platform-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: quality-zero-platform-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: quality-zero-platform-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: quality-zero-platform-test-naming
+trigger: "when creating a test file"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Test Naming
+
+## Action
+
+Name test files using the pattern: *.test.ts
+
+## Evidence
+
+- File pattern: *.test.ts
+- Consistent across test files
+
+---
+id: quality-zero-platform-test-types
+trigger: "when planning tests for a feature"
+confidence: 0.7
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Test Types
+
+## Action
+
+Write unit, integration, e2e tests to match project standards
+
+## Evidence
+
+- Test types detected: unit, integration, e2e
+- Coverage config: yes
+
+---
+id: quality-zero-platform-instinct-file-naming
+trigger: "When creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct File Naming
+
+## Action
+
+Name the file using snake_case
+
+## Evidence
+
+- Pattern in namingConventions.files
+
+---
+id: quality-zero-platform-instinct-function-naming
+trigger: "When defining a new function"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Function Naming
+
+## Action
+
+Use camelCase for the function name
+
+## Evidence
+
+- Pattern in namingConventions.functions
+
+---
+id: quality-zero-platform-instinct-class-naming
+trigger: "When defining a new class"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Class Naming
+
+## Action
+
+Use PascalCase for the class name
+
+## Evidence
+
+- Pattern in namingConventions.classes
+
+---
+id: quality-zero-platform-instinct-constant-naming
+trigger: "When defining a constant"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Constant Naming
+
+## Action
+
+Use SCREAMING_SNAKE_CASE for the constant name
+
+## Evidence
+
+- Pattern in namingConventions.constants
+
+---
+id: quality-zero-platform-instinct-import-style
+trigger: "When importing modules in Python files"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Import Style
+
+## Action
+
+Use relative imports
+
+## Evidence
+
+- Pattern in importStyle: relative
+
+---
+id: quality-zero-platform-instinct-export-style
+trigger: "When exporting functions or classes"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Export Style
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Pattern in exportStyle: named
+
+---
+id: quality-zero-platform-instinct-test-file-pattern
+trigger: "When creating a new test file"
+confidence: 0.7
+domain: testing
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Test File Pattern
+
+## Action
+
+Name the file with the pattern *.test.ts
+
+## Evidence
+
+- Pattern in testing.filePattern
+
+---
+id: quality-zero-platform-instinct-test-types
+trigger: "When writing tests"
+confidence: 0.7
+domain: testing
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Test Types
+
+## Action
+
+Include unit, integration, and e2e tests as appropriate
+
+## Evidence
+
+- Pattern in testing.testTypes
+
+---
+id: quality-zero-platform-instinct-test-location
+trigger: "When adding or organizing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Test Location
+
+## Action
+
+Place tests in the separate 'tests' folder
+
+## Evidence
+
+- Pattern in architecture.folderStructure.commonFolders: tests
+
+---
+id: quality-zero-platform-instinct-coverage-config
+trigger: "When configuring tests"
+confidence: 0.7
+domain: testing
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Coverage Config
+
+## Action
+
+Ensure test coverage is configured
+
+## Evidence
+
+- Pattern in testing.coverageConfig: true
+
+---
+id: quality-zero-platform-instinct-commit-prefix
+trigger: "When writing a commit message for CI changes"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Commit Prefix
+
+## Action
+
+Prefix the commit message with 'ci:'
+
+## Evidence
+
+- Seen in commit: ci: migrate QZP self-CI to the lean deterministic quality gate
+
+---
+id: quality-zero-platform-instinct-commit-format
+trigger: "When writing a commit message"
+confidence: 0.8
+domain: git
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Commit Format
+
+## Action
+
+Follow the conventional commit format: <type>: <description>
+
+## Evidence
+
+- Pattern in commits.type: conventional
+- Seen in commit: ci: migrate QZP self-CI to the lean deterministic quality gate
+
+---
+id: quality-zero-platform-instinct-commit-length
+trigger: "When writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Commit Length
+
+## Action
+
+Keep the commit message concise, around 62 characters on average
+
+## Evidence
+
+- Pattern in commits.averageLength: 62
+
+---
+id: quality-zero-platform-instinct-ci-workflow-location
+trigger: "When configuring CI workflows"
+confidence: 0.8
+domain: workflow
+source: repo-analysis
+source_repo: Prekzursil/quality-zero-platform
+---
+
+# Quality Zero Platform Instinct Ci Workflow Location
+
+## Action
+
+Place workflow configuration in .github/workflows/quality-zero-platform.yml
+
+## Evidence
+
+- Pattern in architecture.configFiles: .github/workflows/quality-zero-platform.yml
+

@@ -1,4 +1,5 @@
 """Tests for JSON Schema validation of canonical findings (per §A.9.5)."""
+
 from __future__ import absolute_import
 
 import json
@@ -11,13 +12,12 @@ if str(Path(__file__).resolve().parents[3]) not in sys.path:
 
 try:
     import jsonschema
+
     HAS_JSONSCHEMA = True
 except ImportError:
     HAS_JSONSCHEMA = False
 
-SCHEMA_PATH = (
-    Path(__file__).resolve().parents[3] / "docs" / "schemas" / "qzp-finding-v1.json"
-)
+SCHEMA_PATH = Path(__file__).resolve().parents[3] / "docs" / "schemas" / "qzp-finding-v1.json"
 
 
 def _load_schema() -> dict:
@@ -91,13 +91,15 @@ class JsonSchemaTests(unittest.TestCase):
         schema = _load_schema()
         finding = _sample_finding()
         finding["corroboration"] = "multi"
-        finding["corroborators"].append({
-            "provider": "SonarCloud",
-            "rule_id": "python:S1481",
-            "rule_url": "https://rules.sonarsource.com/python/RSPEC-1481",
-            "original_message": "Remove unused variable",
-            "provider_priority_rank": 1,
-        })
+        finding["corroborators"].append(
+            {
+                "provider": "SonarCloud",
+                "rule_id": "python:S1481",
+                "rule_url": "https://rules.sonarsource.com/python/RSPEC-1481",
+                "original_message": "Remove unused variable",
+                "provider_priority_rank": 1,
+            }
+        )
         jsonschema.validate(instance=finding, schema=schema)
 
     def test_invalid_schema_version_fails(self) -> None:
@@ -138,6 +140,7 @@ class JsonSchemaTests(unittest.TestCase):
     def test_pipeline_output_validates_against_schema(self) -> None:
         """Integration: run pipeline and validate each finding against schema."""
         import tempfile
+
         from scripts.quality.rollup_v2.pipeline import run_pipeline
 
         schema = _load_schema()
@@ -161,9 +164,7 @@ class JsonSchemaTests(unittest.TestCase):
                     ]
                 }
             }
-            result = run_pipeline(
-                artifacts=artifacts, repo_root=repo_root
-            )
+            result = run_pipeline(artifacts=artifacts, repo_root=repo_root)
             for finding_dict in result.canonical_payload.get("findings", []):
                 jsonschema.validate(instance=finding_dict, schema=schema)
 

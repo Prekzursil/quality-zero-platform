@@ -1,4 +1,5 @@
 """CLI entrypoint for quality rollup v2 (per design §A.8 + Phase 13)."""
+
 from __future__ import absolute_import
 
 import argparse
@@ -69,9 +70,7 @@ def _load_artifacts(artifacts_dir: Path) -> Dict[str, object]:
     for lane_key, (subdir, filename) in _ARTIFACT_LOCATIONS.items():
         json_path = artifacts_dir / subdir / filename
         if json_path.is_file():
-            artifacts[lane_key] = json.loads(
-                json_path.read_text(encoding="utf-8")
-            )
+            artifacts[lane_key] = json.loads(json_path.read_text(encoding="utf-8"))
     return artifacts
 
 

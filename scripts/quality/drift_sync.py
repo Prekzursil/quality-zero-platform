@@ -61,9 +61,7 @@ class DriftEntry:
     proposed_content: str
 
 
-def _unified_diff(
-    actual: str, proposed: str, output_path: str
-) -> str:
+def _unified_diff(actual: str, proposed: str, output_path: str) -> str:
     """Return a standard unified diff text between ``actual`` and ``proposed``."""
     return "".join(
         difflib.unified_diff(
@@ -75,9 +73,7 @@ def _unified_diff(
     )
 
 
-def _classify_entry(
-    proposed: str, current_path: Path, output_path: str
-) -> DriftEntry:
+def _classify_entry(proposed: str, current_path: Path, output_path: str) -> DriftEntry:
     """Compute the drift status for a single template->output mapping."""
     if not current_path.is_file():
         return DriftEntry(
@@ -105,9 +101,7 @@ def _classify_entry(
     )
 
 
-def detect_drift(
-    profile: Mapping[str, Any], repo_root: Path
-) -> List[DriftEntry]:
+def detect_drift(profile: Mapping[str, Any], repo_root: Path) -> List[DriftEntry]:
     """Return a ``DriftEntry`` for each template that belongs to this stack.
 
     ``profile`` is the resolved profile JSON; ``profile['stack']`` selects
@@ -146,19 +140,23 @@ def _parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--profile-json", required=True,
+        "--profile-json",
+        required=True,
         help="Path to the resolved profile JSON (output of export_profile.py).",
     )
     parser.add_argument(
-        "--repo-root", required=True,
+        "--repo-root",
+        required=True,
         help="Path to the consumer repo's checkout.",
     )
     parser.add_argument(
-        "--out-json", default="",
+        "--out-json",
+        default="",
         help="Where to write the drift report JSON (stdout if empty).",
     )
     parser.add_argument(
-        "--fail-on-drift", action="store_true",
+        "--fail-on-drift",
+        action="store_true",
         help="Exit non-zero when drift or missing entries are detected.",
     )
     return parser.parse_args()
@@ -189,14 +187,16 @@ def main() -> int:
     if not profile_path.is_file():
         print(
             f"drift_sync: profile JSON not found: {profile_path}",
-            file=sys.stderr, flush=True,
+            file=sys.stderr,
+            flush=True,
         )
         return 2
     repo_root = Path(args.repo_root)
     if not repo_root.is_dir():
         print(
             f"drift_sync: repo root not found: {repo_root}",
-            file=sys.stderr, flush=True,
+            file=sys.stderr,
+            flush=True,
         )
         return 2
     profile = json.loads(profile_path.read_text(encoding="utf-8"))

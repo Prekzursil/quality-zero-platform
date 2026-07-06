@@ -1,4 +1,5 @@
 """Tests for renderer empty-state output (per design §A.1.2)."""
+
 from __future__ import absolute_import
 
 import sys

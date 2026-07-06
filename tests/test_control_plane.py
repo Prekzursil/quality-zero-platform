@@ -2,13 +2,14 @@ from __future__ import absolute_import
 
 import unittest
 
+from tests.control_plane_support import ROOT, ControlPlaneAssertions
+
 from scripts.quality.control_plane import (
     active_required_contexts,
     build_ruleset_payload,
     load_inventory,
     load_repo_profile,
 )
-from tests.control_plane_support import ControlPlaneAssertions, ROOT
 
 
 class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
@@ -40,9 +41,7 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
         profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
         pbinfo = load_repo_profile(inventory, "Prekzursil/pbinfo-get-unsolved")
         pr_contexts = active_required_contexts(profile, event_name="pull_request")
-        merge_group_contexts = active_required_contexts(
-            profile, event_name="merge_group"
-        )
+        merge_group_contexts = active_required_contexts(profile, event_name="merge_group")
 
         self.assertEqual(profile["stack"], "node-frontend")
         self.assertEqual(profile["coverage"]["branch_min_percent"], 100.0)
@@ -64,11 +63,7 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
             ],
         )
         self.assertIn("shared-scanner-matrix / QLTY Zero", pr_contexts)
-        self.assertTrue(
-            {"qlty check", "qlty coverage", "qlty coverage diff"}.issubset(
-                pr_contexts
-            )
-        )
+        self.assertTrue({"qlty check", "qlty coverage", "qlty coverage diff"}.issubset(pr_contexts))
         self.assertTrue(
             {
                 "shared-scanner-matrix / QLTY Zero",
@@ -77,11 +72,7 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
                 "qlty coverage diff",
             }.issubset(pbinfo["required_contexts"]["target"])
         )
-        self.assertTrue(
-            {"Chromatic Playwright", "Applitools Visual"}.issubset(
-                profile["required_contexts"]["target"]
-            )
-        )
+        self.assertTrue({"Chromatic Playwright", "Applitools Visual"}.issubset(profile["required_contexts"]["target"]))
         self.assertEqual(pr_contexts, merge_group_contexts)
 
     def test_phase1_repo_verify_commands_follow_repo_contracts(self) -> None:
@@ -101,7 +92,7 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
             (
                 "dotnet test tests/SwfocTrainer.Tests/"
                 "SwfocTrainer.Tests.csproj -c Release "
-                '--no-build --filter '
+                "--no-build --filter "
                 '"FullyQualifiedName!~SwfocTrainer.Tests.Profiles.Live'
                 '&FullyQualifiedName!~RuntimeAttachSmokeTests"'
             ),
@@ -177,13 +168,10 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
 
         push_contexts = active_required_contexts(profile, event_name="push")
         ruleset_contexts = active_required_contexts(profile, event_name="ruleset")
-        merge_group_contexts = active_required_contexts(
-            profile, event_name="merge_group"
-        )
+        merge_group_contexts = active_required_contexts(profile, event_name="merge_group")
         payload = build_ruleset_payload(profile)
         ruleset_status_checks = [
-            item["context"]
-            for item in payload["rules"][1]["parameters"]["required_status_checks"]
+            item["context"] for item in payload["rules"][1]["parameters"]["required_status_checks"]
         ]
         self.assertTrue(
             all(
@@ -214,11 +202,7 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
             payload["rules"][0]["parameters"]["required_approving_review_count"],
             0,
         )
-        self.assertFalse(
-            payload["rules"][0]["parameters"][
-                "required_review_thread_resolution"
-            ]
-        )
+        self.assertFalse(payload["rules"][0]["parameters"]["required_review_thread_resolution"])
 
     def test_quality_zero_platform_requires_lean_gate(self) -> None:
         """The control-plane target contexts are the lean gate, not the SaaS lanes."""

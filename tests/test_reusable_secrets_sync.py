@@ -18,11 +18,7 @@ from pathlib import Path
 
 import yaml  # type: ignore[import-untyped]
 
-
-_WORKFLOW = (
-    Path(__file__).resolve().parents[1]
-    / ".github" / "workflows" / "reusable-secrets-sync.yml"
-)
+_WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "reusable-secrets-sync.yml"
 
 
 class ReusableSecretsSyncWorkflowTests(unittest.TestCase):
@@ -74,10 +70,7 @@ class ReusableSecretsSyncWorkflowTests(unittest.TestCase):
     def test_checkout_does_not_persist_credentials(self) -> None:
         """``persist-credentials: false`` on checkout — CodeQL safety."""
         steps = self.doc["jobs"]["sync"]["steps"]
-        checkout_steps = [
-            s for s in steps
-            if "uses" in s and s["uses"].startswith("actions/checkout")
-        ]
+        checkout_steps = [s for s in steps if "uses" in s and s["uses"].startswith("actions/checkout")]
         self.assertEqual(len(checkout_steps), 1)
         self.assertFalse(
             checkout_steps[0].get("with", {}).get("persist-credentials", True),
@@ -88,24 +81,17 @@ class ReusableSecretsSyncWorkflowTests(unittest.TestCase):
     def test_audit_log_uploaded_as_artifact(self) -> None:
         """The audit log is exposed as a workflow artifact."""
         steps = self.doc["jobs"]["sync"]["steps"]
-        artifact_steps = [
-            s for s in steps
-            if "uses" in s and "upload-artifact" in s["uses"]
-        ]
+        artifact_steps = [s for s in steps if "uses" in s and "upload-artifact" in s["uses"]]
         self.assertTrue(
             artifact_steps,
-            "No upload-artifact step — the audit log would be lost "
-            "after the workflow completes.",
+            "No upload-artifact step — the audit log would be lost after the workflow completes.",
         )
 
     def test_sync_pat_used_as_gh_token_for_secret_set(self) -> None:
         """The fine-grained SECRETS_SYNC_PAT is what ``gh secret set`` uses."""
         # The sync step's env block must route SECRETS_SYNC_PAT as GH_TOKEN.
         steps = self.doc["jobs"]["sync"]["steps"]
-        sync_steps = [
-            s for s in steps
-            if s.get("name", "").startswith("Sync secret")
-        ]
+        sync_steps = [s for s in steps if s.get("name", "").startswith("Sync secret")]
         self.assertEqual(len(sync_steps), 1)
         env = sync_steps[0].get("env", {})
         self.assertIn("GH_TOKEN", env)

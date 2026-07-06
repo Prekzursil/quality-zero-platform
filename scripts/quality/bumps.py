@@ -55,7 +55,10 @@ _ensure_platform_on_syspath()
 
 
 REQUIRED_TOP_FIELDS = (
-    "name", "target", "affects_stacks", "staging_repos",
+    "name",
+    "target",
+    "affects_stacks",
+    "staging_repos",
 )
 REQUIRED_TARGET_FIELDS = ("file_glob", "yaml_path", "value")
 
@@ -75,8 +78,7 @@ def _validate_top_fields(recipe: Mapping[str, Any], path: Path) -> None:
         value = recipe.get(list_field)
         if not isinstance(value, list) or not value:
             raise BumpRecipeError(
-                f"bump recipe {path} field {list_field!r} must be a "
-                f"non-empty list (got {type(value).__name__})",
+                f"bump recipe {path} field {list_field!r} must be a non-empty list (got {type(value).__name__})",
             )
 
 
@@ -99,8 +101,7 @@ def _validate_staging_repo_slugs(recipe: Mapping[str, Any], path: Path) -> None:
     for slug in recipe["staging_repos"]:
         if not isinstance(slug, str) or "/" not in slug:
             raise BumpRecipeError(
-                f"bump recipe {path} staging repo {slug!r} must be "
-                f"'owner/name' format",
+                f"bump recipe {path} staging repo {slug!r} must be 'owner/name' format",
             )
 
 
@@ -125,7 +126,8 @@ def load_bump_recipe(path: Path) -> Dict[str, Any]:
 
 
 def resolve_target_files(
-    repo_root: Path, targets: Iterable[Mapping[str, Any]],
+    repo_root: Path,
+    targets: Iterable[Mapping[str, Any]],
 ) -> List[Path]:
     """Expand every ``target[].file_glob`` against ``repo_root``.
 
@@ -144,7 +146,10 @@ def resolve_target_files(
 
 
 def apply_bump_text(
-    text: str, *, pattern: str, replacement: str,
+    text: str,
+    *,
+    pattern: str,
+    replacement: str,
 ) -> Tuple[str, int]:
     """Run ``re.subn`` on ``text``; return ``(new_text, replacement_count)``.
 
@@ -201,15 +206,19 @@ def _apply_target_to_files(
         if current is None:
             current = hit.read_text(encoding="utf-8")
         new_text, count = apply_bump_text(
-            current, pattern=pattern, replacement=replacement,
+            current,
+            pattern=pattern,
+            replacement=replacement,
         )
         if count > 0:
             files_changed[key] = new_text
-            edited.append({
-                "path": key,
-                "target_index": target_index,
-                "replacements": count,
-            })
+            edited.append(
+                {
+                    "path": key,
+                    "target_index": target_index,
+                    "replacements": count,
+                }
+            )
 
 
 def apply_bump_files(
@@ -274,11 +283,18 @@ if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
 
     _recipe = load_bump_recipe(Path(_args.recipe))
     _files = resolve_target_files(
-        Path(_args.repo_root), _recipe["target"],
+        Path(_args.repo_root),
+        _recipe["target"],
     )
-    print(json.dumps({
-        "recipe_name": _recipe["name"],
-        "staging_repos": _recipe["staging_repos"],
-        "affects_stacks": _recipe["affects_stacks"],
-        "target_files": [p.as_posix() for p in _files],
-    }, indent=2, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "recipe_name": _recipe["name"],
+                "staging_repos": _recipe["staging_repos"],
+                "affects_stacks": _recipe["affects_stacks"],
+                "target_files": [p.as_posix() for p in _files],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )

@@ -1,4 +1,5 @@
 """Tests for declining patch generators (per §5.1 — categories that always return PatchDeclined)."""
+
 from __future__ import absolute_import
 
 import sys
@@ -146,26 +147,50 @@ class GeneratorRegistrationTests(unittest.TestCase):
 
     def test_31_generators_registered(self):
         from scripts.quality.rollup_v2.patches import GENERATORS
+
         self.assertEqual(len(GENERATORS), 31)
 
     def test_all_expected_categories_present(self):
         from scripts.quality.rollup_v2.patches import GENERATORS
+
         expected = {
-            "assert-in-production", "bad-line-ending", "bare-raise",
-            "broad-except", "command-injection", "coverage-gap",
-            "cyclic-import", "dead-code", "duplicate-code",
-            "hardcoded-secret", "indent-mismatch", "insecure-random",
-            "line-too-long", "missing-docstring", "mutable-default",
-            "naming-convention", "open-redirect", "print-in-production",
-            "quote-style", "shadowed-builtin", "spacing-convention",
-            "tab-vs-space", "todo-comment", "too-complex", "too-long",
-            "trailing-newline", "trailing-whitespace", "unused-import",
-            "unused-variable", "weak-crypto", "wrong-import-order",
+            "assert-in-production",
+            "bad-line-ending",
+            "bare-raise",
+            "broad-except",
+            "command-injection",
+            "coverage-gap",
+            "cyclic-import",
+            "dead-code",
+            "duplicate-code",
+            "hardcoded-secret",
+            "indent-mismatch",
+            "insecure-random",
+            "line-too-long",
+            "missing-docstring",
+            "mutable-default",
+            "naming-convention",
+            "open-redirect",
+            "print-in-production",
+            "quote-style",
+            "shadowed-builtin",
+            "spacing-convention",
+            "tab-vs-space",
+            "todo-comment",
+            "too-complex",
+            "too-long",
+            "trailing-newline",
+            "trailing-whitespace",
+            "unused-import",
+            "unused-variable",
+            "weak-crypto",
+            "wrong-import-order",
         }
         self.assertEqual(set(GENERATORS.keys()), expected)
 
     def test_each_generator_has_generate_function(self):
         from scripts.quality.rollup_v2.patches import GENERATORS
+
         for category, module in GENERATORS.items():
             self.assertTrue(
                 callable(getattr(module, "generate", None)),

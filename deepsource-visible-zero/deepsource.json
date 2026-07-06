@@ -1,0 +1,14 @@
+{
+  "findings": [
+    "GITHUB_TOKEN or GH_TOKEN is required.",
+    "REPO_SLUG or GITHUB_REPOSITORY is required.",
+    "TARGET_SHA or GITHUB_SHA is required.",
+    "DeepSource issues URL could not be resolved."
+  ],
+  "issues_url": "",
+  "open_issues": 0,
+  "status": "fail",
+  "status_contexts": [],
+  "target_urls": [],
+  "timestamp_utc": "2026-07-06T07:34:50.741889+00:00"
+}

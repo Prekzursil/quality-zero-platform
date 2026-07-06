@@ -11,11 +11,7 @@ from scripts.security_helpers import normalize_https_url
 
 def _require_values(slug: str, required_values: List[Tuple[str, Any]]) -> List[str]:
     """Return findings for required profile fields that are empty."""
-    return [
-        f"{slug}: {field_name} is required"
-        for field_name, value in required_values
-        if not value
-    ]
+    return [f"{slug}: {field_name} is required" for field_name, value in required_values if not value]
 
 
 def _require_expected_values(
@@ -66,9 +62,7 @@ def _validate_codex_environment(
     )
     runner_labels = codex_environment.get("runner_labels", [])
     if runner_labels and "self-hosted" not in runner_labels:
-        findings.append(
-            f"{slug}: codex_environment.runner_labels must include self-hosted"
-        )
+        findings.append(f"{slug}: codex_environment.runner_labels must include self-hosted")
     return findings
 
 
@@ -117,11 +111,7 @@ def _missing_required_now_contexts(profile: Dict[str, Any]) -> List[str]:
         ]
     )
     required_now = set(profile["required_contexts"].get("required_now", []))
-    return [
-        name
-        for name in pr_context_defaults
-        if not _contains_required_context(required_now, name)
-    ]
+    return [name for name in pr_context_defaults if not _contains_required_context(required_now, name)]
 
 
 def _missing_target_contexts(profile: Dict[str, Any]) -> List[str]:
@@ -138,20 +128,14 @@ def _missing_ruleset_target_contexts(
 ) -> List[str]:
     """Return target contexts that are not emitted by the ruleset contract."""
     target_contexts = set(profile["required_contexts"].get("target", []))
-    return [
-        name
-        for name in target_contexts
-        if not _contains_required_context(ruleset_contexts, name)
-    ]
+    return [name for name in target_contexts if not _contains_required_context(ruleset_contexts, name)]
 
 
 def _matches_required_context(actual_context: str, expected_context: str) -> bool:
     """Return whether one emitted status context satisfies the expected name."""
     current = str(actual_context or "").strip()
     expected = str(expected_context or "").strip()
-    return bool(current) and bool(expected) and (
-        expected in (current, current.rsplit(" / ", 1)[-1])
-    )
+    return bool(current) and bool(expected) and (expected in (current, current.rsplit(" / ", 1)[-1]))
 
 
 def _contains_required_context(
@@ -159,10 +143,7 @@ def _contains_required_context(
     expected_context: str,
 ) -> bool:
     """Return whether any available context matches the expected status check."""
-    return any(
-        _matches_required_context(actual_context, expected_context)
-        for actual_context in contexts
-    )
+    return any(_matches_required_context(actual_context, expected_context) for actual_context in contexts)
 
 
 def _validate_required_context_sets(
@@ -178,24 +159,17 @@ def _validate_required_context_sets(
     missing_required_now = _missing_required_now_contexts(profile)
     if missing_required_now:
         findings.append(
-            f"{profile['slug']}: required_contexts.required_now is missing "
-            f"{', '.join(missing_required_now)}"
+            f"{profile['slug']}: required_contexts.required_now is missing {', '.join(missing_required_now)}"
         )
     missing_target = _missing_target_contexts(profile)
     if missing_target:
-        findings.append(
-            f"{profile['slug']}: required_contexts.target is missing "
-            f"{', '.join(missing_target)}"
-        )
+        findings.append(f"{profile['slug']}: required_contexts.target is missing {', '.join(missing_target)}")
     missing_ruleset_target = _missing_ruleset_target_contexts(
         profile,
         ruleset_contexts=ruleset_contexts,
     )
     if missing_ruleset_target:
-        findings.append(
-            f"{profile['slug']}: emitted ruleset contexts are missing "
-            f"{', '.join(missing_ruleset_target)}"
-        )
+        findings.append(f"{profile['slug']}: emitted ruleset contexts are missing {', '.join(missing_ruleset_target)}")
     return findings
 
 
@@ -203,14 +177,11 @@ def _validate_secret_contract(profile: Dict[str, Any]) -> List[str]:
     """Validate required and conditional secret declarations."""
     findings: List[str] = []
     duplicate_conditional = [
-        name
-        for name in profile.get("conditional_secrets", [])
-        if name in profile.get("required_secrets", [])
+        name for name in profile.get("conditional_secrets", []) if name in profile.get("required_secrets", [])
     ]
     if duplicate_conditional:
         findings.append(
-            f"{profile['slug']}: conditional_secrets duplicates required_secrets "
-            f"for {', '.join(duplicate_conditional)}"
+            f"{profile['slug']}: conditional_secrets duplicates required_secrets for {', '.join(duplicate_conditional)}"
         )
     findings.extend(
         f"{profile['slug']}: {secret_name} must not be part of required_secrets"
@@ -225,24 +196,13 @@ def _validate_issue_policy_contract(profile: Dict[str, Any]) -> List[str]:
     issue_policy = profile.get("issue_policy", {})
     findings: List[str] = []
     if issue_policy.get("mode") not in {"zero", "ratchet", "audit"}:
-        findings.append(
-            f"{profile['slug']}: issue_policy.mode must be zero, ratchet, "
-            f"or audit"
-        )
+        findings.append(f"{profile['slug']}: issue_policy.mode must be zero, ratchet, or audit")
     if issue_policy.get("pr_behavior") not in {"introduced_only", "absolute"}:
-        findings.append(
-            f"{profile['slug']}: issue_policy.pr_behavior must be "
-            f"introduced_only or absolute"
-        )
+        findings.append(f"{profile['slug']}: issue_policy.pr_behavior must be introduced_only or absolute")
     if issue_policy.get("main_behavior") != "absolute":
-        findings.append(
-            f"{profile['slug']}: issue_policy.main_behavior must be absolute"
-        )
+        findings.append(f"{profile['slug']}: issue_policy.main_behavior must be absolute")
     if issue_policy.get("mode") == "ratchet" and not issue_policy.get("baseline_ref"):
-        findings.append(
-            f"{profile['slug']}: issue_policy.baseline_ref is required "
-            f"when mode is ratchet"
-        )
+        findings.append(f"{profile['slug']}: issue_policy.baseline_ref is required when mode is ratchet")
     return findings
 
 
@@ -251,10 +211,7 @@ def _validate_deps_contract(profile: Dict[str, Any]) -> List[str]:
     deps = profile.get("deps", {})
     findings: List[str] = []
     if deps.get("policy") not in {"zero_critical", "zero_high", "zero_any"}:
-        findings.append(
-            f"{profile['slug']}: deps.policy must be zero_critical, "
-            f"zero_high, or zero_any"
-        )
+        findings.append(f"{profile['slug']}: deps.policy must be zero_critical, zero_high, or zero_any")
     if deps.get("scope") not in {"runtime", "all"}:
         findings.append(f"{profile['slug']}: deps.scope must be runtime or all")
     return findings
@@ -313,9 +270,7 @@ def _validate_coverage_contract(profile: Dict[str, Any]) -> List[str]:
         [("coverage.command", coverage.get("command"))],
     )
     if not coverage.get("inputs"):
-        findings.append(
-            f"{profile['slug']}: coverage.inputs must declare at least one report"
-        )
+        findings.append(f"{profile['slug']}: coverage.inputs must declare at least one report")
     if coverage.get("shell") not in {"bash", "pwsh"}:
         findings.append(f"{profile['slug']}: coverage.shell must be bash or pwsh")
     findings.extend(
@@ -329,10 +284,7 @@ def _validate_coverage_contract(profile: Dict[str, Any]) -> List[str]:
         if mode_value not in {"enforce", "evidence_only", "non_regression"}
     )
     if coverage.get("require_sources_mode") not in {"explicit", "infer", "disabled"}:
-        findings.append(
-            f"{profile['slug']}: coverage.require_sources_mode must be "
-            f"explicit, infer, or disabled"
-        )
+        findings.append(f"{profile['slug']}: coverage.require_sources_mode must be explicit, infer, or disabled")
     return findings
 
 
@@ -347,9 +299,7 @@ def _validate_vendor_urls(profile: Dict[str, Any]) -> List[str]:
                 try:
                     normalize_https_url(str(value))
                 except ValueError as exc:
-                    findings.append(
-                        f"{profile['slug']}: invalid {vendor_name}.{key}: {exc}"
-                    )
+                    findings.append(f"{profile['slug']}: invalid {vendor_name}.{key}: {exc}")
     return findings
 
 

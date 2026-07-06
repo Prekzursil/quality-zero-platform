@@ -1,4 +1,5 @@
 """Codacy normalizer (per design §4.2 + §A.6)."""
+
 from __future__ import absolute_import
 
 from pathlib import Path
@@ -18,10 +19,17 @@ _SEVERITY_MAP = {
     "Info": "low",
 }
 
-_SECURITY_CATEGORY_HINTS = frozenset({
-    "sql-injection", "command-injection", "hardcoded-password-string",
-    "weak-crypto", "insecure-random", "exec-used", "xss",
-})
+_SECURITY_CATEGORY_HINTS = frozenset(
+    {
+        "sql-injection",
+        "command-injection",
+        "hardcoded-password-string",
+        "weak-crypto",
+        "insecure-random",
+        "exec-used",
+        "xss",
+    }
+)
 
 
 class CodacyNormalizer(BaseNormalizer):
@@ -32,21 +40,19 @@ class CodacyNormalizer(BaseNormalizer):
         for index, issue in enumerate(issues):
             pattern_id = str(issue.get("patternId", ""))
             category = lookup("Codacy", pattern_id) or "uncategorized"
-            group = (
-                CATEGORY_GROUP_SECURITY
-                if category in _SECURITY_CATEGORY_HINTS
-                else CATEGORY_GROUP_QUALITY
+            group = CATEGORY_GROUP_SECURITY if category in _SECURITY_CATEGORY_HINTS else CATEGORY_GROUP_QUALITY
+            yield self._build_finding(
+                FindingDraft(
+                    finding_id=f"codacy-{index:04d}",
+                    file=str(issue.get("filename", "")),
+                    line=int(issue.get("line") or 1),
+                    category=category,
+                    category_group=group,
+                    severity=_SEVERITY_MAP.get(str(issue.get("severity", "Warning")), "medium"),
+                    primary_message=str(issue.get("message", "")),
+                    rule_id=pattern_id,
+                    rule_url=issue.get("patternUrl"),
+                    original_message=str(issue.get("message", "")),
+                    context_snippet="",
+                )
             )
-            yield self._build_finding(FindingDraft(
-                finding_id=f"codacy-{index:04d}",
-                file=str(issue.get("filename", "")),
-                line=int(issue.get("line") or 1),
-                category=category,
-                category_group=group,
-                severity=_SEVERITY_MAP.get(str(issue.get("severity", "Warning")), "medium"),
-                primary_message=str(issue.get("message", "")),
-                rule_id=pattern_id,
-                rule_url=issue.get("patternUrl"),
-                original_message=str(issue.get("message", "")),
-                context_snippet="",
-            ))

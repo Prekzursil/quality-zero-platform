@@ -1,4 +1,5 @@
 """Tests for apply_deterministic_patches.py (per design §5.2)."""
+
 from __future__ import absolute_import
 
 import json
@@ -133,13 +134,7 @@ class ApplyPatchTests(unittest.TestCase):
             check=True,
         )
 
-        diff = (
-            "--- a/example.py\n"
-            "+++ b/example.py\n"
-            "@@ -1,2 +1,1 @@\n"
-            "-import os\n"
-            " import sys\n"
-        )
+        diff = "--- a/example.py\n+++ b/example.py\n@@ -1,2 +1,1 @@\n-import os\n import sys\n"
         result = apply_single_patch(diff, self.repo_dir)
         self.assertTrue(result["applied"])
         self.assertFalse(result["skipped"])
@@ -164,18 +159,11 @@ class ApplyPatchTests(unittest.TestCase):
         )
 
         # Diff that doesn't match the file content
-        diff = (
-            "--- a/example.py\n"
-            "+++ b/example.py\n"
-            "@@ -1,2 +1,1 @@\n"
-            "-import os\n"
-            " import sys\n"
-        )
+        diff = "--- a/example.py\n+++ b/example.py\n@@ -1,2 +1,1 @@\n-import os\n import sys\n"
         result = apply_single_patch(diff, self.repo_dir)
         self.assertFalse(result["applied"])
         self.assertTrue(result["skipped"])
         self.assertIn("reason", result)
-
 
     def test_check_passes_but_apply_fails(self) -> None:
         """Cover the edge case where git apply --check succeeds but git apply fails."""
@@ -247,20 +235,8 @@ class RunPatcherTests(unittest.TestCase):
             check=True,
         )
 
-        good_diff = (
-            "--- a/example.py\n"
-            "+++ b/example.py\n"
-            "@@ -1,2 +1,1 @@\n"
-            "-import os\n"
-            " import sys\n"
-        )
-        bad_diff = (
-            "--- a/missing.py\n"
-            "+++ b/missing.py\n"
-            "@@ -1,1 +1,1 @@\n"
-            "-old\n"
-            "+new\n"
-        )
+        good_diff = "--- a/example.py\n+++ b/example.py\n@@ -1,2 +1,1 @@\n-import os\n import sys\n"
+        bad_diff = "--- a/missing.py\n+++ b/missing.py\n@@ -1,1 +1,1 @@\n-old\n+new\n"
         findings = [
             _make_finding(finding_id="good", patch_diff=good_diff),
             _make_finding(finding_id="bad", patch_diff=bad_diff),
@@ -298,9 +274,12 @@ class CLITests(unittest.TestCase):
             "sys.argv",
             [
                 "apply_deterministic_patches.py",
-                "--canonical-json", "/tmp/canonical.json",
-                "--repo-dir", "/tmp/repo",
-                "--out-json", "/tmp/result.json",
+                "--canonical-json",
+                "/tmp/canonical.json",
+                "--repo-dir",
+                "/tmp/repo",
+                "--out-json",
+                "/tmp/result.json",
             ],
         ):
             args = parse_args()
@@ -317,11 +296,15 @@ class CLITests(unittest.TestCase):
             subprocess.run(["git", "init"], cwd=repo_dir, capture_output=True, check=True)
             subprocess.run(
                 ["git", "config", "user.email", "t@t.com"],
-                cwd=repo_dir, capture_output=True, check=True,
+                cwd=repo_dir,
+                capture_output=True,
+                check=True,
             )
             subprocess.run(
                 ["git", "config", "user.name", "T"],
-                cwd=repo_dir, capture_output=True, check=True,
+                cwd=repo_dir,
+                capture_output=True,
+                check=True,
             )
 
             canonical_path = Path(tmp) / "canonical.json"
@@ -343,9 +326,12 @@ class CLITests(unittest.TestCase):
                     "sys.argv",
                     [
                         "apply_deterministic_patches.py",
-                        "--canonical-json", str(canonical_path),
-                        "--repo-dir", str(repo_dir),
-                        "--out-json", "result.json",
+                        "--canonical-json",
+                        str(canonical_path),
+                        "--repo-dir",
+                        str(repo_dir),
+                        "--out-json",
+                        "result.json",
                     ],
                 ):
                     exit_code = main()
@@ -356,7 +342,6 @@ class CLITests(unittest.TestCase):
             result = json.loads(out_path.read_text(encoding="utf-8"))
             self.assertEqual(result["applied_count"], 0)
             self.assertEqual(result["skipped_count"], 0)
-
 
     def test_main_rejects_path_traversal_escape(self) -> None:
         """``safe_output_path`` MUST reject --out-json values that escape cwd.
@@ -373,17 +358,22 @@ class CLITests(unittest.TestCase):
             try:
                 os.chdir(tmp)
                 # Escape the workspace via leading ``..`` components.
-                with patch(
-                    "sys.argv",
-                    [
-                        "apply_deterministic_patches.py",
-                        "--canonical-json", "canonical.json",
-                        "--repo-dir", ".",
-                        "--out-json", "../../escape.json",
-                    ],
+                with (
+                    patch(
+                        "sys.argv",
+                        [
+                            "apply_deterministic_patches.py",
+                            "--canonical-json",
+                            "canonical.json",
+                            "--repo-dir",
+                            ".",
+                            "--out-json",
+                            "../../escape.json",
+                        ],
+                    ),
+                    self.assertRaises(ValueError) as ctx,
                 ):
-                    with self.assertRaises(ValueError) as ctx:
-                        main()
+                    main()
                 self.assertIn("escapes workspace root", str(ctx.exception))
             finally:
                 os.chdir(original_cwd)

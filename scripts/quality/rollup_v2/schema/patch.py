@@ -4,6 +4,7 @@ Per Round 3 Designer feedback: no Protocol class for the generator interface.
 The dispatcher calls `gen.generate(finding, source_file_content=..., repo_root=...)`
 where `gen` is a module exposing a module-level `generate` function.
 """
+
 from __future__ import absolute_import
 
 from dataclasses import dataclass
@@ -51,9 +52,7 @@ class PatchResult:
             raise AssertionError("touches_files must be non-empty")
         for p in self.touches_files:
             if not isinstance(p, Path):
-                raise AssertionError(
-                    f"touches_files must contain Path, got {type(p).__name__}"
-                )
+                raise AssertionError(f"touches_files must contain Path, got {type(p).__name__}")
 
 
 @dataclass(frozen=True, slots=True)

@@ -3,6 +3,7 @@
 Parses Chromatic build API response JSON and converts visual changes,
 errors, and rejections into canonical Finding objects.
 """
+
 from __future__ import absolute_import
 
 from pathlib import Path
@@ -35,9 +36,7 @@ class ChromaticNormalizer(BaseNormalizer):
             context_snippet="",
         )
 
-    def _change_draft(
-        self, index: int, change: dict, web_url: Any, status: str
-    ) -> FindingDraft:
+    def _change_draft(self, index: int, change: dict, web_url: Any, status: str) -> FindingDraft:
         component = str(change.get("component", "unknown"))
         story = str(change.get("story", "unknown"))
         change_url = change.get("changeUrl")
@@ -84,7 +83,5 @@ class ChromaticNormalizer(BaseNormalizer):
                 yield self._build_finding(self._err_draft(index, err_count, web_url))
                 index += 1
             for entry in self._changes_iter(build):
-                yield self._build_finding(
-                    self._change_draft(index, entry["_change"], web_url, entry["_status"])
-                )
+                yield self._build_finding(self._change_draft(index, entry["_change"], web_url, entry["_status"]))
                 index += 1

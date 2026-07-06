@@ -68,8 +68,7 @@ class DetectDeadlineMissedTests(unittest.TestCase):
         """``target_date: 2026-01-01``, today 2026-04-23, phase ratchet → fires."""
         triggers = at.detect_deadline_missed(
             slug="org/repo",
-            profile={"mode": {"phase": "ratchet",
-                              "ratchet": {"target_date": "2026-01-01"}}},
+            profile={"mode": {"phase": "ratchet", "ratchet": {"target_date": "2026-01-01"}}},
             today=dt.date(2026, 4, 23),
         )
         self.assertEqual(len(triggers), 1)
@@ -80,8 +79,7 @@ class DetectDeadlineMissedTests(unittest.TestCase):
         """Target 2026-12-31, today 2026-04-23 → no alert."""
         triggers = at.detect_deadline_missed(
             slug="org/repo",
-            profile={"mode": {"phase": "ratchet",
-                              "ratchet": {"target_date": "2026-12-31"}}},
+            profile={"mode": {"phase": "ratchet", "ratchet": {"target_date": "2026-12-31"}}},
             today=dt.date(2026, 4, 23),
         )
         self.assertEqual(triggers, [])
@@ -90,8 +88,7 @@ class DetectDeadlineMissedTests(unittest.TestCase):
         """Even with past target_date, absolute phase suppresses alert."""
         triggers = at.detect_deadline_missed(
             slug="org/repo",
-            profile={"mode": {"phase": "absolute",
-                              "ratchet": {"target_date": "2026-01-01"}}},
+            profile={"mode": {"phase": "absolute", "ratchet": {"target_date": "2026-01-01"}}},
             today=dt.date(2026, 4, 23),
         )
         self.assertEqual(triggers, [])
@@ -113,8 +110,7 @@ class DetectEscalationTests(unittest.TestCase):
         """Escalation passed + not absolute → alert fires."""
         triggers = at.detect_escalation(
             slug="org/repo",
-            profile={"mode": {"phase": "ratchet",
-                              "ratchet": {"escalation_date": "2025-12-31"}}},
+            profile={"mode": {"phase": "ratchet", "ratchet": {"escalation_date": "2025-12-31"}}},
             today=dt.date(2026, 4, 23),
         )
         self.assertEqual(len(triggers), 1)
@@ -124,8 +120,7 @@ class DetectEscalationTests(unittest.TestCase):
         """Future escalation → no alert."""
         triggers = at.detect_escalation(
             slug="org/repo",
-            profile={"mode": {"phase": "ratchet",
-                              "ratchet": {"escalation_date": "2026-12-31"}}},
+            profile={"mode": {"phase": "ratchet", "ratchet": {"escalation_date": "2026-12-31"}}},
             today=dt.date(2026, 4, 23),
         )
         self.assertEqual(triggers, [])
@@ -134,8 +129,7 @@ class DetectEscalationTests(unittest.TestCase):
         """Once absolute, escalation is moot."""
         triggers = at.detect_escalation(
             slug="org/repo",
-            profile={"mode": {"phase": "absolute",
-                              "ratchet": {"escalation_date": "2025-12-31"}}},
+            profile={"mode": {"phase": "absolute", "ratchet": {"escalation_date": "2025-12-31"}}},
             today=dt.date(2026, 4, 23),
         )
         self.assertEqual(triggers, [])
@@ -144,8 +138,7 @@ class DetectEscalationTests(unittest.TestCase):
         """Ratchet block without escalation_date → no alert."""
         triggers = at.detect_escalation(
             slug="org/repo",
-            profile={"mode": {"phase": "ratchet",
-                              "ratchet": {"target_date": "2026-06-30"}}},
+            profile={"mode": {"phase": "ratchet", "ratchet": {"target_date": "2026-06-30"}}},
             today=dt.date(2026, 4, 23),
         )
         self.assertEqual(triggers, [])
@@ -189,8 +182,7 @@ class DefensiveProfileShapeTests(unittest.TestCase):
         """Profile with `target_date: date(..)` object (not str) also works."""
         triggers = at.detect_deadline_missed(
             slug="org/repo",
-            profile={"mode": {"phase": "ratchet",
-                              "ratchet": {"target_date": dt.date(2025, 1, 1)}}},
+            profile={"mode": {"phase": "ratchet", "ratchet": {"target_date": dt.date(2025, 1, 1)}}},
             today=dt.date(2026, 4, 23),
         )
         self.assertEqual(len(triggers), 1)
@@ -199,8 +191,7 @@ class DefensiveProfileShapeTests(unittest.TestCase):
         """Garbage date string → parses to date.min, fails-closed."""
         triggers = at.detect_deadline_missed(
             slug="org/repo",
-            profile={"mode": {"phase": "ratchet",
-                              "ratchet": {"target_date": "not-a-date"}}},
+            profile={"mode": {"phase": "ratchet", "ratchet": {"target_date": "not-a-date"}}},
             today=dt.date(2026, 4, 23),
         )
         # date.min < today → fires the alert (that's the "fail-closed"
@@ -209,12 +200,12 @@ class DefensiveProfileShapeTests(unittest.TestCase):
         self.assertEqual(len(triggers), 1)
 
 
-_NOW = dt.datetime(2026, 4, 23, tzinfo=dt.timezone.utc)
+_NOW = dt.datetime(2026, 4, 23, tzinfo=dt.UTC)
 
 
 def _utc(year: int, month: int, day: int) -> dt.datetime:
     """Convenience builder for UTC ``dt.datetime`` fixtures."""
-    return dt.datetime(year, month, day, tzinfo=dt.timezone.utc)
+    return dt.datetime(year, month, day, tzinfo=dt.UTC)
 
 
 class _AgeDetectorScenario:
@@ -361,13 +352,15 @@ class DetectSecretMissingTests(unittest.TestCase):
         self.assertEqual(len(triggers), 2)
         subjects = sorted(t.subject for t in triggers)
         self.assertEqual(
-            subjects, ["org/repo:CODECOV_TOKEN", "org/repo:SONAR_TOKEN"],
+            subjects,
+            ["org/repo:CODECOV_TOKEN", "org/repo:SONAR_TOKEN"],
         )
 
     def test_empty_missing_list_does_not_fire(self) -> None:
         """No missing secrets → no alerts."""
         triggers = at.detect_secret_missing(
-            slug="org/repo", missing_secrets=[],
+            slug="org/repo",
+            missing_secrets=[],
         )
         self.assertEqual(triggers, [])
 

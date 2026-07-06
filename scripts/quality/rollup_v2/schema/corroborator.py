@@ -1,4 +1,5 @@
 """Corroborator dataclass for canonical findings (per design §A.3.2 + §B.3.4)."""
+
 from __future__ import absolute_import
 
 from dataclasses import dataclass
@@ -13,6 +14,7 @@ class Corroborator:
     Always construct via `Corroborator.from_provider(...)` — direct construction
     with `provider_priority_rank == -1` (the "not looked up" sentinel) raises.
     """
+
     provider: str
     rule_id: str
     rule_url: str | None

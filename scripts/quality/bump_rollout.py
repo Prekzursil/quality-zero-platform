@@ -72,7 +72,8 @@ def plan_rollout(
 
 
 def classify_staging_outcome(
-    *, staging_results: Sequence[Mapping[str, Any]],
+    *,
+    staging_results: Sequence[Mapping[str, Any]],
 ) -> Dict[str, Any]:
     """Decide rollout/rollback/wait from staging CI conclusions."""
     if not staging_results:
@@ -109,8 +110,14 @@ if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
     if _args.fleet:
         _fleet = json.loads(Path(_args.fleet).read_text(encoding="utf-8"))
     _plan = plan_rollout(recipe=_recipe, fleet=_fleet)
-    print(json.dumps({
-        "recipe_name": _recipe["name"],
-        "staging": _plan["staging"],
-        "rollout": _plan["rollout"],
-    }, indent=2, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "recipe_name": _recipe["name"],
+                "staging": _plan["staging"],
+                "rollout": _plan["rollout"],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )

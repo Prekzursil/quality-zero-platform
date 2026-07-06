@@ -9,6 +9,7 @@ Usage:
     python scripts/quality/rollup_v2/validate_workflow_paths.py --repo-root /path --path storybook-static
     python scripts/quality/rollup_v2/validate_workflow_paths.py --repo-root /path --path applitools.config.js
 """
+
 from __future__ import absolute_import
 
 import argparse
@@ -34,12 +35,11 @@ def validate_paths(repo_root: Path, paths: List[str]) -> List[str]:
 
 
 def main(argv: List[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Validate workflow-supplied paths against repo root (§B.2.2)"
-    )
+    parser = argparse.ArgumentParser(description="Validate workflow-supplied paths against repo root (§B.2.2)")
     parser.add_argument("--repo-root", required=True, help="Repository root directory")
-    parser.add_argument("--path", action="append", dest="paths", required=True,
-                        help="Path to validate (can be repeated)")
+    parser.add_argument(
+        "--path", action="append", dest="paths", required=True, help="Path to validate (can be repeated)"
+    )
     args = parser.parse_args(argv)
 
     repo_root = Path(args.repo_root).resolve()

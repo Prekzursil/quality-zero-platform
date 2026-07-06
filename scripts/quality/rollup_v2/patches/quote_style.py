@@ -1,4 +1,5 @@
 """Deterministic patch generator for `quote-style` category."""
+
 from __future__ import absolute_import
 
 import re
@@ -18,6 +19,7 @@ _SINGLE_QUOTED = re.compile(r"(?<!['\"])(?<!f)'([^'\\]*(?:\\.[^'\\]*)*)'")
 
 def _replace_quotes(line: str) -> str:
     """Replace single-quoted strings with double-quoted, preserving content."""
+
     def _swap(m: re.Match[str]) -> str:
         content = m.group(1)
         # Don't convert if the content contains unescaped double quotes
@@ -26,6 +28,7 @@ def _replace_quotes(line: str) -> str:
         # Unescape single quotes, escape double quotes
         content = content.replace("\\'", "'")
         return f'"{content}"'
+
     return _SINGLE_QUOTED.sub(_swap, line)
 
 

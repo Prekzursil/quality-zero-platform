@@ -1,4 +1,5 @@
 """Tests for Finding dataclass (per design §3.1 + §A.3.2 + §A.4.1)."""
+
 from __future__ import absolute_import
 
 import sys
@@ -10,10 +11,10 @@ if str(Path(__file__).resolve().parents[3]) not in sys.path:
 
 from scripts.quality.rollup_v2.schema.corroborator import Corroborator
 from scripts.quality.rollup_v2.schema.finding import (
-    SCHEMA_VERSION,
-    CATEGORY_GROUP_SECURITY,
     CATEGORY_GROUP_QUALITY,
+    CATEGORY_GROUP_SECURITY,
     CATEGORY_GROUP_STYLE,
+    SCHEMA_VERSION,
     Finding,
 )
 
@@ -96,7 +97,7 @@ class FindingTests(unittest.TestCase):
                 end_line=1,
                 column=None,
                 category="c",
-                category_group="invalid",   # <- not security/quality/style
+                category_group="invalid",  # <- not security/quality/style
                 severity="low",
                 corroboration="single",
                 primary_message="m",
@@ -111,7 +112,6 @@ class FindingTests(unittest.TestCase):
                 autofixable=False,
                 tags=(),
             )
-
 
     def test_patch_error_defaults_to_none_and_is_optional(self):
         f = Finding(

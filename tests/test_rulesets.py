@@ -9,7 +9,6 @@ from scripts.quality.control_plane import (
     load_repo_profile,
 )
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -33,9 +32,7 @@ class RulesetPayloadTests(unittest.TestCase):
             payload["rules"][0]["parameters"]["required_approving_review_count"],
             0,
         )
-        self.assertFalse(
-            payload["rules"][0]["parameters"]["required_review_thread_resolution"]
-        )
+        self.assertFalse(payload["rules"][0]["parameters"]["required_review_thread_resolution"])
         self.assertEqual(profile["default_branch"], "main")
 
     def test_reframe_ruleset_payload_uses_target_contract(self) -> None:
@@ -102,10 +99,7 @@ class RulesetPayloadTests(unittest.TestCase):
         profile = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
         payload = build_ruleset_payload(profile)
 
-        contexts = [
-            entry["context"]
-            for entry in payload["rules"][1]["parameters"]["required_status_checks"]
-        ]
+        contexts = [entry["context"] for entry in payload["rules"][1]["parameters"]["required_status_checks"]]
 
         self.assertNotIn("qlty check", contexts)
         self.assertNotIn("qlty coverage", contexts)

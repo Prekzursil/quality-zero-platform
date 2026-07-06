@@ -9,6 +9,7 @@ smells gate previously flagged as duplication:
   the line doesn't match a regex guard, pop it, diff. Used by
   ``unused_import`` and ``unused_variable``.
 """
+
 from __future__ import absolute_import
 
 import difflib
@@ -26,6 +27,7 @@ LineTransformer = Callable[[str], str]
 @dataclass(frozen=True, slots=True)
 class _PatchMeta:
     """Common metadata shared by ``apply_line_transform`` / ``apply_line_removal``."""
+
     confidence: str
     category: str
     generator_version: str
@@ -51,12 +53,14 @@ def apply_line_transform(
             reason_text=decline_reason,
             suggested_tier=decline_tier,
         )
-    diff = "".join(difflib.unified_diff(
-        lines,
-        patched_lines,
-        fromfile=f"a/{finding.file}",
-        tofile=f"b/{finding.file}",
-    ))
+    diff = "".join(
+        difflib.unified_diff(
+            lines,
+            patched_lines,
+            fromfile=f"a/{finding.file}",
+            tofile=f"b/{finding.file}",
+        )
+    )
     return PatchResult(
         unified_diff=diff,
         confidence=confidence,
@@ -87,7 +91,9 @@ def make_line_removal_generator(
     finding line number into the decline reason.
     """
     meta = _PatchMeta(
-        confidence=confidence, category=category, generator_version=generator_version,
+        confidence=confidence,
+        category=category,
+        generator_version=generator_version,
     )
 
     def generate(
@@ -107,12 +113,14 @@ def make_line_removal_generator(
             ),
             meta=meta,
         )
+
     return generate
 
 
 @dataclass(frozen=True, slots=True)
 class _RemovalGuard:
     """Configuration for ``apply_line_removal`` regex-guarded removal."""
+
     pattern: re.Pattern[str]
     decline_reason: str
     decline_tier: str = "llm-fallback"
@@ -132,8 +140,7 @@ def apply_line_removal(
     if target_index < 0 or target_index >= len(lines):
         return PatchDeclined(
             reason_code="provider-data-insufficient",
-            reason_text=guard.out_of_range_reason
-            or f"line {finding.line} out of range",
+            reason_text=guard.out_of_range_reason or f"line {finding.line} out of range",
             suggested_tier="skip",
         )
     target_line = lines[target_index]
@@ -145,12 +152,14 @@ def apply_line_removal(
         )
     patched_lines = lines.copy()
     patched_lines.pop(target_index)
-    diff = "".join(difflib.unified_diff(
-        lines,
-        patched_lines,
-        fromfile=f"a/{finding.file}",
-        tofile=f"b/{finding.file}",
-    ))
+    diff = "".join(
+        difflib.unified_diff(
+            lines,
+            patched_lines,
+            fromfile=f"a/{finding.file}",
+            tofile=f"b/{finding.file}",
+        )
+    )
     return PatchResult(
         unified_diff=diff,
         confidence=meta.confidence,

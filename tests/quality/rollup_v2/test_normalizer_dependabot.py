@@ -1,4 +1,5 @@
 """Tests for Dependabot normalizer (per §6.7)."""
+
 from __future__ import absolute_import
 
 import json

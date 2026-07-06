@@ -72,9 +72,7 @@ class CoverageAssertTests(unittest.TestCase):
             fallback_stats = parse_coverage_xml("fallback", fallback_xml)
 
         self.assertEqual((summary_stats.covered, summary_stats.total), (4, 5))
-        self.assertEqual(
-            (summary_stats.branch_covered, summary_stats.branch_total), (3, 6)
-        )
+        self.assertEqual((summary_stats.branch_covered, summary_stats.branch_total), (3, 6))
         self.assertEqual((fallback_stats.covered, fallback_stats.total), (2, 3))
 
     def test_parse_lcov_counts_lines_found_and_hit(self) -> None:
@@ -83,9 +81,7 @@ class CoverageAssertTests(unittest.TestCase):
             root = Path(tmp)
             lcov_path = root / "coverage.lcov"
             (root / "src").mkdir()
-            (root / "src" / "main.cpp").write_text(
-                "int main() { return 0; }\n", encoding="utf-8"
-            )
+            (root / "src" / "main.cpp").write_text("int main() { return 0; }\n", encoding="utf-8")
             lcov_path.write_text(
                 "\n".join(
                     [
@@ -115,9 +111,7 @@ class CoverageAssertTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "apps" / "web" / "src").mkdir(parents=True)
-            (root / "apps" / "web" / "src" / "main.ts").write_text(
-                "export const x = 1;\n", encoding="utf-8"
-            )
+            (root / "apps" / "web" / "src" / "main.ts").write_text("export const x = 1;\n", encoding="utf-8")
             (root / "apps" / "web" / "coverage").mkdir(parents=True)
             lcov_path = root / "apps" / "web" / "coverage" / "lcov.info"
             lcov_path.write_text(
@@ -154,9 +148,7 @@ class CoverageAssertTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "apps" / "web" / "src").mkdir(parents=True)
-            (root / "apps" / "web" / "src" / "x.ts").write_text(
-                "export const x = 1;\n", encoding="utf-8"
-            )
+            (root / "apps" / "web" / "src" / "x.ts").write_text("export const x = 1;\n", encoding="utf-8")
             lcov_path = root / "lcov.info"
             lcov_path.write_text(
                 "\n".join(
@@ -191,13 +183,9 @@ class CoverageAssertTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "scripts" / "quality").mkdir(parents=True)
-            (root / "scripts" / "quality" / "check_required_checks.py").write_text(
-                "print('ok')\n", encoding="utf-8"
-            )
+            (root / "scripts" / "quality" / "check_required_checks.py").write_text("print('ok')\n", encoding="utf-8")
             (root / "src").mkdir()
-            (root / "src" / "app.ts").write_text(
-                "export const ok = true;\n", encoding="utf-8"
-            )
+            (root / "src" / "app.ts").write_text("export const ok = true;\n", encoding="utf-8")
             xml_path = root / "coverage.xml"
             lcov_path = root / "coverage.lcov"
             xml_path.write_text(
@@ -234,9 +222,7 @@ class CoverageAssertTests(unittest.TestCase):
 
         self.assertIn("scripts/quality/check_required_checks.py", xml_sources)
         self.assertIn("src/app.ts", lcov_sources)
-        self.assertNotIn(
-            "build/_deps/googletest-src/googletest/src/gtest.cc", lcov_sources
-        )
+        self.assertNotIn("build/_deps/googletest-src/googletest/src/gtest.cc", lcov_sources)
 
     def test_evaluate_flags_missing_required_sources_and_honors_threshold(self) -> None:
         """Cover evaluate flags missing required sources and honors threshold."""
@@ -253,11 +239,7 @@ class CoverageAssertTests(unittest.TestCase):
 
         self.assertEqual(status, "fail")
         self.assertTrue(any("coverage below 100.00%" in item for item in findings))
-        self.assertTrue(
-            any(
-                "missing required source path: app/main.py" in item for item in findings
-            )
-        )
+        self.assertTrue(any("missing required source path: app/main.py" in item for item in findings))
         self.assertTrue(any("tests/ paths" in item for item in findings))
 
         ok_status, ok_findings = evaluate(
@@ -292,9 +274,7 @@ class CoverageAssertTests(unittest.TestCase):
             ),
         )
         self.assertEqual(branch_status, "fail")
-        self.assertTrue(
-            any("branch coverage below 80.00%" in item for item in branch_findings)
-        )
+        self.assertTrue(any("branch coverage below 80.00%" in item for item in branch_findings))
 
         missing_branch_status, missing_branch_findings = evaluate(
             [
@@ -315,12 +295,7 @@ class CoverageAssertTests(unittest.TestCase):
             ),
         )
         self.assertEqual(missing_branch_status, "fail")
-        self.assertTrue(
-            any(
-                "branch coverage data missing" in item
-                for item in missing_branch_findings
-            )
-        )
+        self.assertTrue(any("branch coverage data missing" in item for item in missing_branch_findings))
 
     def test_source_normalization_and_required_source_helpers_cover_edge_cases(
         self,
@@ -333,13 +308,9 @@ class CoverageAssertTests(unittest.TestCase):
                 external_file = external_root / "external.py"
                 external_file.write_text("print('external')\n", encoding="utf-8")
                 (root / "src").mkdir(parents=True)
-                (root / "src" / "main.py").write_text(
-                    "print('main')\n", encoding="utf-8"
-                )
+                (root / "src" / "main.py").write_text("print('main')\n", encoding="utf-8")
                 (root / "node_modules").mkdir()
-                (root / "node_modules" / "shim.js").write_text(
-                    "export default true;\n", encoding="utf-8"
-                )
+                (root / "node_modules" / "shim.js").write_text("export default true;\n", encoding="utf-8")
             with _temporary_cwd(root):
                 workspace_root = Path.cwd().resolve(strict=False).as_posix().rstrip("/")
                 self.assertEqual(
@@ -347,9 +318,7 @@ class CoverageAssertTests(unittest.TestCase):
                     "src/main.py",
                 )
                 self.assertEqual(_normalize_source_path("./"), "")
-                self.assertEqual(
-                    _normalize_source_path("./src//main.py"), "src/main.py"
-                )
+                self.assertEqual(_normalize_source_path("./src//main.py"), "src/main.py")
                 self.assertEqual(_normalize_source_path("."), "")
                 self.assertEqual(_normalize_source_path(workspace_root), "")
                 self.assertEqual(
@@ -357,17 +326,13 @@ class CoverageAssertTests(unittest.TestCase):
                     external_file.resolve(strict=False).as_posix(),
                 )
                 self.assertEqual(_existing_repo_file_candidate(""), "")
-                self.assertEqual(
-                    _existing_repo_file_candidate("repo/src/main.py"), "src/main.py"
-                )
+                self.assertEqual(_existing_repo_file_candidate("repo/src/main.py"), "src/main.py")
                 self.assertFalse(_should_track_coverage_source(""))
                 self.assertFalse(_should_track_coverage_source("node_modules/shim.js"))
                 self.assertFalse(_matches_required_source("src/main.py", ""))
                 self.assertTrue(_matches_required_source("src/main.py", "src"))
                 self.assertEqual(
-                    _find_missing_required_sources(
-                        {"src/main.py"}, ["", "src", "frontend/app.ts"]
-                    ),
+                    _find_missing_required_sources({"src/main.py"}, ["", "src", "frontend/app.ts"]),
                     ["frontend/app.ts"],
                 )
                 self.assertTrue(_is_tests_only_report({"tests/test_main.py"}))
@@ -378,4 +343,3 @@ class CoverageAssertTests(unittest.TestCase):
                         "missing required source path: src/main.py",
                     ],
                 )
-

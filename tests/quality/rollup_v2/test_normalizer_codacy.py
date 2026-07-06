@@ -1,4 +1,5 @@
 """Tests for Codacy normalizer (per §6.1)."""
+
 from __future__ import absolute_import
 
 import json
@@ -45,14 +46,16 @@ class CodacyNormalizerTests(unittest.TestCase):
 
     def test_unmapped_rule_falls_through_to_uncategorized(self):
         artifact = {
-            "issues": [{
-                "message": "Unknown rule fires",
-                "patternId": "Pylint_NoSuchRule",
-                "patternUrl": None,
-                "filename": "scripts/quality/common.py",
-                "line": 1,
-                "severity": "Info",
-            }]
+            "issues": [
+                {
+                    "message": "Unknown rule fires",
+                    "patternId": "Pylint_NoSuchRule",
+                    "patternUrl": None,
+                    "filename": "scripts/quality/common.py",
+                    "line": 1,
+                    "severity": "Info",
+                }
+            ]
         }
         result = CodacyNormalizer().run(artifact=artifact, repo_root=self.root)
         self.assertEqual(result.findings[0].category, "uncategorized")

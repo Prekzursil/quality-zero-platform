@@ -7,6 +7,7 @@ runner and the same temp-dir/coverage-XML fixture. Centralising them avoids
 the ~60-line duplication block qlty's smells gate previously flagged while
 keeping each test file under its own coverage scope.
 """
+
 from __future__ import absolute_import
 
 import tempfile
@@ -37,9 +38,7 @@ def assert_run_shell_invocation(
                 return_value=object(),
             ) as mock_run,
         ):
-            run_coverage_gate._run_shell(
-                "echo coverage", shell_name=shell_name, cwd=cwd
-            )
+            run_coverage_gate._run_shell("echo coverage", shell_name=shell_name, cwd=cwd)
 
     mock_run.assert_called_once_with(
         expected_argv,
@@ -62,8 +61,8 @@ def make_coverage_assert_fixture():
     coverage_dir.mkdir()
     (coverage_dir / "platform-coverage.xml").write_text(
         (
-            "<coverage lines-valid=\"1\" lines-covered=\"1\"><packages>"
-            "<package><classes><class filename=\"src/app.py\"><lines>"
+            '<coverage lines-valid="1" lines-covered="1"><packages>'
+            '<package><classes><class filename="src/app.py"><lines>'
             '<line number="1" hits="1" />'
             "</lines></class></classes></package></packages></coverage>"
         ),

@@ -3,6 +3,7 @@
 Parses Applitools batch result JSON and converts unresolved, failed,
 and mismatch entries into canonical Finding objects.
 """
+
 from __future__ import absolute_import
 
 from pathlib import Path
@@ -45,20 +46,21 @@ class ApplitoolsNormalizer(BaseNormalizer):
 
             severity = "high" if status == "failed" else "medium"
 
-            yield self._build_finding(FindingDraft(
-                finding_id=f"applitools-{index:04d}",
-                file="(applitools)",
-                line=1,
-                category="visual-regression-diff",
-                category_group=CATEGORY_GROUP_QUALITY,
-                severity=severity,
-                primary_message=(
-                    f"Visual test {test_name!r}: {status} "
-                    f"(unresolved={unresolved_count}, failed={failed_count})"
-                ),
-                rule_id="applitools/visual-diff",
-                rule_url=result_url,
-                original_message=f"{test_name}: {status}",
-                context_snippet="",
-            ))
+            yield self._build_finding(
+                FindingDraft(
+                    finding_id=f"applitools-{index:04d}",
+                    file="(applitools)",
+                    line=1,
+                    category="visual-regression-diff",
+                    category_group=CATEGORY_GROUP_QUALITY,
+                    severity=severity,
+                    primary_message=(
+                        f"Visual test {test_name!r}: {status} (unresolved={unresolved_count}, failed={failed_count})"
+                    ),
+                    rule_id="applitools/visual-diff",
+                    rule_url=result_url,
+                    original_message=f"{test_name}: {status}",
+                    context_snippet="",
+                )
+            )
             index += 1

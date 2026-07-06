@@ -1,4 +1,5 @@
 """HMAC envelope encode/decode for LLM cache integrity (per design §5.2 + §B.3.12)."""
+
 from __future__ import absolute_import
 
 import hashlib
@@ -36,7 +37,7 @@ def verify_envelope(envelope: Dict[str, Any], hmac_key: str) -> Dict[str, Any] |
     sig_value = envelope["signature"]
     if not isinstance(sig_value, str) or not sig_value.startswith("hmac-sha256:"):
         return None
-    expected_hex = sig_value[len("hmac-sha256:"):]
+    expected_hex = sig_value[len("hmac-sha256:") :]
     actual = hmac.new(
         hmac_key.encode("utf-8"),
         _canonical_json(envelope["payload"]),

@@ -4,6 +4,7 @@ Class-definition-time dynamic test method generation: discovers fixture triples
 from tests/quality/rollup_v2/fixtures/patches/<category>/case_NN.* and attaches
 one test method per fixture to PatchGeneratorGoldenTests.
 """
+
 from __future__ import absolute_import
 
 import json
@@ -60,6 +61,7 @@ def _finding_from_json(data: dict) -> Finding:
 
 class PatchGeneratorGoldenTests(unittest.TestCase):
     """Parametrized tests -- methods attached dynamically at module load time."""
+
     pass
 
 

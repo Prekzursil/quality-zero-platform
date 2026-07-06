@@ -1,4 +1,5 @@
 """Provider priority ranking for canonical-finding merges (per design §A.4.3)."""
+
 from __future__ import absolute_import
 
 from typing import Final, Mapping

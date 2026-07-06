@@ -19,11 +19,7 @@ from pathlib import Path
 
 import yaml  # type: ignore[import-untyped]
 
-
-_WORKFLOW = (
-    Path(__file__).resolve().parents[1]
-    / ".github" / "workflows" / "reusable-bump-apply.yml"
-)
+_WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "reusable-bump-apply.yml"
 
 
 class ReusableBumpApplyContract(unittest.TestCase):
@@ -78,10 +74,7 @@ class ReusableBumpApplyContract(unittest.TestCase):
         """Bump-apply report artifact name uses slash-escaped slug
         (NTFS portability rule, learned in #130)."""
         steps = self.doc["jobs"]["apply"]["steps"]
-        upload_steps = [
-            s for s in steps
-            if "uses" in s and "upload-artifact" in s["uses"]
-        ]
+        upload_steps = [s for s in steps if "uses" in s and "upload-artifact" in s["uses"]]
         self.assertEqual(len(upload_steps), 1)
         self.assertIn(
             "steps.artifact_name.outputs.slug_safe",
@@ -92,9 +85,7 @@ class ReusableBumpApplyContract(unittest.TestCase):
         """PR step requires (a) !dry_run, (b) DRIFT_SYNC_PAT present,
         (c) bumped_total > 0. Same shape as bump-shas-wave."""
         steps = self.doc["jobs"]["apply"]["steps"]
-        pr_steps = [
-            s for s in steps if "Commit + open bump PR" in s.get("name", "")
-        ]
+        pr_steps = [s for s in steps if "Commit + open bump PR" in s.get("name", "")]
         self.assertEqual(len(pr_steps), 1)
         cond = pr_steps[0].get("if", "")
         self.assertIn("!inputs.dry_run", cond)

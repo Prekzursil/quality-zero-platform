@@ -153,19 +153,19 @@ class RenderCodexPromptTests(unittest.TestCase):
         )()
 
         stdout = io.StringIO()
-        with patch.object(
-            render_codex_prompt, "_parse_args", return_value=args
-        ), patch.object(
-            render_codex_prompt, "load_inventory", return_value={"repos": []}
-        ), patch.object(
-            render_codex_prompt,
-            "load_repo_profile",
-            return_value={"slug": "Prekzursil/quality-zero-platform"},
-        ), patch.object(
-            render_codex_prompt, "_render_prompt", return_value=prompt_text
-        ), patch(
-            "sys.stdout",
-            stdout,
+        with (
+            patch.object(render_codex_prompt, "_parse_args", return_value=args),
+            patch.object(render_codex_prompt, "load_inventory", return_value={"repos": []}),
+            patch.object(
+                render_codex_prompt,
+                "load_repo_profile",
+                return_value={"slug": "Prekzursil/quality-zero-platform"},
+            ),
+            patch.object(render_codex_prompt, "_render_prompt", return_value=prompt_text),
+            patch(
+                "sys.stdout",
+                stdout,
+            ),
         ):
             self.assertEqual(render_codex_prompt.main(), 0)
 
@@ -174,16 +174,15 @@ class RenderCodexPromptTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "prompt.md"
             args.output = str(output_path)
-            with patch.object(
-                render_codex_prompt, "_parse_args", return_value=args
-            ), patch.object(
-                render_codex_prompt, "load_inventory", return_value={"repos": []}
-            ), patch.object(
-                render_codex_prompt,
-                "load_repo_profile",
-                return_value={"slug": "Prekzursil/quality-zero-platform"},
-            ), patch.object(
-                render_codex_prompt, "_render_prompt", return_value=prompt_text
+            with (
+                patch.object(render_codex_prompt, "_parse_args", return_value=args),
+                patch.object(render_codex_prompt, "load_inventory", return_value={"repos": []}),
+                patch.object(
+                    render_codex_prompt,
+                    "load_repo_profile",
+                    return_value={"slug": "Prekzursil/quality-zero-platform"},
+                ),
+                patch.object(render_codex_prompt, "_render_prompt", return_value=prompt_text),
             ):
                 self.assertEqual(render_codex_prompt.main(), 0)
             self.assertEqual(output_path.read_text(encoding="utf-8"), prompt_text)
@@ -202,21 +201,27 @@ class RenderCodexPromptTests(unittest.TestCase):
             "codex_environment": {},
         }
         buffer = io.StringIO()
-        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
-            sys,
-            "argv",
-            [str(script_path), "--repo-slug", "Prekzursil/quality-zero-platform"],
-        ), patch.object(sys, "path", trimmed_sys_path[:]), patch(
-            "scripts.quality.render_codex_prompt.load_inventory",
-            return_value=fake_inventory,
-        ), patch(
-            "scripts.quality.render_codex_prompt.load_repo_profile",
-            return_value=fake_profile,
-        ), patch(
-            "scripts.quality.render_codex_prompt.active_required_contexts",
-            return_value=["Coverage 100 Gate"],
-        ), patch(
-            "sys.stdout", buffer
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            patch.object(
+                sys,
+                "argv",
+                [str(script_path), "--repo-slug", "Prekzursil/quality-zero-platform"],
+            ),
+            patch.object(sys, "path", trimmed_sys_path[:]),
+            patch(
+                "scripts.quality.render_codex_prompt.load_inventory",
+                return_value=fake_inventory,
+            ),
+            patch(
+                "scripts.quality.render_codex_prompt.load_repo_profile",
+                return_value=fake_profile,
+            ),
+            patch(
+                "scripts.quality.render_codex_prompt.active_required_contexts",
+                return_value=["Coverage 100 Gate"],
+            ),
+            patch("sys.stdout", buffer),
         ):
             cwd = Path(tmpdir)
             previous = Path.cwd()

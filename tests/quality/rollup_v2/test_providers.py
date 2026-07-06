@@ -1,4 +1,5 @@
 """Tests for provider priority ranking (per design §A.4.3)."""
+
 from __future__ import absolute_import
 
 import sys

@@ -60,11 +60,16 @@ _SHADOW_UNTIL_LINE_RE = re.compile(r"^(?P<indent>\s*)shadow_until:\s*.+$")
 
 
 def _run_gh(
-    args: List[str], *, runner: ProcessRunner,
+    args: List[str],
+    *,
+    runner: ProcessRunner,
 ) -> "subprocess.CompletedProcess[str]":
     """Invoke ``gh`` with shared defaults (capture, text, check=False)."""
     return runner(
-        ["gh", *args], capture_output=True, text=True, check=False,
+        ["gh", *args],
+        capture_output=True,
+        text=True,
+        check=False,
     )  # nosec B603 — gh args are controlled
 
 
@@ -78,12 +83,18 @@ def count_consecutive_green_shadow_runs(
 ) -> int:
     """Count contiguous newest-first green runs of ``workflow`` on ``branch``."""
     args = [
-        "run", "list",
-        "--repo", slug,
-        "--workflow", workflow,
-        "--branch", branch,
-        "--limit", str(limit),
-        "--json", "conclusion,status",
+        "run",
+        "list",
+        "--repo",
+        slug,
+        "--workflow",
+        workflow,
+        "--branch",
+        branch,
+        "--limit",
+        str(limit),
+        "--json",
+        "conclusion,status",
     ]
     completed = _run_gh(args, runner=runner)
     payload = json.loads(completed.stdout) if completed.stdout else []
@@ -105,7 +116,9 @@ def count_consecutive_green_shadow_runs(
 
 
 def should_promote(
-    *, green_run_count: int, required: int = DEFAULT_GREEN_RUN_THRESHOLD,
+    *,
+    green_run_count: int,
+    required: int = DEFAULT_GREEN_RUN_THRESHOLD,
 ) -> bool:
     """Return True iff ``green_run_count`` meets/exceeds ``required``."""
     return green_run_count >= required
@@ -115,8 +128,7 @@ def promote_profile(profile_yaml: str, *, target_phase: str) -> str:
     """Rewrite ``mode.phase`` and clear ``shadow_until`` in ``profile_yaml``."""
     if target_phase not in ALLOWED_TARGET_PHASES:
         raise ValueError(
-            f"target_phase must be one of {ALLOWED_TARGET_PHASES}; "
-            f"got {target_phase!r}",
+            f"target_phase must be one of {ALLOWED_TARGET_PHASES}; got {target_phase!r}",
         )
     rewritten_lines: List[str] = []
     found_shadow_phase = False
@@ -137,8 +149,7 @@ def promote_profile(profile_yaml: str, *, target_phase: str) -> str:
         rewritten_lines.append(line)
     if not found_shadow_phase:
         raise ValueError(
-            "promote_profile requires an existing 'mode.phase: shadow' line; "
-            "profile is already past shadow phase.",
+            "promote_profile requires an existing 'mode.phase: shadow' line; profile is already past shadow phase.",
         )
     return "".join(rewritten_lines)
 
@@ -155,15 +166,16 @@ def compute_promotion_plan(
 ) -> Dict[str, Any]:
     """Return ``{ready, green_runs, promoted_yaml}`` summary for the workflow."""
     green_runs = count_consecutive_green_shadow_runs(
-        slug=slug, workflow=workflow, branch=branch, runner=runner,
+        slug=slug,
+        workflow=workflow,
+        branch=branch,
+        runner=runner,
     )
     ready = should_promote(
-        green_run_count=green_runs, required=required_green,
+        green_run_count=green_runs,
+        required=required_green,
     )
-    promoted_yaml = (
-        promote_profile(profile_yaml, target_phase=target_phase)
-        if ready else ""
-    )
+    promoted_yaml = promote_profile(profile_yaml, target_phase=target_phase) if ready else ""
     return {
         "ready": ready,
         "green_runs": green_runs,
@@ -193,10 +205,13 @@ if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
         target_phase=_args.target_phase,
         required_green=_args.required,
     )
-    print(json.dumps(
-        {"ready": _plan["ready"], "green_runs": _plan["green_runs"]},
-        indent=2, sort_keys=True,
-    ))
+    print(
+        json.dumps(
+            {"ready": _plan["ready"], "green_runs": _plan["green_runs"]},
+            indent=2,
+            sort_keys=True,
+        )
+    )
     if _plan["ready"]:
         if _args.out:
             Path(_args.out).write_text(_plan["promoted_yaml"], encoding="utf-8")

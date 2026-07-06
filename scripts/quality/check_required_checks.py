@@ -19,9 +19,7 @@ from scripts.security_helpers import load_json_https
 
 def _parse_args() -> argparse.Namespace:
     """Parse CLI arguments for the required-context gate."""
-    parser = argparse.ArgumentParser(
-        description="Wait for required GitHub contexts and assert they are successful."
-    )
+    parser = argparse.ArgumentParser(description="Wait for required GitHub contexts and assert they are successful.")
     parser.add_argument("--repo", required=True, help="owner/repo")
     parser.add_argument("--sha", required=True, help="commit SHA")
     parser.add_argument(
@@ -112,9 +110,7 @@ def _resolve_observed_context(
     exact = contexts.get(context)
     if exact:
         return exact
-    suffix_matches = [
-        details for name, details in contexts.items() if name.endswith(f" / {context}")
-    ]
+    suffix_matches = [details for name, details in contexts.items() if name.endswith(f" / {context}")]
     if len(suffix_matches) == 1:
         return suffix_matches[0]
     return None
@@ -144,11 +140,7 @@ def _evaluate(
     contexts: Dict[str, Dict[str, str]],
 ) -> Tuple[str, List[str], List[str]]:
     """Return overall gate status plus missing and failed required contexts."""
-    missing = [
-        context
-        for context in required
-        if _resolve_observed_context(context, contexts) is None
-    ]
+    missing = [context for context in required if _resolve_observed_context(context, contexts) is None]
     failed = [
         failure
         for context in required
@@ -248,9 +240,7 @@ def _render_md(payload: Mapping[str, Any]) -> str:
 def main() -> int:
     """Run the required-context gate and write its JSON and markdown reports."""
     args = _parse_args()
-    token = (
-        os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")
-    ).strip()
+    token = (os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")).strip()
     required = [item.strip() for item in args.required_context if item.strip()]
     if not required:
         raise SystemExit("At least one --required-context is required")

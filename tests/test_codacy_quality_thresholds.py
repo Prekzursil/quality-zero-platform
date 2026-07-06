@@ -6,8 +6,8 @@ import unittest
 from typing import Any, Dict
 
 from scripts.quality.codacy_quality_thresholds import (
-    CodacyQualitySnapshot,
     DEFAULT_COVERAGE_FLOOR,
+    CodacyQualitySnapshot,
     evaluate_quality_thresholds,
     fetch_repository_quality,
     parse_quality_snapshot,
@@ -124,7 +124,8 @@ class EvaluateThresholdsTests(unittest.TestCase):
         payload = _qzp_payload(coverage_percentage=85)
         payload["data"]["complexFilesPercentage"] = 5
         findings = evaluate_quality_thresholds(
-            parse_quality_snapshot(payload), coverage_floor=80,
+            parse_quality_snapshot(payload),
+            coverage_floor=80,
         )
         self.assertEqual(findings, [])
 
@@ -160,7 +161,9 @@ class FetchRepositoryQualityTests(unittest.TestCase):
             return _qzp_payload()
 
         snapshot = fetch_repository_quality(
-            "https://app.codacy.com/api/v3/example", "tok", request_json=fake_request,
+            "https://app.codacy.com/api/v3/example",
+            "tok",
+            request_json=fake_request,
         )
         self.assertEqual(captured["url"], "https://app.codacy.com/api/v3/example")
         self.assertEqual(captured["token"], "tok")

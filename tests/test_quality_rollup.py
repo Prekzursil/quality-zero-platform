@@ -34,11 +34,14 @@ def pending_then_success_contexts():
 
 def exercise_wait_for_contexts(responses):
     """Handle exercise wait for contexts."""
-    with patch.object(
-        build_quality_rollup,
-        "load_check_contexts",
-        side_effect=responses,
-    ), patch("scripts.quality.build_quality_rollup.time.sleep") as sleep_mock:
+    with (
+        patch.object(
+            build_quality_rollup,
+            "load_check_contexts",
+            side_effect=responses,
+        ),
+        patch("scripts.quality.build_quality_rollup.time.sleep") as sleep_mock,
+    ):
         contexts = build_quality_rollup._wait_for_contexts(
             build_quality_rollup.ContextWaitRequest(
                 repo="owner/repo",
@@ -118,9 +121,7 @@ class QualityRollupTests(unittest.TestCase):
                 "Sonar Zero",
             ],
         )
-        self.assertEqual(
-            rollup["contexts"][3]["detail"], "Sonar reports 2 open issues (expected 0)."
-        )
+        self.assertEqual(rollup["contexts"][3]["detail"], "Sonar reports 2 open issues (expected 0).")
         self.assertEqual(rollup["contexts"][1]["detail"], "Open issues: 0")
 
     def test_render_rollup_markdown_and_comment_body_include_marker(self) -> None:
@@ -163,15 +164,8 @@ class QualityRollupTests(unittest.TestCase):
                 '{"status":"fail","findings":["bad"]}',
                 encoding="utf-8",
             )
-            (root / "deepsource_visible-artifacts" / "deepsource-visible-zero").mkdir(
-                parents=True
-            )
-            (
-                root
-                / "deepsource_visible-artifacts"
-                / "deepsource-visible-zero"
-                / "deepsource.json"
-            ).write_text(
+            (root / "deepsource_visible-artifacts" / "deepsource-visible-zero").mkdir(parents=True)
+            (root / "deepsource_visible-artifacts" / "deepsource-visible-zero" / "deepsource.json").write_text(
                 '{"status":"pass","open_issues":0,"findings":[]}',
                 encoding="utf-8",
             )
@@ -202,18 +196,10 @@ class QualityRollupTests(unittest.TestCase):
                 "source": "check_run",
             },
         }
-        self.assertEqual(
-            build_quality_rollup._status_from_context("Semgrep Zero", contexts), "pass"
-        )
-        self.assertEqual(
-            build_quality_rollup._status_from_context("DeepScan", contexts), "pass"
-        )
-        self.assertEqual(
-            build_quality_rollup._status_from_context("Pending", contexts), "pending"
-        )
-        self.assertEqual(
-            build_quality_rollup._status_from_context("Missing", contexts), "missing"
-        )
+        self.assertEqual(build_quality_rollup._status_from_context("Semgrep Zero", contexts), "pass")
+        self.assertEqual(build_quality_rollup._status_from_context("DeepScan", contexts), "pass")
+        self.assertEqual(build_quality_rollup._status_from_context("Pending", contexts), "pending")
+        self.assertEqual(build_quality_rollup._status_from_context("Missing", contexts), "missing")
 
     def test_load_check_contexts_merges_check_runs_and_statuses(self) -> None:
         """Cover load check contexts merges check runs and statuses."""
@@ -230,23 +216,15 @@ class QualityRollupTests(unittest.TestCase):
             {"statuses": [{"context": "DeepScan", "state": "success"}]},
         ]
 
-        with patch.object(
-            build_quality_rollup, "_github_payload", side_effect=responses
-        ):
-            contexts = build_quality_rollup.load_check_contexts(
-                "owner/repo", "sha", "token"
-            )
+        with patch.object(build_quality_rollup, "_github_payload", side_effect=responses):
+            contexts = build_quality_rollup.load_check_contexts("owner/repo", "sha", "token")
 
-        self.assertEqual(
-            contexts["shared-scanner-matrix / QLTY Zero"]["conclusion"], "success"
-        )
+        self.assertEqual(contexts["shared-scanner-matrix / QLTY Zero"]["conclusion"], "success")
         self.assertEqual(contexts["DeepScan"]["source"], "status")
 
     def test_wait_for_contexts_polls_until_pending_contexts_settle(self) -> None:
         """Cover wait for contexts polls until pending contexts settle."""
-        contexts, sleep_mock = exercise_wait_for_contexts(
-            pending_then_success_contexts()
-        )
+        contexts, sleep_mock = exercise_wait_for_contexts(pending_then_success_contexts())
 
         self.assertEqual(contexts["Coverage 100 Gate"]["conclusion"], "success")
         sleep_mock.assert_called_once()
@@ -273,21 +251,23 @@ class QualityRollupTests(unittest.TestCase):
         self,
     ) -> None:
         """Cover wait for contexts returns empty when timeout expires before first poll."""
-        with patch.object(
-            build_quality_rollup,
-            "load_check_contexts",
-            return_value={
-                "Coverage 100 Gate": {
-                    "state": "in_progress",
-                    "conclusion": "",
-                    "source": "check_run",
-                }
-            },
-        ), patch(
-            "scripts.quality.build_quality_rollup.time.sleep"
-        ) as sleep_mock, patch(
-            "scripts.quality.build_quality_rollup.time.time",
-            side_effect=[10, 12],
+        with (
+            patch.object(
+                build_quality_rollup,
+                "load_check_contexts",
+                return_value={
+                    "Coverage 100 Gate": {
+                        "state": "in_progress",
+                        "conclusion": "",
+                        "source": "check_run",
+                    }
+                },
+            ),
+            patch("scripts.quality.build_quality_rollup.time.sleep") as sleep_mock,
+            patch(
+                "scripts.quality.build_quality_rollup.time.time",
+                side_effect=[10, 12],
+            ),
         ):
             contexts = build_quality_rollup._wait_for_contexts(
                 build_quality_rollup.ContextWaitRequest(

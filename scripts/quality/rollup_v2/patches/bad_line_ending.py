@@ -1,4 +1,5 @@
 """Deterministic patch generator for `bad-line-ending` category."""
+
 from __future__ import absolute_import
 
 import difflib
@@ -26,12 +27,14 @@ def generate(
     patched = source_file_content.replace("\r\n", "\n")
     lines = source_file_content.splitlines(keepends=True)
     patched_lines = patched.splitlines(keepends=True)
-    diff = "".join(difflib.unified_diff(
-        lines,
-        patched_lines,
-        fromfile=f"a/{finding.file}",
-        tofile=f"b/{finding.file}",
-    ))
+    diff = "".join(
+        difflib.unified_diff(
+            lines,
+            patched_lines,
+            fromfile=f"a/{finding.file}",
+            tofile=f"b/{finding.file}",
+        )
+    )
     return PatchResult(
         unified_diff=diff,
         confidence="high",

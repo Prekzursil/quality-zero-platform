@@ -11,9 +11,8 @@ import datetime as dt
 import unittest
 from unittest.mock import MagicMock
 
-from scripts.quality import alert_dispatch
+from scripts.quality import alert_dispatch, alerts
 from scripts.quality import alert_triggers as at
-from scripts.quality import alerts
 
 
 class DispatchDetectedTriggersTests(unittest.TestCase):
@@ -24,17 +23,21 @@ class DispatchDetectedTriggersTests(unittest.TestCase):
         triggers = [
             at.AlertTrigger(
                 alert_type=alerts.AlertType.REGRESSION,
-                subject="org/repo", body="body-a",
+                subject="org/repo",
+                body="body-a",
             ),
             at.AlertTrigger(
                 alert_type=alerts.AlertType.FLAG_MISSING,
-                subject="org/repo:ui", body="body-b",
+                subject="org/repo:ui",
+                body="body-b",
             ),
         ]
-        opener = MagicMock(side_effect=[
-            {"number": 1, "title": "x", "created": True},
-            {"number": 2, "title": "y", "created": True},
-        ])
+        opener = MagicMock(
+            side_effect=[
+                {"number": 1, "title": "x", "created": True},
+                {"number": 2, "title": "y", "created": True},
+            ]
+        )
         results = alert_dispatch.dispatch_detected_triggers(
             platform_slug="Prekzursil/quality-zero-platform",
             triggers=triggers,
@@ -51,7 +54,8 @@ class DispatchDetectedTriggersTests(unittest.TestCase):
         """``dry_run=True`` yields stub records and never calls the opener."""
         trigger = at.AlertTrigger(
             alert_type=alerts.AlertType.REGRESSION,
-            subject="org/repo", body="body",
+            subject="org/repo",
+            body="body",
         )
         opener = MagicMock()
         results = alert_dispatch.dispatch_detected_triggers(
@@ -84,7 +88,7 @@ class BuildTriggersFromFleetStateTests(unittest.TestCase):
         """Coverage regression + deadline missed + flag missing all fire."""
         state = {
             "today": dt.date(2026, 4, 23),
-            "now": dt.datetime(2026, 4, 23, tzinfo=dt.timezone.utc),
+            "now": dt.datetime(2026, 4, 23, tzinfo=dt.UTC),
             "profiles": [
                 {
                     "slug": "org/cov-drop",
@@ -112,7 +116,7 @@ class BuildTriggersFromFleetStateTests(unittest.TestCase):
                 {
                     "slug": "org/stale",
                     "issue_number": 7,
-                    "opened_at": dt.datetime(2026, 4, 10, tzinfo=dt.timezone.utc),
+                    "opened_at": dt.datetime(2026, 4, 10, tzinfo=dt.UTC),
                 },
             ],
             "drift_prs": [],
@@ -130,7 +134,7 @@ class BuildTriggersFromFleetStateTests(unittest.TestCase):
         """All-empty inputs → zero triggers."""
         state = {
             "today": dt.date(2026, 4, 23),
-            "now": dt.datetime(2026, 4, 23, tzinfo=dt.timezone.utc),
+            "now": dt.datetime(2026, 4, 23, tzinfo=dt.UTC),
             "profiles": [],
             "bypass_issues": [],
             "drift_prs": [],
@@ -144,7 +148,7 @@ class BuildTriggersFromFleetStateTests(unittest.TestCase):
         """Empty staging_results → no fleet-bump alert (no wave happened)."""
         state = {
             "today": dt.date(2026, 4, 23),
-            "now": dt.datetime(2026, 4, 23, tzinfo=dt.timezone.utc),
+            "now": dt.datetime(2026, 4, 23, tzinfo=dt.UTC),
             "profiles": [],
             "bypass_issues": [],
             "drift_prs": [],
@@ -161,24 +165,21 @@ class BuildTriggersFromFleetStateTests(unittest.TestCase):
         """Drift PR open > 3 days in state → drift-stuck trigger."""
         state = {
             "today": dt.date(2026, 4, 23),
-            "now": dt.datetime(2026, 4, 23, tzinfo=dt.timezone.utc),
+            "now": dt.datetime(2026, 4, 23, tzinfo=dt.UTC),
             "profiles": [],
             "bypass_issues": [],
             "drift_prs": [
                 {
                     "slug": "org/slow-repo",
                     "pr_number": 77,
-                    "opened_at": dt.datetime(2026, 4, 18, tzinfo=dt.timezone.utc),
+                    "opened_at": dt.datetime(2026, 4, 18, tzinfo=dt.UTC),
                 },
             ],
             "staging_results": [],
             "recipe_name": "",
         }
         triggers = alert_dispatch.build_triggers_from_fleet_state(state)
-        drift_triggers = [
-            t for t in triggers
-            if t.alert_type == alerts.AlertType.DRIFT_STUCK
-        ]
+        drift_triggers = [t for t in triggers if t.alert_type == alerts.AlertType.DRIFT_STUCK]
         self.assertEqual(len(drift_triggers), 1)
         self.assertEqual(drift_triggers[0].subject, "org/slow-repo#77")
 
@@ -186,7 +187,7 @@ class BuildTriggersFromFleetStateTests(unittest.TestCase):
         """Staging failures + recipe name → bump alert fires."""
         state = {
             "today": dt.date(2026, 4, 23),
-            "now": dt.datetime(2026, 4, 23, tzinfo=dt.timezone.utc),
+            "now": dt.datetime(2026, 4, 23, tzinfo=dt.UTC),
             "profiles": [],
             "bypass_issues": [],
             "drift_prs": [],
@@ -196,10 +197,7 @@ class BuildTriggersFromFleetStateTests(unittest.TestCase):
             "recipe_name": "Node 20 -> 24",
         }
         triggers = alert_dispatch.build_triggers_from_fleet_state(state)
-        bump = [
-            t for t in triggers
-            if t.alert_type == alerts.AlertType.FLEET_BUMP_FAIL
-        ]
+        bump = [t for t in triggers if t.alert_type == alerts.AlertType.FLEET_BUMP_FAIL]
         self.assertEqual(len(bump), 1)
 
 

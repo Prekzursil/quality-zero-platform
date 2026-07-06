@@ -21,7 +21,10 @@ from scripts.quality import alerts
 def _fake_completed(stdout: str = "", returncode: int = 0) -> subprocess.CompletedProcess:
     """Build a lightweight ``CompletedProcess`` for runner doubles."""
     return subprocess.CompletedProcess(
-        args=["gh"], returncode=returncode, stdout=stdout, stderr="",
+        args=["gh"],
+        returncode=returncode,
+        stdout=stdout,
+        stderr="",
     )
 
 
@@ -47,10 +50,12 @@ class AlertTypeRegistryTests(unittest.TestCase):
     def test_label_is_stable_string(self) -> None:
         """``AlertType.label`` is the enum's canonical GitHub label string."""
         self.assertEqual(
-            alerts.AlertType.REGRESSION.label, "alert:regression",
+            alerts.AlertType.REGRESSION.label,
+            "alert:regression",
         )
         self.assertEqual(
-            alerts.AlertType.FLAG_MISSING.label, "alert:flag-missing",
+            alerts.AlertType.FLAG_MISSING.label,
+            "alert:flag-missing",
         )
 
 
@@ -60,17 +65,20 @@ class AlertTitleTests(unittest.TestCase):
     def test_title_format_is_bracket_label_space_subject(self) -> None:
         """``[alert:drift-stuck] org/repo`` canonical format."""
         title = alerts.alert_issue_title(
-            alerts.AlertType.DRIFT_STUCK, "org/repo",
+            alerts.AlertType.DRIFT_STUCK,
+            "org/repo",
         )
         self.assertEqual(title, "[alert:drift-stuck] org/repo")
 
     def test_title_preserves_subject_punctuation_for_flag_alerts(self) -> None:
         """``alert:flag-missing`` carries ``slug:flag`` subjects literally."""
         title = alerts.alert_issue_title(
-            alerts.AlertType.FLAG_MISSING, "Prekzursil/event-link:frontend",
+            alerts.AlertType.FLAG_MISSING,
+            "Prekzursil/event-link:frontend",
         )
         self.assertEqual(
-            title, "[alert:flag-missing] Prekzursil/event-link:frontend",
+            title,
+            "[alert:flag-missing] Prekzursil/event-link:frontend",
         )
 
 
@@ -79,10 +87,16 @@ class FindExistingAlertIssueTests(unittest.TestCase):
 
     def test_match_found_returns_the_issue_mapping(self) -> None:
         """When gh returns an issue with matching title, it is returned."""
-        runner = MagicMock(return_value=_fake_completed(json.dumps([
-            {"number": 42, "title": "[alert:drift-stuck] org/repo", "state": "open"},
-            {"number": 99, "title": "other-thing", "state": "open"},
-        ])))
+        runner = MagicMock(
+            return_value=_fake_completed(
+                json.dumps(
+                    [
+                        {"number": 42, "title": "[alert:drift-stuck] org/repo", "state": "open"},
+                        {"number": 99, "title": "other-thing", "state": "open"},
+                    ]
+                )
+            )
+        )
         issue = alerts.find_existing_alert_issue(
             "Prekzursil/quality-zero-platform",
             alert_type=alerts.AlertType.DRIFT_STUCK,
@@ -94,9 +108,15 @@ class FindExistingAlertIssueTests(unittest.TestCase):
 
     def test_no_match_returns_none(self) -> None:
         """When no matching title in gh output, return None."""
-        runner = MagicMock(return_value=_fake_completed(json.dumps([
-            {"number": 99, "title": "unrelated", "state": "open"},
-        ])))
+        runner = MagicMock(
+            return_value=_fake_completed(
+                json.dumps(
+                    [
+                        {"number": 99, "title": "unrelated", "state": "open"},
+                    ]
+                )
+            )
+        )
         issue = alerts.find_existing_alert_issue(
             "Prekzursil/quality-zero-platform",
             alert_type=alerts.AlertType.DRIFT_STUCK,
@@ -148,9 +168,13 @@ class OpenAlertIssueTests(unittest.TestCase):
 
     def test_existing_open_issue_is_reused(self) -> None:
         """When a matching open issue exists, ``created`` is False."""
-        list_result = _fake_completed(json.dumps([
-            {"number": 7, "title": "[alert:regression] org/repo", "state": "open"},
-        ]))
+        list_result = _fake_completed(
+            json.dumps(
+                [
+                    {"number": 7, "title": "[alert:regression] org/repo", "state": "open"},
+                ]
+            )
+        )
         runner = MagicMock(return_value=list_result)
         result = alerts.open_alert_issue(
             "Prekzursil/quality-zero-platform",
@@ -250,9 +274,13 @@ class CloseAlertIssueTests(unittest.TestCase):
     def test_closes_matching_open_issue(self) -> None:
         """When a matching issue exists, ``gh issue close`` is called."""
         responses: List[subprocess.CompletedProcess] = [
-            _fake_completed(json.dumps([
-                {"number": 11, "title": "[alert:drift-stuck] org/repo", "state": "open"},
-            ])),
+            _fake_completed(
+                json.dumps(
+                    [
+                        {"number": 11, "title": "[alert:drift-stuck] org/repo", "state": "open"},
+                    ]
+                )
+            ),
             _fake_completed(""),  # gh close is silent on success.
         ]
         runner = MagicMock(side_effect=responses)
@@ -273,9 +301,13 @@ class CloseAlertIssueTests(unittest.TestCase):
     def test_close_without_comment_skips_comment_flag(self) -> None:
         """Empty ``close_comment`` → ``gh issue close`` is called without --comment."""
         responses: List[subprocess.CompletedProcess] = [
-            _fake_completed(json.dumps([
-                {"number": 22, "title": "[alert:flag-missing] org/repo:frontend", "state": "open"},
-            ])),
+            _fake_completed(
+                json.dumps(
+                    [
+                        {"number": 22, "title": "[alert:flag-missing] org/repo:frontend", "state": "open"},
+                    ]
+                )
+            ),
             _fake_completed(""),
         ]
         runner = MagicMock(side_effect=responses)

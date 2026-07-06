@@ -1,11 +1,11 @@
 """Tests for renderer provider summary table + alternate views (per design §4.1 + §A.1.1)."""
-from __future__ import absolute_import
 
-from typing import Tuple
+from __future__ import absolute_import
 
 import sys
 import unittest
 from pathlib import Path
+from typing import Tuple
 
 if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
@@ -121,10 +121,9 @@ class AlternateViewsTests(unittest.TestCase):
         # Each <details> for alternate views should appear after the by-file section
         lines = md.split("\n")
         alt_details = [
-            i for i, l in enumerate(lines)
-            if l.startswith("<details><summary>") and (
-                "View by" in l or "Autofixable" in l
-            )
+            i
+            for i, ln in enumerate(lines)
+            if ln.startswith("<details><summary>") and ("View by" in ln or "Autofixable" in ln)
         ]
         # All three alternate views should exist
         self.assertEqual(len(alt_details), 3)

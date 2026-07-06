@@ -1,4 +1,5 @@
 """Hybrid dedup + corroborator merge (per design §3.3 + §A.3.2)."""
+
 from __future__ import absolute_import
 
 from dataclasses import replace
@@ -43,12 +44,15 @@ def merge_corroborators(findings: List[Finding]) -> Finding:
     # protocol covering any frozen dataclass), so Sonar python:S5886 flags
     # the ``-> Finding`` return type as a downcast. The cast is a no-op at
     # runtime since ``primary`` is concretely a Finding.
-    return cast("Finding", replace(
-        primary,
-        severity=severity,
-        corroboration="multi" if len(findings) >= 2 else "single",
-        corroborators=all_corroborators,
-    ))
+    return cast(
+        "Finding",
+        replace(
+            primary,
+            severity=severity,
+            corroboration="multi" if len(findings) >= 2 else "single",
+            corroborators=all_corroborators,
+        ),
+    )
 
 
 def _pick_primary_by_provider_priority(findings: List[Finding]) -> Finding:
@@ -68,7 +72,4 @@ def assign_stable_ids(findings: List[Finding]) -> List[Finding]:
     Returns a new list — does NOT mutate inputs (frozen dataclasses + replace).
     """
     sorted_findings = sorted(findings, key=lambda f: (f.file, f.line, f.category))
-    return [
-        replace(f, finding_id=f"qzp-{i:04d}")
-        for i, f in enumerate(sorted_findings, start=1)
-    ]
+    return [replace(f, finding_id=f"qzp-{i:04d}") for i, f in enumerate(sorted_findings, start=1)]

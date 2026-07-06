@@ -1,4 +1,5 @@
 """Declining patch generator for `shadowed-builtin` category."""
+
 from __future__ import absolute_import
 
 from scripts.quality.rollup_v2.patches._declining import make_decline_generator

@@ -4,10 +4,10 @@ from __future__ import absolute_import
 
 import importlib
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
-import sys
 from typing import Any, Sequence, Tuple
 from unittest.mock import patch
 
@@ -66,11 +66,7 @@ class RunQltyZeroTests(unittest.TestCase):
         )
         self.assertFalse(run_qlty_zero._smells_output_indicates_findings(""))
         self.assertFalse(run_qlty_zero._smells_output_indicates_findings("no issues"))
-        self.assertFalse(
-            run_qlty_zero._smells_output_indicates_findings(
-                "\u001b[32m✔ No issues\u001b[0m"
-            )
-        )
+        self.assertFalse(run_qlty_zero._smells_output_indicates_findings("\u001b[32m✔ No issues\u001b[0m"))
         self.assertTrue(run_qlty_zero._smells_output_indicates_findings("one smell"))
 
     def test_render_md_uses_none_when_a_check_has_no_output_tail(self) -> None:
@@ -135,11 +131,9 @@ class RunQltyZeroTests(unittest.TestCase):
             {"returncode": 1, "stdout": "smell summary\n", "stderr": "stderr noise\n"},
         )()
 
-        result, repo_dir, _json_text, _markdown, call_args = (
-            self._run_main_with_completed_processes(
-                completed_check,
-                completed_smells,
-            )
+        result, repo_dir, _json_text, _markdown, call_args = self._run_main_with_completed_processes(
+            completed_check,
+            completed_smells,
         )
 
         # Smells now block the gate: a non-zero qlty-smells return code propagates
@@ -177,11 +171,9 @@ class RunQltyZeroTests(unittest.TestCase):
             {"returncode": 1, "stdout": "smell summary\n", "stderr": "stderr noise\n"},
         )()
 
-        result, _repo_dir, json_text, markdown, _call_args = (
-            self._run_main_with_completed_processes(
-                completed_check,
-                completed_smells,
-            )
+        result, _repo_dir, json_text, markdown, _call_args = self._run_main_with_completed_processes(
+            completed_check,
+            completed_smells,
         )
 
         # Smells failures block the gate: check=pass + smells=fail => overall fail.
@@ -215,9 +207,7 @@ class RunQltyZeroTests(unittest.TestCase):
 
             with (
                 patch("scripts.quality.run_qlty_zero.shutil.which", return_value=None),
-                patch(
-                    "scripts.quality.run_qlty_zero._write_payload", return_value=0
-                ) as mock_write,
+                patch("scripts.quality.run_qlty_zero._write_payload", return_value=0) as mock_write,
                 patch(
                     "scripts.quality.run_qlty_zero.sys.argv",
                     [
@@ -238,15 +228,8 @@ class RunQltyZeroTests(unittest.TestCase):
             payload = mock_write.call_args.args[0]
             self.assertEqual(payload["status"], "error")
             self.assertEqual(payload["return_code"], 1)
-            self.assertEqual(
-                [check["name"] for check in payload["checks"]], ["check", "smells"]
-            )
-            self.assertTrue(
-                all(
-                    "command not found" in check["output_tail"]
-                    for check in payload["checks"]
-                )
-            )
+            self.assertEqual([check["name"] for check in payload["checks"]], ["check", "smells"])
+            self.assertTrue(all("command not found" in check["output_tail"] for check in payload["checks"]))
 
     def test_main_returns_the_report_error_when_report_writing_fails(self) -> None:
         """Cover main returns the report error when report writing fails."""
@@ -299,17 +282,11 @@ class RunQltyZeroTests(unittest.TestCase):
         duplication and complexity findings; this test now asserts the
         fail-on-findings semantics.
         """
-        completed_check = type(
-            "Completed", (), {"returncode": 0, "stdout": "clean\n", "stderr": ""}
-        )()
-        completed_smells = type(
-            "Completed", (), {"returncode": 0, "stdout": "one smell\n", "stderr": ""}
-        )()
-        result, _repo_dir, json_text, _markdown, _call_args = (
-            self._run_main_with_completed_processes(
-                completed_check,
-                completed_smells,
-            )
+        completed_check = type("Completed", (), {"returncode": 0, "stdout": "clean\n", "stderr": ""})()
+        completed_smells = type("Completed", (), {"returncode": 0, "stdout": "one smell\n", "stderr": ""})()
+        result, _repo_dir, json_text, _markdown, _call_args = self._run_main_with_completed_processes(
+            completed_check,
+            completed_smells,
         )
 
         # Smells findings → overall fail, even with a 0 CLI exit code from qlty
@@ -325,17 +302,11 @@ class RunQltyZeroTests(unittest.TestCase):
         self,
     ) -> None:
         """Cover main returns success and still writes artifacts for clean check."""
-        completed_check = type(
-            "Completed", (), {"returncode": 0, "stdout": "clean\n", "stderr": ""}
-        )()
-        completed_smells = type(
-            "Completed", (), {"returncode": 0, "stdout": "no smells\n", "stderr": ""}
-        )()
-        result, _repo_dir, json_text, markdown, _call_args = (
-            self._run_main_with_completed_processes(
-                completed_check,
-                completed_smells,
-            )
+        completed_check = type("Completed", (), {"returncode": 0, "stdout": "clean\n", "stderr": ""})()
+        completed_smells = type("Completed", (), {"returncode": 0, "stdout": "no smells\n", "stderr": ""})()
+        result, _repo_dir, json_text, markdown, _call_args = self._run_main_with_completed_processes(
+            completed_check,
+            completed_smells,
         )
 
         self.assertEqual(result, 0)

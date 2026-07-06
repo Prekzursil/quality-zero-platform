@@ -1,4 +1,5 @@
 """DeepSource normalizer (per design §4.2 + §A.6)."""
+
 from __future__ import absolute_import
 
 from pathlib import Path
@@ -18,10 +19,17 @@ _SEVERITY_MAP = {
     "MINOR": "low",
 }
 
-_SECURITY_CATEGORY_HINTS = frozenset({
-    "sql-injection", "command-injection", "hardcoded-password-string",
-    "weak-crypto", "insecure-random", "exec-used", "xss",
-})
+_SECURITY_CATEGORY_HINTS = frozenset(
+    {
+        "sql-injection",
+        "command-injection",
+        "hardcoded-password-string",
+        "weak-crypto",
+        "insecure-random",
+        "exec-used",
+        "xss",
+    }
+)
 
 
 def _resolve_location(issue: Dict[str, Any]) -> Tuple[str, int]:
@@ -40,23 +48,21 @@ class DeepSourceNormalizer(BaseNormalizer):
         for index, issue in enumerate(issues):
             issue_code = str(issue.get("issue_code", ""))
             category = lookup("DeepSource", issue_code) or "uncategorized"
-            group = (
-                CATEGORY_GROUP_SECURITY
-                if category in _SECURITY_CATEGORY_HINTS
-                else CATEGORY_GROUP_QUALITY
-            )
+            group = CATEGORY_GROUP_SECURITY if category in _SECURITY_CATEGORY_HINTS else CATEGORY_GROUP_QUALITY
             file_path, line = _resolve_location(issue)
             title = str(issue.get("title", ""))
-            yield self._build_finding(FindingDraft(
-                finding_id=f"deepsource-{index:04d}",
-                file=file_path,
-                line=line,
-                category=category,
-                category_group=group,
-                severity=_SEVERITY_MAP.get(str(issue.get("severity", "MAJOR")), "medium"),
-                primary_message=title,
-                rule_id=issue_code,
-                rule_url=None,
-                original_message=title,
-                context_snippet="",
-            ))
+            yield self._build_finding(
+                FindingDraft(
+                    finding_id=f"deepsource-{index:04d}",
+                    file=file_path,
+                    line=line,
+                    category=category,
+                    category_group=group,
+                    severity=_SEVERITY_MAP.get(str(issue.get("severity", "MAJOR")), "medium"),
+                    primary_message=title,
+                    rule_id=issue_code,
+                    rule_url=None,
+                    original_message=title,
+                    context_snippet="",
+                )
+            )

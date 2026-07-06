@@ -106,20 +106,32 @@ class DriftSummaryTests(unittest.TestCase):
         """Every status appears in the output even when zero."""
         entries = [
             ds.DriftEntry(
-                template_path="a", output_path="a", status="missing",
-                diff="", proposed_content="",
+                template_path="a",
+                output_path="a",
+                status="missing",
+                diff="",
+                proposed_content="",
             ),
             ds.DriftEntry(
-                template_path="b", output_path="b", status="drift",
-                diff="", proposed_content="",
+                template_path="b",
+                output_path="b",
+                status="drift",
+                diff="",
+                proposed_content="",
             ),
             ds.DriftEntry(
-                template_path="c", output_path="c", status="drift",
-                diff="", proposed_content="",
+                template_path="c",
+                output_path="c",
+                status="drift",
+                diff="",
+                proposed_content="",
             ),
             ds.DriftEntry(
-                template_path="d", output_path="d", status="in_sync",
-                diff="", proposed_content="",
+                template_path="d",
+                output_path="d",
+                status="in_sync",
+                diff="",
+                proposed_content="",
             ),
         ]
         self.assertEqual(
@@ -139,77 +151,88 @@ class CliTests(unittest.TestCase):
 
     def test_missing_profile_json_returns_2(self) -> None:
         """Exit 2 when profile JSON path doesn't exist."""
-        rc = self._run([
-            "--profile-json", "/does/not/exist.json",
-            "--repo-root", str(Path.cwd()),
-        ])
+        rc = self._run(
+            [
+                "--profile-json",
+                "/does/not/exist.json",
+                "--repo-root",
+                str(Path.cwd()),
+            ]
+        )
         self.assertEqual(rc, 2)
 
     def test_missing_repo_root_returns_2(self) -> None:
         """Exit 2 when repo root path doesn't exist or isn't a directory."""
-        profile_path = Path(tempfile.NamedTemporaryFile(
-            delete=False, suffix=".json"
-        ).name)
+        profile_path = Path(tempfile.NamedTemporaryFile(delete=False, suffix=".json").name)
         self.addCleanup(profile_path.unlink, missing_ok=True)
         profile_path.write_text(
             json.dumps({"stack": "python-only", "coverage": {}}),
             encoding="utf-8",
         )
-        rc = self._run([
-            "--profile-json", str(profile_path),
-            "--repo-root", "/nope/not/here",
-        ])
+        rc = self._run(
+            [
+                "--profile-json",
+                str(profile_path),
+                "--repo-root",
+                "/nope/not/here",
+            ]
+        )
         self.assertEqual(rc, 2)
 
     def test_fail_on_drift_flag_returns_1_when_out_of_sync(self) -> None:
         """Exit 1 with ``--fail-on-drift`` and at least one missing/drift entry."""
         profile = {"stack": "python-only", "coverage": {"command": "pytest"}}
-        profile_path = Path(tempfile.NamedTemporaryFile(
-            delete=False, suffix=".json"
-        ).name)
+        profile_path = Path(tempfile.NamedTemporaryFile(delete=False, suffix=".json").name)
         self.addCleanup(profile_path.unlink, missing_ok=True)
         profile_path.write_text(json.dumps(profile), encoding="utf-8")
         repo = _make_temp_repo({})  # empty repo = everything missing
-        rc = self._run([
-            "--profile-json", str(profile_path),
-            "--repo-root", str(repo),
-            "--fail-on-drift",
-        ])
+        rc = self._run(
+            [
+                "--profile-json",
+                str(profile_path),
+                "--repo-root",
+                str(repo),
+                "--fail-on-drift",
+            ]
+        )
         self.assertEqual(rc, 1)
 
     def test_no_fail_on_drift_returns_0_even_with_drift(self) -> None:
         """Without ``--fail-on-drift`` the CLI always returns 0."""
         profile = {"stack": "python-only", "coverage": {"command": "pytest"}}
-        profile_path = Path(tempfile.NamedTemporaryFile(
-            delete=False, suffix=".json"
-        ).name)
+        profile_path = Path(tempfile.NamedTemporaryFile(delete=False, suffix=".json").name)
         self.addCleanup(profile_path.unlink, missing_ok=True)
         profile_path.write_text(json.dumps(profile), encoding="utf-8")
         repo = _make_temp_repo({})
-        rc = self._run([
-            "--profile-json", str(profile_path),
-            "--repo-root", str(repo),
-        ])
+        rc = self._run(
+            [
+                "--profile-json",
+                str(profile_path),
+                "--repo-root",
+                str(repo),
+            ]
+        )
         self.assertEqual(rc, 0)
 
     def test_out_json_writes_report_file(self) -> None:
         """``--out-json`` writes the report instead of printing to stdout."""
         profile = {"stack": "python-only", "coverage": {"command": "pytest"}}
-        profile_path = Path(tempfile.NamedTemporaryFile(
-            delete=False, suffix=".json"
-        ).name)
+        profile_path = Path(tempfile.NamedTemporaryFile(delete=False, suffix=".json").name)
         self.addCleanup(profile_path.unlink, missing_ok=True)
         profile_path.write_text(json.dumps(profile), encoding="utf-8")
         repo = _make_temp_repo({})
-        out_path = Path(tempfile.NamedTemporaryFile(
-            delete=False, suffix=".json"
-        ).name)
+        out_path = Path(tempfile.NamedTemporaryFile(delete=False, suffix=".json").name)
         self.addCleanup(out_path.unlink, missing_ok=True)
-        rc = self._run([
-            "--profile-json", str(profile_path),
-            "--repo-root", str(repo),
-            "--out-json", str(out_path),
-        ])
+        rc = self._run(
+            [
+                "--profile-json",
+                str(profile_path),
+                "--repo-root",
+                str(repo),
+                "--out-json",
+                str(out_path),
+            ]
+        )
         self.assertEqual(rc, 0)
         report = json.loads(out_path.read_text(encoding="utf-8"))
         self.assertIn("summary", report)

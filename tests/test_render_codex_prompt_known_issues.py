@@ -34,12 +34,14 @@ class KnownIssuesSectionTests(unittest.TestCase):
 
     def test_registry_without_qrv2_feeding_entries_is_empty(self) -> None:
         """Entries with ``feeds_qrv2: false`` don't populate the section."""
-        reg = self._write_registry({
-            "QZ-FP-OFF.yml": (
-                "id: QZ-FP-OFF\ntitle: off\ndescription: off\n"
-                "affects: [x]\nfeeds_qrv2: false\nverified_at: '2026-04-23'\n"
-            ),
-        })
+        reg = self._write_registry(
+            {
+                "QZ-FP-OFF.yml": (
+                    "id: QZ-FP-OFF\ntitle: off\ndescription: off\n"
+                    "affects: [x]\nfeeds_qrv2: false\nverified_at: '2026-04-23'\n"
+                ),
+            }
+        )
         self.assertEqual(rcp._render_known_issues_section(reg), "")
 
     def test_shipped_registry_produces_section(self) -> None:
@@ -53,26 +55,30 @@ class KnownIssuesSectionTests(unittest.TestCase):
 
     def test_canonical_fix_rendered_in_code_fence(self) -> None:
         """Each entry's ``fix_snippet`` lands inside a fenced block."""
-        reg = self._write_registry({
-            "QZ-OK-1.yml": (
-                "id: QZ-OK-1\ntitle: title\ndescription: why\n"
-                "affects: [codeql]\nfeeds_qrv2: true\n"
-                "fix_snippet: 'pass # fix'\nverified_at: '2026-04-23'\n"
-            ),
-        })
+        reg = self._write_registry(
+            {
+                "QZ-OK-1.yml": (
+                    "id: QZ-OK-1\ntitle: title\ndescription: why\n"
+                    "affects: [codeql]\nfeeds_qrv2: true\n"
+                    "fix_snippet: 'pass # fix'\nverified_at: '2026-04-23'\n"
+                ),
+            }
+        )
         section = rcp._render_known_issues_section(reg)
         self.assertIn("Canonical fix:", section)
         self.assertIn("```\npass # fix\n```", section)
 
     def test_affects_list_formatted(self) -> None:
         """``affects`` renders as a comma-joined list."""
-        reg = self._write_registry({
-            "QZ-OK-2.yml": (
-                "id: QZ-OK-2\ntitle: t\ndescription: d\n"
-                "affects: [codeql, sonarcloud]\nfeeds_qrv2: true\n"
-                "fix_snippet: 'pass'\nverified_at: '2026-04-23'\n"
-            ),
-        })
+        reg = self._write_registry(
+            {
+                "QZ-OK-2.yml": (
+                    "id: QZ-OK-2\ntitle: t\ndescription: d\n"
+                    "affects: [codeql, sonarcloud]\nfeeds_qrv2: true\n"
+                    "fix_snippet: 'pass'\nverified_at: '2026-04-23'\n"
+                ),
+            }
+        )
         section = rcp._render_known_issues_section(reg)
         self.assertIn("Affects: codeql, sonarcloud", section)
 
@@ -123,9 +129,7 @@ class PromptIntegrationTests(unittest.TestCase):
 
     def test_known_issues_section_omitted_when_registry_empty(self) -> None:
         """Empty registry → prompt has no dangling heading."""
-        with patch.object(
-            rcp, "_render_known_issues_section", return_value=""
-        ):
+        with patch.object(rcp, "_render_known_issues_section", return_value=""):
             prompt = rcp._render_prompt(
                 self._MIN_PROFILE,
                 lane="remediation",

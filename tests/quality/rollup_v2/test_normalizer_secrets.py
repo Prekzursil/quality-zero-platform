@@ -1,4 +1,5 @@
 """Tests for QualitySecrets normalizer (per §6.9, special handling)."""
+
 from __future__ import absolute_import
 
 import json

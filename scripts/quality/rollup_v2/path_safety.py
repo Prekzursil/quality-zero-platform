@@ -7,6 +7,7 @@ and is NOT modified in PR 1 (per design §B.2.3 — "reuses as-is"). All path
 normalization for rollup_v2 happens here, keeping the change inside PR 1's
 coverage scope (`scripts/quality/rollup_v2/` per A.3.3).
 """
+
 from __future__ import absolute_import
 
 from pathlib import Path

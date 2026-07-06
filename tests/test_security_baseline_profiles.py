@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 import yaml
+from tests.control_plane_support import ROOT
 
 from scripts.quality.control_plane import active_required_contexts, load_inventory, load_repo_profile
 from scripts.quality.render_repo_baseline import (
@@ -15,7 +16,6 @@ from scripts.quality.render_repo_baseline import (
     render_repo_baseline,
     render_security_policy,
 )
-from tests.control_plane_support import ROOT
 
 
 class SecurityBaselineProfileTests(unittest.TestCase):
@@ -58,8 +58,7 @@ class SecurityBaselineProfileTests(unittest.TestCase):
     def test_render_codeql_wrapper_pins_requested_controller_sha(self) -> None:
         """Repo CodeQL wrappers must use immutable controller refs."""
         rendered = render_codeql_wrapper(
-            repo_slug="Prekzursil/WebCoder",
-            platform_release_sha="0123456789abcdef0123456789abcdef01234567"
+            repo_slug="Prekzursil/WebCoder", platform_release_sha="0123456789abcdef0123456789abcdef01234567"
         )
         self.assertIn(
             "Prekzursil/quality-zero-platform/.github/workflows/reusable-codeql.yml@0123456789abcdef0123456789abcdef01234567",

@@ -114,17 +114,13 @@ class CoverageBackfillTests(unittest.TestCase):
 
     def test_dashboard_parse_args_fallback_write_and_module_entrypoint(self) -> None:
         """Cover dashboard parse args fallback write and module entrypoint."""
-        with patch.object(
-            sys, "argv", ["build_admin_dashboard.py", "--output-dir", "site"]
-        ):
+        with patch.object(sys, "argv", ["build_admin_dashboard.py", "--output-dir", "site"]):
             args = build_admin_dashboard.parse_args()
         self.assertEqual(args.output_dir, "site")
 
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir) / "site"
-            build_admin_dashboard.write_dashboard(
-                output_dir, {"generated_at": "now", "repo_count": 0, "repos": []}
-            )
+            build_admin_dashboard.write_dashboard(output_dir, {"generated_at": "now", "repo_count": 0, "repos": []})
             self.assertTrue((output_dir / "index.html").is_file())
 
             script_path = Path(build_admin_dashboard.__file__).resolve()
@@ -140,13 +136,9 @@ class CoverageBackfillTests(unittest.TestCase):
                     patch.object(
                         reloaded,
                         "parse_args",
-                        return_value=Namespace(
-                            inventory="", output_dir=str(output_dir), assets_dir=""
-                        ),
+                        return_value=Namespace(inventory="", output_dir=str(output_dir), assets_dir=""),
                     ),
-                    patch.object(
-                        reloaded, "load_inventory", return_value={"repos": []}
-                    ),
+                    patch.object(reloaded, "load_inventory", return_value={"repos": []}),
                     patch.object(reloaded, "write_dashboard", return_value=None),
                 ):
                     self.assertEqual(reloaded.main(), 0)
@@ -154,9 +146,7 @@ class CoverageBackfillTests(unittest.TestCase):
                 sys.path[:] = original_sys_path
 
             with (
-                patch.object(
-                    sys, "argv", [str(script_path), "--output-dir", str(output_dir)]
-                ),
+                patch.object(sys, "argv", [str(script_path), "--output-dir", str(output_dir)]),
                 patch.dict("os.environ", {}, clear=True),
                 self.assertRaises(SystemExit) as result,
             ):
@@ -257,9 +247,7 @@ class CoverageBackfillTests(unittest.TestCase):
         self,
     ) -> None:
         """Cover dependabot parse render invalid payload and module entrypoint."""
-        with patch.object(
-            sys, "argv", ["check_dependabot_alerts.py", "--repo", "owner/repo"]
-        ):
+        with patch.object(sys, "argv", ["check_dependabot_alerts.py", "--repo", "owner/repo"]):
             args = check_dependabot_alerts._parse_args()
         self.assertEqual(args.policy, "zero_critical")
         markdown = check_dependabot_alerts._render_md(
@@ -280,13 +268,9 @@ class CoverageBackfillTests(unittest.TestCase):
                 "load_json_https",
                 return_value=({"bad": True}, {}),
             ),
-            self.assertRaisesRegex(
-                RuntimeError, "Unexpected Dependabot alerts payload"
-            ),
+            self.assertRaisesRegex(RuntimeError, "Unexpected Dependabot alerts payload"),
         ):
-            check_dependabot_alerts._request_alerts(
-                "owner/repo", "token", scope="runtime"
-            )
+            check_dependabot_alerts._request_alerts("owner/repo", "token", scope="runtime")
 
         script_path = Path(check_dependabot_alerts.__file__).resolve()
         root_text = str(script_path.parents[2])
@@ -317,9 +301,7 @@ class CoverageBackfillTests(unittest.TestCase):
             profiles = root / "profiles" / "repos"
             inventory.mkdir(parents=True)
             profiles.mkdir(parents=True)
-            (inventory / "repos.yml").write_text(
-                "version: 1\nrepos: []\n", encoding="utf-8"
-            )
+            (inventory / "repos.yml").write_text("version: 1\nrepos: []\n", encoding="utf-8")
             script_path = Path(control_plane_admin.__file__).resolve()
             root_text = str(script_path.parents[2])
             original_sys_path = list(sys.path)
@@ -418,9 +400,7 @@ class CoverageBackfillTests(unittest.TestCase):
                 self.assertRaises(SystemExit) as result,
             ):
                 runpy.run_path(str(script_path), run_name="__main__")
-            self.assertEqual(
-                str(result.exception), "GITHUB_TOKEN or GH_TOKEN is required"
-            )
+            self.assertEqual(str(result.exception), "GITHUB_TOKEN or GH_TOKEN is required")
 
     def test_post_pr_comment_subprocess_bootstraps_repo_root(self) -> None:
         """Cover post pr comment subprocess bootstraps repo root."""
@@ -444,11 +424,7 @@ class CoverageBackfillTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 check=False,
-                env={
-                    k: v
-                    for k, v in os.environ.items()
-                    if k not in {"GITHUB_TOKEN", "GH_TOKEN"}
-                },
+                env={k: v for k, v in os.environ.items() if k not in {"GITHUB_TOKEN", "GH_TOKEN"}},
             )
         self.assertEqual(completed.returncode, 1)
         self.assertIn(

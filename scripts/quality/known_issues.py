@@ -55,16 +55,9 @@ def _validate_entry(entry: Dict[str, Any], path: Path) -> None:
     """Fail loudly if ``entry`` is missing a required field."""
     missing = [f for f in REQUIRED_FIELDS if f not in entry]
     if missing:
-        raise KnownIssueError(
-            f"{path}: missing required fields: {', '.join(sorted(missing))}"
-        )
-    if entry.get("feeds_qrv2") is True and not str(
-        entry.get("fix_snippet") or ""
-    ).strip():
-        raise KnownIssueError(
-            f"{path}: entries with ``feeds_qrv2: true`` must include a "
-            f"non-empty ``fix_snippet``"
-        )
+        raise KnownIssueError(f"{path}: missing required fields: {', '.join(sorted(missing))}")
+    if entry.get("feeds_qrv2") is True and not str(entry.get("fix_snippet") or "").strip():
+        raise KnownIssueError(f"{path}: entries with ``feeds_qrv2: true`` must include a non-empty ``fix_snippet``")
 
 
 def load_known_issues(registry_path: Path) -> List[Dict[str, Any]]:
@@ -79,9 +72,7 @@ def load_known_issues(registry_path: Path) -> List[Dict[str, Any]]:
     for path in sorted(registry_path.glob("QZ-*.yml")):
         payload = yaml.safe_load(path.read_text(encoding="utf-8"))
         if not isinstance(payload, dict):
-            raise KnownIssueError(
-                f"{path}: top-level YAML must be a mapping, got {type(payload).__name__}"
-            )
+            raise KnownIssueError(f"{path}: top-level YAML must be a mapping, got {type(payload).__name__}")
         _validate_entry(payload, path)
         entries.append(payload)
     entries.sort(key=lambda e: str(e.get("id", "")))
@@ -90,11 +81,7 @@ def load_known_issues(registry_path: Path) -> List[Dict[str, Any]]:
 
 def qrv2_prompt_entries(entries: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Return entries that should feed QRv2's Codex prompt."""
-    return [
-        e for e in entries
-        if bool(e.get("feeds_qrv2")) is True
-        and str(e.get("fix_snippet") or "").strip()
-    ]
+    return [e for e in entries if bool(e.get("feeds_qrv2")) is True and str(e.get("fix_snippet") or "").strip()]
 
 
 if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI

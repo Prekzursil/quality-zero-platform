@@ -23,7 +23,9 @@ class LoadBumpRecipeTests(unittest.TestCase):
     def test_valid_recipe_returns_normalised_dict(self) -> None:
         """Canonical Node 20→24 recipe round-trips through the loader."""
         with tempfile.TemporaryDirectory() as tmp:
-            path = _write_recipe(Path(tmp), """
+            path = _write_recipe(
+                Path(tmp),
+                """
                 name: Node 20 -> 24
                 target:
                   - file_glob: "**/ci.yml"
@@ -34,7 +36,8 @@ class LoadBumpRecipeTests(unittest.TestCase):
                   - Prekzursil/env-inspector
                 full_rollout_after_staging: true
                 rollback_on_failure: true
-            """)
+            """,
+            )
             recipe = bumps.load_bump_recipe(path)
         self.assertEqual(recipe["name"], "Node 20 -> 24")
         self.assertEqual(len(recipe["target"]), 1)
@@ -45,14 +48,17 @@ class LoadBumpRecipeTests(unittest.TestCase):
     def test_missing_required_field_raises(self) -> None:
         """Recipe missing ``name`` is rejected with clear message."""
         with tempfile.TemporaryDirectory() as tmp:
-            path = _write_recipe(Path(tmp), """
+            path = _write_recipe(
+                Path(tmp),
+                """
                 target:
                   - file_glob: "**/ci.yml"
                     yaml_path: "x.y"
                     value: '24'
                 affects_stacks: [x]
                 staging_repos: [a/b]
-            """)
+            """,
+            )
             with self.assertRaises(bumps.BumpRecipeError) as ctx:
                 bumps.load_bump_recipe(path)
             self.assertIn("name", str(ctx.exception))
@@ -60,19 +66,24 @@ class LoadBumpRecipeTests(unittest.TestCase):
     def test_target_must_be_non_empty_list(self) -> None:
         """Recipe with empty ``target`` is rejected."""
         with tempfile.TemporaryDirectory() as tmp:
-            path = _write_recipe(Path(tmp), """
+            path = _write_recipe(
+                Path(tmp),
+                """
                 name: empty
                 target: []
                 affects_stacks: [x]
                 staging_repos: [a/b]
-            """)
+            """,
+            )
             with self.assertRaises(bumps.BumpRecipeError):
                 bumps.load_bump_recipe(path)
 
     def test_target_entry_requires_file_glob_yaml_path_value(self) -> None:
         """Each target entry must have all three required keys."""
         with tempfile.TemporaryDirectory() as tmp:
-            path = _write_recipe(Path(tmp), """
+            path = _write_recipe(
+                Path(tmp),
+                """
                 name: partial
                 target:
                   - file_glob: "**/ci.yml"
@@ -80,14 +91,17 @@ class LoadBumpRecipeTests(unittest.TestCase):
                     # missing: value
                 affects_stacks: [x]
                 staging_repos: [a/b]
-            """)
+            """,
+            )
             with self.assertRaises(bumps.BumpRecipeError):
                 bumps.load_bump_recipe(path)
 
     def test_staging_repos_must_be_non_empty(self) -> None:
         """Empty staging_repos blocks rollout — rejected."""
         with tempfile.TemporaryDirectory() as tmp:
-            path = _write_recipe(Path(tmp), """
+            path = _write_recipe(
+                Path(tmp),
+                """
                 name: no-staging
                 target:
                   - file_glob: "**/ci.yml"
@@ -95,14 +109,17 @@ class LoadBumpRecipeTests(unittest.TestCase):
                     value: '24'
                 affects_stacks: [x]
                 staging_repos: []
-            """)
+            """,
+            )
             with self.assertRaises(bumps.BumpRecipeError):
                 bumps.load_bump_recipe(path)
 
     def test_staging_repo_slug_must_have_owner(self) -> None:
         """Staging repos must be ``owner/name``, not bare ``name``."""
         with tempfile.TemporaryDirectory() as tmp:
-            path = _write_recipe(Path(tmp), """
+            path = _write_recipe(
+                Path(tmp),
+                """
                 name: bad-slug
                 target:
                   - file_glob: "**/ci.yml"
@@ -110,14 +127,17 @@ class LoadBumpRecipeTests(unittest.TestCase):
                     value: '24'
                 affects_stacks: [x]
                 staging_repos: [just-a-name]
-            """)
+            """,
+            )
             with self.assertRaises(bumps.BumpRecipeError):
                 bumps.load_bump_recipe(path)
 
     def test_defaults_applied_when_optional_fields_missing(self) -> None:
         """``full_rollout_after_staging`` and ``rollback_on_failure`` default to True."""
         with tempfile.TemporaryDirectory() as tmp:
-            path = _write_recipe(Path(tmp), """
+            path = _write_recipe(
+                Path(tmp),
+                """
                 name: minimal
                 target:
                   - file_glob: "**/ci.yml"
@@ -125,7 +145,8 @@ class LoadBumpRecipeTests(unittest.TestCase):
                     value: '24'
                 affects_stacks: [x]
                 staging_repos: [a/b]
-            """)
+            """,
+            )
             recipe = bumps.load_bump_recipe(path)
         self.assertTrue(recipe["full_rollout_after_staging"])
         self.assertTrue(recipe["rollback_on_failure"])
@@ -142,13 +163,16 @@ class LoadBumpRecipeTests(unittest.TestCase):
     def test_target_entry_that_is_not_mapping_rejected(self) -> None:
         """``target: [scalar]`` rejected — each entry must be a mapping."""
         with tempfile.TemporaryDirectory() as tmp:
-            path = _write_recipe(Path(tmp), """
+            path = _write_recipe(
+                Path(tmp),
+                """
                 name: bad-target
                 target:
                   - just-a-string
                 affects_stacks: [x]
                 staging_repos: [a/b]
-            """)
+            """,
+            )
             with self.assertRaises(bumps.BumpRecipeError) as ctx:
                 bumps.load_bump_recipe(path)
             self.assertIn("target[0]", str(ctx.exception))
@@ -217,10 +241,7 @@ class SampleNodeRecipeIsValidTests(unittest.TestCase):
 
     def test_sample_recipe_loads_and_has_node_24(self) -> None:
         """The canonical Node 20→24 recipe survives the loader round-trip."""
-        sample_path = (
-            Path(__file__).resolve().parents[1]
-            / "profiles" / "bumps" / "2026-04-23-node-24.yml"
-        )
+        sample_path = Path(__file__).resolve().parents[1] / "profiles" / "bumps" / "2026-04-23-node-24.yml"
         recipe = bumps.load_bump_recipe(sample_path)
         self.assertIn("node", recipe["name"].lower())
         # Last target (or any) should have 24 in its value.

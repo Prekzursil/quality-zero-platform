@@ -1,4 +1,5 @@
 """Tests to close coverage gaps across rollup_v2 modules."""
+
 from __future__ import absolute_import
 
 import sys
@@ -148,29 +149,29 @@ class RendererGapTests(unittest.TestCase):
 
 def _baseline_finding_kwargs() -> dict:
     """Return the kwargs needed to build a minimal valid ``Finding``."""
-    return dict(
-        schema_version=SCHEMA_VERSION,
-        finding_id="t",
-        file="f",
-        line=1,
-        end_line=1,
-        column=None,
-        category="c",
-        category_group="quality",
-        severity="medium",
-        corroboration="single",
-        primary_message="m",
-        corroborators=(),
-        fix_hint=None,
-        patch=None,
-        patch_source="none",
-        patch_confidence=None,
-        context_snippet="",
-        source_file_hash="",
-        cwe=None,
-        autofixable=False,
-        tags=(),
-    )
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "finding_id": "t",
+        "file": "f",
+        "line": 1,
+        "end_line": 1,
+        "column": None,
+        "category": "c",
+        "category_group": "quality",
+        "severity": "medium",
+        "corroboration": "single",
+        "primary_message": "m",
+        "corroborators": (),
+        "fix_hint": None,
+        "patch": None,
+        "patch_source": "none",
+        "patch_confidence": None,
+        "context_snippet": "",
+        "source_file_hash": "",
+        "cwe": None,
+        "autofixable": False,
+        "tags": (),
+    }
 
 
 class FindingValidationGapTests(unittest.TestCase):
@@ -232,9 +233,7 @@ class TaxonomyGapTests(unittest.TestCase):
             config_dir = Path(tmp) / "config" / "taxonomy"
             config_dir.mkdir(parents=True)
             # Write an invalid taxonomy YAML (missing provider or wrong type)
-            (config_dir / "bad.yaml").write_text(
-                "provider: 42\nmapping: not-a-dict\n", encoding="utf-8"
-            )
+            (config_dir / "bad.yaml").write_text("provider: 42\nmapping: not-a-dict\n", encoding="utf-8")
             with mock_patch.object(taxonomy, "_CONFIG_DIR", config_dir):
                 taxonomy.load_all_taxonomies.cache_clear()
                 with self.assertRaises(ValueError):

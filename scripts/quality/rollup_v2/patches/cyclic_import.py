@@ -1,4 +1,5 @@
 """Declining patch generator for `cyclic-import` category."""
+
 from __future__ import absolute_import
 
 from scripts.quality.rollup_v2.patches._declining import make_decline_generator

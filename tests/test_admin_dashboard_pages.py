@@ -54,10 +54,12 @@ class RenderCoverageTrendPageTests(unittest.TestCase):
 
     def test_renders_each_repo_as_a_row(self) -> None:
         """One <tr> per repo with slug + coverage value."""
-        html = pages.render_coverage_trend_page(rows=[
-            {"slug": "org/repo-a", "coverage_percent": 100.0},
-            {"slug": "org/repo-b", "coverage_percent": 96.3},
-        ])
+        html = pages.render_coverage_trend_page(
+            rows=[
+                {"slug": "org/repo-a", "coverage_percent": 100.0},
+                {"slug": "org/repo-b", "coverage_percent": 96.3},
+            ]
+        )
         self.assertIn("<title>Coverage", html)
         self.assertIn("org/repo-a", html)
         self.assertIn("100.0", html)
@@ -75,14 +77,16 @@ class RenderDriftPageTests(unittest.TestCase):
 
     def test_renders_each_entry_status_and_sync_pr(self) -> None:
         """Each drift entry shows slug + status + PR url."""
-        html = pages.render_drift_page(entries=[
-            {
-                "slug": "org/repo-a",
-                "status": "open",
-                "pr_url": "https://github.com/org/repo-a/pull/42",
-            },
-            {"slug": "org/repo-b", "status": "closed", "pr_url": ""},
-        ])
+        html = pages.render_drift_page(
+            entries=[
+                {
+                    "slug": "org/repo-a",
+                    "status": "open",
+                    "pr_url": "https://github.com/org/repo-a/pull/42",
+                },
+                {"slug": "org/repo-b", "status": "closed", "pr_url": ""},
+            ]
+        )
         self.assertIn("org/repo-a", html)
         self.assertIn("open", html)
         self.assertIn("pull/42", html)
@@ -99,23 +103,25 @@ class RenderAuditPageTests(unittest.TestCase):
 
     def test_renders_each_audit_row(self) -> None:
         """Each audit row shows timestamp + label + pr_slug + actor."""
-        html = pages.render_audit_page(entries=[
-            {
-                "timestamp": "2026-04-23T12:00:00Z",
-                "label": "quality-zero:break-glass",
-                "pr_slug": "org/repo",
-                "pr_number": 42,
-                "actor": "alice",
-                "incident": "INC-1234",
-            },
-            {
-                "timestamp": "2026-04-23T13:00:00Z",
-                "label": "quality-zero:skip",
-                "pr_slug": "org/repo",
-                "pr_number": 43,
-                "actor": "bob",
-            },
-        ])
+        html = pages.render_audit_page(
+            entries=[
+                {
+                    "timestamp": "2026-04-23T12:00:00Z",
+                    "label": "quality-zero:break-glass",
+                    "pr_slug": "org/repo",
+                    "pr_number": 42,
+                    "actor": "alice",
+                    "incident": "INC-1234",
+                },
+                {
+                    "timestamp": "2026-04-23T13:00:00Z",
+                    "label": "quality-zero:skip",
+                    "pr_slug": "org/repo",
+                    "pr_number": 43,
+                    "actor": "bob",
+                },
+            ]
+        )
         self.assertIn("break-glass", html)
         self.assertIn("INC-1234", html)
         self.assertIn("alice", html)
@@ -133,10 +139,21 @@ class LoadAuditJsonlTests(unittest.TestCase):
     def test_valid_jsonl_round_trips(self) -> None:
         """Every one-line record is returned as a dict."""
         records = [
-            {"timestamp": "2026-04-23T12:00:00Z", "label": "quality-zero:skip",
-             "pr_slug": "org/repo", "pr_number": 1, "actor": "alice"},
-            {"timestamp": "2026-04-23T13:00:00Z", "label": "quality-zero:break-glass",
-             "pr_slug": "org/repo", "pr_number": 2, "actor": "bob", "incident": "INC-99"},
+            {
+                "timestamp": "2026-04-23T12:00:00Z",
+                "label": "quality-zero:skip",
+                "pr_slug": "org/repo",
+                "pr_number": 1,
+                "actor": "alice",
+            },
+            {
+                "timestamp": "2026-04-23T13:00:00Z",
+                "label": "quality-zero:break-glass",
+                "pr_slug": "org/repo",
+                "pr_number": 2,
+                "actor": "bob",
+                "incident": "INC-99",
+            },
         ]
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "break-glass.jsonl"
@@ -159,9 +176,7 @@ class LoadAuditJsonlTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "log.jsonl"
             path.write_text(
-                "\n\n"
-                + json.dumps({"label": "x"}, sort_keys=True) + "\n"
-                + "  \n",
+                "\n\n" + json.dumps({"label": "x"}, sort_keys=True) + "\n" + "  \n",
                 encoding="utf-8",
             )
             loaded = pages.load_audit_jsonl(path)
@@ -172,8 +187,7 @@ class LoadAuditJsonlTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "log.jsonl"
             path.write_text(
-                json.dumps([1, 2, 3]) + "\n"
-                + json.dumps({"label": "real"}) + "\n",
+                json.dumps([1, 2, 3]) + "\n" + json.dumps({"label": "real"}) + "\n",
                 encoding="utf-8",
             )
             loaded = pages.load_audit_jsonl(path)
@@ -188,10 +202,15 @@ class LoadCoverageRowsTests(unittest.TestCase):
         """File containing a bare JSON list of dicts → rows returned as-is."""
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "coverage.json"
-            path.write_text(json.dumps([
-                {"slug": "org/a", "coverage_percent": 100.0},
-                {"slug": "org/b", "coverage_percent": 98.5},
-            ]), encoding="utf-8")
+            path.write_text(
+                json.dumps(
+                    [
+                        {"slug": "org/a", "coverage_percent": 100.0},
+                        {"slug": "org/b", "coverage_percent": 98.5},
+                    ]
+                ),
+                encoding="utf-8",
+            )
             rows = pages.load_coverage_rows(path)
         self.assertEqual(len(rows), 2)
         self.assertEqual(rows[0]["slug"], "org/a")
@@ -200,9 +219,16 @@ class LoadCoverageRowsTests(unittest.TestCase):
         """``{"repos": [...]}`` wrapper (matches inventory shape) also works."""
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "coverage.json"
-            path.write_text(json.dumps({"repos": [
-                {"slug": "org/a", "coverage_percent": 100.0},
-            ]}), encoding="utf-8")
+            path.write_text(
+                json.dumps(
+                    {
+                        "repos": [
+                            {"slug": "org/a", "coverage_percent": 100.0},
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
             rows = pages.load_coverage_rows(path)
         self.assertEqual(len(rows), 1)
 
@@ -215,10 +241,15 @@ class LoadCoverageRowsTests(unittest.TestCase):
         """Rows that aren't dicts (stray scalars) are dropped."""
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "coverage.json"
-            path.write_text(json.dumps([
-                "not-a-dict",
-                {"slug": "org/a", "coverage_percent": 100.0},
-            ]), encoding="utf-8")
+            path.write_text(
+                json.dumps(
+                    [
+                        "not-a-dict",
+                        {"slug": "org/a", "coverage_percent": 100.0},
+                    ]
+                ),
+                encoding="utf-8",
+            )
             rows = pages.load_coverage_rows(path)
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["slug"], "org/a")
@@ -240,8 +271,10 @@ class LoadDriftEntriesTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "drift.jsonl"
             path.write_text(
-                json.dumps({"slug": "org/a", "status": "open"}) + "\n"
-                + json.dumps({"slug": "org/b", "status": "closed"}) + "\n",
+                json.dumps({"slug": "org/a", "status": "open"})
+                + "\n"
+                + json.dumps({"slug": "org/b", "status": "closed"})
+                + "\n",
                 encoding="utf-8",
             )
             entries = pages.load_drift_entries(path)

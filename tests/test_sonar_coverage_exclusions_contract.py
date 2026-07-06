@@ -13,6 +13,7 @@ expands the coverage source to the full ``scripts/quality/`` tree, the
 exclusion list shrinks accordingly — and this test prevents the two
 configurations from drifting silently.
 """
+
 from __future__ import absolute_import
 
 import tomllib
@@ -59,10 +60,7 @@ def _is_in_coverage_source(rel_path: str, source_tokens: Set[str]) -> bool:
     """Return True if ``rel_path`` is inside any ``tool.coverage.run.source`` entry."""
     posix = rel_path.replace("\\", "/")
     candidate = posix
-    if candidate.endswith(".py"):
-        candidate_no_ext = candidate[:-3]
-    else:
-        candidate_no_ext = candidate
+    candidate_no_ext = candidate[:-3] if candidate.endswith(".py") else candidate
     for token in source_tokens:
         if posix == token:
             return True
@@ -107,10 +105,7 @@ class SonarCoverageExclusionsContract(unittest.TestCase):
         )
 
         # Build the expected exclusion set (everything outside the source).
-        expected_excluded = {
-            f for f in script_files
-            if not _is_in_coverage_source(f, source_tokens)
-        }
+        expected_excluded = {f for f in script_files if not _is_in_coverage_source(f, source_tokens)}
 
         # Parse the actual exclusion list.
         raw_value = _load_sonar_property("sonar.coverage.exclusions")
@@ -121,15 +116,13 @@ class SonarCoverageExclusionsContract(unittest.TestCase):
 
         self.assertFalse(
             missing,
-            f"Files outside tool.coverage.run.source but missing from "
-            f"sonar.coverage.exclusions:\n  "
-            + "\n  ".join(sorted(missing)),
+            "Files outside tool.coverage.run.source but missing from "
+            "sonar.coverage.exclusions:\n  " + "\n  ".join(sorted(missing)),
         )
         self.assertFalse(
             extra,
-            f"sonar.coverage.exclusions has stale entries (file does not exist "
-            f"or is now in tool.coverage.run.source):\n  "
-            + "\n  ".join(sorted(extra)),
+            "sonar.coverage.exclusions has stale entries (file does not exist "
+            "or is now in tool.coverage.run.source):\n  " + "\n  ".join(sorted(extra)),
         )
 
 

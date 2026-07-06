@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Gate script: assert zero Semgrep findings in a SARIF file (per §9.1)."""
+
 from __future__ import absolute_import
 
 import sys

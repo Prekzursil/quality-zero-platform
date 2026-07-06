@@ -1,4 +1,5 @@
 """Deterministic patch generator for `print-in-production` category."""
+
 from __future__ import absolute_import
 
 import difflib
@@ -50,12 +51,14 @@ def generate(
     if not _HAS_LOGGING_IMPORT.search(source_file_content):
         patched_lines.insert(0, "import logging\n")
 
-    diff = "".join(difflib.unified_diff(
-        lines,
-        patched_lines,
-        fromfile=f"a/{finding.file}",
-        tofile=f"b/{finding.file}",
-    ))
+    diff = "".join(
+        difflib.unified_diff(
+            lines,
+            patched_lines,
+            fromfile=f"a/{finding.file}",
+            tofile=f"b/{finding.file}",
+        )
+    )
     return PatchResult(
         unified_diff=diff,
         confidence="medium",

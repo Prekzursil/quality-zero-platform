@@ -43,9 +43,7 @@ class RunCodexExecTests(unittest.TestCase):
         return argv
 
     @staticmethod
-    def _build_main_args(
-        tmpdir_path: Path, *, prompt_text: str = "hello codex"
-    ) -> Namespace:
+    def _build_main_args(tmpdir_path: Path, *, prompt_text: str = "hello codex") -> Namespace:
         """Handle build main args."""
         repo_dir = tmpdir_path / "repo"
         repo_dir.mkdir()
@@ -85,18 +83,16 @@ class RunCodexExecTests(unittest.TestCase):
     ):
         """Handle run main with patched subprocess."""
         json_log = Path(args.json_log)
-        with patch(
-            "scripts.quality.run_codex_exec._parse_args", return_value=args
-        ), patch(
-            "scripts.quality.run_codex_exec.shutil.which",
-            return_value=r"C:\Tools\codex.exe",
-        ), patch(
-            "scripts.quality.run_codex_exec.subprocess.run", return_value=completed
-        ) as mock_run, patch(
-            "sys.stdout", new=io.StringIO()
-        ) as stdout, patch(
-            "sys.stderr", new=io.StringIO()
-        ) as stderr:
+        with (
+            patch("scripts.quality.run_codex_exec._parse_args", return_value=args),
+            patch(
+                "scripts.quality.run_codex_exec.shutil.which",
+                return_value=r"C:\Tools\codex.exe",
+            ),
+            patch("scripts.quality.run_codex_exec.subprocess.run", return_value=completed) as mock_run,
+            patch("sys.stdout", new=io.StringIO()) as stdout,
+            patch("sys.stderr", new=io.StringIO()) as stderr,
+        ):
             exit_code = main()
         return {
             "exit_code": exit_code,
@@ -206,9 +202,7 @@ class RunCodexExecTests(unittest.TestCase):
 
     def test_validate_cli_token_rejects_control_characters(self):
         """Cover validate cli token rejects control characters."""
-        with self.assertRaisesRegex(
-            ValueError, "--profile contains unsupported control characters"
-        ):
+        with self.assertRaisesRegex(ValueError, "--profile contains unsupported control characters"):
             _validate_cli_token("trusted\nprofile", flag_name="--profile")
 
     def test_validate_cli_token_rejects_empty_values(self):
@@ -233,9 +227,7 @@ class RunCodexExecTests(unittest.TestCase):
                 "scripts.quality.run_codex_exec.shutil.which",
                 return_value=r"C:\Tools\codex.exe",
             ),
-            self.assertRaisesRegex(
-                ValueError, "--profile contains unsupported characters"
-            ),
+            self.assertRaisesRegex(ValueError, "--profile contains unsupported characters"),
         ):
             build_codex_command(args)
 
@@ -253,9 +245,7 @@ class RunCodexExecTests(unittest.TestCase):
 
         with (
             patch("scripts.quality.run_codex_exec.shutil.which", return_value=None),
-            self.assertRaisesRegex(
-                FileNotFoundError, "Unable to locate required executable: codex"
-            ),
+            self.assertRaisesRegex(FileNotFoundError, "Unable to locate required executable: codex"),
         ):
             build_codex_command(args)
 
@@ -272,12 +262,13 @@ class RunCodexExecTests(unittest.TestCase):
 
         completed = SimpleNamespace(stdout='{"ok":true}', stderr="warn", returncode=7)
 
-        with patch(
-            "scripts.quality.run_codex_exec.shutil.which",
-            return_value=r"C:\Tools\codex.exe",
-        ), patch(
-            "scripts.quality.run_codex_exec.subprocess.run", return_value=completed
-        ) as mock_run:
+        with (
+            patch(
+                "scripts.quality.run_codex_exec.shutil.which",
+                return_value=r"C:\Tools\codex.exe",
+            ),
+            patch("scripts.quality.run_codex_exec.subprocess.run", return_value=completed) as mock_run,
+        ):
             result = _run_codex_exec(args, "hello codex")
 
         self.assertIs(result, completed)
@@ -293,9 +284,7 @@ class RunCodexExecTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)
             args = self._build_main_args(tmpdir_path)
-            completed = SimpleNamespace(
-                stdout='{"ok":true}', stderr="warn", returncode=7
-            )
+            completed = SimpleNamespace(stdout='{"ok":true}', stderr="warn", returncode=7)
             result = self._run_main_with_patched_subprocess(args, completed)
 
             self.assertEqual(result["exit_code"], 7)
@@ -318,15 +307,8 @@ class RunCodexExecTests(unittest.TestCase):
             prompt_file = tmpdir_path / "prompt.txt"
             prompt_file.write_text("hello from entrypoint", encoding="utf-8")
             output_last_message = tmpdir_path / "message.txt"
-            script_path = (
-                Path(__file__).resolve().parents[1]
-                / "scripts"
-                / "quality"
-                / "run_codex_exec.py"
-            )
-            completed = SimpleNamespace(
-                stdout='{"entry":true}', stderr="", returncode=0
-            )
+            script_path = Path(__file__).resolve().parents[1] / "scripts" / "quality" / "run_codex_exec.py"
+            completed = SimpleNamespace(stdout='{"entry":true}', stderr="", returncode=0)
             argv = [
                 str(script_path),
                 "--repo-dir",
@@ -337,13 +319,13 @@ class RunCodexExecTests(unittest.TestCase):
                 str(output_last_message),
             ]
 
-            with patch("shutil.which", return_value=r"C:\Tools\codex.exe"), patch(
-                "subprocess.run", return_value=completed
-            ) as mock_run, patch("sys.argv", argv), patch(
-                "sys.stdout", new=io.StringIO()
-            ) as stdout, self.assertRaises(
-                SystemExit
-            ) as result:
+            with (
+                patch("shutil.which", return_value=r"C:\Tools\codex.exe"),
+                patch("subprocess.run", return_value=completed) as mock_run,
+                patch("sys.argv", argv),
+                patch("sys.stdout", new=io.StringIO()) as stdout,
+                self.assertRaises(SystemExit) as result,
+            ):
                 runpy.run_path(str(script_path), run_name="__main__")
 
             self.assertEqual(result.exception.code, 0)

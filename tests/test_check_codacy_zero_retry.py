@@ -1,6 +1,5 @@
 """Test check codacy zero -- retry and commit-scope fallback paths."""
 
-
 from __future__ import absolute_import
 
 import os
@@ -12,8 +11,8 @@ from argparse import Namespace
 from email.message import Message
 from pathlib import Path
 from typing import List
-from urllib.error import HTTPError
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 import scripts.quality.check_codacy_zero as check_codacy_zero
 from scripts.quality import codacy_zero_support
@@ -29,8 +28,6 @@ from scripts.quality.check_codacy_zero import (
 def _raise_runtime_error(message: str) -> None:
     """Raise one runtime error for callback tests."""
     raise RuntimeError(message)
-
-
 
 
 class CodacyZeroRetryTests(unittest.TestCase):
@@ -52,7 +49,6 @@ class CodacyZeroRetryTests(unittest.TestCase):
             sha=sha,
         )
 
-
     @staticmethod
     def _retry_config(
         provider_candidates,
@@ -68,7 +64,6 @@ class CodacyZeroRetryTests(unittest.TestCase):
             pending_fn=pending_fn,
             sleep_seconds=sleep_seconds,
         )
-
 
     def test_retry_retries_pull_request_404s(self) -> None:
         """Cover load codacy findings with retry retries pull request 404s."""
@@ -94,9 +89,7 @@ class CodacyZeroRetryTests(unittest.TestCase):
         with (
             patch.object(check_codacy_zero, "SCOPED_ANALYSIS_RETRY_ATTEMPTS", 2),
             patch.object(check_codacy_zero.time, "sleep", return_value=None),
-            patch.object(
-                check_codacy_zero, "_query_codacy_open_issues", side_effect=fake_query
-            ),
+            patch.object(check_codacy_zero, "_query_codacy_open_issues", side_effect=fake_query),
         ):
             open_issues, findings = check_codacy_zero.load_codacy_findings_with_retry(
                 self._base_query(pull_request="49"),
@@ -123,9 +116,7 @@ class CodacyZeroRetryTests(unittest.TestCase):
 
     def test_retry_returns_last_findings_after_budget(self) -> None:
         """Cover retry returns last findings after retry budget."""
-        not_found = HTTPError(
-            "https://api.codacy.com", 404, "Not Found", hdrs=Message(), fp=None
-        )
+        not_found = HTTPError("https://api.codacy.com", 404, "Not Found", hdrs=Message(), fp=None)
         with (
             patch.object(check_codacy_zero, "SCOPED_ANALYSIS_RETRY_ATTEMPTS", 2),
             patch.object(check_codacy_zero.time, "sleep", return_value=None),
@@ -146,17 +137,13 @@ class CodacyZeroRetryTests(unittest.TestCase):
             )
 
         self.assertIsNone(open_issues)
-        self.assertEqual(
-            findings, ["Codacy API endpoint was not found for providers: gh, github."]
-        )
+        self.assertEqual(findings, ["Codacy API endpoint was not found for providers: gh, github."])
         self.assertEqual(query_mock.call_count, 2)
 
     def test_retry_waits_for_target_sha(self) -> None:
         """Cover load codacy findings with retry waits for target sha."""
         attempts: List[int] = []
-        base_query = CodacyQuery(
-            "gh", "Prekzursil", "quality-zero-platform", sha="targetsha"
-        )
+        base_query = CodacyQuery("gh", "Prekzursil", "quality-zero-platform", sha="targetsha")
         pending_responses = [
             "Codacy repository analysis is still on oldsha (waiting for targetsha).",
             None,
@@ -167,9 +154,7 @@ class CodacyZeroRetryTests(unittest.TestCase):
             attempts.append(len(attempts) + 1)
             return 0, [], None
 
-        with patch.object(
-            check_codacy_zero, "_query_codacy_open_issues", side_effect=fake_query
-        ):
+        with patch.object(check_codacy_zero, "_query_codacy_open_issues", side_effect=fake_query):
             open_issues, findings = check_codacy_zero.load_codacy_findings_with_retry(
                 base_query,
                 "token",
@@ -185,9 +170,7 @@ class CodacyZeroRetryTests(unittest.TestCase):
 
     def test_retry_reports_pending_analysis_after_budget(self) -> None:
         """Cover retry reports pending analysis after budget."""
-        base_query = CodacyQuery(
-            "gh", "Prekzursil", "quality-zero-platform", sha="targetsha"
-        )
+        base_query = CodacyQuery("gh", "Prekzursil", "quality-zero-platform", sha="targetsha")
 
         with patch.object(
             check_codacy_zero,
@@ -199,9 +182,7 @@ class CodacyZeroRetryTests(unittest.TestCase):
                 "token",
                 self._retry_config(
                     ("gh",),
-                    pending_fn=lambda _query, _token: (
-                        "Codacy repository analysis is not available yet."
-                    ),
+                    pending_fn=lambda _query, _token: "Codacy repository analysis is not available yet.",
                 ),
             )
 
@@ -232,9 +213,7 @@ class CodacyZeroRetryTests(unittest.TestCase):
                 "_query_codacy_open_issues",
                 return_value=(0, [], None),
             ) as query_mock,
-            patch.object(
-                check_codacy_zero.time, "sleep", return_value=None
-            ) as sleep_mock,
+            patch.object(check_codacy_zero.time, "sleep", return_value=None) as sleep_mock,
         ):
             open_issues, findings = check_codacy_zero.load_codacy_findings_with_retry(
                 self._base_query(pull_request="49"),
@@ -254,9 +233,7 @@ class CodacyZeroRetryTests(unittest.TestCase):
             return_value=(0, [], None),
         ):
             open_issues, findings = check_codacy_zero.load_codacy_findings_with_retry(
-                CodacyQuery(
-                    "gh", "Prekzursil", "quality-zero-platform", sha="targetsha"
-                ),
+                CodacyQuery("gh", "Prekzursil", "quality-zero-platform", sha="targetsha"),
                 "token",
                 self._retry_config(
                     ("gh",),
@@ -265,9 +242,7 @@ class CodacyZeroRetryTests(unittest.TestCase):
             )
 
         self.assertEqual(open_issues, 0)
-        self.assertEqual(
-            findings, ["Codacy analysis status request failed: status broke"]
-        )
+        self.assertEqual(findings, ["Codacy analysis status request failed: status broke"])
 
     def test_commit_scope_fallback_ignores_non_stale_findings(self) -> None:
         """Do not trigger commit fallback when PR findings are not stale-state messages."""
@@ -294,10 +269,7 @@ class CodacyZeroRetryTests(unittest.TestCase):
                     ("gh", "github"),
                     [
                         "Codacy reports 18 open issues (expected 0).",
-                        (
-                            "Codacy analysis for pull request 68 issues is still on "
-                            "oldsha (waiting for targetsha)."
-                        ),
+                        ("Codacy analysis for pull request 68 issues is still on oldsha (waiting for targetsha)."),
                     ],
                 ),
                 (0, []),
@@ -315,12 +287,7 @@ class CodacyZeroRetryTests(unittest.TestCase):
                 self._base_query(pull_request="68", sha=""),
                 "token",
                 ("gh",),
-                [
-                    (
-                        "Codacy analysis for pull request 68 issues is still on "
-                        "oldsha (waiting for targetsha)."
-                    )
-                ],
+                [("Codacy analysis for pull request 68 issues is still on oldsha (waiting for targetsha).")],
             )
         )
 
@@ -336,12 +303,7 @@ class CodacyZeroRetryTests(unittest.TestCase):
                     self._base_query(pull_request="68", sha="targetsha"),
                     "token",
                     ("gh",),
-                    [
-                        (
-                            "Codacy analysis for pull request 68 issues is still on "
-                            "oldsha (waiting for targetsha)."
-                        )
-                    ],
+                    [("Codacy analysis for pull request 68 issues is still on oldsha (waiting for targetsha).")],
                 )
             )
 
@@ -367,10 +329,7 @@ class CodacyZeroRetryTests(unittest.TestCase):
                     18,
                     [
                         "Codacy reports 18 open issues (expected 0).",
-                        (
-                            "Codacy analysis for pull request 68 issues is still on "
-                            "oldsha (waiting for targetsha)."
-                        ),
+                        ("Codacy analysis for pull request 68 issues is still on oldsha (waiting for targetsha)."),
                     ],
                 ),
             ),
@@ -380,7 +339,9 @@ class CodacyZeroRetryTests(unittest.TestCase):
                 return_value=(0, [], None),
             ),
             patch.object(
-                check_codacy_zero, "_quality_threshold_findings", return_value=[],
+                check_codacy_zero,
+                "_quality_threshold_findings",
+                return_value=[],
             ),
         ):
             result = check_codacy_zero._resolve_codacy_status(args)
@@ -404,16 +365,17 @@ class CodacyZeroRetryTests(unittest.TestCase):
         )
         threshold_findings = [
             "Codacy complex-files percentage is 15% (goal: <= 10%).",
-            "Codacy coverage is missing — no coverage report was uploaded "
-            + "(strict-zero floor: 100% line+branch).",
+            "Codacy coverage is missing — no coverage report was uploaded " + "(strict-zero floor: 100% line+branch).",
         ]
         with (
             patch.object(
-                check_codacy_zero, "load_codacy_findings_with_retry",
+                check_codacy_zero,
+                "load_codacy_findings_with_retry",
                 return_value=(0, []),
             ),
             patch.object(
-                check_codacy_zero, "_quality_threshold_findings",
+                check_codacy_zero,
+                "_quality_threshold_findings",
                 return_value=threshold_findings,
             ),
         ):
@@ -428,12 +390,7 @@ class CodacyZeroRetryTests(unittest.TestCase):
         self.assertTrue(
             codacy_zero_support.stale_pull_request_findings(
                 "68",
-                [
-                    (
-                        "Codacy analysis for pull request 68 issues is still on "
-                        "oldsha (waiting for targetsha)."
-                    )
-                ],
+                [("Codacy analysis for pull request 68 issues is still on oldsha (waiting for targetsha).")],
             )
         )
         self.assertFalse(
@@ -445,12 +402,7 @@ class CodacyZeroRetryTests(unittest.TestCase):
         self.assertFalse(
             codacy_zero_support.stale_pull_request_findings(
                 "",
-                [
-                    (
-                        "Codacy analysis for pull request 68 issues is still on "
-                        "oldsha (waiting for targetsha)."
-                    )
-                ],
+                [("Codacy analysis for pull request 68 issues is still on oldsha (waiting for targetsha).")],
             )
         )
 
@@ -458,14 +410,10 @@ class CodacyZeroRetryTests(unittest.TestCase):
         """Cover payload and report helpers."""
         payload = _build_payload(
             Namespace(provider="gh", owner="Prekzursil", repo="quality-zero-platform"),
-            CodacyStatusResult(
-                status="pass", findings=["done"], open_issues=0, pull_request=""
-            ),
+            CodacyStatusResult(status="pass", findings=["done"], open_issues=0, pull_request=""),
         )
         self.assertIn("- done", check_codacy_zero._render_md(payload))
-        with patch.object(
-            check_codacy_zero, "write_report", return_value=0
-        ) as write_report_mock:
+        with patch.object(check_codacy_zero, "write_report", return_value=0) as write_report_mock:
             self.assertEqual(
                 _write_codacy_report(
                     Namespace(

@@ -17,11 +17,14 @@ class ControlPlaneAdminExtraTests(unittest.TestCase):
     def _run_main_for_args(self, repo_root: Path, **kwargs):
         """Run one admin command and return the patched mutation helper."""
         handler_name = kwargs.pop("handler_name")
-        with patch.object(
-            control_plane_admin,
-            "parse_args",
-            return_value=Namespace(repo_root=str(repo_root), **kwargs),
-        ), patch.object(control_plane_admin, handler_name) as handler_mock:
+        with (
+            patch.object(
+                control_plane_admin,
+                "parse_args",
+                return_value=Namespace(repo_root=str(repo_root), **kwargs),
+            ),
+            patch.object(control_plane_admin, handler_name) as handler_mock,
+        ):
             self.assertEqual(control_plane_admin.main(), 0)
         return handler_mock
 
@@ -101,6 +104,4 @@ class ControlPlaneAdminExtraTests(unittest.TestCase):
                 event_name="default",
                 mode="enforce",
             )
-            self.assertEqual(
-                set_coverage_mock.call_args.kwargs["event_name"], "default"
-            )
+            self.assertEqual(set_coverage_mock.call_args.kwargs["event_name"], "default")

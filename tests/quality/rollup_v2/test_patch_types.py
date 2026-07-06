@@ -1,4 +1,5 @@
 """Tests for PatchResult and PatchDeclined types (per design §A.1.3 + §B.3.11)."""
+
 from __future__ import absolute_import
 
 import sys

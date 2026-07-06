@@ -4,9 +4,9 @@ import unittest
 from pathlib import Path
 from typing import List, Set
 
-from scripts.quality.control_plane import active_required_contexts, load_inventory, load_repo_profile, validate_profile
-
 from tests.control_plane_support import ControlPlaneAssertions
+
+from scripts.quality.control_plane import active_required_contexts, load_inventory, load_repo_profile, validate_profile
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -63,12 +63,7 @@ class CodexSessionManagerControlPlaneTests(unittest.TestCase, ControlPlaneAssert
     ) -> None:
         """Assert the event-specific context contract for the repo."""
         repo_required = self._repo_required_contexts()
-        pr_required = (
-            self._shared_zero_gate_contexts()
-            | {"codeql / CodeQL"}
-            | repo_required
-            | self._pr_only_contexts()
-        )
+        pr_required = self._shared_zero_gate_contexts() | {"codeql / CodeQL"} | repo_required | self._pr_only_contexts()
         self._assert_context_subset(
             push_contexts,
             self._zero_gate_provider_contexts() | {"codeql / CodeQL"} | repo_required,

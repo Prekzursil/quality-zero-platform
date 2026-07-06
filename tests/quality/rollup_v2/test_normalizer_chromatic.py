@@ -1,4 +1,5 @@
 """Tests for Chromatic normalizer (per §9.3)."""
+
 from __future__ import absolute_import
 
 import json
@@ -50,11 +51,13 @@ class ChromaticNormalizerTests(unittest.TestCase):
 
     def test_errored_build_produces_high_severity(self):
         artifact = {
-            "builds": [{
-                "errCount": 3,
-                "webUrl": "https://chromatic.com/build/123",
-                "changes": [],
-            }],
+            "builds": [
+                {
+                    "errCount": 3,
+                    "webUrl": "https://chromatic.com/build/123",
+                    "changes": [],
+                }
+            ],
             "summary": {"total": 10, "accepted": 7, "errored": 3, "changed": 0, "unchanged": 7, "rejected": 0},
         }
         result = ChromaticNormalizer().run(artifact=artifact, repo_root=self.root)
@@ -64,13 +67,15 @@ class ChromaticNormalizerTests(unittest.TestCase):
 
     def test_rejected_change_is_high_severity(self):
         artifact = {
-            "builds": [{
-                "errCount": 0,
-                "webUrl": "https://chromatic.com/build/456",
-                "changes": [
-                    {"component": "Card", "story": "Default", "status": "REJECTED", "changeUrl": None},
-                ],
-            }],
+            "builds": [
+                {
+                    "errCount": 0,
+                    "webUrl": "https://chromatic.com/build/456",
+                    "changes": [
+                        {"component": "Card", "story": "Default", "status": "REJECTED", "changeUrl": None},
+                    ],
+                }
+            ],
             "summary": {"total": 5, "accepted": 4, "errored": 0, "changed": 0, "unchanged": 4, "rejected": 1},
         }
         result = ChromaticNormalizer().run(artifact=artifact, repo_root=self.root)
@@ -90,16 +95,17 @@ class ChromaticNormalizerTests(unittest.TestCase):
 
     def test_clean_build_no_findings(self):
         artifact = {
-            "builds": [{
-                "errCount": 0,
-                "webUrl": "https://chromatic.com/build/789",
-                "changes": [],
-            }],
+            "builds": [
+                {
+                    "errCount": 0,
+                    "webUrl": "https://chromatic.com/build/789",
+                    "changes": [],
+                }
+            ],
             "summary": {"total": 10, "accepted": 10, "errored": 0, "changed": 0, "unchanged": 10, "rejected": 0},
         }
         result = ChromaticNormalizer().run(artifact=artifact, repo_root=self.root)
         self.assertEqual(len(result.findings), 0)
-
 
     def test_builds_not_list_returns_empty(self):
         result = ChromaticNormalizer().run(artifact={"builds": "not-list"}, repo_root=self.root)
@@ -121,12 +127,20 @@ class ChromaticNormalizerTests(unittest.TestCase):
         """Cover branch: changes loop exhausts then continues to next build."""
         artifact = {
             "builds": [
-                {"errCount": 0, "webUrl": None, "changes": [
-                    {"component": "A", "story": "B", "status": "CHANGED", "changeUrl": None},
-                ]},
-                {"errCount": 0, "webUrl": None, "changes": [
-                    {"component": "C", "story": "D", "status": "UNCHANGED", "changeUrl": None},
-                ]},
+                {
+                    "errCount": 0,
+                    "webUrl": None,
+                    "changes": [
+                        {"component": "A", "story": "B", "status": "CHANGED", "changeUrl": None},
+                    ],
+                },
+                {
+                    "errCount": 0,
+                    "webUrl": None,
+                    "changes": [
+                        {"component": "C", "story": "D", "status": "UNCHANGED", "changeUrl": None},
+                    ],
+                },
             ],
             "summary": {"total": 2, "accepted": 1, "errored": 0, "changed": 1, "unchanged": 1, "rejected": 0},
         }
@@ -143,9 +157,15 @@ class ChromaticNormalizerTests(unittest.TestCase):
 
     def test_unchanged_status_skipped(self):
         artifact = {
-            "builds": [{"errCount": 0, "webUrl": None, "changes": [
-                {"component": "X", "story": "Y", "status": "UNCHANGED", "changeUrl": None},
-            ]}],
+            "builds": [
+                {
+                    "errCount": 0,
+                    "webUrl": None,
+                    "changes": [
+                        {"component": "X", "story": "Y", "status": "UNCHANGED", "changeUrl": None},
+                    ],
+                }
+            ],
             "summary": {"total": 1, "accepted": 1, "errored": 0, "changed": 0, "unchanged": 1, "rejected": 0},
         }
         result = ChromaticNormalizer().run(artifact=artifact, repo_root=self.root)

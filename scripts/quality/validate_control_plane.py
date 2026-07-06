@@ -22,9 +22,7 @@ from scripts.quality.control_plane import (
 
 def _parse_args() -> argparse.Namespace:
     """Handle parse args."""
-    parser = argparse.ArgumentParser(
-        description="Validate all enrolled control-plane repo profiles."
-    )
+    parser = argparse.ArgumentParser(description="Validate all enrolled control-plane repo profiles.")
     parser.add_argument("--inventory", default="")
     parser.add_argument("--write-generated", default="")
     return parser.parse_args()
@@ -45,9 +43,7 @@ def main() -> int:
         if generated_dir is not None:
             payload = build_ruleset_payload(profile)
             output_path = generated_dir / f"{profile['profile_id']}.json"
-            output_path.write_text(
-                json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-            )
+            output_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     if findings:
         for finding in findings:

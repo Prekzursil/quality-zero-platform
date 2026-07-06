@@ -23,15 +23,8 @@ from pathlib import Path
 
 import yaml  # type: ignore[import-untyped]
 
-
-_REUSABLE = (
-    Path(__file__).resolve().parents[1]
-    / ".github" / "workflows" / "reusable-codeql.yml"
-)
-_CALLER = (
-    Path(__file__).resolve().parents[1]
-    / ".github" / "workflows" / "codeql.yml"
-)
+_REUSABLE = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "reusable-codeql.yml"
+_CALLER = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "codeql.yml"
 
 
 class ReusableCodeQLContract(unittest.TestCase):
@@ -56,14 +49,12 @@ class ReusableCodeQLContract(unittest.TestCase):
     def test_init_step_uses_codeql_config_file_input(self) -> None:
         """``codeql-action/init`` ``config-file`` references the input, not a hardcode."""
         steps = self.reusable["jobs"]["codeql"]["steps"]
-        init_steps = [
-            s for s in steps
-            if "uses" in s and s["uses"].startswith("github/codeql-action/init")
-        ]
+        init_steps = [s for s in steps if "uses" in s and s["uses"].startswith("github/codeql-action/init")]
         self.assertEqual(len(init_steps), 1)
         config_value = init_steps[0]["with"].get("config-file")
         self.assertEqual(
-            config_value, "${{ inputs.codeql_config_file }}",
+            config_value,
+            "${{ inputs.codeql_config_file }}",
             "init step must thread the input through, not hardcode a "
             "platform-only path that fleet consumers don't have",
         )
@@ -72,10 +63,13 @@ class ReusableCodeQLContract(unittest.TestCase):
         """Platform's own ``codeql.yml`` caller passes the config-file path."""
         caller_with = self.caller["jobs"]["codeql"].get("with", {}) or {}
         cfg = caller_with.get("codeql_config_file", "")
-        self.assertIn("codeql-config.yml", cfg,
+        self.assertIn(
+            "codeql-config.yml",
+            cfg,
             "platform's CALLER must pass the config-file path so the "
             "platform's own CodeQL run keeps its false-positive "
-            "suppressions for secrets_sync.py")
+            "suppressions for secrets_sync.py",
+        )
 
 
 if __name__ == "__main__":  # pragma: no cover

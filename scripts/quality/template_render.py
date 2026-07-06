@@ -133,9 +133,7 @@ def list_templates(
             continue
         for path in base.rglob("*.j2"):
             rel_template = path.relative_to(root).as_posix()
-            rel_output = (
-                path.relative_to(base).as_posix().removesuffix(".j2")
-            )
+            rel_output = path.relative_to(base).as_posix().removesuffix(".j2")
             mapping[rel_template] = rel_output
     return mapping
 

@@ -10,6 +10,7 @@ Usage:
     python scripts/quality/rollup_v2/verify_action_pins.py --workflows-dir .github/workflows
     python scripts/quality/rollup_v2/verify_action_pins.py --workflows-dir .github/workflows --strict
 """
+
 from __future__ import absolute_import
 
 import argparse
@@ -68,12 +69,14 @@ def scan_workflow(path: Path) -> List[Dict[str, str]]:
         if _SHA_RE.match(ref):
             continue
 
-        violations.append({
-            "file": str(path),
-            "line": str(line_num),
-            "action": f"{owner}/{repo}",
-            "ref": ref,
-        })
+        violations.append(
+            {
+                "file": str(path),
+                "line": str(line_num),
+                "action": f"{owner}/{repo}",
+                "ref": ref,
+            }
+        )
 
     return violations
 
@@ -94,9 +97,7 @@ def scan_workflows_dir(workflows_dir: Path) -> List[Dict[str, str]]:
 
 
 def main(argv: List[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Verify third-party GitHub Actions are SHA-pinned (§B.3.6)"
-    )
+    parser = argparse.ArgumentParser(description="Verify third-party GitHub Actions are SHA-pinned (§B.3.6)")
     parser.add_argument(
         "--workflows-dir",
         required=True,

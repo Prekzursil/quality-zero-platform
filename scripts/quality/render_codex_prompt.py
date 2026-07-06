@@ -25,14 +25,10 @@ _KNOWN_ISSUES_ROOT = Path(__file__).resolve().parents[2] / "known-issues"
 
 def _parse_args() -> argparse.Namespace:
     """Handle parse args."""
-    parser = argparse.ArgumentParser(
-        description="Render Codex remediation/backlog prompts from a repo profile."
-    )
+    parser = argparse.ArgumentParser(description="Render Codex remediation/backlog prompts from a repo profile.")
     parser.add_argument("--inventory", default="")
     parser.add_argument("--repo-slug", required=True)
-    parser.add_argument(
-        "--lane", choices=("remediation", "backlog"), default="remediation"
-    )
+    parser.add_argument("--lane", choices=("remediation", "backlog"), default="remediation")
     parser.add_argument("--event-name", default="pull_request")
     parser.add_argument("--failure-context", default="")
     parser.add_argument("--artifact", action="append", default=[])
@@ -61,15 +57,9 @@ def _repo_contract_lines(profile: dict) -> List[str]:
         f"- Codex auth lane: `{profile.get('codex_auth_lane', 'chatgpt-account')}`",
         f"- Provider UI mode: `{provider_ui_mode}`",
         f"- Codex environment mode: `{codex_environment.get('mode', 'automatic')}`",
-        (
-            "- Codex environment verify command: "
-            f"`{codex_environment.get('verify_command', profile['verify_command'])}`"
-        ),
+        (f"- Codex environment verify command: `{codex_environment.get('verify_command', profile['verify_command'])}`"),
         f"- Codex auth file: `{codex_auth_file}`",
-        (
-            "- Codex environment network profile: "
-            f"`{codex_environment.get('network_profile', 'unrestricted')}`"
-        ),
+        (f"- Codex environment network profile: `{codex_environment.get('network_profile', 'unrestricted')}`"),
         f"- Codex environment methods: `{codex_environment.get('methods', 'all')}`",
         f"- Codex runner labels: `{runner_labels}`",
         f"- Default branch: `{profile['default_branch']}`",
@@ -199,9 +189,7 @@ def _validate_render_prompt_inputs(
     Raises ``TypeError`` for any contract violation.
     """
     if len(args) != 1:
-        raise TypeError(
-            "_render_prompt expects a single profile mapping positional argument"
-        )
+        raise TypeError("_render_prompt expects a single profile mapping positional argument")
     profile = args[0]
     if not isinstance(profile, dict):
         raise TypeError("_render_prompt expects profile to be a mapping")
@@ -215,9 +203,7 @@ def _validate_render_prompt_inputs(
     if not isinstance(artifacts_value, Iterable):
         raise TypeError("_render_prompt expects artifacts to be iterable")
     if kwargs:
-        raise TypeError(
-            f"Unexpected _render_prompt parameters: {', '.join(sorted(kwargs))}"
-        )
+        raise TypeError(f"Unexpected _render_prompt parameters: {', '.join(sorted(kwargs))}")
     return (
         profile,
         lane,
@@ -229,9 +215,7 @@ def _validate_render_prompt_inputs(
 
 def _render_prompt(*args: object, **kwargs: object) -> str:
     """Handle render prompt."""
-    profile, lane, event_name, failure_context, artifacts = (
-        _validate_render_prompt_inputs(args, kwargs)
-    )
+    profile, lane, event_name, failure_context, artifacts = _validate_render_prompt_inputs(args, kwargs)
     headline = "PR failure remediation" if lane == "remediation" else "backlog sweep"
     sections = [
         f"# Codex {headline}",
@@ -240,10 +224,7 @@ def _render_prompt(*args: object, **kwargs: object) -> str:
         f"Lane: {lane}",
         f"Failure context: {failure_context or 'n/a'}",
         "",
-        (
-            "Treat missing external statuses as policy drift, provider drift, "
-            "or secret drift before changing code."
-        ),
+        ("Treat missing external statuses as policy drift, provider drift, or secret drift before changing code."),
         (
             "Never push to the default branch. Use "
             "`codex/fix/<context>/<shortsha>` for remediation and "
@@ -282,9 +263,7 @@ def main() -> int:
         canonical_path = Path(args.canonical_json)
         if canonical_path.is_file():
             canonical = json.loads(canonical_path.read_text(encoding="utf-8"))
-            findings_section = _render_canonical_findings_section(
-                canonical.get("findings", [])
-            )
+            findings_section = _render_canonical_findings_section(canonical.get("findings", []))
             if findings_section:
                 prompt = prompt.rstrip("\n") + "\n\n" + findings_section
     if args.output:

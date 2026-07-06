@@ -8,6 +8,7 @@ skeleton in 12 files generates a 24-line duplication block flagged by qlty.
 This factory builds the closure once per category so each patch module collapses
 to a 3-line declaration: import, version/category constants, and one factory call.
 """
+
 from __future__ import absolute_import
 
 from pathlib import Path

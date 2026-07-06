@@ -1,4 +1,5 @@
 """Coverage normalizer (per design §4.2 + §A.6, Task 6.8 special handling)."""
+
 from __future__ import absolute_import
 
 from pathlib import Path
@@ -32,6 +33,7 @@ class CoverageNormalizer(BaseNormalizer):
 
     Only modules with coverage below 100% emit findings.
     """
+
     provider = "Coverage"
 
     def parse(self, artifact: Any, repo_root: Path) -> Iterable[Finding]:
@@ -41,16 +43,18 @@ class CoverageNormalizer(BaseNormalizer):
             if percent >= 100.0:
                 continue
             name = str(component.get("name", f"module-{index}"))
-            yield self._build_finding(FindingDraft(
-                finding_id=f"coverage-{index:04d}",
-                file=name,
-                line=1,
-                category="coverage-gap",
-                category_group=CATEGORY_GROUP_QUALITY,
-                severity=_severity_from_percent(percent),
-                primary_message=f"Coverage {percent:.1f}% below threshold",
-                rule_id="coverage-gap",
-                rule_url=None,
-                original_message=f"Module {name} has {percent:.1f}% coverage",
-                context_snippet="",
-            ))
+            yield self._build_finding(
+                FindingDraft(
+                    finding_id=f"coverage-{index:04d}",
+                    file=name,
+                    line=1,
+                    category="coverage-gap",
+                    category_group=CATEGORY_GROUP_QUALITY,
+                    severity=_severity_from_percent(percent),
+                    primary_message=f"Coverage {percent:.1f}% below threshold",
+                    rule_id="coverage-gap",
+                    rule_url=None,
+                    original_message=f"Module {name} has {percent:.1f}% coverage",
+                    context_snippet="",
+                )
+            )

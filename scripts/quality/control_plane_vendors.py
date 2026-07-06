@@ -50,12 +50,8 @@ def _resolve_sonar_project_key(
         return project_key
 
     if bool(sonar.get("project_key_from_repo_slug")):
-        resolved_owner = (
-            owner or str(vendors.get("codacy", {}).get("owner", "")).strip()
-        )
-        resolved_repo_name = (
-            repo_name or str(vendors.get("codacy", {}).get("repo", "")).strip()
-        )
+        resolved_owner = owner or str(vendors.get("codacy", {}).get("owner", "")).strip()
+        resolved_repo_name = repo_name or str(vendors.get("codacy", {}).get("repo", "")).strip()
         return f"{resolved_owner}_{resolved_repo_name}".strip("_")
 
     separator = str(sonar.get("project_key_separator", "_")).strip() or "_"
@@ -106,10 +102,7 @@ def _finalize_codacy_vendor(
     _ensure_vendor_url(
         codacy,
         "dashboard_url",
-        (
-            "https://app.codacy.com/gh/"
-            f"{quote(owner, safe='')}/{quote(repo_name, safe='')}/dashboard"
-        ),
+        (f"https://app.codacy.com/gh/{quote(owner, safe='')}/{quote(repo_name, safe='')}/dashboard"),
         allowed_host_suffixes={"codacy.com"},
     )
 
@@ -124,10 +117,7 @@ def _finalize_codecov_vendor(
     _ensure_vendor_url(
         vendors.setdefault("codecov", {}),
         "dashboard_url",
-        (
-            "https://app.codecov.io/gh/"
-            f"{quote(owner, safe='')}/{quote(repo_name, safe='')}"
-        ),
+        (f"https://app.codecov.io/gh/{quote(owner, safe='')}/{quote(repo_name, safe='')}"),
         allowed_host_suffixes={"codecov.io"},
     )
 
@@ -157,10 +147,7 @@ def _finalize_qlty_vendor(
     _ensure_vendor_url(
         qlty,
         "dashboard_url",
-        (
-            "https://qlty.sh/gh/"
-            f"{quote(owner, safe='')}/projects/{quote(repo_name, safe='')}"
-        ),
+        (f"https://qlty.sh/gh/{quote(owner, safe='')}/projects/{quote(repo_name, safe='')}"),
         allowed_host_suffixes={"qlty.sh"},
     )
 
@@ -202,14 +189,10 @@ def _finalize_visual_vendors(profile: Dict[str, Any], vendors: Dict[str, Any]) -
         "local_env_var",
         f"CHROMATIC_PROJECT_TOKEN_{_provider_env_suffix(repo_name)}",
     )
-    token_secret_parts = _joined_vendor_env_parts(
-        chromatic.pop("token_secret_parts", None)
-    )
+    token_secret_parts = _joined_vendor_env_parts(chromatic.pop("token_secret_parts", None))
     if token_secret_parts:
         chromatic["token_secret"] = token_secret_parts
-    local_env_var_parts = _joined_vendor_env_parts(
-        chromatic.pop("local_env_var_parts", None)
-    )
+    local_env_var_parts = _joined_vendor_env_parts(chromatic.pop("local_env_var_parts", None))
     if local_env_var_parts:
         chromatic["local_env_var"] = local_env_var_parts
 

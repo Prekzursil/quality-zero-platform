@@ -9,6 +9,7 @@ in turn are imported (transitively) by ``coverage_support`` which
 Moving the dataclass to a leaf module lets every consumer import from
 here without dragging in the rest of the coverage stack.
 """
+
 from __future__ import absolute_import
 
 from dataclasses import dataclass

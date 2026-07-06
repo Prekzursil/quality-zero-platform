@@ -1,11 +1,11 @@
 """Tests for renderer high-volume truncation + footer (per design §A.1.2 + §B.3.9 + §B.3.15 + §B.3.8)."""
-from __future__ import absolute_import
 
-from typing import List
+from __future__ import absolute_import
 
 import sys
 import unittest
 from pathlib import Path
+from typing import List
 
 if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
@@ -63,9 +63,7 @@ def _many_findings(n_files: int, per_file: int) -> List[Finding]:
     findings = []
     for fi in range(n_files):
         for li in range(per_file):
-            findings.append(
-                _make_finding(file=f"src/file_{fi:03d}.py", line=li + 1)
-            )
+            findings.append(_make_finding(file=f"src/file_{fi:03d}.py", line=li + 1))
     return findings
 
 

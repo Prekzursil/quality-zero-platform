@@ -1,4 +1,5 @@
 """Budget guard for LLM fallback patch generation (per design §5.2)."""
+
 from __future__ import absolute_import
 
 
@@ -21,9 +22,7 @@ class BudgetGuard:
     def record_call(self) -> None:
         """Record one LLM call.  Raises ``RuntimeError`` if budget exhausted."""
         if not self.can_proceed():
-            raise RuntimeError(
-                f"LLM patch budget exhausted: {self._used}/{self._max_patches} used"
-            )
+            raise RuntimeError(f"LLM patch budget exhausted: {self._used}/{self._max_patches} used")
         self._used += 1
 
     def remaining(self) -> int:

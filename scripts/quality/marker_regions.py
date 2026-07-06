@@ -97,19 +97,14 @@ def _handle_begin(
     return (begin_id, lineno, [])
 
 
-def _handle_end(
-    end_id: str, lineno: int, open_region: Optional[Tuple[str, int, List[str]]]
-) -> Region:
+def _handle_end(end_id: str, lineno: int, open_region: Optional[Tuple[str, int, List[str]]]) -> Region:
     """Validate the END marker, returning the closed ``Region``."""
     if open_region is None:
-        raise MismatchedRegionError(
-            f"END on line {lineno} ({end_id!r}) without a matching BEGIN"
-        )
+        raise MismatchedRegionError(f"END on line {lineno} ({end_id!r}) without a matching BEGIN")
     region_id, begin_line, body_lines = open_region
     if end_id != region_id:
         raise MismatchedRegionError(
-            f"END on line {lineno} has id {end_id!r}; "
-            f"expected {region_id!r} (opened on line {begin_line})"
+            f"END on line {lineno} has id {end_id!r}; expected {region_id!r} (opened on line {begin_line})"
         )
     return Region(
         region_id=region_id,
@@ -146,8 +141,7 @@ def parse_regions(text: str) -> List[Region]:
             open_region[2].append(raw)
     if open_region is not None:
         raise UnterminatedRegionError(
-            f"BEGIN on line {open_region[1]} "
-            f"({open_region[0]!r}) has no matching END before EOF"
+            f"BEGIN on line {open_region[1]} ({open_region[0]!r}) has no matching END before EOF"
         )
     return regions
 
@@ -159,9 +153,7 @@ def _normalise_override_body(body: str) -> str:
     return body
 
 
-def _emit_begin(
-    raw: str, region_id: str, overrides: Mapping[str, str], out: List[str]
-) -> None:
+def _emit_begin(raw: str, region_id: str, overrides: Mapping[str, str], out: List[str]) -> None:
     """Append the BEGIN line and, when overridden, the new body."""
     out.append(raw)
     if region_id in overrides:

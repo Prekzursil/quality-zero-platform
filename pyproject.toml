@@ -41,9 +41,24 @@ partial_branches = [
 target-version = "py312"
 line-length = 120
 src = ["scripts", "tests"]
+# The rollup_v2 patch harness feeds DELIBERATELY-BROKEN Python samples
+# (``*.input.py``: undefined names, tab indentation, mutable defaults, bare
+# excepts) plus generated golden ``.md``/``.diff``/``.json`` files. They are
+# DATA fixtures consumed by patch_harness.py, not lintable source — linting them
+# would flag the intentional breakage (F821/W191/B006/E722/...) and "fixing" it
+# would corrupt the golden expectations. Excluded from both check and format
+# (mirrors the lean model's extend-exclude of non-source trees).
+extend-exclude = ["tests/quality/rollup_v2/fixtures"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "TCH", "S", "PT"]
+# PT (flake8-pytest-style) is intentionally NOT selected: this project's test
+# suite is unittest-based (``unittest.TestCase`` + ``self.assertEqual`` /
+# ``self.assertRaises``), run via ``python -m unittest discover``. PT009/PT027
+# would demand rewriting ~3.1k unittest assertions into bare ``assert``s,
+# discarding unittest's rich failure diffs — a categorical rule/framework
+# mismatch, not a code defect. SAST/security stays on gate 4 (opengrep) + the S
+# rules below.
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "TCH", "S"]
 ignore = [
   "S101",  # assert is used in tests
   # The codacy-compat test in tests/test_quality_codacy_compatibility.py
@@ -61,6 +76,23 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["scripts"]
+
+[tool.ruff.lint.per-file-ignores]
+# Test code legitimately does what production code must not, and these are
+# categorical test-inherent patterns (not defects). Real security is enforced
+# on SOURCE by the opengrep SAST gate (gate 4) + the gitleaks secrets gate
+# (gate 5); relaxing them for the test tree does not weaken the source gates.
+"tests/**" = [
+  "S105",  # "hardcoded password string" — fake secret values in scanner-zero fixtures
+  "S106",  # "hardcoded password func arg" — fake ``secret_name`` args in secrets-sync tests
+  "S108",  # "hardcoded temp file" — deterministic ``/tmp/...`` paths in test fixtures
+  "S603",  # "subprocess without shell=True check" — the tests' own git/CLI harness
+  "S607",  # "start process with partial path" — ``git``/tool names in the test harness
+  "B017",  # ``assertRaises(Exception)`` — tests intentionally assert generic-failure paths
+  "N802",  # unittest-style ``assertEqual``/``assertIn`` helper names (Protocol mirror)
+  "E501",  # long expected-value literals in golden / SARIF assertion fixtures
+  "SIM115",  # ``NamedTemporaryFile(delete=False).name`` + ``addCleanup(...unlink)`` temp-path idiom
+]
 
 [tool.pydocstyle]
 # D212 (summary on first line) and D213 (summary on second line) are

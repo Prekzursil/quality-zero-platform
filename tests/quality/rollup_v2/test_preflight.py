@@ -1,4 +1,5 @@
 """Tests for LLM fallback preflight check (per design §B.3.12)."""
+
 from __future__ import absolute_import
 
 import sys

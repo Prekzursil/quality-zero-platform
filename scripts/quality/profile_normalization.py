@@ -20,23 +20,15 @@ def _issue_policy_defaults(mode: str) -> Dict[str, str]:
     }
 
 
-def _merge_issue_policy_defaults(
-    mode: str, payload: Mapping[str, Any]
-) -> Dict[str, str]:
+def _merge_issue_policy_defaults(mode: str, payload: Mapping[str, Any]) -> Dict[str, str]:
     """Handle merge issue policy defaults."""
     defaults = _issue_policy_defaults(mode)
     return {
         "mode": mode,
-        "pr_behavior": str(payload.get("pr_behavior", defaults["pr_behavior"])).strip()
-        or defaults["pr_behavior"],
-        "main_behavior": str(
-            payload.get("main_behavior", defaults["main_behavior"])
-        ).strip()
+        "pr_behavior": str(payload.get("pr_behavior", defaults["pr_behavior"])).strip() or defaults["pr_behavior"],
+        "main_behavior": str(payload.get("main_behavior", defaults["main_behavior"])).strip()
         or defaults["main_behavior"],
-        "baseline_ref": str(
-            payload.get("baseline_ref", defaults["baseline_ref"])
-        ).strip()
-        or defaults["baseline_ref"],
+        "baseline_ref": str(payload.get("baseline_ref", defaults["baseline_ref"])).strip() or defaults["baseline_ref"],
     }
 
 
@@ -47,9 +39,7 @@ def normalize_issue_policy(
     if isinstance(raw_issue_policy, str):
         return _issue_policy_defaults(str(raw_issue_policy or "").strip() or "ratchet")
 
-    payload = (
-        deepcopy(raw_issue_policy or {}) if isinstance(raw_issue_policy, dict) else {}
-    )
+    payload = deepcopy(raw_issue_policy or {}) if isinstance(raw_issue_policy, dict) else {}
     mode = str(payload.get("mode", "ratchet")).strip() or "ratchet"
     return _merge_issue_policy_defaults(mode, payload)
 
@@ -59,8 +49,7 @@ def normalize_deps(raw_deps: Mapping[str, Any] | None) -> Dict[str, Any]:
     payload = deepcopy(raw_deps or {}) if isinstance(raw_deps, dict) else {}
     return {
         "enabled": bool(payload.get("enabled", False)),
-        "policy": str(payload.get("policy", "zero_critical")).strip()
-        or "zero_critical",
+        "policy": str(payload.get("policy", "zero_critical")).strip() or "zero_critical",
         "scope": str(payload.get("scope", "runtime")).strip() or "runtime",
     }
 
@@ -69,14 +58,8 @@ def normalize_required_contexts(raw: Mapping[str, Any] | None) -> Dict[str, List
     """Handle normalize required contexts."""
     payload = deepcopy(raw or {}) if isinstance(raw, dict) else {}
     always = dedupe_strings(payload.get("always", []))
-    pull_request_only = [
-        item
-        for item in dedupe_strings(payload.get("pull_request_only", []))
-        if item not in always
-    ]
-    required_now = dedupe_strings(
-        payload.get("required_now", []) or [*always, *pull_request_only]
-    )
+    pull_request_only = [item for item in dedupe_strings(payload.get("pull_request_only", [])) if item not in always]
+    required_now = dedupe_strings(payload.get("required_now", []) or [*always, *pull_request_only])
     target = dedupe_strings(payload.get("target", []) or [*required_now])
     return {
         "always": always,
@@ -86,9 +69,7 @@ def normalize_required_contexts(raw: Mapping[str, Any] | None) -> Dict[str, List
     }
 
 
-def merge_required_contexts(
-    base: Mapping[str, Any] | None, overlay: Mapping[str, Any] | None
-) -> Dict[str, List[str]]:
+def merge_required_contexts(base: Mapping[str, Any] | None, overlay: Mapping[str, Any] | None) -> Dict[str, List[str]]:
     """Handle merge required contexts."""
     base_payload = base if isinstance(base, Mapping) else {}
     overlay_payload = overlay if isinstance(overlay, Mapping) else {}
@@ -141,9 +122,7 @@ def normalize_coverage_setup(raw_setup: Any) -> Dict[str, Any]:
 
 def normalize_coverage_assert_mode(raw_assert_mode: Any) -> Dict[str, str]:
     """Handle normalize coverage assert mode."""
-    return profile_coverage_normalization.normalize_coverage_assert_mode(
-        raw_assert_mode
-    )
+    return profile_coverage_normalization.normalize_coverage_assert_mode(raw_assert_mode)
 
 
 def normalize_coverage(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
@@ -151,23 +130,16 @@ def normalize_coverage(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
     return profile_coverage_normalization.normalize_coverage(raw)
 
 
-def normalize_codex_environment(
-    raw: Mapping[str, Any] | None, *, verify_command: str
-) -> Dict[str, Any]:
+def normalize_codex_environment(raw: Mapping[str, Any] | None, *, verify_command: str) -> Dict[str, Any]:
     """Handle normalize codex environment."""
     payload = deepcopy(raw or {}) if isinstance(raw, dict) else {}
     return {
         "mode": str(payload.get("mode", "automatic")).strip() or "automatic",
-        "verify_command": str(payload.get("verify_command", verify_command)).strip()
-        or verify_command,
-        "auth_file": str(payload.get("auth_file", "~/.codex/auth.json")).strip()
-        or "~/.codex/auth.json",
-        "network_profile": str(payload.get("network_profile", "unrestricted")).strip()
-        or "unrestricted",
+        "verify_command": str(payload.get("verify_command", verify_command)).strip() or verify_command,
+        "auth_file": str(payload.get("auth_file", "~/.codex/auth.json")).strip() or "~/.codex/auth.json",
+        "network_profile": str(payload.get("network_profile", "unrestricted")).strip() or "unrestricted",
         "methods": str(payload.get("methods", "all")).strip() or "all",
-        "runner_labels": dedupe_strings(
-            payload.get("runner_labels", ["self-hosted", "codex-trusted"])
-        ),
+        "runner_labels": dedupe_strings(payload.get("runner_labels", ["self-hosted", "codex-trusted"])),
     }
 
 
@@ -177,8 +149,7 @@ def normalize_codeql(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
     return {
         "enabled": bool(payload.get("enabled", True)),
         "languages": dedupe_strings(payload.get("languages", [])),
-        "runner": str(payload.get("runner", "ubuntu-latest")).strip()
-        or "ubuntu-latest",
+        "runner": str(payload.get("runner", "ubuntu-latest")).strip() or "ubuntu-latest",
         "build_mode": str(payload.get("build_mode", "none")).strip() or "none",
         "setup": normalize_coverage_setup(payload.get("setup", {})),
     }
@@ -205,11 +176,8 @@ def normalize_dependabot(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
         "enabled": bool(payload.get("enabled", True)),
         "updates": updates,
         "open_pull_requests_limit": int(payload.get("open_pull_requests_limit", 10)),
-        "schedule_interval": str(payload.get("schedule_interval", "weekly")).strip()
-        or "weekly",
-        "labels": dedupe_strings(
-            payload.get("labels", ["dependencies", "type:chore", "area:ci"])
-        ),
+        "schedule_interval": str(payload.get("schedule_interval", "weekly")).strip() or "weekly",
+        "labels": dedupe_strings(payload.get("labels", ["dependencies", "type:chore", "area:ci"])),
     }
 
 
@@ -252,17 +220,14 @@ def _phase_from_issue_policy(legacy_issue_policy: Mapping[str, Any] | None) -> s
 
 def _normalize_ratchet(raw_ratchet: Any) -> Dict[str, Any]:
     """Return a canonical ratchet sub-structure from user input."""
-    payload = (
-        deepcopy(raw_ratchet or {}) if isinstance(raw_ratchet, Mapping) else {}
-    )
+    payload = deepcopy(raw_ratchet or {}) if isinstance(raw_ratchet, Mapping) else {}
     raw_baseline = payload.get("baseline")
     baseline = raw_baseline if isinstance(raw_baseline, Mapping) else {}
     return {
         "baseline": dict(baseline),
         "target_date": str(payload.get("target_date", "")).strip(),
         "escalation_date": str(payload.get("escalation_date", "")).strip(),
-        "on_escalation": str(payload.get("on_escalation", "absolute")).strip()
-        or "absolute",
+        "on_escalation": str(payload.get("on_escalation", "absolute")).strip() or "absolute",
     }
 
 

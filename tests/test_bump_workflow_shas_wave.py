@@ -12,7 +12,6 @@ from pathlib import Path
 
 import yaml  # type: ignore[import-untyped]
 
-
 _BASE = Path(__file__).resolve().parents[1] / ".github" / "workflows"
 _PER_REPO = _BASE / "reusable-bump-workflow-shas.yml"
 _WAVE = _BASE / "bump-workflow-shas-wave.yml"
@@ -49,10 +48,7 @@ class ReusableBumpWorkflowShasContract(unittest.TestCase):
     def test_artifact_name_uses_safe_slug(self) -> None:
         """Bump-report artifact name uses the slash-escaped slug."""
         steps = self.doc["jobs"]["bump"]["steps"]
-        upload_steps = [
-            s for s in steps
-            if "uses" in s and "upload-artifact" in s["uses"]
-        ]
+        upload_steps = [s for s in steps if "uses" in s and "upload-artifact" in s["uses"]]
         self.assertEqual(len(upload_steps), 1)
         name = upload_steps[0]["with"]["name"]
         self.assertIn("steps.artifact_name.outputs.slug_safe", name)
@@ -60,9 +56,7 @@ class ReusableBumpWorkflowShasContract(unittest.TestCase):
     def test_open_pr_step_gated_on_dry_run_and_pat_and_bumps(self) -> None:
         """PR step requires (a) opt-out of dry-run, (b) PAT present, (c) >0 bumps."""
         steps = self.doc["jobs"]["bump"]["steps"]
-        pr_steps = [
-            s for s in steps if "Open bump PR" in s.get("name", "")
-        ]
+        pr_steps = [s for s in steps if "Open bump PR" in s.get("name", "")]
         self.assertEqual(len(pr_steps), 1)
         cond = pr_steps[0].get("if", "")
         self.assertIn("!inputs.dry_run", cond)

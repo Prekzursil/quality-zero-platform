@@ -27,8 +27,7 @@ class FindReusablePinsTests(unittest.TestCase):
         pins = bws.find_reusable_pins(text)
         self.assertEqual(
             pins,
-            [("reusable-codecov-analytics.yml",
-              "cc7e3095598478230cd85566a72e310acd1a8923")],
+            [("reusable-codecov-analytics.yml", "cc7e3095598478230cd85566a72e310acd1a8923")],
         )
 
     def test_extracts_multiple_pins_in_order(self) -> None:
@@ -55,18 +54,12 @@ class FindReusablePinsTests(unittest.TestCase):
 
     def test_ignores_branch_or_tag_pins(self) -> None:
         """Only 40-char hex SHAs are considered pins (skip @main / @v1 etc)."""
-        text = (
-            "uses: Prekzursil/quality-zero-platform/.github/workflows/"
-            "reusable-codeql.yml@main\n"
-        )
+        text = "uses: Prekzursil/quality-zero-platform/.github/workflows/reusable-codeql.yml@main\n"
         self.assertEqual(bws.find_reusable_pins(text), [])
 
     def test_short_sha_is_ignored(self) -> None:
         """Short SHAs (<40 chars) are not full pins — skip them."""
-        text = (
-            "uses: Prekzursil/quality-zero-platform/.github/workflows/"
-            "reusable-codeql.yml@cc7e3095\n"
-        )
+        text = "uses: Prekzursil/quality-zero-platform/.github/workflows/reusable-codeql.yml@cc7e3095\n"
         self.assertEqual(bws.find_reusable_pins(text), [])
 
 
@@ -96,10 +89,7 @@ class BumpPinsToTargetTests(unittest.TestCase):
     def test_idempotent_when_already_at_target(self) -> None:
         """Running twice leaves text identical + count = 0 the second time."""
         target = "b24d2cabf9e2244fd4d981f40c91acdac3fd26eb"
-        text = (
-            f"uses: Prekzursil/quality-zero-platform/.github/workflows/"
-            f"reusable-codeql.yml@{target}\n"
-        )
+        text = f"uses: Prekzursil/quality-zero-platform/.github/workflows/reusable-codeql.yml@{target}\n"
         new_text, count = bws.bump_pins_to_target(text, target_sha=target)
         self.assertEqual(new_text, text)
         self.assertEqual(count, 0)

@@ -23,7 +23,10 @@ from scripts.quality import secrets_sync
 def _fake_completed(stdout: str = "", returncode: int = 0) -> subprocess.CompletedProcess:
     """CompletedProcess double for runner mocks."""
     return subprocess.CompletedProcess(
-        args=["gh"], returncode=returncode, stdout=stdout, stderr="",
+        args=["gh"],
+        returncode=returncode,
+        stdout=stdout,
+        stderr="",
     )
 
 
@@ -57,7 +60,8 @@ class SyncSecretTests(unittest.TestCase):
         # The closure captures the secret; sync_secret never sees it.
         runner = MagicMock(return_value=_fake_completed(""))
         setter = secrets_sync.make_gh_secret_setter(
-            "super-sensitive-token-abc123", runner=runner,
+            "super-sensitive-token-abc123",
+            runner=runner,
         )
         records = secrets_sync.sync_secret(
             secret_name="SONAR_TOKEN",
@@ -69,7 +73,8 @@ class SyncSecretTests(unittest.TestCase):
                 self.assertNotIn("secret_value", record)
                 for value in record.values():
                     self.assertNotIn(
-                        "super-sensitive-token-abc123", str(value),
+                        "super-sensitive-token-abc123",
+                        str(value),
                     )
 
     def test_setter_called_once_per_target(self) -> None:
@@ -142,16 +147,23 @@ class AppendAuditJsonlTests(unittest.TestCase):
         """Records are one-line, sort_keys=True, no spaces, newline-terminated."""
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "secrets-sync.jsonl"
-            secrets_sync.append_audit_jsonl(path, [
-                {
-                    "target_slug": "org/b", "secret_name": "A",
-                    "status": "synced", "timestamp_utc": "2026-04-23T12:00:00Z",
-                },
-                {
-                    "target_slug": "org/a", "secret_name": "B",
-                    "status": "synced", "timestamp_utc": "2026-04-23T12:01:00Z",
-                },
-            ])
+            secrets_sync.append_audit_jsonl(
+                path,
+                [
+                    {
+                        "target_slug": "org/b",
+                        "secret_name": "A",
+                        "status": "synced",
+                        "timestamp_utc": "2026-04-23T12:00:00Z",
+                    },
+                    {
+                        "target_slug": "org/a",
+                        "secret_name": "B",
+                        "status": "synced",
+                        "timestamp_utc": "2026-04-23T12:01:00Z",
+                    },
+                ],
+            )
             content = path.read_text(encoding="utf-8")
         lines = content.splitlines()
         self.assertEqual(len(lines), 2)
@@ -161,19 +173,25 @@ class AppendAuditJsonlTests(unittest.TestCase):
             self.assertIn("secret_name", parsed)
             self.assertIn("timestamp_utc", parsed)
             # Keys should come out in sorted order so greps are stable:
-            key_order = [k for k in parsed]
+            key_order = list(parsed)
             self.assertEqual(key_order, sorted(key_order))
 
     def test_appends_to_existing_file(self) -> None:
         """Second call appends, doesn't truncate."""
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "secrets-sync.jsonl"
-            secrets_sync.append_audit_jsonl(path, [
-                {"target_slug": "org/a", "secret_name": "X", "status": "synced"},
-            ])
-            secrets_sync.append_audit_jsonl(path, [
-                {"target_slug": "org/b", "secret_name": "Y", "status": "synced"},
-            ])
+            secrets_sync.append_audit_jsonl(
+                path,
+                [
+                    {"target_slug": "org/a", "secret_name": "X", "status": "synced"},
+                ],
+            )
+            secrets_sync.append_audit_jsonl(
+                path,
+                [
+                    {"target_slug": "org/b", "secret_name": "Y", "status": "synced"},
+                ],
+            )
             lines = path.read_text(encoding="utf-8").splitlines()
         self.assertEqual(len(lines), 2)
 
@@ -181,9 +199,12 @@ class AppendAuditJsonlTests(unittest.TestCase):
         """``append_audit_jsonl`` creates missing parents automatically."""
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "audit" / "nested" / "secrets-sync.jsonl"
-            secrets_sync.append_audit_jsonl(path, [
-                {"target_slug": "org/a", "secret_name": "X", "status": "synced"},
-            ])
+            secrets_sync.append_audit_jsonl(
+                path,
+                [
+                    {"target_slug": "org/a", "secret_name": "X", "status": "synced"},
+                ],
+            )
             self.assertTrue(path.is_file())
 
     def test_sanitiser_drops_unknown_keys(self) -> None:
@@ -192,14 +213,18 @@ class AppendAuditJsonlTests(unittest.TestCase):
             path = Path(tmp) / "secrets-sync.jsonl"
             # A misuse that includes secret_value in the record would NOT
             # survive to the JSONL thanks to the sanitiser.
-            secrets_sync.append_audit_jsonl(path, [
-                {
-                    "target_slug": "org/a", "secret_name": "X",
-                    "status": "synced",
-                    "secret_value": "should-never-land-in-jsonl",
-                    "extra_junk": "also-dropped",
-                },
-            ])
+            secrets_sync.append_audit_jsonl(
+                path,
+                [
+                    {
+                        "target_slug": "org/a",
+                        "secret_name": "X",
+                        "status": "synced",
+                        "secret_value": "should-never-land-in-jsonl",
+                        "extra_junk": "also-dropped",
+                    },
+                ],
+            )
             line = path.read_text(encoding="utf-8").strip()
         parsed = json.loads(line)
         self.assertNotIn("secret_value", parsed)

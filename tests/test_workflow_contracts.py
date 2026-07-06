@@ -41,7 +41,11 @@ class WorkflowContractTests(unittest.TestCase):
         for path in workflow_paths:
             text = path.read_text(encoding="utf-8")
             self.assertNotIn("secrets: inherit", text, path.name)
-            if path.name in {"quality-zero-platform.yml", "quality-zero-gate.yml"}:
+            # quality-zero-platform.yml migrated to the LEAN self-gate (ruff +
+            # opengrep + charter, see the workflow header) and no longer forwards
+            # ``platform_repository`` to the scanner-matrix. quality-zero-gate.yml
+            # still calls the shared reusable-quality-zero-gate and keeps it.
+            if path.name == "quality-zero-gate.yml":
                 self.assertIn("platform_repository: ${{ github.repository }}", text, path.name)
             if path.name == "codeql.yml":
                 self.assertIn("uses: ./.github/workflows/reusable-codeql.yml", text, path.name)
@@ -60,9 +64,7 @@ class WorkflowContractTests(unittest.TestCase):
         for path in workflow_paths:
             text = path.read_text(encoding="utf-8")
             self.assertNotIn("secrets: inherit", text, path.name)
-            self.assertIn(
-                "@d7a94db4ab57df42940832cf67b730c673af7da6", text, path.name
-            )
+            self.assertIn("@d7a94db4ab57df42940832cf67b730c673af7da6", text, path.name)
             self.assertIn("platform_repository: Prekzursil/quality-zero-platform", text, path.name)
             self.assertIn("platform_ref: main", text, path.name)
             self.assertIn("merge_group:", text, path.name)
@@ -140,8 +142,9 @@ class WorkflowContractTests(unittest.TestCase):
 
     def test_self_wrapper_workflows_use_current_ref_for_platform_checkout(self) -> None:
         """Check self-hosted wrappers out at the current controller ref for the running event."""
+        # quality-zero-platform.yml is intentionally absent: the lean self-gate
+        # checks out at the default ref (no platform_ref indirection needed).
         workflow_expectations = {
-            "quality-zero-platform.yml": "platform_ref: ${{ github.event.pull_request.head.sha || github.sha }}",
             "quality-zero-gate.yml": "platform_ref: ${{ github.event.pull_request.head.sha || github.sha }}",
             "codecov-analytics.yml": "platform_ref: ${{ github.event.pull_request.head.sha || github.sha }}",
             "codeql.yml": "platform_ref: ${{ github.event.pull_request.head.sha || github.sha }}",
@@ -223,7 +226,9 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7", text)
 
         backlog_text = (ROOT / ".github" / "workflows" / "reusable-backlog-sweep.yml").read_text(encoding="utf-8")
-        remediation_text = (ROOT / ".github" / "workflows" / "reusable-remediation-loop.yml").read_text(encoding="utf-8")
+        remediation_text = (ROOT / ".github" / "workflows" / "reusable-remediation-loop.yml").read_text(
+            encoding="utf-8"
+        )
         self.assertIn("peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c", backlog_text)
         self.assertIn("peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c", remediation_text)
 
@@ -236,9 +241,10 @@ class WorkflowContractTests(unittest.TestCase):
         # Codecov upload action must NOT be in scanner-matrix (removed per §7.3)
         self.assertNotIn("codecov/codecov-action@", text)
 
-        wrapper_text = (ROOT / ".github" / "workflows" / "quality-zero-platform.yml").read_text(encoding="utf-8")
-        self.assertIn("CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}", wrapper_text)
-
+        # NOTE: quality-zero-platform.yml no longer forwards CODECOV_TOKEN — it
+        # migrated to the lean self-gate (ruff + opengrep + charter) and does not
+        # run Codecov. The token contract is still asserted on the dedicated
+        # codecov-analytics.yml wrapper + reusable below (fleet path unchanged).
         analytics_text = (ROOT / ".github" / "workflows" / "codecov-analytics.yml").read_text(encoding="utf-8")
         self.assertIn("CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}", analytics_text)
 
@@ -260,7 +266,9 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("validate_codecov_flags.py", reusable_text)
         self.assertEqual(reusable_text.count("persist-credentials: false"), 2)
         self.assertIn('profile_path = Path(os.environ["RUNNER_TEMP"]) / "profile.json"', reusable_text)
-        self.assertIn('coverage = json.loads(profile_path.read_text(encoding="utf-8")).get("coverage", {})', reusable_text)
+        self.assertIn(
+            'coverage = json.loads(profile_path.read_text(encoding="utf-8")).get("coverage", {})', reusable_text
+        )
 
     def test_scanner_matrix_exports_provider_credentials_to_lane_runtime(self) -> None:
         """Expose the provider credentials and repo metadata required by scanner lanes."""
@@ -302,20 +310,17 @@ class WorkflowContractTests(unittest.TestCase):
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
         self.assertIn('pull_request_number = os.environ.get("PULL_REQUEST_NUMBER", "").strip()', text)
         self.assertIn('branch_name = os.environ.get("BRANCH_NAME", "").strip()', text)
-        self.assertIn('if pull_request_number:', text)
+        self.assertIn("if pull_request_number:", text)
         self.assertIn('cmd.extend(["--pull-request", pull_request_number])', text)
         self.assertIn('cmd.extend(["--branch", branch_name])', text)
         self.assertNotIn('if pull_request_number and pr_issue_behavior == "introduced_only":', text)
-        wrapper_text = (ROOT / ".github" / "workflows" / "quality-zero-platform.yml").read_text(encoding="utf-8")
-        for expected in [
-            "branch_name: ${{ github.head_ref || github.ref_name }}",
-            "pull_request_number: ${{ github.event.pull_request.number || '' }}",
-            "pull_request_author: ${{ github.event.pull_request.user.login || '' }}",
-            "pull_request_head_ref: ${{ github.event.pull_request.head.ref || github.head_ref || '' }}",
-        ]:
-            self.assertIn(expected, wrapper_text)
-
-        template_text = (ROOT / "templates" / "repo" / ".github" / "workflows" / "quality-zero-platform.yml").read_text(encoding="utf-8")
+        # The self-wrapper (quality-zero-platform.yml) no longer feeds PR metadata
+        # to the scanner-matrix — it migrated to the lean self-gate. The PR-metadata
+        # wiring is still required on the fleet TEMPLATE below (governed repos keep
+        # the scanner-matrix contract, so their template still passes it through).
+        template_text = (ROOT / "templates" / "repo" / ".github" / "workflows" / "quality-zero-platform.yml").read_text(
+            encoding="utf-8"
+        )
         for expected in [
             "branch_name: ${{ github.head_ref || github.ref_name }}",
             "pull_request_number: ${{ github.event.pull_request.number || '' }}",
@@ -494,6 +499,7 @@ class WorkflowContractTests(unittest.TestCase):
         # Match the directive at YAML-key level (leading whitespace +
         # bare key:value), not a reference inside a comment.
         import re as _re
+
         directive_match = _re.search(
             r"^\s+continue-on-error:\s*true\s*$",
             codacy_block,
@@ -527,12 +533,12 @@ class WorkflowContractTests(unittest.TestCase):
         deepsource_block = text[deepsource_block_start:deepsource_block_end]
         # Reject ``|| true`` on the per-file report invocations specifically.
         self.assertNotIn(
-            "deepsource report --analyzer test-coverage --key python --value-file \"$f\" || true",
+            'deepsource report --analyzer test-coverage --key python --value-file "$f" || true',
             deepsource_block,
             "DeepSource Python coverage report must not be ||true-suppressed",
         )
         self.assertNotIn(
-            "deepsource report --analyzer test-coverage --key javascript --value-file \"$f\" || true",
+            'deepsource report --analyzer test-coverage --key javascript --value-file "$f" || true',
             deepsource_block,
             "DeepSource JavaScript coverage report must not be ||true-suppressed",
         )
@@ -544,8 +550,7 @@ class WorkflowContractTests(unittest.TestCase):
             self.assertIn(
                 "CODACY_PROJECT_TOKEN secret is missing",
                 text,
-                "Workflow must emit an actionable error when "
-                "CODACY_PROJECT_TOKEN is missing",
+                "Workflow must emit an actionable error when CODACY_PROJECT_TOKEN is missing",
             )
         self.assertIn(
             "DEEPSOURCE_DSN secret is missing",

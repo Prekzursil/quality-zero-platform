@@ -17,8 +17,8 @@ from typing import Any, List, Sequence, Tuple
 from scripts.quality.fleet_inventory import (
     ALERT_LABEL_NOT_PROFILED,
     FORK_INCLUDE_SLUGS,
-    FleetDiff,
     PRIVATE_INCLUDE_SLUGS,
+    FleetDiff,
     _build_arg_parser,
     alert_issue_title,
     build_expected_fleet,
@@ -29,10 +29,12 @@ from scripts.quality.fleet_inventory import (
     find_existing_alert_issue,
     format_diff_report,
     load_inventory_slugs,
-    main as fleet_inventory_main,
     merge_repo_lists,
     open_alert_issue_for_unprofiled_repo,
     run_inventory_sweep,
+)
+from scripts.quality.fleet_inventory import (
+    main as fleet_inventory_main,
 )
 
 
@@ -206,9 +208,7 @@ class FetchReposViaGhTests(unittest.TestCase):
     """The ``gh api`` subprocess wrapper — mocked runner, no network."""
 
     @staticmethod
-    def _fake_runner(
-        payload: Any, *, returncode: int = 0
-    ) -> subprocess.CompletedProcess[str]:
+    def _fake_runner(payload: Any, *, returncode: int = 0) -> subprocess.CompletedProcess[str]:
         """Return a CompletedProcess the code under test can consume."""
         return subprocess.CompletedProcess(
             args=[],
@@ -217,15 +217,11 @@ class FetchReposViaGhTests(unittest.TestCase):
             stderr="",
         )
 
-    def _capturing_runner(
-        self, payload: Any
-    ) -> Tuple[List[Sequence[str]], Any]:
+    def _capturing_runner(self, payload: Any) -> Tuple[List[Sequence[str]], Any]:
         """Capture the ``args`` passed to subprocess.run for assertion."""
         captured: List[Sequence[str]] = []
 
-        def runner(
-            args: Sequence[str], **_kwargs: Any
-        ) -> subprocess.CompletedProcess[str]:
+        def runner(args: Sequence[str], **_kwargs: Any) -> subprocess.CompletedProcess[str]:
             """Scripted subprocess.run mock that records each invocation."""
             captured.append(list(args))
             return self._fake_runner(payload)
@@ -283,9 +279,8 @@ class FetchReposViaGhTests(unittest.TestCase):
 
     def test_fetch_user_repos_propagates_gh_failure(self) -> None:
         """A gh CalledProcessError must bubble up to the caller."""
-        def runner(
-            *_args: Any, **_kwargs: Any
-        ) -> subprocess.CompletedProcess[str]:
+
+        def runner(*_args: Any, **_kwargs: Any) -> subprocess.CompletedProcess[str]:
             """Mocked runner that simulates a gh CLI failure."""
             raise subprocess.CalledProcessError(1, ["gh"], stderr="rate limit")
 
@@ -341,18 +336,14 @@ class QueuedRunner:
         self.responses: List[Any] = list(responses)
         self.calls: List[Sequence[str]] = []
 
-    def __call__(
-        self, args: Sequence[str], **_kwargs: Any
-    ) -> subprocess.CompletedProcess[str]:
+    def __call__(self, args: Sequence[str], **_kwargs: Any) -> subprocess.CompletedProcess[str]:
         """Pop one response and return it as a ``CompletedProcess``."""
         self.calls.append(list(args))
         payload = self.responses.pop(0) if self.responses else []
         if isinstance(payload, Exception):
             raise payload  # skipcq: PYL-E0702 — isinstance guard narrows to Exception
         stdout = payload if isinstance(payload, str) else json.dumps(payload)
-        return subprocess.CompletedProcess(
-            args=args, returncode=0, stdout=stdout, stderr=""
-        )
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout=stdout, stderr="")
 
 
 class FindExistingAlertIssueTests(unittest.TestCase):
@@ -597,9 +588,7 @@ class ArgParserTests(unittest.TestCase):
 
     def test_flags_toggle(self) -> None:
         """Each flag maps to its namespace attribute."""
-        ns = _build_arg_parser().parse_args(
-            ["--open-alerts", "--close-resolved", "--dry-run", "--json"]
-        )
+        ns = _build_arg_parser().parse_args(["--open-alerts", "--close-resolved", "--dry-run", "--json"])
         self.assertTrue(ns.open_alerts)
         self.assertTrue(ns.close_resolved)
         self.assertTrue(ns.dry_run)
@@ -620,13 +609,11 @@ class RunInventorySweepTests(unittest.TestCase):
     def test_sweep_reports_clean_fleet(self) -> None:
         """Clean fleet → no missing, no dead entries."""
         with tempfile.TemporaryDirectory() as raw:
-            inventory = self._inventory_fixture(
-                Path(raw), ["Prekzursil/alpha"]
-            )
+            inventory = self._inventory_fixture(Path(raw), ["Prekzursil/alpha"])
             runner = QueuedRunner(
                 responses=[
                     [_repo(name="alpha")],  # public fetch
-                    [],                      # auth fetch
+                    [],  # auth fetch
                 ]
             )
             diff = run_inventory_sweep(
@@ -662,9 +649,9 @@ class RunInventorySweepTests(unittest.TestCase):
             inventory = self._inventory_fixture(Path(raw), [])
             runner = QueuedRunner(
                 responses=[
-                    [_repo(name="alpha")],   # public fetch
-                    [],                       # auth fetch
-                    [],                       # issue list (no existing)
+                    [_repo(name="alpha")],  # public fetch
+                    [],  # auth fetch
+                    [],  # issue list (no existing)
                     "https://github.com/x/y/issues/7\n",  # issue create
                 ]
             )
@@ -683,15 +670,11 @@ class RunInventorySweepTests(unittest.TestCase):
     def test_auth_fetch_failure_is_non_fatal(self) -> None:
         """A CalledProcessError on auth fetch should fall back to public-only."""
         with tempfile.TemporaryDirectory() as raw:
-            inventory = self._inventory_fixture(
-                Path(raw), ["Prekzursil/alpha"]
-            )
+            inventory = self._inventory_fixture(Path(raw), ["Prekzursil/alpha"])
             runner = QueuedRunner(
                 responses=[
                     [_repo(name="alpha")],
-                    subprocess.CalledProcessError(
-                        1, ["gh"], stderr="auth missing"
-                    ),
+                    subprocess.CalledProcessError(1, ["gh"], stderr="auth missing"),
                 ]
             )
             diff = run_inventory_sweep(
@@ -712,9 +695,7 @@ class CoverageClosureTests(unittest.TestCase):
         from scripts.quality.fleet_inventory import _slug_from_github_repo
 
         self.assertEqual(
-            _slug_from_github_repo(
-                {"owner": {"login": "Prekzursil"}, "name": "fallback"}
-            ),
+            _slug_from_github_repo({"owner": {"login": "Prekzursil"}, "name": "fallback"}),
             "Prekzursil/fallback",
         )
 
@@ -763,23 +744,19 @@ class CoverageClosureTests(unittest.TestCase):
         from scripts.quality.fleet_inventory import _issue_number_from_create_output
 
         self.assertEqual(
-            _issue_number_from_create_output(
-                "https://github.com/x/y/issues/not-a-number"
-            ),
+            _issue_number_from_create_output("https://github.com/x/y/issues/not-a-number"),
             0,
         )
 
     def test_sweep_close_resolved_closes_non_dead_inventory(self) -> None:
         """With ``close_resolved``, each inventoried non-dead slug gets a close pass."""
         with tempfile.TemporaryDirectory() as raw:
-            inventory = RunInventorySweepTests._inventory_fixture(
-                Path(raw), ["Prekzursil/alpha"]
-            )
+            inventory = RunInventorySweepTests._inventory_fixture(Path(raw), ["Prekzursil/alpha"])
             runner = QueuedRunner(
                 responses=[
                     [_repo(name="alpha")],  # public fetch
-                    [],                      # auth fetch
-                    [],                      # close_resolved → issue list (none open)
+                    [],  # auth fetch
+                    [],  # close_resolved → issue list (none open)
                 ]
             )
             run_inventory_sweep(
@@ -801,8 +778,8 @@ class CoverageClosureTests(unittest.TestCase):
             runner = QueuedRunner(
                 responses=[
                     [_repo(name="alpha")],  # public: alpha live, dead-slug gone
-                    [],                      # auth fetch
-                    [],                      # close for Prekzursil/alpha: no open alert
+                    [],  # auth fetch
+                    [],  # close for Prekzursil/alpha: no open alert
                 ]
             )
             diff = run_inventory_sweep(
@@ -821,9 +798,7 @@ class CoverageClosureTests(unittest.TestCase):
         """A page containing mixed entries keeps only mapping ones."""
         from scripts.quality.fleet_inventory import _flatten_paginated_json
 
-        result = _flatten_paginated_json(
-            '[[{"full_name": "x/y"}, "stray-string", 42]]'
-        )
+        result = _flatten_paginated_json('[[{"full_name": "x/y"}, "stray-string", 42]]')
         self.assertEqual(result, [{"full_name": "x/y"}])
 
     def test_flatten_paginated_json_skips_top_level_non_list_non_mapping(
@@ -837,9 +812,10 @@ class CoverageClosureTests(unittest.TestCase):
 
     def test_main_json_output_prints_json(self) -> None:
         """``--json`` flips the output format."""
-        import scripts.quality.fleet_inventory as module_under_test
-        from contextlib import redirect_stdout
         import io
+        from contextlib import redirect_stdout
+
+        import scripts.quality.fleet_inventory as module_under_test
 
         original_fetch_user = module_under_test.fetch_user_repos
         original_fetch_auth = module_under_test.fetch_authenticated_repos
@@ -879,9 +855,10 @@ class CoverageClosureTests(unittest.TestCase):
 
     def test_main_gh_failure_exit_two(self) -> None:
         """A subprocess.CalledProcessError from the sweep surfaces as exit 2."""
-        import scripts.quality.fleet_inventory as module_under_test
-        from contextlib import redirect_stdout
         import io
+        from contextlib import redirect_stdout
+
+        import scripts.quality.fleet_inventory as module_under_test
 
         original_fetch_user = module_under_test.fetch_user_repos
 
@@ -892,9 +869,7 @@ class CoverageClosureTests(unittest.TestCase):
         module_under_test.fetch_user_repos = _raise  # type: ignore[assignment]
         with tempfile.TemporaryDirectory() as raw:
             inventory = Path(raw) / "repos.yml"
-            inventory.write_text(
-                "version: 1\nrepos: []\n", encoding="utf-8"
-            )
+            inventory.write_text("version: 1\nrepos: []\n", encoding="utf-8")
             buf = io.StringIO()
             try:
                 with redirect_stdout(buf):
@@ -957,9 +932,7 @@ class MainCLITests(unittest.TestCase):
         """Any gap surfaces as exit code 1 (non-fatal, actionable)."""
         with tempfile.TemporaryDirectory() as raw:
             inventory = Path(raw) / "repos.yml"
-            inventory.write_text(
-                "version: 1\nrepos: []\n", encoding="utf-8"
-            )
+            inventory.write_text("version: 1\nrepos: []\n", encoding="utf-8")
             import scripts.quality.fleet_inventory as module_under_test
 
             original_fetch_user = module_under_test.fetch_user_repos

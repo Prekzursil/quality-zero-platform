@@ -12,6 +12,8 @@ import yaml  # type: ignore[import-untyped]
 
 from scripts.quality.migrate_profiles_to_v2 import (
     main as migrate_main,
+)
+from scripts.quality.migrate_profiles_to_v2 import (
     migrate_profile,
     migrate_profile_file,
 )
@@ -155,9 +157,7 @@ class MigrateProfileFileTests(unittest.TestCase):
 
             roundtrip = yaml.safe_load(profile_path.read_text(encoding="utf-8"))
             self.assertEqual(roundtrip["version"], 2)
-            self.assertEqual(
-                roundtrip["coverage"]["inputs"][0]["flag"], "backend"
-            )
+            self.assertEqual(roundtrip["coverage"]["inputs"][0]["flag"], "backend")
 
     def test_no_change_when_already_v2(self) -> None:
         """A v2 profile on disk is not rewritten (no phantom diff)."""
@@ -218,13 +218,9 @@ class MigrateCLITests(unittest.TestCase):
                 encoding="utf-8",
             )
             original = profile_path.read_text(encoding="utf-8")
-            exit_code = migrate_main(
-                ["--profiles-dir", str(profile_dir), "--dry-run"]
-            )
+            exit_code = migrate_main(["--profiles-dir", str(profile_dir), "--dry-run"])
             self.assertEqual(exit_code, 0)
-            self.assertEqual(
-                profile_path.read_text(encoding="utf-8"), original
-            )
+            self.assertEqual(profile_path.read_text(encoding="utf-8"), original)
 
     def test_real_run_writes_file(self) -> None:
         """CLI run (without ``--dry-run``) writes the migrated YAML."""
@@ -235,18 +231,14 @@ class MigrateCLITests(unittest.TestCase):
                 "slug: Prekzursil/foo\nstack: fullstack-web\n",
                 encoding="utf-8",
             )
-            exit_code = migrate_main(
-                ["--profiles-dir", str(profile_dir)]
-            )
+            exit_code = migrate_main(["--profiles-dir", str(profile_dir)])
             self.assertEqual(exit_code, 0)
             migrated = yaml.safe_load(profile_path.read_text(encoding="utf-8"))
             self.assertEqual(migrated["version"], 2)
 
     def test_missing_dir_exit_two(self) -> None:
         """A missing profiles dir exits 2 for the CLI."""
-        exit_code = migrate_main(
-            ["--profiles-dir", "/definitely/not/a/real/path"]
-        )
+        exit_code = migrate_main(["--profiles-dir", "/definitely/not/a/real/path"])
         self.assertEqual(exit_code, 2)
 
     def test_main_with_no_migrations_needed_prints_none_needed(self) -> None:
@@ -255,15 +247,11 @@ class MigrateCLITests(unittest.TestCase):
             profile_dir = Path(raw)
             # Write a profile that's already fully v2 so the migrator won't touch it.
             v2 = migrate_profile(_v1_profile_fixture())
-            (profile_dir / "ready.yml").write_text(
-                yaml.safe_dump(v2, sort_keys=False), encoding="utf-8"
-            )
+            (profile_dir / "ready.yml").write_text(yaml.safe_dump(v2, sort_keys=False), encoding="utf-8")
             # Plus a non-mapping YAML file that the loop must skip cleanly.
-            (profile_dir / "stray.yml").write_text(
-                "- just a list\n- not a dict\n", encoding="utf-8"
-            )
-            from contextlib import redirect_stdout
+            (profile_dir / "stray.yml").write_text("- just a list\n- not a dict\n", encoding="utf-8")
             import io
+            from contextlib import redirect_stdout
 
             buf = io.StringIO()
             with redirect_stdout(buf):
@@ -278,9 +266,7 @@ class MigrateCLITests(unittest.TestCase):
 
     def test_migrate_profile_with_non_list_inputs_is_left_alone(self) -> None:
         """When ``coverage.inputs`` isn't a list, don't touch it."""
-        result = migrate_profile(
-            {"slug": "X", "coverage": {"inputs": "not-a-list"}}
-        )
+        result = migrate_profile({"slug": "X", "coverage": {"inputs": "not-a-list"}})
         self.assertEqual(result["coverage"]["inputs"], "not-a-list")
 
 

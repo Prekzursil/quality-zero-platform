@@ -1,4 +1,5 @@
 """Deterministic patch generator for `line-too-long` category."""
+
 from __future__ import absolute_import
 
 import difflib
@@ -74,12 +75,14 @@ def generate(
             reason_text="no wrapping change needed",
             suggested_tier="skip",
         )
-    diff = "".join(difflib.unified_diff(
-        lines,
-        patched_lines,
-        fromfile=f"a/{finding.file}",
-        tofile=f"b/{finding.file}",
-    ))
+    diff = "".join(
+        difflib.unified_diff(
+            lines,
+            patched_lines,
+            fromfile=f"a/{finding.file}",
+            tofile=f"b/{finding.file}",
+        )
+    )
     return PatchResult(
         unified_diff=diff,
         confidence="medium",

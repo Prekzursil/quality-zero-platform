@@ -1,4 +1,5 @@
 """Tests for secret redaction (per design B.1)."""
+
 from __future__ import absolute_import
 
 import sys

@@ -1,4 +1,5 @@
 """Tests for QLTY normalizer (per §6.5)."""
+
 from __future__ import absolute_import
 
 import json

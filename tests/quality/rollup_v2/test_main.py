@@ -1,4 +1,5 @@
 """Tests for __main__.py CLI entrypoint (per design §A.8 + Phase 13)."""
+
 from __future__ import absolute_import
 
 import sys
@@ -21,10 +22,14 @@ class ParseArgsTests(unittest.TestCase):
             "sys.argv",
             [
                 "__main__.py",
-                "--artifacts-dir", "/tmp/artifacts",
-                "--output-dir", "/tmp/output",
-                "--repo", "owner/repo",
-                "--sha", "abc123",
+                "--artifacts-dir",
+                "/tmp/artifacts",
+                "--output-dir",
+                "/tmp/output",
+                "--repo",
+                "owner/repo",
+                "--sha",
+                "abc123",
             ],
         ):
             args = parse_args()
@@ -42,12 +47,17 @@ class ParseArgsTests(unittest.TestCase):
             "sys.argv",
             [
                 "__main__.py",
-                "--artifacts-dir", "/tmp/a",
-                "--output-dir", "/tmp/o",
-                "--repo", "owner/repo",
-                "--sha", "def456",
+                "--artifacts-dir",
+                "/tmp/a",
+                "--output-dir",
+                "/tmp/o",
+                "--repo",
+                "owner/repo",
+                "--sha",
+                "def456",
                 "--enable-llm-patches",
-                "--max-llm-patches", "5",
+                "--max-llm-patches",
+                "5",
             ],
         ):
             args = parse_args()
@@ -79,10 +89,14 @@ class MainFunctionTests(unittest.TestCase):
                 "sys.argv",
                 [
                     "__main__.py",
-                    "--artifacts-dir", str(artifacts_dir),
-                    "--output-dir", str(output_dir),
-                    "--repo", "owner/repo",
-                    "--sha", "abc123",
+                    "--artifacts-dir",
+                    str(artifacts_dir),
+                    "--output-dir",
+                    str(output_dir),
+                    "--repo",
+                    "owner/repo",
+                    "--sha",
+                    "abc123",
                 ],
             ):
                 result = main()
@@ -100,18 +114,20 @@ class MainFunctionTests(unittest.TestCase):
             # Put a qlty artifact in the expected location
             qlty_dir = artifacts_dir / "qlty"
             qlty_dir.mkdir()
-            (qlty_dir / "qlty.json").write_text(
-                '{"issues": []}', encoding="utf-8"
-            )
+            (qlty_dir / "qlty.json").write_text('{"issues": []}', encoding="utf-8")
 
             with patch(
                 "sys.argv",
                 [
                     "__main__.py",
-                    "--artifacts-dir", str(artifacts_dir),
-                    "--output-dir", str(output_dir),
-                    "--repo", "owner/repo",
-                    "--sha", "abc123",
+                    "--artifacts-dir",
+                    str(artifacts_dir),
+                    "--output-dir",
+                    str(output_dir),
+                    "--repo",
+                    "owner/repo",
+                    "--sha",
+                    "abc123",
                 ],
             ):
                 result = main()

@@ -21,9 +21,7 @@ from scripts.quality.control_plane import (
 
 def _parse_args() -> argparse.Namespace:
     """Handle parse args."""
-    parser = argparse.ArgumentParser(
-        description="Export a resolved control-plane profile for workflows."
-    )
+    parser = argparse.ArgumentParser(description="Export a resolved control-plane profile for workflows.")
     parser.add_argument("--inventory", default="")
     parser.add_argument("--repo-slug", required=True)
     parser.add_argument("--event-name", default="pull_request")
@@ -35,10 +33,7 @@ def _parse_args() -> argparse.Namespace:
 
 def _coverage_input_files(coverage: Dict[str, Any]) -> str:
     """Handle coverage input files."""
-    return ",".join(
-        str(PurePosixPath(str(item["path"]).replace("\\", "/")))
-        for item in coverage.get("inputs", [])
-    )
+    return ",".join(str(PurePosixPath(str(item["path"]).replace("\\", "/"))) for item in coverage.get("inputs", []))
 
 
 def _coverage_inputs_payload(coverage: Dict[str, Any]) -> List[Dict[str, str]]:
@@ -117,9 +112,7 @@ def _profile_identity_output_lines(profile: Dict[str, Any]) -> List[str]:
     ]
 
 
-def _required_context_output_lines(
-    profile: Dict[str, Any], contexts: List[str]
-) -> List[str]:
+def _required_context_output_lines(profile: Dict[str, Any], contexts: List[str]) -> List[str]:
     """Return the required-context fields exported for one profile."""
     return [
         _json_output("required_contexts_json", contexts),
@@ -127,13 +120,9 @@ def _required_context_output_lines(
             "required_contexts_required_now_json",
             profile["required_contexts"]["required_now"],
         ),
-        _json_output(
-            "required_contexts_target_json", profile["required_contexts"]["target"]
-        ),
+        _json_output("required_contexts_target_json", profile["required_contexts"]["target"]),
         _json_output("required_secrets_json", profile["required_secrets"]),
-        _json_output(
-            "conditional_secrets_json", profile.get("conditional_secrets", [])
-        ),
+        _json_output("conditional_secrets_json", profile.get("conditional_secrets", [])),
         _json_output("required_vars_json", profile["required_vars"]),
     ]
 
@@ -143,9 +132,7 @@ def _codex_environment_output_lines(codex_environment: Dict[str, Any]) -> List[s
     return [
         _json_output("codex_environment_json", codex_environment),
         f"codex_auth_file={codex_environment.get('auth_file', '')}",
-        _json_output(
-            "codex_runner_labels_json", codex_environment.get("runner_labels", [])
-        ),
+        _json_output("codex_runner_labels_json", codex_environment.get("runner_labels", [])),
     ]
 
 
@@ -176,18 +163,12 @@ def _coverage_output_lines(
         _json_output("coverage_system_packages_json", setup.get("system_packages", [])),
         f"codecov_enabled={codecov_enabled}",
         f"codacy_enabled={str(bool(enabled_scanners.get('codacy', False))).lower()}",
-        (
-            "deepsource_enabled="
-            f"{str(bool(enabled_scanners.get('deepsource_visible', False))).lower()}"
-        ),
+        (f"deepsource_enabled={str(bool(enabled_scanners.get('deepsource_visible', False))).lower()}"),
         # SonarCloud's coverage-lane scan ran historically whenever
         # ``SONAR_TOKEN`` was set (no profile gate), so default to True to keep
         # the enrolled fleet unaffected. A profile opting out (e.g. the
         # platform's own lean self-CI) sets ``sonar_coverage: false``.
-        (
-            "sonar_coverage_enabled="
-            f"{str(bool(enabled_scanners.get('sonar_coverage', True))).lower()}"
-        ),
+        (f"sonar_coverage_enabled={str(bool(enabled_scanners.get('sonar_coverage', True))).lower()}"),
         f"coverage_input_files={coverage_input_files}",
         _json_output("coverage_inputs_json", coverage_inputs_payload),
         f"qlty_enabled={qlty_enabled}",
@@ -224,9 +205,7 @@ def main() -> int:
     profile = load_repo_profile(inventory, args.repo_slug)
     export_payload = dict(profile)
     export_payload["event_name"] = args.event_name
-    export_payload["active_required_contexts"] = active_required_contexts(
-        profile, event_name=args.event_name
-    )
+    export_payload["active_required_contexts"] = active_required_contexts(profile, event_name=args.event_name)
 
     output_target = args.out_json or args.output
     if output_target:

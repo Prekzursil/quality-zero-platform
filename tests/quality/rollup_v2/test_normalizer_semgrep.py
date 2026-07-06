@@ -1,4 +1,5 @@
 """Tests for Semgrep normalizer (per §9.1)."""
+
 from __future__ import absolute_import
 
 import json

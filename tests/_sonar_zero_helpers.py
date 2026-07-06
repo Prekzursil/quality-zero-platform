@@ -7,6 +7,7 @@ runners, ``main()`` mock harness). qlty's smells gate previously flagged this
 as duplication; centralising them here keeps both files thin while preserving
 the file-split that limits each test module to ~400 lines.
 """
+
 from __future__ import absolute_import
 
 from typing import List
@@ -33,9 +34,7 @@ class SonarZeroHelpersMixin:
             captured_urls.append(url)
             return responses.pop(0)
 
-        with patch(
-            "scripts.quality.check_sonar_zero._request_json", side_effect=fake_request
-        ):
+        with patch("scripts.quality.check_sonar_zero._request_json", side_effect=fake_request):
             self.assertEqual(
                 check_sonar_zero._load_open_issues(scenario["args"], "auth"),
                 scenario["expected_open_issues"],
@@ -49,33 +48,31 @@ class SonarZeroHelpersMixin:
 
     def _assert_revision_lookup(self, scenario: dict) -> None:
         """Assert one scoped revision lookup and pending-message scenario."""
-        with patch.object(
-            check_sonar_zero, "_request_json", return_value=scenario["payload"]
-        ):
+        with patch.object(check_sonar_zero, "_request_json", return_value=scenario["payload"]):
             self.assertEqual(
                 scenario["revision_loader"](scenario["args"], "auth"),
                 scenario["expected_revision"],
             )
             self.assertEqual(
-                check_sonar_zero._scoped_analysis_pending_message(
-                    scenario["args"], "auth"
-                ),
+                check_sonar_zero._scoped_analysis_pending_message(scenario["args"], "auth"),
                 scenario["expected_pending_message"],
             )
 
     def _assert_main_result(self, scenario: dict) -> None:
         """Exercise one Sonar main-path scenario."""
-        with patch.object(
-            check_sonar_zero, "_parse_args", return_value=scenario["args"]
-        ), patch.object(
-            check_sonar_zero,
-            "write_report",
-            return_value=scenario.get("write_report_result", 0),
-        ) as write_report_mock, patch.object(
-            check_sonar_zero,
-            "load_sonar_findings_with_retry",
-            return_value=scenario.get("load_result"),
-            side_effect=scenario.get("load_side_effect"),
+        with (
+            patch.object(check_sonar_zero, "_parse_args", return_value=scenario["args"]),
+            patch.object(
+                check_sonar_zero,
+                "write_report",
+                return_value=scenario.get("write_report_result", 0),
+            ) as write_report_mock,
+            patch.object(
+                check_sonar_zero,
+                "load_sonar_findings_with_retry",
+                return_value=scenario.get("load_result"),
+                side_effect=scenario.get("load_side_effect"),
+            ),
         ):
             self.assertEqual(check_sonar_zero.main(), scenario["expected_code"])
         payload = write_report_mock.call_args.args[0]

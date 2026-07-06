@@ -1,4 +1,5 @@
 """Multi-view markdown renderer for quality rollup (per design §4.1 + §A.1.1 + §A.1.2)."""
+
 from __future__ import absolute_import
 
 from collections import defaultdict
@@ -21,10 +22,10 @@ _DETAILS_CLOSE = "</details>\n"
 # --- Severity emoji mapping ---
 _SEVERITY_EMOJI: Dict[str, str] = {
     "critical": "\U0001f534",  # red circle
-    "high": "\U0001f534",      # red circle
-    "medium": "\U0001f7e1",    # yellow circle
-    "low": "\u26aa",           # white circle
-    "info": "\u26aa",          # white circle
+    "high": "\U0001f534",  # red circle
+    "medium": "\U0001f7e1",  # yellow circle
+    "low": "\u26aa",  # white circle
+    "info": "\u26aa",  # white circle
 }
 
 _ARTIFACT_FALLBACK_SENTENCE = (
@@ -65,8 +66,7 @@ def _render_provider_summary_table(payload: Dict[str, Any]) -> str:
     ]
     for s in summaries:
         lines.append(
-            f"| {s['provider']} | {s['total']} | {s.get('high', 0)} "
-            f"| {s.get('medium', 0)} | {s.get('low', 0)} |"
+            f"| {s['provider']} | {s['total']} | {s.get('high', 0)} | {s.get('medium', 0)} | {s.get('low', 0)} |"
         )
     lines.append("")
     return "\n".join(lines)
@@ -142,8 +142,7 @@ def _render_by_file_view(
             remaining_files = len(grouped) - collapse_after
             remaining_findings = sum(len(ff) for _, ff in grouped[collapse_after:])
             lines.append(
-                f"<details><summary>{remaining_files} additional files "
-                f"({remaining_findings} findings)</summary>\n"
+                f"<details><summary>{remaining_files} additional files ({remaining_findings} findings)</summary>\n"
             )
 
         n = len(file_findings)
@@ -301,10 +300,7 @@ def render_markdown(payload: Dict[str, Any]) -> str:
         summary_parts = []
         summary_parts.append(_render_normalizer_errors(payload))
         summary_parts.append(_render_provider_summary_table(payload))
-        summary_parts.append(
-            f"**{total} findings across "
-            f"{len(payload.get('provider_summaries', []))} providers.**\n"
-        )
+        summary_parts.append(f"**{total} findings across {len(payload.get('provider_summaries', []))} providers.**\n")
         summary_parts.append(f"\n{_ARTIFACT_FALLBACK_SENTENCE}\n")
         summary_parts.append(_render_footer())
         return "\n".join(summary_parts)

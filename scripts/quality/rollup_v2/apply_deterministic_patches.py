@@ -5,6 +5,7 @@ Reads canonical.json, filters findings with patch_source == "deterministic"
 and a non-null patch, and applies each via ``git apply``.  Findings whose
 patches conflict are recorded as skipped.
 """
+
 from __future__ import absolute_import
 
 import argparse
@@ -26,9 +27,7 @@ _GIT_EXECUTABLE: str = shutil.which("git") or "git"
 
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
-    parser = argparse.ArgumentParser(
-        description="Auto-apply deterministic patches from canonical.json."
-    )
+    parser = argparse.ArgumentParser(description="Auto-apply deterministic patches from canonical.json.")
     parser.add_argument(
         "--canonical-json",
         required=True,
@@ -49,11 +48,7 @@ def parse_args() -> argparse.Namespace:
 
 def filter_patchable_findings(findings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Return only findings with patch_source == 'deterministic' and a non-null patch."""
-    return [
-        f
-        for f in findings
-        if f.get("patch_source") == "deterministic" and f.get("patch") is not None
-    ]
+    return [f for f in findings if f.get("patch_source") == "deterministic" and f.get("patch") is not None]
 
 
 def apply_single_patch(diff: str, repo_dir: Path) -> Dict[str, Any]:
@@ -75,9 +70,10 @@ def apply_single_patch(diff: str, repo_dir: Path) -> Dict[str, Any]:
         # Dry-run first.
         # Safe by construction: shell=False (list argv), git resolved to
         # absolute path at module import via ``shutil.which``, args derived
-        # from the validated tmp_path. ``# nosec`` silences Bandit B603 and
-        # ``# noqa: S603`` silences Ruff S603 — both informational warnings
-        # about every subprocess call regardless of safety posture.
+        # from the validated tmp_path. The ``nosec`` marker silences Bandit
+        # B603 and the ``noqa: S603`` marker silences Ruff S603 — both are
+        # informational warnings about every subprocess call regardless of
+        # safety posture.
         check_result = subprocess.run(  # noqa: S603  # nosec
             [_GIT_EXECUTABLE, "apply", "--check", str(tmp_path)],
             cwd=repo_dir,

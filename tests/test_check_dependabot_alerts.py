@@ -23,12 +23,8 @@ class DependabotAlertTests(unittest.TestCase):
             len(check_dependabot_alerts.filter_alerts(alerts, policy="zero_critical")),
             1,
         )
-        self.assertEqual(
-            len(check_dependabot_alerts.filter_alerts(alerts, policy="zero_high")), 2
-        )
-        self.assertEqual(
-            len(check_dependabot_alerts.filter_alerts(alerts, policy="zero_any")), 3
-        )
+        self.assertEqual(len(check_dependabot_alerts.filter_alerts(alerts, policy="zero_high")), 2)
+        self.assertEqual(len(check_dependabot_alerts.filter_alerts(alerts, policy="zero_any")), 3)
 
     def test_request_alerts_follows_github_pagination(self) -> None:
         """Cover request alerts follows github pagination."""
@@ -42,9 +38,7 @@ class DependabotAlertTests(unittest.TestCase):
             ([{"number": 2}], {}),
         ]
 
-        with patch.object(
-            check_dependabot_alerts, "load_json_https", side_effect=responses
-        ) as load_json_https_mock:
+        with patch.object(check_dependabot_alerts, "load_json_https", side_effect=responses) as load_json_https_mock:
             payload = check_dependabot_alerts._request_alerts(
                 "Prekzursil/quality-zero-platform",
                 "token",
@@ -64,39 +58,37 @@ class DependabotAlertTests(unittest.TestCase):
             out_json="deps-zero/deps.json",
             out_md="deps-zero/deps.md",
         )
-        with patch.dict("os.environ", {}, clear=True), patch.object(
-            check_dependabot_alerts, "_parse_args", return_value=args
-        ), patch.object(
-            check_dependabot_alerts, "write_report", return_value=0
-        ) as write_report_mock:
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch.object(check_dependabot_alerts, "_parse_args", return_value=args),
+            patch.object(check_dependabot_alerts, "write_report", return_value=0) as write_report_mock,
+        ):
             self.assertEqual(check_dependabot_alerts.main(), 1)
         self.assertIn(
             "GITHUB_TOKEN or GH_TOKEN is required.",
             write_report_mock.call_args.args[0]["findings"],
         )
 
-        live_args = check_dependabot_alerts.argparse.Namespace(
-            **{**args.__dict__, "token": "token"}
-        )
-        with patch.object(
-            check_dependabot_alerts,
-            "_request_alerts",
-            return_value=[{"security_vulnerability": {"severity": "critical"}}],
-        ), patch.object(
-            check_dependabot_alerts, "_parse_args", return_value=live_args
-        ), patch.object(
-            check_dependabot_alerts, "write_report", return_value=0
-        ) as write_report_mock:
+        live_args = check_dependabot_alerts.argparse.Namespace(**{**args.__dict__, "token": "token"})
+        with (
+            patch.object(
+                check_dependabot_alerts,
+                "_request_alerts",
+                return_value=[{"security_vulnerability": {"severity": "critical"}}],
+            ),
+            patch.object(check_dependabot_alerts, "_parse_args", return_value=live_args),
+            patch.object(check_dependabot_alerts, "write_report", return_value=0) as write_report_mock,
+        ):
             self.assertEqual(check_dependabot_alerts.main(), 1)
         self.assertEqual(write_report_mock.call_args.args[0]["open_alerts"], 1)
 
-        with patch.object(
-            check_dependabot_alerts,
-            "_request_alerts",
-            return_value=[],
-        ), patch.object(
-            check_dependabot_alerts, "_parse_args", return_value=live_args
-        ), patch.object(
-            check_dependabot_alerts, "write_report", return_value=4
+        with (
+            patch.object(
+                check_dependabot_alerts,
+                "_request_alerts",
+                return_value=[],
+            ),
+            patch.object(check_dependabot_alerts, "_parse_args", return_value=live_args),
+            patch.object(check_dependabot_alerts, "write_report", return_value=4),
         ):
             self.assertEqual(check_dependabot_alerts.main(), 4)

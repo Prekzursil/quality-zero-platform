@@ -8,7 +8,6 @@ from pathlib import Path
 
 from scripts.quality import known_issues as ki
 
-
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _REGISTRY_ROOT = _REPO_ROOT / "known-issues"
 
@@ -59,47 +58,53 @@ class LoaderValidationTests(unittest.TestCase):
 
     def test_missing_registry_returns_empty_list(self) -> None:
         """A non-existent registry dir yields an empty list (not an error)."""
-        self.assertEqual(
-            ki.load_known_issues(Path("/does/not/exist/known-issues")), []
-        )
+        self.assertEqual(ki.load_known_issues(Path("/does/not/exist/known-issues")), [])
 
     def test_missing_required_field_raises(self) -> None:
         """An entry lacking a required field fails validation."""
-        root = self._write_registry({
-            "QZ-BAD-001.yml": "id: QZ-BAD-001\ntitle: missing the rest\n",
-        })
+        root = self._write_registry(
+            {
+                "QZ-BAD-001.yml": "id: QZ-BAD-001\ntitle: missing the rest\n",
+            }
+        )
         with self.assertRaises(ki.KnownIssueError):
             ki.load_known_issues(root)
 
     def test_feeds_qrv2_without_fix_snippet_raises(self) -> None:
         """``feeds_qrv2: true`` must accompany a non-empty ``fix_snippet``."""
-        root = self._write_registry({
-            "QZ-BAD-002.yml": (
-                "id: QZ-BAD-002\n"
-                "title: t\ndescription: d\naffects: [x]\n"
-                "feeds_qrv2: true\nfix_snippet: ''\nverified_at: '2026-04-23'\n"
-            ),
-        })
+        root = self._write_registry(
+            {
+                "QZ-BAD-002.yml": (
+                    "id: QZ-BAD-002\n"
+                    "title: t\ndescription: d\naffects: [x]\n"
+                    "feeds_qrv2: true\nfix_snippet: ''\nverified_at: '2026-04-23'\n"
+                ),
+            }
+        )
         with self.assertRaises(ki.KnownIssueError):
             ki.load_known_issues(root)
 
     def test_non_mapping_yaml_raises(self) -> None:
         """A YAML file whose top level isn't a mapping is rejected."""
-        root = self._write_registry({
-            "QZ-BAD-003.yml": "- just\n- a\n- list\n",
-        })
+        root = self._write_registry(
+            {
+                "QZ-BAD-003.yml": "- just\n- a\n- list\n",
+            }
+        )
         with self.assertRaises(ki.KnownIssueError):
             ki.load_known_issues(root)
 
     def test_non_yaml_files_skipped(self) -> None:
         """README.md and similar files don't break the loader."""
-        root = self._write_registry({
-            "README.md": "# not an entry\n",
-            "QZ-OK-001.yml": (
-                "id: QZ-OK-001\ntitle: ok\ndescription: ok\n"
-                "affects: [x]\nfeeds_qrv2: false\nverified_at: '2026-04-23'\n"
-            ),
-        })
+        root = self._write_registry(
+            {
+                "README.md": "# not an entry\n",
+                "QZ-OK-001.yml": (
+                    "id: QZ-OK-001\ntitle: ok\ndescription: ok\n"
+                    "affects: [x]\nfeeds_qrv2: false\nverified_at: '2026-04-23'\n"
+                ),
+            }
+        )
         entries = ki.load_known_issues(root)
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0]["id"], "QZ-OK-001")

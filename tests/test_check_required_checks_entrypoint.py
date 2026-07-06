@@ -24,37 +24,43 @@ class RequiredChecksEntrypointTests(unittest.TestCase):
         write_report_result: int = 0,
     ) -> Tuple[int, MagicMock]:
         """Execute the gate entrypoint with a mocked payload and writer."""
-        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
-            sys,
-            "argv",
-            [
-                "check_required_checks.py",
-                "--repo",
-                "Prekzursil/quality-zero-platform",
-                "--sha",
-                "abc123",
-                "--required-context",
-                "Coverage 100 Gate",
-                "--out-json",
-                str(Path(tmpdir) / "required-checks.json"),
-                "--out-md",
-                str(Path(tmpdir) / "required-checks.md"),
-            ],
-        ), patch.dict(
-            os.environ,
-            {"GH_TOKEN": "token-123"},
-            clear=False,
-        ), patch.object(
-            checks_module,
-            "_wait_for_payload",
-            return_value=payload,
-        ), patch.object(
-            checks_module,
-            "write_report",
-            return_value=write_report_result,
-        ) as writer:
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "check_required_checks.py",
+                    "--repo",
+                    "Prekzursil/quality-zero-platform",
+                    "--sha",
+                    "abc123",
+                    "--required-context",
+                    "Coverage 100 Gate",
+                    "--out-json",
+                    str(Path(tmpdir) / "required-checks.json"),
+                    "--out-md",
+                    str(Path(tmpdir) / "required-checks.md"),
+                ],
+            ),
+            patch.dict(
+                os.environ,
+                {"GH_TOKEN": "token-123"},
+                clear=False,
+            ),
+            patch.object(
+                checks_module,
+                "_wait_for_payload",
+                return_value=payload,
+            ),
+            patch.object(
+                checks_module,
+                "write_report",
+                return_value=write_report_result,
+            ) as writer,
+        ):
             result = checks_module.main()
-        return result, cast(MagicMock, writer)
+        return result, cast("MagicMock", writer)
 
     def _assert_entrypoint_requires_contexts(
         self,
@@ -63,27 +69,32 @@ class RequiredChecksEntrypointTests(unittest.TestCase):
         sys_path: List[str],
     ) -> None:
         """Assert the CLI exits when no required contexts are configured."""
-        with patch.object(
-            sys,
-            "argv",
-            [
-                "check_required_checks.py",
-                "--repo",
-                "Prekzursil/quality-zero-platform",
-                "--sha",
-                "abc123",
-            ],
-        ), patch.object(
-            sys,
-            "path",
-            sys_path,
-        ), patch.dict(
-            os.environ,
-            {"GH_TOKEN": "token-123"},
-            clear=False,
-        ), self.assertRaisesRegex(
-            SystemExit,
-            "At least one --required-context is required",
+        with (
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "check_required_checks.py",
+                    "--repo",
+                    "Prekzursil/quality-zero-platform",
+                    "--sha",
+                    "abc123",
+                ],
+            ),
+            patch.object(
+                sys,
+                "path",
+                sys_path,
+            ),
+            patch.dict(
+                os.environ,
+                {"GH_TOKEN": "token-123"},
+                clear=False,
+            ),
+            self.assertRaisesRegex(
+                SystemExit,
+                "At least one --required-context is required",
+            ),
         ):
             runpy.run_path(
                 str(repo_root / "scripts" / "quality" / "check_required_checks.py"),
@@ -92,56 +103,62 @@ class RequiredChecksEntrypointTests(unittest.TestCase):
 
     def test_main_rejects_missing_required_contexts(self) -> None:
         """Require at least one check context before the CLI can run."""
-        with patch.object(
-            sys,
-            "argv",
-            [
-                "check_required_checks.py",
-                "--repo",
-                "Prekzursil/quality-zero-platform",
-                "--sha",
-                "abc123",
-            ],
-        ), patch.dict(
-            os.environ,
-            {"GH_TOKEN": "token-123"},
-            clear=False,
-        ), self.assertRaisesRegex(
-            SystemExit,
-            "At least one --required-context is required",
+        with (
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "check_required_checks.py",
+                    "--repo",
+                    "Prekzursil/quality-zero-platform",
+                    "--sha",
+                    "abc123",
+                ],
+            ),
+            patch.dict(
+                os.environ,
+                {"GH_TOKEN": "token-123"},
+                clear=False,
+            ),
+            self.assertRaisesRegex(
+                SystemExit,
+                "At least one --required-context is required",
+            ),
         ):
             checks_module.main()
 
     def test_main_rejects_missing_github_token(self) -> None:
         """Exit when neither GitHub token environment variable is populated."""
-        with patch.object(
-            sys,
-            "argv",
-            [
-                "check_required_checks.py",
-                "--repo",
-                "Prekzursil/quality-zero-platform",
-                "--sha",
-                "abc123",
-                "--required-context",
-                "Coverage 100 Gate",
-            ],
-        ), patch.dict(
-            os.environ,
-            {"GH_TOKEN": "", "GITHUB_TOKEN": ""},
-            clear=False,
-        ), self.assertRaisesRegex(
-            SystemExit,
-            "GITHUB_TOKEN or GH_TOKEN is required",
+        with (
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "check_required_checks.py",
+                    "--repo",
+                    "Prekzursil/quality-zero-platform",
+                    "--sha",
+                    "abc123",
+                    "--required-context",
+                    "Coverage 100 Gate",
+                ],
+            ),
+            patch.dict(
+                os.environ,
+                {"GH_TOKEN": "", "GITHUB_TOKEN": ""},
+                clear=False,
+            ),
+            self.assertRaisesRegex(
+                SystemExit,
+                "GITHUB_TOKEN or GH_TOKEN is required",
+            ),
         ):
             checks_module.main()
 
     def test_script_entrypoint_raises_system_exit_from_main(self) -> None:
         """Propagate the CLI validation error through the script entrypoint."""
         repo_root = Path(__file__).resolve().parents[1]
-        without_empty = [
-            entry for entry in sys.path if entry != str(repo_root) and entry != ""
-        ]
+        without_empty = [entry for entry in sys.path if entry != str(repo_root) and entry != ""]
 
         for sys_path in (without_empty, ["", *without_empty]):
             if "" not in sys_path:

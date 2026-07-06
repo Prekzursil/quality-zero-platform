@@ -8,9 +8,19 @@ import json
 import sys
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, List
+
+from tests._quality_common_helpers import (
+    inferred_coverage as _inferred_coverage_helper,
+)
+from tests._quality_common_helpers import (
+    normalized_explicit_coverage as _explicit_coverage_helper,
+)
+from tests._quality_common_helpers import (
+    temporary_cwd as _temporary_cwd,
+)
 
 from scripts.quality.common import (
     ReportSpec,
@@ -23,13 +33,6 @@ from scripts.quality.common import (
     safe_output_path,
     utc_timestamp,
     write_report,
-)
-
-
-from tests._quality_common_helpers import (
-    inferred_coverage as _inferred_coverage_helper,
-    normalized_explicit_coverage as _explicit_coverage_helper,
-    temporary_cwd as _temporary_cwd,
 )
 
 
@@ -70,9 +73,7 @@ class QualityCommonTests(unittest.TestCase):
         ):
             _resolve_report_spec("legacy-positional-arg")
 
-        with self.assertRaisesRegex(
-            TypeError, "Missing required report parameter: render_md"
-        ):
+        with self.assertRaisesRegex(TypeError, "Missing required report parameter: render_md"):
             _resolve_report_spec(
                 out_json="reports/out.json",
                 out_md="reports/out.md",
@@ -80,9 +81,7 @@ class QualityCommonTests(unittest.TestCase):
                 default_md="fallback.md",
             )
 
-        with self.assertRaisesRegex(
-            TypeError, "Unexpected write_report parameters: extra"
-        ):
+        with self.assertRaisesRegex(TypeError, "Unexpected write_report parameters: extra"):
             _resolve_report_spec(
                 out_json="reports/out.json",
                 out_md="reports/out.md",
@@ -97,7 +96,7 @@ class QualityCommonTests(unittest.TestCase):
         timestamp = utc_timestamp()
         parsed = datetime.fromisoformat(timestamp)
         self.assertIsNotNone(parsed.tzinfo)
-        self.assertEqual(parsed.tzinfo, timezone.utc)
+        self.assertEqual(parsed.tzinfo, UTC)
 
     def test_dedupe_strings_trims_skips_empty_and_preserves_first_seen_order(
         self,
@@ -147,9 +146,7 @@ class QualityCommonTests(unittest.TestCase):
                 )
 
             self.assertEqual(result, 0)
-            json_payload = json.loads(
-                (root / "reports" / "result.json").read_text(encoding="utf-8")
-            )
+            json_payload = json.loads((root / "reports" / "result.json").read_text(encoding="utf-8"))
             self.assertEqual(json_payload, payload)
             self.assertEqual(
                 (root / "reports" / "result.md").read_text(encoding="utf-8"),
@@ -250,17 +247,23 @@ class QualityCommonTests(unittest.TestCase):
         normalised = normalize_coverage_inputs(
             [
                 {
-                    "format": "xml", "name": "backend", "path": "backend/cov.xml",
-                    "flag": "backend", "sources": ["backend/", " ui/api/ "],
+                    "format": "xml",
+                    "name": "backend",
+                    "path": "backend/cov.xml",
+                    "flag": "backend",
+                    "sources": ["backend/", " ui/api/ "],
                     "min_percent": 99.5,
                 },
                 {
-                    "format": "lcov", "name": "ui", "path": "ui/lcov.info",
+                    "format": "lcov",
+                    "name": "ui",
+                    "path": "ui/lcov.info",
                     "flag": " ui ",  # whitespace stripped on flag too
                     "min_percent": "100",  # numeric strings coerce to float
                 },
                 {
-                    "format": "xml", "name": "no-extras",
+                    "format": "xml",
+                    "name": "no-extras",
                     "path": "p/cov.xml",
                     # min_percent of unparseable type is silently dropped
                     "min_percent": [123],
@@ -282,9 +285,7 @@ class QualityCommonTests(unittest.TestCase):
         self.assertEqual(
             infer_coverage_inputs(
                 {
-                    "inputs": [
-                        {"format": "lcov", "name": "existing", "path": "cov.info"}
-                    ],
+                    "inputs": [{"format": "lcov", "name": "existing", "path": "cov.info"}],
                     "artifact_path": "coverage.xml",
                 }
             ),
@@ -319,6 +320,7 @@ class EnsureWithinRootPR1Tests(unittest.TestCase):
 
     def test_well_formed_resolved_path_accepted(self):
         from scripts.quality.common import _ensure_within_root
+
         _ensure_within_root(
             (self.tmp_root / "a" / "b.py").resolve(strict=False),
             self.tmp_root,
@@ -326,12 +328,14 @@ class EnsureWithinRootPR1Tests(unittest.TestCase):
 
     def test_resolved_dotdot_escape_rejected(self):
         from scripts.quality.common import _ensure_within_root
+
         escape = (self.tmp_root / ".." / ".." / "etc" / "passwd").resolve(strict=False)
         with self.assertRaises(ValueError):
             _ensure_within_root(escape, self.tmp_root)
 
     def test_absolute_escape_rejected(self):
         from scripts.quality.common import _ensure_within_root
+
         with self.assertRaises(ValueError):
             _ensure_within_root(Path("/etc/passwd"), self.tmp_root)
 
@@ -340,6 +344,6 @@ class EnsureWithinRootPR1Tests(unittest.TestCase):
         escape_link = self.tmp_root / "a" / "escape"
         escape_link.symlink_to(Path("/etc/passwd"))
         from scripts.quality.common import _ensure_within_root
+
         with self.assertRaises(ValueError):
             _ensure_within_root(escape_link.resolve(strict=False), self.tmp_root)
-

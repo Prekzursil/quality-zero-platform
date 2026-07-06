@@ -1,4 +1,5 @@
 """Deterministic patch generator for `hardcoded-secret` category."""
+
 from __future__ import absolute_import
 
 import difflib
@@ -57,18 +58,18 @@ def generate(
     patched_lines[target_index] = new_line
 
     # Add `import os` at the top if not already present
-    has_os_import = any(
-        re.match(r"^\s*import\s+os\b", line) for line in lines
-    )
+    has_os_import = any(re.match(r"^\s*import\s+os\b", line) for line in lines)
     if not has_os_import:
         patched_lines.insert(0, "import os\n")
 
-    diff = "".join(difflib.unified_diff(
-        lines,
-        patched_lines,
-        fromfile=f"a/{finding.file}",
-        tofile=f"b/{finding.file}",
-    ))
+    diff = "".join(
+        difflib.unified_diff(
+            lines,
+            patched_lines,
+            fromfile=f"a/{finding.file}",
+            tofile=f"b/{finding.file}",
+        )
+    )
     return PatchResult(
         unified_diff=diff,
         confidence="medium",

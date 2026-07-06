@@ -1,4 +1,5 @@
 """Tests for Applitools normalizer (per §9.4)."""
+
 from __future__ import absolute_import
 
 import json
@@ -88,7 +89,6 @@ class ApplitoolsNormalizerTests(unittest.TestCase):
         artifact = json.loads(_FIXTURE.read_text("utf-8"))
         result = ApplitoolsNormalizer().run(artifact=artifact, repo_root=self.root)
         self.assertIn("eyes.applitools.com", result.findings[0].corroborators[0].rule_url)
-
 
     def test_results_not_list_returns_empty(self):
         result = ApplitoolsNormalizer().run(artifact={"results": "not-list"}, repo_root=self.root)

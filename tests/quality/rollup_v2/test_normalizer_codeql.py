@@ -1,4 +1,5 @@
 """Tests for CodeQL normalizer (per §9.2)."""
+
 from __future__ import absolute_import
 
 import json

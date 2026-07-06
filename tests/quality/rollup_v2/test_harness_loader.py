@@ -1,4 +1,5 @@
 """Ensure patch_harness.py is loaded during standard test discovery."""
+
 from __future__ import absolute_import
 
 import sys

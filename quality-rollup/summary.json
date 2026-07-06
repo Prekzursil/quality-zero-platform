@@ -1,0 +1,13 @@
+{
+  "contexts": [],
+  "generated_at": "2026-07-06T07:34:52.165891+00:00",
+  "repo": "owner/repo",
+  "severity": {
+    "blockers": [],
+    "infos": [],
+    "verdict": "pass",
+    "warnings": []
+  },
+  "sha": "abc",
+  "status": "pass"
+}

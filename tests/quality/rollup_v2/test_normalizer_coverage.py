@@ -1,4 +1,5 @@
 """Tests for Coverage normalizer (per §6.8, special handling)."""
+
 from __future__ import absolute_import
 
 import json
@@ -46,7 +47,7 @@ class CoverageNormalizerTests(unittest.TestCase):
         """<80 -> high, 80-95 -> medium, 95-99 -> low."""
         artifact = json.loads(_FIXTURE.read_text("utf-8"))
         result = CoverageNormalizer().run(artifact=artifact, repo_root=self.root)
-        self.assertEqual(result.findings[0].severity, "high")    # 75%
+        self.assertEqual(result.findings[0].severity, "high")  # 75%
         self.assertEqual(result.findings[1].severity, "medium")  # 90%
 
     def test_primary_message_contains_percent(self):

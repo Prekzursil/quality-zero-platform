@@ -1,4 +1,5 @@
 """Tests for SonarCloud normalizer (per §6.2)."""
+
 from __future__ import absolute_import
 
 import json
@@ -46,8 +47,8 @@ class SonarCloudNormalizerTests(unittest.TestCase):
     def test_severity_mapping(self):
         artifact = json.loads(_FIXTURE.read_text("utf-8"))
         result = SonarCloudNormalizer().run(artifact=artifact, repo_root=self.root)
-        self.assertEqual(result.findings[0].severity, "medium")   # MAJOR
-        self.assertEqual(result.findings[1].severity, "low")      # MINOR
+        self.assertEqual(result.findings[0].severity, "medium")  # MAJOR
+        self.assertEqual(result.findings[1].severity, "low")  # MINOR
         self.assertEqual(result.findings[2].severity, "critical")  # BLOCKER
 
     def test_component_file_extraction(self):

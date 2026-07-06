@@ -8,22 +8,22 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Any, cast, Dict, List
+from typing import Any, Dict, List, cast
 from unittest.mock import patch
 
 from scripts.quality import profile_shape
 from scripts.quality.control_plane import (
     InventoryOverrides,
     _apply_inventory_overrides,
-    _load_yaml,
     _infer_coverage_inputs,
     _load_stack,
+    _load_yaml,
     _merge_required_contexts,
     _normalize_codex_environment,
     _normalize_coverage,
     _normalize_coverage_assert_mode,
-    _normalize_coverage_setup,
     _normalize_coverage_inputs,
+    _normalize_coverage_setup,
     _normalize_issue_policy,
     _normalize_java_setup,
     _normalize_required_contexts,
@@ -35,7 +35,6 @@ from scripts.quality.control_plane import (
     repo_root,
     validate_profile,
 )
-
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTROL_PLANE_PATH = ROOT / "scripts" / "quality" / "control_plane.py"
@@ -97,7 +96,7 @@ invalid codacy.dashboard_url
             }
         )
         profile["vendors"]["codacy"]["dashboard_url"] = "https://localhost/codacy"
-        return cast(Dict[str, Any], profile)
+        return cast("Dict[str, Any]", profile)
 
     @staticmethod
     def _invalid_profile_findings() -> List[str]:
@@ -232,14 +231,14 @@ invalid codacy.dashboard_url
             (root / "profiles" / "stacks").mkdir(parents=True, exist_ok=True)
             (root / "profiles" / "repos").mkdir(parents=True, exist_ok=True)
             inventory_path.write_text(
-                "repos:\n"
-                "  - slug: Example/Repo\n"
-                ,
+                "repos:\n  - slug: Example/Repo\n",
                 encoding="utf-8",
             )
             (root / "profiles" / "stacks" / "cycle-a.yml").write_text("extends: cycle-b\n", encoding="utf-8")
             (root / "profiles" / "stacks" / "cycle-b.yml").write_text("extends: cycle-a\n", encoding="utf-8")
-            (root / "profiles" / "repos" / "example.yml").write_text("verify_command: bash scripts/verify\n", encoding="utf-8")
+            (root / "profiles" / "repos" / "example.yml").write_text(
+                "verify_command: bash scripts/verify\n", encoding="utf-8"
+            )
 
             inventory = load_inventory(inventory_path)
 
@@ -328,9 +327,7 @@ invalid codacy.dashboard_url
 
         visual_profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
         visual_profile["required_contexts"]["target"] = [
-            item
-            for item in visual_profile["required_contexts"]["target"]
-            if item != "Applitools Visual"
+            item for item in visual_profile["required_contexts"]["target"] if item != "Applitools Visual"
         ]
 
         findings = validate_profile(visual_profile)
@@ -349,32 +346,33 @@ invalid codacy.dashboard_url
         outputs: List[Any] = []
         for mode in ("profile", "ruleset", "contexts"):
             buffer = io.StringIO()
-            with patch.object(
-                sys,
-                "argv",
-                [
-                    "control_plane.py",
-                    "--inventory",
-                    str(ROOT / "inventory" / "repos.yml"),
-                    "--repo-slug",
-                    "Prekzursil/quality-zero-platform",
-                    "--print",
-                    mode,
-                ],
-            ), contextlib.redirect_stdout(buffer):
+            with (
+                patch.object(
+                    sys,
+                    "argv",
+                    [
+                        "control_plane.py",
+                        "--inventory",
+                        str(ROOT / "inventory" / "repos.yml"),
+                        "--repo-slug",
+                        "Prekzursil/quality-zero-platform",
+                        "--print",
+                        mode,
+                    ],
+                ),
+                contextlib.redirect_stdout(buffer),
+            ):
                 self.assertEqual(main(), 0)
             outputs.append(json.loads(buffer.getvalue()))
 
-        profile_payload = cast(Dict[str, Any], outputs[0])
-        ruleset_payload = cast(Dict[str, Any], outputs[1])
-        contexts_payload = cast(List[str], outputs[2])
+        profile_payload = cast("Dict[str, Any]", outputs[0])
+        ruleset_payload = cast("Dict[str, Any]", outputs[1])
+        contexts_payload = cast("List[str]", outputs[2])
         self.assertEqual(profile_payload["slug"], "Prekzursil/quality-zero-platform")
         self.assertEqual(ruleset_payload["repo_slug"], "Prekzursil/quality-zero-platform")
         self.assertIn("Control Plane Verify", contexts_payload)
         self.assertIn("codeql / CodeQL", contexts_payload)
-        self.assertNotIn(
-            "shared-scanner-matrix / Coverage 100 Gate", contexts_payload
-        )
+        self.assertNotIn("shared-scanner-matrix / Coverage 100 Gate", contexts_payload)
 
     def test_script_entrypoint_inserts_repo_root_when_missing(self) -> None:
         """Check the script entrypoint restores the repository root on sys.path."""

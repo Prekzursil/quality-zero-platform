@@ -1,4 +1,5 @@
 """BaseNormalizer abstract class (per design §B.1.2 + §A.6)."""
+
 from __future__ import absolute_import
 
 import traceback
@@ -35,6 +36,7 @@ class FindingDraft:  # pylint: disable=too-many-instance-attributes
     a small parameter count and qlty's "function with many parameters" smell
     stays clean while still tracking every Finding field at the call site.
     """
+
     finding_id: str
     file: str
     line: int
@@ -60,6 +62,7 @@ class BaseNormalizer(ABC):
     parse() in try/except, applies redaction + path validation to every yielded
     Finding, and packages the result into a NormalizerResult.
     """
+
     provider: str = "UNKNOWN"
 
     @abstractmethod
@@ -81,23 +84,27 @@ class BaseNormalizer(ABC):
         try:
             raw = list(self.parse(artifact, repo_root))
         except Exception as exc:  # pylint: disable=broad-exception-caught
-            errors.append({
-                "provider": self.provider,
-                "error_class": exc.__class__.__name__,
-                "error_message": str(exc),
-                "traceback_digest": traceback.format_exc()[:1024],
-            })
+            errors.append(
+                {
+                    "provider": self.provider,
+                    "error_class": exc.__class__.__name__,
+                    "error_message": str(exc),
+                    "traceback_digest": traceback.format_exc()[:1024],
+                }
+            )
             return NormalizerResult(findings=(), normalizer_errors=tuple(errors), security_drops=())
         for finding in raw:
             # 1. Path validation (defense-in-depth against poisoned provider output)
             try:
                 validate_finding_file(finding.file, repo_root)
             except PathEscapedRootError as exc:
-                drops.append({
-                    "provider": self.provider,
-                    "file": finding.file,
-                    "reason": str(exc),
-                })
+                drops.append(
+                    {
+                        "provider": self.provider,
+                        "file": finding.file,
+                        "reason": str(exc),
+                    }
+                )
                 continue
             # 2. Redaction (belt-and-suspenders -- already applied by _build_finding,
             # but applied again at finalize time to catch subclass bypass attempts)
@@ -158,9 +165,12 @@ class BaseNormalizer(ABC):
         # (a protocol covering any frozen dataclass), so Sonar python:S5886
         # flags the ``-> Finding`` return type as a downcast. The cast is a
         # no-op at runtime since ``finding`` is concretely a Finding.
-        return cast("Finding", replace(
-            finding,
-            primary_message=redact_secrets(finding.primary_message),
-            context_snippet=redact_secrets(finding.context_snippet),
-            corroborators=redacted_corroborators,
-        ))
+        return cast(
+            "Finding",
+            replace(
+                finding,
+                primary_message=redact_secrets(finding.primary_message),
+                context_snippet=redact_secrets(finding.context_snippet),
+                corroborators=redacted_corroborators,
+            ),
+        )

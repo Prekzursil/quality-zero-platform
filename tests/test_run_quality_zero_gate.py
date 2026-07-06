@@ -2,14 +2,14 @@
 
 from __future__ import absolute_import
 
-import json
 import importlib
+import json
+import runpy
+import sys
 import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
-import runpy
-import sys
 from typing import List
 from unittest.mock import patch
 
@@ -47,22 +47,16 @@ class RunQualityZeroGateTests(unittest.TestCase):
     ) -> None:
         """Cover required contexts uses fallback target and rejects invalid profiles."""
         self.assertEqual(
-            importlib.import_module(
-                "scripts.quality.run_quality_zero_gate"
-            )._required_contexts(
-                {
-                    "required_contexts": {
-                        "target": [" Coverage 100 Gate ", "", "qlty check"]
-                    }
-                }
+            importlib.import_module("scripts.quality.run_quality_zero_gate")._required_contexts(
+                {"required_contexts": {"target": [" Coverage 100 Gate ", "", "qlty check"]}}
             ),
             ["Coverage 100 Gate", "qlty check"],
         )
 
         with self.assertRaises(SystemExit):
-            importlib.import_module(
-                "scripts.quality.run_quality_zero_gate"
-            )._required_contexts({"required_contexts": "not-a-dict"})
+            importlib.import_module("scripts.quality.run_quality_zero_gate")._required_contexts(
+                {"required_contexts": "not-a-dict"}
+            )
 
     def test_build_argv_uses_profile_contexts_and_explicit_outputs(self) -> None:
         """Cover build argv uses profile contexts and explicit outputs."""
@@ -221,10 +215,7 @@ class RunQualityZeroGateTests(unittest.TestCase):
 
     def test_module_execution_as_main_inserts_repo_root_and_exits_cleanly(self) -> None:
         """Cover module execution as main inserts repo root and exits cleanly."""
-        module_path = (
-            importlib.import_module("scripts.quality.run_quality_zero_gate").__file__
-            or ""
-        )
+        module_path = importlib.import_module("scripts.quality.run_quality_zero_gate").__file__ or ""
         self.assertTrue(module_path)
         repo_root = str(Path(module_path).resolve().parents[2])
         original_sys_path = list(sys.path)
@@ -264,9 +255,7 @@ class RunQualityZeroGateTests(unittest.TestCase):
                     patch.dict("os.environ", {"TARGET_SHA": "deadbeef"}, clear=False),
                     self.assertRaises(SystemExit) as exc,
                 ):
-                    runpy.run_module(
-                        "scripts.quality.run_quality_zero_gate", run_name="__main__"
-                    )
+                    runpy.run_module("scripts.quality.run_quality_zero_gate", run_name="__main__")
             self.assertEqual(exc.exception.code, 0)
             self.assertIn(repo_root, sys.path)
         finally:
@@ -281,13 +270,7 @@ class RunQualityZeroGateTests(unittest.TestCase):
             repo_dir = Path(tmpdir) / "repo"
             repo_dir.mkdir()
             argv = [
-                str(
-                    Path(tmpdir)
-                    / "platform"
-                    / "scripts"
-                    / "quality"
-                    / "check_required_checks.py"
-                ),
+                str(Path(tmpdir) / "platform" / "scripts" / "quality" / "check_required_checks.py"),
                 "--repo",
                 "Prekzursil/quality-zero-platform",
                 "--sha",

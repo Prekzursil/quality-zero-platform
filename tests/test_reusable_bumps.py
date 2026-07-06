@@ -13,11 +13,7 @@ from pathlib import Path
 
 import yaml  # type: ignore[import-untyped]
 
-
-_WORKFLOW = (
-    Path(__file__).resolve().parents[1]
-    / ".github" / "workflows" / "reusable-bumps.yml"
-)
+_WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "reusable-bumps.yml"
 
 
 class ReusableBumpsWorkflowTests(unittest.TestCase):
@@ -88,8 +84,7 @@ class ReusableBumpsWorkflowTests(unittest.TestCase):
         strategy = stage_1.get("strategy", {})
         matrix = strategy.get("matrix", {})
         self.assertIn("slug", matrix)
-        self.assertIs(strategy.get("fail-fast"), False,
-            "fail-fast: false so one bad staging repo can't abort the wave")
+        self.assertIs(strategy.get("fail-fast"), False, "fail-fast: false so one bad staging repo can't abort the wave")
         # Calls the per-repo applier reusable workflow.
         self.assertIn("reusable-bump-apply.yml", stage_1.get("uses", ""))
         # Forwards DRIFT_SYNC_PAT secret.
@@ -141,10 +136,7 @@ class ReusableBumpsWorkflowTests(unittest.TestCase):
         self.assertEqual(perms.get("contents"), "read")
         self.assertEqual(perms.get("issues"), "write")
         # The heredoc imports alerts and references FLEET_BUMP_FAIL.
-        rollback_text = "\n".join(
-            step.get("run", "") for step in rollback.get("steps", [])
-            if isinstance(step, dict)
-        )
+        rollback_text = "\n".join(step.get("run", "") for step in rollback.get("steps", []) if isinstance(step, dict))
         self.assertIn("FLEET_BUMP_FAIL", rollback_text)
         self.assertIn("from scripts.quality import alerts", rollback_text)
 

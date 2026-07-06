@@ -1,4 +1,5 @@
 """Deterministic patch generator for `spacing-convention` category."""
+
 from __future__ import absolute_import
 
 import difflib
@@ -49,12 +50,14 @@ def generate(
             reason_text="no spacing fixes applicable on target line",
             suggested_tier="llm-fallback",
         )
-    diff = "".join(difflib.unified_diff(
-        lines,
-        patched_lines,
-        fromfile=f"a/{finding.file}",
-        tofile=f"b/{finding.file}",
-    ))
+    diff = "".join(
+        difflib.unified_diff(
+            lines,
+            patched_lines,
+            fromfile=f"a/{finding.file}",
+            tofile=f"b/{finding.file}",
+        )
+    )
     return PatchResult(
         unified_diff=diff,
         confidence="medium",

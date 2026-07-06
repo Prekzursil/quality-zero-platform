@@ -1,4 +1,5 @@
 """Tests for BaseNormalizer abstract class (per design §B.1.2 + §A.6)."""
+
 from __future__ import absolute_import
 
 import sys
@@ -25,19 +26,21 @@ class _DemoNormalizer(BaseNormalizer):
     def parse(self, artifact, repo_root):
         # Pretend to parse an artifact and yield one Finding
         return [
-            self._build_finding(FindingDraft(
-                finding_id="demo-1",
-                file="a.py",
-                line=1,
-                category="broad-except",
-                category_group=CATEGORY_GROUP_QUALITY,
-                severity="medium",
-                primary_message='FOO_KEY = "sk-thirtytwocharsecretvalue" was here',
-                rule_id="Pylint_W0703",
-                rule_url=None,
-                original_message="broad-except",
-                context_snippet='API_KEY = "sk-thirtytwocharsecretvalue"',
-            ))
+            self._build_finding(
+                FindingDraft(
+                    finding_id="demo-1",
+                    file="a.py",
+                    line=1,
+                    category="broad-except",
+                    category_group=CATEGORY_GROUP_QUALITY,
+                    severity="medium",
+                    primary_message='FOO_KEY = "sk-thirtytwocharsecretvalue" was here',
+                    rule_id="Pylint_W0703",
+                    rule_url=None,
+                    original_message="broad-except",
+                    context_snippet='API_KEY = "sk-thirtytwocharsecretvalue"',
+                )
+            )
         ]
 
 
@@ -68,20 +71,23 @@ class BaseNormalizerTests(unittest.TestCase):
         class _EscapeNormalizer(_DemoNormalizer):
             def parse(self, artifact, repo_root):
                 return [
-                    self._build_finding(FindingDraft(
-                        finding_id="x",
-                        file="../../etc/passwd",
-                        line=1,
-                        category="broad-except",
-                        category_group=CATEGORY_GROUP_QUALITY,
-                        severity="low",
-                        primary_message="m",
-                        rule_id="R",
-                        rule_url=None,
-                        original_message="m",
-                        context_snippet="",
-                    ))
+                    self._build_finding(
+                        FindingDraft(
+                            finding_id="x",
+                            file="../../etc/passwd",
+                            line=1,
+                            category="broad-except",
+                            category_group=CATEGORY_GROUP_QUALITY,
+                            severity="low",
+                            primary_message="m",
+                            rule_id="R",
+                            rule_url=None,
+                            original_message="m",
+                            context_snippet="",
+                        )
+                    )
                 ]
+
         norm = _EscapeNormalizer()
         result = norm.run(artifact=None, repo_root=self.root)
         self.assertEqual(len(result.findings), 0)
@@ -91,6 +97,7 @@ class BaseNormalizerTests(unittest.TestCase):
         class _CrashNormalizer(_DemoNormalizer):
             def parse(self, artifact, repo_root):
                 raise ValueError("simulated parser crash")
+
         norm = _CrashNormalizer()
         result = norm.run(artifact=None, repo_root=self.root)
         self.assertEqual(len(result.findings), 0)

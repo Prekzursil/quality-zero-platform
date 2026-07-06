@@ -77,9 +77,7 @@ def _profile_path(repo_root: Path, profile_id: str) -> Path:
     return repo_root / "profiles" / "repos" / f"{profile_id}.yml"
 
 
-def set_scanner(
-    *, repo_root: Path, profile_id: str, scanner: str, enabled: bool
-) -> None:
+def set_scanner(*, repo_root: Path, profile_id: str, scanner: str, enabled: bool) -> None:
     """Handle set scanner."""
     path = _profile_path(repo_root, profile_id)
     payload = _load_yaml(path)
@@ -88,9 +86,7 @@ def set_scanner(
     _write_yaml(path, payload)
 
 
-def set_issue_policy(
-    *, repo_root: Path, profile_id: str, mode: str, baseline_ref: str = ""
-) -> None:
+def set_issue_policy(*, repo_root: Path, profile_id: str, mode: str, baseline_ref: str = "") -> None:
     """Handle set issue policy."""
     path = _profile_path(repo_root, profile_id)
     payload = _load_yaml(path)
@@ -102,9 +98,7 @@ def set_issue_policy(
     _write_yaml(path, payload)
 
 
-def set_coverage_mode(
-    *, repo_root: Path, profile_id: str, event_name: str, mode: str
-) -> None:
+def set_coverage_mode(*, repo_root: Path, profile_id: str, event_name: str, mode: str) -> None:
     """Handle set coverage mode."""
     path = _profile_path(repo_root, profile_id)
     payload = _load_yaml(path)
@@ -136,9 +130,7 @@ def set_required_context(
 
 def parse_args() -> argparse.Namespace:
     """Handle parse args."""
-    parser = argparse.ArgumentParser(
-        description="Mutate inventory or profile YAML for admin PR workflows."
-    )
+    parser = argparse.ArgumentParser(description="Mutate inventory or profile YAML for admin PR workflows.")
     parser.add_argument("--repo-root", default=".")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -156,19 +148,13 @@ def parse_args() -> argparse.Namespace:
 
     issue_policy = subparsers.add_parser("set-issue-policy")
     issue_policy.add_argument("--profile-id", required=True)
-    issue_policy.add_argument(
-        "--mode", choices=("zero", "ratchet", "audit"), required=True
-    )
+    issue_policy.add_argument("--mode", choices=("zero", "ratchet", "audit"), required=True)
     issue_policy.add_argument("--baseline-ref", default="")
 
     coverage = subparsers.add_parser("set-coverage-mode")
     coverage.add_argument("--profile-id", required=True)
-    coverage.add_argument(
-        "--event-name", choices=("default", "push", "pull_request"), required=True
-    )
-    coverage.add_argument(
-        "--mode", choices=("enforce", "evidence_only", "non_regression"), required=True
-    )
+    coverage.add_argument("--event-name", choices=("default", "push", "pull_request"), required=True)
+    coverage.add_argument("--mode", choices=("enforce", "evidence_only", "non_regression"), required=True)
 
     required_context = subparsers.add_parser("set-required-context")
     required_context.add_argument("--profile-id", required=True)

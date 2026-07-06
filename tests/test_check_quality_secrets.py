@@ -19,7 +19,10 @@ from scripts.quality import check_quality_secrets as cqs
 def _fake_completed(stdout: str = "", returncode: int = 0) -> subprocess.CompletedProcess:
     """Helper: ``CompletedProcess`` double for runner mocks."""
     return subprocess.CompletedProcess(
-        args=["gh"], returncode=returncode, stdout=stdout, stderr="",
+        args=["gh"],
+        returncode=returncode,
+        stdout=stdout,
+        stderr="",
     )
 
 

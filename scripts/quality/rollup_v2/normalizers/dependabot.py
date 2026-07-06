@@ -1,4 +1,5 @@
 """Dependabot normalizer (per design §4.2 + §A.6)."""
+
 from __future__ import absolute_import
 
 from pathlib import Path
@@ -55,6 +56,7 @@ class DependabotNormalizer(BaseNormalizer):
     since they represent dependency vulnerabilities, not static lint rules.
     Taxonomy lookup is bypassed.
     """
+
     provider = "Dependabot"
 
     def parse(self, artifact: Any, repo_root: Path) -> Iterable[Finding]:

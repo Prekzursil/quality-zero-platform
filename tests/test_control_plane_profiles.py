@@ -54,8 +54,7 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
         """Special repos should keep their expected multi-language coverage inputs."""
         profiles = self._special_repo_profiles()
         reframe_inputs = {
-            (item["format"], item["name"], item["path"])
-            for item in profiles["reframe"]["coverage"]["inputs"]
+            (item["format"], item["name"], item["path"]) for item in profiles["reframe"]["coverage"]["inputs"]
         }
         self.assertEqual(
             reframe_inputs,
@@ -71,8 +70,7 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
             },
         )
         momentstudio_inputs = {
-            (item["format"], item["name"], item["path"])
-            for item in profiles["momentstudio"]["coverage"]["inputs"]
+            (item["format"], item["name"], item["path"]) for item in profiles["momentstudio"]["coverage"]["inputs"]
         }
         self.assertEqual(
             momentstudio_inputs,
@@ -170,9 +168,7 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
             self.assertIn(lean, push_contexts)
             self.assertIn(lean, pr_contexts)
             self.assertIn(lean, target_contexts)
-        self.assertNotIn(
-            "shared-codecov-analytics / Codecov Analytics", target_contexts
-        )
+        self.assertNotIn("shared-codecov-analytics / Codecov Analytics", target_contexts)
 
     def test_env_inspector_overlay_aligns_push_required_contexts_to_emitted_surface(
         self,
@@ -209,9 +205,7 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
                 "qlty coverage diff",
             },
         )
-        self.assertIn(
-            "shared-codecov-analytics / Codecov Analytics", target_contexts
-        )
+        self.assertIn("shared-codecov-analytics / Codecov Analytics", target_contexts)
         self.assertIn("shared-scanner-matrix / QLTY Zero", target_contexts)
         self.assertIn("qlty coverage", target_contexts)
         self.assertIn("qlty coverage diff", target_contexts)
@@ -262,9 +256,7 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
     def test_provider_metadata_tracks_real_qlty_names(self) -> None:
         """Provider metadata should expose the expected QLTY names and policy values."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
-        quality_zero_platform = load_repo_profile(
-            inventory, "Prekzursil/quality-zero-platform"
-        )
+        quality_zero_platform = load_repo_profile(inventory, "Prekzursil/quality-zero-platform")
         self.assertEqual(
             quality_zero_platform["vendors"]["qlty"]["check_names_actual"],
             ["qlty check", "qlty coverage", "qlty coverage diff"],
@@ -342,9 +334,7 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
         profile["required_contexts"]["target"] = [
-            name
-            for name in profile["required_contexts"]["target"]
-            if name != "Applitools Visual"
+            name for name in profile["required_contexts"]["target"] if name != "Applitools Visual"
         ]
 
         findings = validate_profile(profile)
@@ -364,31 +354,19 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
         findings = validate_profile(profile)
 
         self.assertIn(
-            (
-                "Prekzursil/TanksFlashMobile: visual_pair_required "
-                "requires chromatic.project_name"
-            ),
+            ("Prekzursil/TanksFlashMobile: visual_pair_required requires chromatic.project_name"),
             findings,
         )
         self.assertIn(
-            (
-                "Prekzursil/TanksFlashMobile: visual_pair_required "
-                "requires chromatic.token_secret"
-            ),
+            ("Prekzursil/TanksFlashMobile: visual_pair_required requires chromatic.token_secret"),
             findings,
         )
         self.assertIn(
-            (
-                "Prekzursil/TanksFlashMobile: visual_pair_required "
-                "requires chromatic.local_env_var"
-            ),
+            ("Prekzursil/TanksFlashMobile: visual_pair_required requires chromatic.local_env_var"),
             findings,
         )
         self.assertIn(
-            (
-                "Prekzursil/TanksFlashMobile: visual_pair_required "
-                "requires applitools.project_name"
-            ),
+            ("Prekzursil/TanksFlashMobile: visual_pair_required requires applitools.project_name"),
             findings,
         )
 
@@ -400,9 +378,7 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
 
         findings = validate_profile(profile)
 
-        self.assertTrue(
-            any("invalid codacy.dashboard_url" in item for item in findings)
-        )
+        self.assertTrue(any("invalid codacy.dashboard_url" in item for item in findings))
 
     def test_export_profile_emits_coverage_inputs_for_codecov_and_qlty_uploads(
         self,
@@ -487,9 +463,7 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
                 str(output_path),
             ]
             repo_root = str(ROOT)
-            without_empty = [
-                entry for entry in sys.path if entry not in (repo_root, "")
-            ]
+            without_empty = [entry for entry in sys.path if entry not in (repo_root, "")]
 
             for sys_path in (without_empty, ["", *without_empty]):
                 if "" not in sys_path:

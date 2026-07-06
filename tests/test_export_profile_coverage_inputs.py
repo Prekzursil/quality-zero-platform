@@ -44,27 +44,28 @@ class CoverageInputsPayloadTests(unittest.TestCase):
 
     def test_flag_falls_back_to_name_when_missing(self) -> None:
         """A profile omitting ``flag`` reuses ``name`` so the upload is keyed."""
-        payload = _coverage_inputs_payload(
-            {"inputs": [{"name": "legacy", "path": "build/cov.xml"}]}
+        payload = _coverage_inputs_payload({"inputs": [{"name": "legacy", "path": "build/cov.xml"}]})
+        self.assertEqual(
+            payload,
+            [
+                {"path": "build/cov.xml", "flag": "legacy", "name": "legacy", "format": ""},
+            ],
         )
-        self.assertEqual(payload, [
-            {"path": "build/cov.xml", "flag": "legacy", "name": "legacy", "format": ""},
-        ])
 
     def test_windows_backslashes_normalised_to_forward(self) -> None:
         """Windows-style paths are normalised so Codecov sees POSIX form."""
         payload = _coverage_inputs_payload(
-            {"inputs": [
-                {"name": "win", "flag": "win", "path": r"a\b\c.xml"},
-            ]}
+            {
+                "inputs": [
+                    {"name": "win", "flag": "win", "path": r"a\b\c.xml"},
+                ]
+            }
         )
         self.assertEqual(payload[0]["path"], "a/b/c.xml")
 
     def test_missing_path_is_dropped(self) -> None:
         """Inputs without a ``path`` are skipped rather than uploaded as empty."""
-        payload = _coverage_inputs_payload(
-            {"inputs": [{"name": "orphan"}]}
-        )
+        payload = _coverage_inputs_payload({"inputs": [{"name": "orphan"}]})
         self.assertEqual(payload, [])
 
     def test_empty_or_missing_coverage_returns_empty(self) -> None:
@@ -179,10 +180,7 @@ class GithubActionsOutputFileTests(unittest.TestCase):
             self.assertIn("coverage_inputs_json=", content)
             # And the payload itself must be valid JSON.
             try:
-                line = next(
-                    ln for ln in content.splitlines()
-                    if ln.startswith("coverage_inputs_json=")
-                )
+                line = next(ln for ln in content.splitlines() if ln.startswith("coverage_inputs_json="))
             except StopIteration:  # pragma: no cover — assertIn above rules this out
                 self.fail("coverage_inputs_json= line missing despite assertIn hit")
             payload = json.loads(line.split("=", 1)[1])

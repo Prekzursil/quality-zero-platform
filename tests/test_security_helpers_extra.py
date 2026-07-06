@@ -3,9 +3,9 @@
 from __future__ import absolute_import
 
 import unittest
+from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.parse import urlparse
-from unittest.mock import patch
 
 from scripts import security_helpers
 
@@ -13,9 +13,7 @@ from scripts import security_helpers
 class _FakeBytesResponse:
     """Fake Bytes Response."""
 
-    def __init__(
-        self, payload: bytes, headers=None, *, status=200, reason="OK"
-    ) -> None:
+    def __init__(self, payload: bytes, headers=None, *, status=200, reason="OK") -> None:
         """Handle init."""
         self._payload = payload
         self._headers = dict(headers or {})
@@ -82,9 +80,7 @@ class SecurityHelpersExtraTests(unittest.TestCase):
         )
         self.assertEqual(parsed.hostname, "api.github.com")
         self.assertEqual(request_kwargs["timeout"], 15)
-        with self.assertRaisesRegex(
-            TypeError, "Unexpected load_bytes_https parameters: extra"
-        ):
+        with self.assertRaisesRegex(TypeError, "Unexpected load_bytes_https parameters: extra"):
             security_helpers._prepare_https_request(
                 "https://api.github.com/repos/Prekzursil/quality-zero-platform/status",
                 function_name="load_bytes_https",
@@ -95,9 +91,7 @@ class SecurityHelpersExtraTests(unittest.TestCase):
         self,
     ) -> None:
         """Cover read bytes response and load bytes https cover success and error paths."""
-        parsed = urlparse(
-            "https://api.github.com/repos/Prekzursil/quality-zero-platform/status"
-        )
+        parsed = urlparse("https://api.github.com/repos/Prekzursil/quality-zero-platform/status")
         self._assert_read_bytes_response(
             parsed,
             _FakeBytesResponse(b"payload", {"X-Test": "value"}),
@@ -109,9 +103,7 @@ class SecurityHelpersExtraTests(unittest.TestCase):
         )
 
         response = _FakeBytesResponse(b"bytes", {"X-Test": "value"})
-        with patch(
-            "scripts.security_helpers._ValidatedTLSConnection"
-        ) as connection_cls:
+        with patch("scripts.security_helpers._ValidatedTLSConnection") as connection_cls:
             connection = connection_cls.return_value
             connection.getresponse.return_value = response
             payload, headers = security_helpers.load_bytes_https(

@@ -29,9 +29,7 @@ LEGACY_ZERO_WORKFLOW_FILES = (
 
 def _parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
-    parser = argparse.ArgumentParser(
-        description="Render managed CodeQL, Dependabot, and SECURITY.md files."
-    )
+    parser = argparse.ArgumentParser(description="Render managed CodeQL, Dependabot, and SECURITY.md files.")
     parser.add_argument("--inventory", default="")
     parser.add_argument("--repo-slug", required=True)
     parser.add_argument("--repo-root", required=True)
@@ -51,12 +49,7 @@ def _codeql_wrapper_uses_line(is_self_repo: bool, platform_release_sha: str) -> 
     """Pick the ``uses:`` line for the codeql wrapper (self-call vs external)."""
     if is_self_repo:
         return "    uses: ./.github/workflows/reusable-codeql.yml"
-    return (
-        "    uses: Prekzursil/quality-zero-platform/"
-        ".github/workflows/"
-        "reusable-codeql.yml"
-        f"@{platform_release_sha}"
-    )
+    return f"    uses: Prekzursil/quality-zero-platform/.github/workflows/reusable-codeql.yml@{platform_release_sha}"
 
 
 def _codeql_wrapper_platform_lines(is_self_repo: bool) -> Tuple[str, str]:
@@ -94,7 +87,7 @@ def render_codeql_wrapper(*, repo_slug: str, platform_release_sha: str) -> str:
             "  merge_group:",
             "    types: [checks_requested]",
             "  schedule:",
-            "    - cron: \"23 3 * * 1\"",
+            '    - cron: "23 3 * * 1"',
             "  workflow_dispatch:",
             "",
             "jobs:",

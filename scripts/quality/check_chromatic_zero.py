@@ -6,6 +6,7 @@ Usage:
 
 Checks: accepted == total AND errored == 0. Exits 0 on pass, 1 on fail.
 """
+
 from __future__ import absolute_import
 
 import argparse

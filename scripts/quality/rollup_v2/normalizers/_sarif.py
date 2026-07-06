@@ -6,6 +6,7 @@ objects, a 50MB guard to reject oversized artifacts before parsing, and a
 Semgrep) only need to declare ``provider`` instead of duplicating the same
 artifact-dispatch ``parse()`` implementation.
 """
+
 from __future__ import absolute_import
 
 import json
@@ -35,11 +36,20 @@ _SARIF_LEVEL_TO_SEVERITY: Dict[str, str] = {
     "none": "low",
 }
 
-_SECURITY_TAGS: frozenset[str] = frozenset({
-    "security", "vulnerability", "cwe", "injection", "xss",
-    "command-injection", "sql-injection", "code-injection",
-    "weak-crypto", "hardcoded-secret",
-})
+_SECURITY_TAGS: frozenset[str] = frozenset(
+    {
+        "security",
+        "vulnerability",
+        "cwe",
+        "injection",
+        "xss",
+        "command-injection",
+        "sql-injection",
+        "code-injection",
+        "weak-crypto",
+        "hardcoded-secret",
+    }
+)
 
 
 def _classify_category_group(
@@ -160,9 +170,7 @@ def check_sarif_size(data: bytes | str) -> None:
     """Raise SarifTooLargeError if the raw SARIF data exceeds 50MB."""
     size = len(data) if isinstance(data, bytes) else len(data.encode("utf-8"))
     if size > MAX_SARIF_BYTES:
-        raise SarifTooLargeError(
-            f"SARIF artifact is {size:,} bytes, exceeding the {MAX_SARIF_BYTES:,} byte limit"
-        )
+        raise SarifTooLargeError(f"SARIF artifact is {size:,} bytes, exceeding the {MAX_SARIF_BYTES:,} byte limit")
 
 
 def _build_sarif_finding_draft(

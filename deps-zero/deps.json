@@ -1,0 +1,11 @@
+{
+  "findings": [
+    "GITHUB_TOKEN or GH_TOKEN is required."
+  ],
+  "open_alerts": null,
+  "policy": "zero_critical",
+  "repo": "owner/repo",
+  "scope": "runtime",
+  "status": "fail",
+  "timestamp_utc": "2026-07-06T07:34:51.999372+00:00"
+}

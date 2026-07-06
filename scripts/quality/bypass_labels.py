@@ -87,12 +87,7 @@ def extract_incident_id(pr_body: str) -> Optional[str]:
 
 def _utc_iso_now() -> str:
     """Current UTC timestamp in ISO-8601 with ``Z`` suffix."""
-    return (
-        datetime.now(UTC)
-        .replace(microsecond=0)
-        .isoformat()
-        .replace("+00:00", "Z")
-    )
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def _build_audit_record(
@@ -121,7 +116,10 @@ def _build_audit_record(
 
 
 def _build_tracking_issue(
-    pr_slug: str, pr_number: int, actor: str, incident: str,
+    pr_slug: str,
+    pr_number: int,
+    actor: str,
+    incident: str,
 ) -> tuple:
     """Return ``(title, body)`` for the post-merge tracking issue."""
     title = f"break-glass follow-up: {pr_slug}#{pr_number} (Incident: {incident})"
@@ -228,8 +226,7 @@ def _run_cli() -> None:  # pragma: no cover — ad-hoc CLI
     """
     if len(sys.argv) < 6:
         print(
-            "usage: bypass_labels.py <label> <pr_slug> <pr_number> "
-            "<head_sha> <actor> <audit_dir>",
+            "usage: bypass_labels.py <label> <pr_slug> <pr_number> <head_sha> <actor> <audit_dir>",
             file=sys.stderr,
         )
         raise SystemExit(2)
@@ -246,12 +243,16 @@ def _run_cli() -> None:  # pragma: no cover — ad-hoc CLI
         raise SystemExit(2)
     if decision.audit_record is not None:
         append_jsonl(Path(audit_dir) / filename, decision.audit_record)
-    print(json.dumps({
-        "label": decision.label,
-        "allowed": decision.allowed,
-        "incident": decision.incident,
-        "tracking_issue_title": decision.tracking_issue_title,
-    }))
+    print(
+        json.dumps(
+            {
+                "label": decision.label,
+                "allowed": decision.allowed,
+                "incident": decision.incident,
+                "tracking_issue_title": decision.tracking_issue_title,
+            }
+        )
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI

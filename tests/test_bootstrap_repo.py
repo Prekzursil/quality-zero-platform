@@ -25,7 +25,10 @@ from scripts.quality import bootstrap_repo as br
 def _fake_completed(stdout: str = "", returncode: int = 0) -> subprocess.CompletedProcess:
     """Helper: lightweight ``CompletedProcess`` double for runner mocks."""
     return subprocess.CompletedProcess(
-        args=["gh"], returncode=returncode, stdout=stdout, stderr="",
+        args=["gh"],
+        returncode=returncode,
+        stdout=stdout,
+        stderr="",
     )
 
 
@@ -34,11 +37,17 @@ class CountConsecutiveGreenShadowRunsTests(unittest.TestCase):
 
     def test_all_green_returns_full_count(self) -> None:
         """3/3 newest-first green runs → 3."""
-        runner = MagicMock(return_value=_fake_completed(json.dumps([
-            {"conclusion": "success", "status": "completed"},
-            {"conclusion": "success", "status": "completed"},
-            {"conclusion": "success", "status": "completed"},
-        ])))
+        runner = MagicMock(
+            return_value=_fake_completed(
+                json.dumps(
+                    [
+                        {"conclusion": "success", "status": "completed"},
+                        {"conclusion": "success", "status": "completed"},
+                        {"conclusion": "success", "status": "completed"},
+                    ]
+                )
+            )
+        )
         count = br.count_consecutive_green_shadow_runs(
             slug="Prekzursil/event-link",
             workflow="quality-rollup.yml",
@@ -49,12 +58,18 @@ class CountConsecutiveGreenShadowRunsTests(unittest.TestCase):
 
     def test_stops_at_first_failure(self) -> None:
         """Greens before a failure → up to the failure only."""
-        runner = MagicMock(return_value=_fake_completed(json.dumps([
-            {"conclusion": "success", "status": "completed"},
-            {"conclusion": "success", "status": "completed"},
-            {"conclusion": "failure", "status": "completed"},
-            {"conclusion": "success", "status": "completed"},
-        ])))
+        runner = MagicMock(
+            return_value=_fake_completed(
+                json.dumps(
+                    [
+                        {"conclusion": "success", "status": "completed"},
+                        {"conclusion": "success", "status": "completed"},
+                        {"conclusion": "failure", "status": "completed"},
+                        {"conclusion": "success", "status": "completed"},
+                    ]
+                )
+            )
+        )
         count = br.count_consecutive_green_shadow_runs(
             slug="Prekzursil/event-link",
             workflow="quality-rollup.yml",
@@ -65,11 +80,17 @@ class CountConsecutiveGreenShadowRunsTests(unittest.TestCase):
 
     def test_in_progress_run_is_skipped_not_counted(self) -> None:
         """An ``in_progress`` run is neither counted nor a stopper."""
-        runner = MagicMock(return_value=_fake_completed(json.dumps([
-            {"conclusion": "", "status": "in_progress"},
-            {"conclusion": "success", "status": "completed"},
-            {"conclusion": "success", "status": "completed"},
-        ])))
+        runner = MagicMock(
+            return_value=_fake_completed(
+                json.dumps(
+                    [
+                        {"conclusion": "", "status": "in_progress"},
+                        {"conclusion": "success", "status": "completed"},
+                        {"conclusion": "success", "status": "completed"},
+                    ]
+                )
+            )
+        )
         count = br.count_consecutive_green_shadow_runs(
             slug="Prekzursil/event-link",
             workflow="quality-rollup.yml",
@@ -113,11 +134,17 @@ class CountConsecutiveGreenShadowRunsTests(unittest.TestCase):
 
     def test_non_dict_element_breaks_the_streak(self) -> None:
         """Defensive: a non-mapping element interrupts counting."""
-        runner = MagicMock(return_value=_fake_completed(json.dumps([
-            {"conclusion": "success", "status": "completed"},
-            "not-a-dict",
-            {"conclusion": "success", "status": "completed"},
-        ])))
+        runner = MagicMock(
+            return_value=_fake_completed(
+                json.dumps(
+                    [
+                        {"conclusion": "success", "status": "completed"},
+                        "not-a-dict",
+                        {"conclusion": "success", "status": "completed"},
+                    ]
+                )
+            )
+        )
         count = br.count_consecutive_green_shadow_runs(
             slug="Prekzursil/event-link",
             workflow="quality-rollup.yml",
@@ -170,11 +197,7 @@ class PromoteProfileTests(unittest.TestCase):
 
     def test_shadow_to_ratchet_also_clears_shadow_until(self) -> None:
         """Target ``ratchet`` clears the shadow deadline field."""
-        src = (
-            "mode:\n"
-            "  phase: shadow\n"
-            "  shadow_until: 2026-06-30\n"
-        )
+        src = "mode:\n  phase: shadow\n  shadow_until: 2026-06-30\n"
         out = br.promote_profile(src, target_phase="ratchet")
         self.assertIn("phase: ratchet", out)
         self.assertIn("shadow_until: null", out)
@@ -208,7 +231,8 @@ class PromoteProfileTests(unittest.TestCase):
         self.assertIn("slug: org/repo\n", out)
         self.assertIn("stack: go\n", out)
         self.assertIn(
-            "scanners:\n  codeql: { enabled: true, severity: block }\n", out,
+            "scanners:\n  codeql: { enabled: true, severity: block }\n",
+            out,
         )
 
 
@@ -217,21 +241,22 @@ class ComputePromotionPlanTests(unittest.TestCase):
 
     def test_plan_ready_when_enough_greens(self) -> None:
         """3 greens + target → ``ready=True``, promoted YAML included."""
-        runner = MagicMock(return_value=_fake_completed(json.dumps([
-            {"conclusion": "success", "status": "completed"},
-            {"conclusion": "success", "status": "completed"},
-            {"conclusion": "success", "status": "completed"},
-        ])))
+        runner = MagicMock(
+            return_value=_fake_completed(
+                json.dumps(
+                    [
+                        {"conclusion": "success", "status": "completed"},
+                        {"conclusion": "success", "status": "completed"},
+                        {"conclusion": "success", "status": "completed"},
+                    ]
+                )
+            )
+        )
         plan = br.compute_promotion_plan(
             slug="Prekzursil/event-link",
             workflow="quality-rollup.yml",
             branch="main",
-            profile_yaml=(
-                "slug: Prekzursil/event-link\n"
-                "mode:\n"
-                "  phase: shadow\n"
-                "  shadow_until: 2026-06-30\n"
-            ),
+            profile_yaml=("slug: Prekzursil/event-link\nmode:\n  phase: shadow\n  shadow_until: 2026-06-30\n"),
             target_phase="absolute",
             runner=runner,
         )
@@ -241,10 +266,16 @@ class ComputePromotionPlanTests(unittest.TestCase):
 
     def test_plan_not_ready_when_insufficient_greens(self) -> None:
         """< 3 greens → ``ready=False``, no promoted YAML."""
-        runner = MagicMock(return_value=_fake_completed(json.dumps([
-            {"conclusion": "success", "status": "completed"},
-            {"conclusion": "failure", "status": "completed"},
-        ])))
+        runner = MagicMock(
+            return_value=_fake_completed(
+                json.dumps(
+                    [
+                        {"conclusion": "success", "status": "completed"},
+                        {"conclusion": "failure", "status": "completed"},
+                    ]
+                )
+            )
+        )
         plan = br.compute_promotion_plan(
             slug="Prekzursil/event-link",
             workflow="quality-rollup.yml",

@@ -107,12 +107,14 @@ def is_security_finding(finding: Mapping[str, Any]) -> bool:
     if not isinstance(finding, Mapping):
         return False
     category = str(finding.get("category", "")).strip().lower()
-    return any((
-        bool(finding.get("is_security")),
-        _scanner_name(finding) in SECURITY_SCANNERS,
-        category in {"security", "vulnerability", "secret"},
-        _has_security_tag(finding),
-    ))
+    return any(
+        (
+            bool(finding.get("is_security")),
+            _scanner_name(finding) in SECURITY_SCANNERS,
+            category in {"security", "vulnerability", "secret"},
+            _has_security_tag(finding),
+        )
+    )
 
 
 def filter_auto_merge_candidates(
@@ -145,10 +147,7 @@ def ensure_pr_only_for_security(
         return
     classified = filter_auto_merge_candidates(findings)
     if classified.must_open_pr:
-        ids = ", ".join(
-            str(f.get("id") or f.get("rule") or "<anonymous>")
-            for f in classified.must_open_pr
-        )
+        ids = ", ".join(str(f.get("id") or f.get("rule") or "<anonymous>") for f in classified.must_open_pr)
         raise SecurityAutoMergeRefusedError(
             f"QRv2 refused to auto-merge: security-class findings present "
             f"({ids}). Security-class remediations must open a PR."
@@ -160,7 +159,12 @@ if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
 
     _findings = json.loads(sys.stdin.read() or "[]")
     _classified = filter_auto_merge_candidates(_findings)
-    print(json.dumps({
-        "auto_merge_ok": _classified.auto_merge_ok,
-        "must_open_pr": _classified.must_open_pr,
-    }, indent=2))
+    print(
+        json.dumps(
+            {
+                "auto_merge_ok": _classified.auto_merge_ok,
+                "must_open_pr": _classified.must_open_pr,
+            },
+            indent=2,
+        )
+    )

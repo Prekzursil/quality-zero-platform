@@ -1,10 +1,16 @@
 """Test quality common -- normalization and vendor helpers."""
 
-
 from __future__ import absolute_import
 
 import unittest
 from unittest.mock import patch
+
+from tests._quality_common_helpers import (
+    inferred_coverage as _inferred_coverage_helper,
+)
+from tests._quality_common_helpers import (
+    normalized_explicit_coverage as _explicit_coverage_helper,
+)
 
 from scripts.quality import profile_coverage_normalization
 from scripts.quality.common import (
@@ -13,16 +19,10 @@ from scripts.quality.common import (
     normalize_codex_environment,
     normalize_coverage,
     normalize_coverage_assert_mode,
+    normalize_coverage_setup,
     normalize_deps,
     normalize_issue_policy,
-    normalize_coverage_setup,
     normalize_java_setup,
-)
-
-
-from tests._quality_common_helpers import (
-    inferred_coverage as _inferred_coverage_helper,
-    normalized_explicit_coverage as _explicit_coverage_helper,
 )
 
 
@@ -37,15 +37,10 @@ class QualityCommonExtraTests(unittest.TestCase):
     def _inferred_coverage() -> dict:
         return _inferred_coverage_helper()
 
-
     def test_normalize_setup_helpers_cover_string_inputs(self) -> None:
         """Cover normalize setup helpers cover string inputs."""
-        self.assertEqual(
-            normalize_java_setup("21"), {"distribution": "temurin", "version": "21"}
-        )
-        self.assertEqual(
-            normalize_java_setup(None), {"distribution": "", "version": ""}
-        )
+        self.assertEqual(normalize_java_setup("21"), {"distribution": "temurin", "version": "21"})
+        self.assertEqual(normalize_java_setup(None), {"distribution": "", "version": ""})
         self.assertEqual(
             normalize_coverage_setup(
                 {
@@ -69,14 +64,10 @@ class QualityCommonExtraTests(unittest.TestCase):
             },
         )
         self.assertEqual(normalize_coverage_setup(None), normalize_coverage_setup({}))
-        self.assertEqual(
-            normalize_coverage_assert_mode("strict"), {"default": "strict"}
-        )
+        self.assertEqual(normalize_coverage_assert_mode("strict"), {"default": "strict"})
         self.assertEqual(normalize_coverage_assert_mode(None), {"default": "enforce"})
         self.assertEqual(
-            normalize_coverage_assert_mode(
-                {"default": "", "python": " warn ", "javascript": " "}
-            ),
+            normalize_coverage_assert_mode({"default": "", "python": " warn ", "javascript": " "}),
             {"default": "enforce", "python": "warn"},
         )
         self.assertEqual(
@@ -92,9 +83,7 @@ class QualityCommonExtraTests(unittest.TestCase):
                 "runner": "ubuntu-latest",
                 "shell": "bash",
                 "command": "qlty check",
-                "inputs": [
-                    {"format": "xml", "name": "coverage", "path": "coverage.xml"}
-                ],
+                "inputs": [{"format": "xml", "name": "coverage", "path": "coverage.xml"}],
                 "require_sources": ["source-a", "source-b"],
                 "require_sources_mode": "explicit",
                 "min_percent": 98.5,
@@ -130,47 +119,38 @@ class QualityCommonExtraTests(unittest.TestCase):
         )
         self.assertEqual(inferred["require_sources_mode"], "infer")
         self.assertIsNone(inferred["branch_min_percent"])
-        self.assertIsNone(
-            normalize_coverage({"branch_min_percent": "bogus"})["branch_min_percent"]
-        )
+        self.assertIsNone(normalize_coverage({"branch_min_percent": "bogus"})["branch_min_percent"])
 
     def test_profile_coverage_normalization_helpers_cover_empty_and_multi_filter_paths(
         self,
     ) -> None:
         """Cover profile coverage normalization helpers cover empty and multi filter paths."""
-        with patch.object(
-            profile_coverage_normalization, "_normalize_source_hint", return_value=""
-        ):
-            self.assertEqual(
-                profile_coverage_normalization._extract_cov_hints("--cov=scripts"), []
-            )
+        with patch.object(profile_coverage_normalization, "_normalize_source_hint", return_value=""):
+            self.assertEqual(profile_coverage_normalization._extract_cov_hints("--cov=scripts"), [])
 
         fake_match = type(
             "FakeMatch",
             (),
             {"group": staticmethod(lambda _name: "alpha")},
         )
-        with patch.object(
-            profile_coverage_normalization,
-            "_GCOVR_FILTER_RE",
-            type(
-                "FakeRegex",
-                (),
-                {
-                    "finditer": staticmethod(
-                        lambda _command: [fake_match(), fake_match()]
-                    )
-                },
-            )(),
-        ), patch.object(
-            profile_coverage_normalization,
-            "_normalize_source_hint",
-            side_effect=["alpha/", ""],
+        with (
+            patch.object(
+                profile_coverage_normalization,
+                "_GCOVR_FILTER_RE",
+                type(
+                    "FakeRegex",
+                    (),
+                    {"finditer": staticmethod(lambda _command: [fake_match(), fake_match()])},
+                )(),
+            ),
+            patch.object(
+                profile_coverage_normalization,
+                "_normalize_source_hint",
+                side_effect=["alpha/", ""],
+            ),
         ):
             self.assertEqual(
-                profile_coverage_normalization._extract_gcovr_hints(
-                    "gcovr --filter placeholder"
-                ),
+                profile_coverage_normalization._extract_gcovr_hints("gcovr --filter placeholder"),
                 ["alpha/"],
             )
 

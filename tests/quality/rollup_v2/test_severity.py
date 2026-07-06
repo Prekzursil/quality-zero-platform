@@ -1,4 +1,5 @@
 """Tests for severity ordering (per design §A.4.2)."""
+
 from __future__ import absolute_import
 
 import sys

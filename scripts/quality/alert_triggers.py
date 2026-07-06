@@ -79,9 +79,13 @@ def detect_coverage_regression(
         f"on `{slug}`: baseline was `{baseline_percent:.2f}%`, current is "
         f"`{current_percent:.2f}%`."
     )
-    return [AlertTrigger(
-        alert_type=alerts.AlertType.REGRESSION, subject=slug, body=body,
-    )]
+    return [
+        AlertTrigger(
+            alert_type=alerts.AlertType.REGRESSION,
+            subject=slug,
+            body=body,
+        )
+    ]
 
 
 def _iso_date(value: Any) -> dt.date:
@@ -112,7 +116,10 @@ def _phase(profile: Mapping[str, Any]) -> str:
 
 
 def detect_deadline_missed(
-    *, slug: str, profile: Mapping[str, Any], today: dt.date,
+    *,
+    slug: str,
+    profile: Mapping[str, Any],
+    today: dt.date,
 ) -> List[AlertTrigger]:
     """Fire when ``ratchet.target_date`` passed and phase is not absolute."""
     if _phase(profile) == "absolute":
@@ -128,13 +135,20 @@ def detect_deadline_missed(
         f"`{slug}` reaching `mode.phase: absolute`. Current phase: "
         f"`{_phase(profile) or '<unset>'}`."
     )
-    return [AlertTrigger(
-        alert_type=alerts.AlertType.DEADLINE_MISSED, subject=slug, body=body,
-    )]
+    return [
+        AlertTrigger(
+            alert_type=alerts.AlertType.DEADLINE_MISSED,
+            subject=slug,
+            body=body,
+        )
+    ]
 
 
 def detect_escalation(
-    *, slug: str, profile: Mapping[str, Any], today: dt.date,
+    *,
+    slug: str,
+    profile: Mapping[str, Any],
+    today: dt.date,
 ) -> List[AlertTrigger]:
     """Fire when ``ratchet.escalation_date`` passed and phase is not absolute."""
     if _phase(profile) == "absolute":
@@ -149,15 +163,21 @@ def detect_escalation(
         f"Ratchet escalation date **{escalation.isoformat()}** has passed. "
         f"`{slug}` must flip to `mode.phase: absolute` now."
     )
-    return [AlertTrigger(
-        alert_type=alerts.AlertType.ESCALATION, subject=slug, body=body,
-    )]
+    return [
+        AlertTrigger(
+            alert_type=alerts.AlertType.ESCALATION,
+            subject=slug,
+            body=body,
+        )
+    ]
 
 
 def detect_bypass_stale(
     *,
-    slug: str, issue_number: int,
-    opened_at: dt.datetime, now: dt.datetime,
+    slug: str,
+    issue_number: int,
+    opened_at: dt.datetime,
+    now: dt.datetime,
     threshold_days: int = BYPASS_STALE_THRESHOLD_DAYS,
 ) -> List[AlertTrigger]:
     """Fire when a break-glass tracking issue has been open > ``threshold_days``."""
@@ -170,15 +190,21 @@ def detect_bypass_stale(
         f"**{age.days} days** — past the {threshold_days}-day remediation "
         f"SLA. Close the underlying quality regression and this issue."
     )
-    return [AlertTrigger(
-        alert_type=alerts.AlertType.BYPASS_STALE, subject=subject, body=body,
-    )]
+    return [
+        AlertTrigger(
+            alert_type=alerts.AlertType.BYPASS_STALE,
+            subject=subject,
+            body=body,
+        )
+    ]
 
 
 def detect_drift_stuck(
     *,
-    slug: str, pr_number: int,
-    opened_at: dt.datetime, now: dt.datetime,
+    slug: str,
+    pr_number: int,
+    opened_at: dt.datetime,
+    now: dt.datetime,
     threshold_days: int = DRIFT_STUCK_THRESHOLD_DAYS,
 ) -> List[AlertTrigger]:
     """Fire when a drift-sync PR has been open > ``threshold_days``."""
@@ -191,9 +217,13 @@ def detect_drift_stuck(
         f"past the {threshold_days}-day sync SLA. Merge or close the PR to "
         f"keep the fleet aligned."
     )
-    return [AlertTrigger(
-        alert_type=alerts.AlertType.DRIFT_STUCK, subject=subject, body=body,
-    )]
+    return [
+        AlertTrigger(
+            alert_type=alerts.AlertType.DRIFT_STUCK,
+            subject=subject,
+            body=body,
+        )
+    ]
 
 
 def detect_fleet_bump_fail(
@@ -214,23 +244,25 @@ def detect_fleet_bump_fail(
         f"Failing staging repos: {', '.join(failed)}. Revert the recipe "
         f"commit and investigate before rolling out to the rest of the fleet."
     )
-    return [AlertTrigger(
-        alert_type=alerts.AlertType.FLEET_BUMP_FAIL,
-        subject=recipe_name, body=body,
-    )]
+    return [
+        AlertTrigger(
+            alert_type=alerts.AlertType.FLEET_BUMP_FAIL,
+            subject=recipe_name,
+            body=body,
+        )
+    ]
 
 
 def detect_flag_missing(
-    *, slug: str,
+    *,
+    slug: str,
     declared_flags: Iterable[str],
     reported_flags: Iterable[str],
 ) -> List[AlertTrigger]:
     """One alert per declared flag without a matching Codecov report."""
     reported_set = {str(f).strip() for f in reported_flags if str(f).strip()}
     missing = [
-        str(flag).strip()
-        for flag in declared_flags
-        if str(flag).strip() and str(flag).strip() not in reported_set
+        str(flag).strip() for flag in declared_flags if str(flag).strip() and str(flag).strip() not in reported_set
     ]
     triggers: List[AlertTrigger] = []
     for flag in missing:
@@ -240,15 +272,20 @@ def detect_flag_missing(
             f"coverage inputs but did not appear in the latest commit's "
             f"Codecov totals. Check the upload step of the `{flag}` lane."
         )
-        triggers.append(AlertTrigger(
-            alert_type=alerts.AlertType.FLAG_MISSING,
-            subject=subject, body=body,
-        ))
+        triggers.append(
+            AlertTrigger(
+                alert_type=alerts.AlertType.FLAG_MISSING,
+                subject=subject,
+                body=body,
+            )
+        )
     return triggers
 
 
 def detect_secret_missing(
-    *, slug: str, missing_secrets: Iterable[str],
+    *,
+    slug: str,
+    missing_secrets: Iterable[str],
 ) -> List[AlertTrigger]:
     """One alert per severity:block scanner that lacks its configured secret."""
     missing = [str(s).strip() for s in missing_secrets if str(s).strip()]
@@ -261,17 +298,32 @@ def detect_secret_missing(
             f"secrets (or the org-level secret for shared scanners). Until "
             f"the secret lands, the corresponding quality lane will fail."
         )
-        triggers.append(AlertTrigger(
-            alert_type=alerts.AlertType.MISSING_SCANNER_AUTH,
-            subject=subject, body=body,
-        ))
+        triggers.append(
+            AlertTrigger(
+                alert_type=alerts.AlertType.MISSING_SCANNER_AUTH,
+                subject=subject,
+                body=body,
+            )
+        )
     return triggers
 
 
 if __name__ == "__main__":  # pragma: no cover — no ad-hoc CLI yet
     import json
-    print(json.dumps({"detectors": [
-        "coverage_regression", "deadline_missed", "escalation",
-        "bypass_stale", "drift_stuck", "fleet_bump_fail", "flag_missing",
-        "secret_missing",
-    ]}))
+
+    print(
+        json.dumps(
+            {
+                "detectors": [
+                    "coverage_regression",
+                    "deadline_missed",
+                    "escalation",
+                    "bypass_stale",
+                    "drift_stuck",
+                    "fleet_bump_fail",
+                    "flag_missing",
+                    "secret_missing",
+                ]
+            }
+        )
+    )

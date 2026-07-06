@@ -1,6 +1,5 @@
 """Test run coverage gate -- non-regression, baseline, and entrypoint paths."""
 
-
 from __future__ import absolute_import, division
 
 import io
@@ -14,16 +13,12 @@ from pathlib import Path
 from typing import List
 from unittest.mock import patch
 
-
-from scripts.quality import run_coverage_gate
-
-
-
-
 from tests._run_coverage_gate_helpers import (
     assert_run_shell_invocation,
     make_coverage_assert_fixture,
 )
+
+from scripts.quality import run_coverage_gate
 
 
 class RunCoverageGateExtraTests(unittest.TestCase):
@@ -46,7 +41,6 @@ class RunCoverageGateExtraTests(unittest.TestCase):
     @staticmethod
     def _coverage_assert_fixture():
         return make_coverage_assert_fixture()
-
 
     def test_non_regression_mode_uses_baseline_payload(self) -> None:
         """Cover non regression mode uses baseline payload."""
@@ -72,10 +66,7 @@ class RunCoverageGateExtraTests(unittest.TestCase):
             with (
                 patch("scripts.quality.run_coverage_gate._run_shell") as mock_shell,
                 patch(
-                    (
-                        "scripts.quality.run_coverage_gate."
-                        "_collect_current_coverage_payload"
-                    ),
+                    ("scripts.quality.run_coverage_gate._collect_current_coverage_payload"),
                     return_value={"combined_percent": 95.0},
                 ),
                 patch(
@@ -106,26 +97,18 @@ class RunCoverageGateExtraTests(unittest.TestCase):
 
     def test_download_and_lookup_helpers_cover_success_paths(self) -> None:
         """Cover download and lookup helpers cover success paths."""
-        with patch.object(
-            run_coverage_gate, "load_bytes_https", return_value=(b"bytes", {})
-        ) as load_bytes_mock:
+        with patch.object(run_coverage_gate, "load_bytes_https", return_value=(b"bytes", {})) as load_bytes_mock:
             self.assertEqual(
-                run_coverage_gate._download_bytes(
-                    "https://api.github.com/example", "token"
-                ),
+                run_coverage_gate._download_bytes("https://api.github.com/example", "token"),
                 b"bytes",
             )
-        self.assertEqual(
-            load_bytes_mock.call_args.kwargs["allowed_hosts"], {"api.github.com"}
-        )
+        self.assertEqual(load_bytes_mock.call_args.kwargs["allowed_hosts"], {"api.github.com"})
 
         with patch.dict("os.environ", {"GITHUB_TOKEN": "token"}, clear=True):
             self.assertEqual(run_coverage_gate._github_api_token(), "token")
         with (
             patch.dict("os.environ", {}, clear=True),
-            self.assertRaisesRegex(
-                RuntimeError, "GITHUB_TOKEN or GH_TOKEN is required"
-            ),
+            self.assertRaisesRegex(RuntimeError, "GITHUB_TOKEN or GH_TOKEN is required"),
         ):
             run_coverage_gate._github_api_token()
 
@@ -133,9 +116,7 @@ class RunCoverageGateExtraTests(unittest.TestCase):
             {"id": 1, "name": "Other", "conclusion": "success"},
             {"id": 2, "name": "Quality Zero Platform", "conclusion": "success"},
         ]
-        self.assertEqual(
-            run_coverage_gate._find_successful_run_id(runs, "Quality Zero Platform"), 2
-        )
+        self.assertEqual(run_coverage_gate._find_successful_run_id(runs, "Quality Zero Platform"), 2)
         self.assertIsNone(run_coverage_gate._find_successful_run_id(runs, "Missing"))
         artifacts = [
             {
@@ -147,9 +128,7 @@ class RunCoverageGateExtraTests(unittest.TestCase):
             run_coverage_gate._find_artifact_by_name(artifacts, "coverage-artifacts"),
             artifacts[0],
         )
-        self.assertIsNone(
-            run_coverage_gate._find_artifact_by_name(artifacts, "missing")
-        )
+        self.assertIsNone(run_coverage_gate._find_artifact_by_name(artifacts, "missing"))
 
     def test_baseline_loading_reads_artifact_payload(self) -> None:
         """Cover baseline loading reads artifact payload."""
@@ -177,9 +156,7 @@ class RunCoverageGateExtraTests(unittest.TestCase):
                     "artifacts": [
                         {
                             "name": "coverage-artifacts",
-                            "archive_download_url": (
-                                "https://api.github.com/archive.zip"
-                            ),
+                            "archive_download_url": ("https://api.github.com/archive.zip"),
                         }
                     ]
                 }
@@ -221,9 +198,7 @@ class RunCoverageGateExtraTests(unittest.TestCase):
         self,
     ) -> None:
         """Cover write non regression report handles pass fail and write errors."""
-        with patch.object(
-            run_coverage_gate, "write_report", return_value=0
-        ) as write_report_mock:
+        with patch.object(run_coverage_gate, "write_report", return_value=0) as write_report_mock:
             self.assertEqual(
                 run_coverage_gate._write_non_regression_report(
                     {"components": [{"covered": 9, "total": 10}]},
@@ -233,9 +208,7 @@ class RunCoverageGateExtraTests(unittest.TestCase):
             )
         self.assertEqual(write_report_mock.call_args.args[0]["status"], "pass")
 
-        with patch.object(
-            run_coverage_gate, "write_report", return_value=0
-        ) as write_report_mock:
+        with patch.object(run_coverage_gate, "write_report", return_value=0) as write_report_mock:
             self.assertEqual(
                 run_coverage_gate._write_non_regression_report(
                     {"components": [{"covered": 7, "total": 10}]},
@@ -256,35 +229,21 @@ class RunCoverageGateExtraTests(unittest.TestCase):
 
     def test_remaining_helper_and_entrypoint_paths(self) -> None:
         """Cover remaining helper and entrypoint paths."""
-        self.assertEqual(
-            run_coverage_gate._combined_coverage_percent({"components": "bad"}), 100.0
-        )
+        self.assertEqual(run_coverage_gate._combined_coverage_percent({"components": "bad"}), 100.0)
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_dir = Path(temp_dir)
             (repo_dir / "coverage-100").mkdir()
-            (repo_dir / "coverage-100" / "coverage.json").write_text(
-                "{}", encoding="utf-8"
-            )
-            with patch.object(
-                run_coverage_gate, "_run_assert_coverage_100", return_value=0
-            ):
+            (repo_dir / "coverage-100" / "coverage.json").write_text("{}", encoding="utf-8")
+            with patch.object(run_coverage_gate, "_run_assert_coverage_100", return_value=0):
                 self.assertEqual(
-                    run_coverage_gate._collect_current_coverage_payload(
-                        {}, repo_dir=repo_dir, platform_dir=repo_dir
-                    ),
+                    run_coverage_gate._collect_current_coverage_payload({}, repo_dir=repo_dir, platform_dir=repo_dir),
                     {},
                 )
             with (
-                patch.object(
-                    run_coverage_gate, "_run_assert_coverage_100", return_value=2
-                ),
-                self.assertRaisesRegex(
-                    RuntimeError, "coverage assertion returned unexpected exit code 2"
-                ),
+                patch.object(run_coverage_gate, "_run_assert_coverage_100", return_value=2),
+                self.assertRaisesRegex(RuntimeError, "coverage assertion returned unexpected exit code 2"),
             ):
-                run_coverage_gate._collect_current_coverage_payload(
-                    {}, repo_dir=repo_dir, platform_dir=repo_dir
-                )
+                run_coverage_gate._collect_current_coverage_payload({}, repo_dir=repo_dir, platform_dir=repo_dir)
 
         with (
             patch.object(run_coverage_gate, "_github_api_token", return_value="token"),
@@ -293,13 +252,9 @@ class RunCoverageGateExtraTests(unittest.TestCase):
                 "_download_bytes",
                 return_value=json.dumps({"workflow_runs": []}).encode("utf-8"),
             ),
-            self.assertRaisesRegex(
-                RuntimeError, "Unable to find a successful Quality Zero Platform run"
-            ),
+            self.assertRaisesRegex(RuntimeError, "Unable to find a successful Quality Zero Platform run"),
         ):
-            run_coverage_gate._load_baseline_coverage_payload(
-                {"slug": "owner/repo", "default_branch": "main"}
-            )
+            run_coverage_gate._load_baseline_coverage_payload({"slug": "owner/repo", "default_branch": "main"})
 
         with (
             patch.object(run_coverage_gate, "_github_api_token", return_value="token"),
@@ -323,9 +278,7 @@ class RunCoverageGateExtraTests(unittest.TestCase):
             ),
             self.assertRaisesRegex(RuntimeError, "Unable to find coverage-artifacts"),
         ):
-            run_coverage_gate._load_baseline_coverage_payload(
-                {"slug": "owner/repo", "default_branch": "main"}
-            )
+            run_coverage_gate._load_baseline_coverage_payload({"slug": "owner/repo", "default_branch": "main"})
 
         script_path = Path(run_coverage_gate.__file__).resolve()
         with tempfile.TemporaryDirectory() as temp_dir:

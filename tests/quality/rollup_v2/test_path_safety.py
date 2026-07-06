@@ -1,4 +1,5 @@
 """Tests for rollup_v2 path safety wrapper (per design §B.2)."""
+
 from __future__ import absolute_import
 
 import sys

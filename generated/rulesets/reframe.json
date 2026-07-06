@@ -55,9 +55,6 @@
             "context": "shared-scanner-matrix / Sentry Zero"
           },
           {
-            "context": "shared-scanner-matrix / DeepScan Zero"
-          },
-          {
             "context": "shared-scanner-matrix / DeepSource Visible Zero"
           },
           {
@@ -65,9 +62,6 @@
           },
           {
             "context": "SonarCloud Code Analysis"
-          },
-          {
-            "context": "DeepScan"
           },
           {
             "context": "Python API & worker checks"

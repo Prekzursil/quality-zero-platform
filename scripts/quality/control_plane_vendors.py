@@ -219,10 +219,6 @@ def _finalize_visual_vendors(profile: Dict[str, Any], vendors: Dict[str, Any]) -
 
 def _finalize_passthrough_vendors(vendors: Dict[str, Any]) -> None:
     """Populate passthrough vendor defaults used by downstream checks."""
-    vendors.setdefault(
-        "deepscan",
-        {},
-    ).setdefault("open_issues_url_var", "DEEPSCAN_OPEN_ISSUES_URL")
     sentry = vendors.setdefault("sentry", {})
     sentry.setdefault("org_var", "SENTRY_ORG")
     sentry.setdefault("project_vars", ["SENTRY_PROJECT"])

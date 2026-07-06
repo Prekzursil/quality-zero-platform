@@ -37,7 +37,6 @@ class ControlPlaneAssertions(_AssertionProtocol):
             "shared-scanner-matrix / Codacy Zero",
             "shared-scanner-matrix / Semgrep Zero",
             "shared-scanner-matrix / Sentry Zero",
-            "shared-scanner-matrix / DeepScan Zero",
         }
 
     @staticmethod
@@ -51,7 +50,6 @@ class ControlPlaneAssertions(_AssertionProtocol):
             "shared-scanner-matrix / Codacy Zero",
             "shared-scanner-matrix / Semgrep Zero",
             "shared-scanner-matrix / Sentry Zero",
-            "shared-scanner-matrix / DeepScan Zero",
         }
 
     def _assert_context_subset(

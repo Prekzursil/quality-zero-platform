@@ -32,7 +32,6 @@ required_contexts:
   - shared-scanner-matrix / Codacy Zero
   - shared-scanner-matrix / Semgrep Zero
   - shared-scanner-matrix / Sentry Zero
-  - shared-scanner-matrix / DeepScan Zero
   - shared-scanner-matrix / DeepSource Visible Zero
   pull_request_only:
   - dependency-review
@@ -48,7 +47,6 @@ required_contexts:
   - shared-scanner-matrix / Codacy Zero
   - shared-scanner-matrix / Semgrep Zero
   - shared-scanner-matrix / Sentry Zero
-  - shared-scanner-matrix / DeepScan Zero
   - shared-scanner-matrix / DeepSource Visible Zero
   - aggregate-gate / Quality Zero Gate
   - shared-scanner-matrix / Quality Rollup
@@ -64,7 +62,6 @@ required_contexts:
   - shared-scanner-matrix / Codacy Zero
   - shared-scanner-matrix / Semgrep Zero
   - shared-scanner-matrix / Sentry Zero
-  - shared-scanner-matrix / DeepScan Zero
   - shared-scanner-matrix / DeepSource Visible Zero
   - aggregate-gate / Quality Zero Gate
   - shared-scanner-matrix / Quality Rollup

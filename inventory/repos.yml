@@ -19,7 +19,7 @@ repos:
     profile: airline-reservations-system
     rollout: phase1-wave4
     default_branch: main
-    notes: Airline overlay with PR-only DeepScan contexts.
+    notes: Airline overlay with native DeepSource contexts.
   - slug: Prekzursil/DevExtreme-Filter-Go-Language
     profile: devextreme-filter-go-language
     rollout: phase1-wave2

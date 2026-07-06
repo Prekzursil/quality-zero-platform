@@ -27,7 +27,6 @@ secrets are not silently tolerated.
 | ``DEEPSOURCE_DSN`` | DeepSource coverage publish | Lane fails with explicit ``DEEPSOURCE_DSN is missing`` preflight error |
 | ``SONAR_TOKEN`` | Sonar Zero gate + coverage publish | Sonar lane fails |
 | ``SEMGREP_APP_TOKEN`` (optional) | Semgrep ``ci`` mode | Falls back to ``semgrep scan --config auto`` (less rule coverage but still produces SARIF) |
-| ``DEEPSCAN_API_TOKEN`` (optional) | DeepScan ``open_issues`` policy mode | Required when ``DEEPSCAN_POLICY_MODE=open_issues`` |
 
 ### Where to find each token
 
@@ -41,8 +40,6 @@ secrets are not silently tolerated.
 
 | Variable | Used by | When required |
 |----------|---------|---------------|
-| ``DEEPSCAN_POLICY_MODE`` | DeepScan Zero gate | Optional — defaults to ``github_check_context``. Set to ``open_issues`` when DeepScan GitHub App isn't installed |
-| ``DEEPSCAN_OPEN_ISSUES_URL`` | DeepScan Zero gate (open_issues mode) | Required when ``DEEPSCAN_POLICY_MODE=open_issues`` |
 | ``SENTRY_ORG`` | Sentry Zero gate | Optional |
 | ``SENTRY_PROJECT`` | Sentry Zero gate | Optional |
 
@@ -53,10 +50,7 @@ GitHub-secret level):
 
 - **DeepSource GitHub App**: install on each repo so each push gets a
   ``DeepSource: <language>`` GitHub status check. Without this, the
-  DeepScan-style "missing status = red-block" guard fires.
-- **DeepScan GitHub App**: install on each JavaScript/TypeScript repo
-  (or set ``DEEPSCAN_POLICY_MODE=open_issues`` repo variable as the
-  alternative).
+  strict-zero "missing status = red-block" guard fires.
 - **Codacy GitHub App**: must be added to the org / repo so coverage +
   issues sync.
 - **Sonar Cloud project**: imported from GitHub.
@@ -102,7 +96,6 @@ After completing the checklist on a repo:
    - ``shared-scanner-matrix / Coverage 100 Gate``
    - ``shared-scanner-matrix / Codacy Zero``
    - ``shared-scanner-matrix / Semgrep Zero``
-   - ``shared-scanner-matrix / DeepScan Zero``
    - ``shared-scanner-matrix / DeepSource Visible Zero``
    - ``shared-scanner-matrix / QLTY Zero``
    - ``shared-scanner-matrix / Sonar Zero``

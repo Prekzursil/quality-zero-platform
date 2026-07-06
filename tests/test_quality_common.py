@@ -211,16 +211,16 @@ class QualityCommonTests(unittest.TestCase):
                 },
                 {
                     "always": ["qlty check"],
-                    "pull_request_only": ["qlty check", "DeepScan Zero"],
-                    "required_now": ["qlty check", "DeepScan Zero"],
-                    "target": ["qlty check", "DeepScan Zero"],
+                    "pull_request_only": ["qlty check", "Sentry Zero"],
+                    "required_now": ["qlty check", "Sentry Zero"],
+                    "target": ["qlty check", "Sentry Zero"],
                 },
             ),
             {
                 "always": ["Coverage 100 Gate", "qlty check"],
-                "pull_request_only": ["DeepScan Zero"],
-                "required_now": ["Coverage 100 Gate", "qlty check", "DeepScan Zero"],
-                "target": ["Coverage 100 Gate", "qlty check", "DeepScan Zero"],
+                "pull_request_only": ["Sentry Zero"],
+                "required_now": ["Coverage 100 Gate", "qlty check", "Sentry Zero"],
+                "target": ["Coverage 100 Gate", "qlty check", "Sentry Zero"],
             },
         )
 

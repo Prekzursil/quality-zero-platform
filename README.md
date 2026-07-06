@@ -16,7 +16,7 @@ It replaces the old queue/template baseline with reusable workflows, shared qual
 - `inventory/repos.yml`: enrolled repositories, rollout wave, and profile bindings
 - `profiles/stacks/*.yml`: reusable stack defaults
 - `profiles/repos/*.yml`: repo-specific overrides
-- `scripts/quality/`: shared strict-zero policy, provider checks (13 providers: Codacy, CodeQL, Chromatic, Applitools, SonarCloud, DeepSource, DeepScan, QLTY, Sentry, Semgrep, Dependabot, Coverage, Secrets), ruleset generation, and remediation prompt rendering
+- `scripts/quality/`: shared strict-zero policy, provider checks (12 providers: Codacy, CodeQL, Chromatic, Applitools, SonarCloud, DeepSource, QLTY, Sentry, Semgrep, Dependabot, Coverage, Secrets), ruleset generation, and remediation prompt rendering
 - `scripts/provider_ui/`: Playwright-based provider-admin bootstrap scripts that persist browser state outside the repo
 - `.github/workflows/`: reusable workflows called by governed repos, including push-parity scanner, gate, rollup, admin, Pages, and Codecov analytics lanes
 - `templates/repo/`: thin wrapper contract for governed repos

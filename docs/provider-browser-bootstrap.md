@@ -19,7 +19,6 @@ Supported providers:
 - Applitools
 - SonarCloud
 - Codacy
-- DeepScan
 - Sentry
 
 ## State model

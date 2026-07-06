@@ -80,17 +80,13 @@ required_contexts:
   - 'DeepSource: C & C++'
   - 'DeepSource: Shell'
   - 'DeepSource: Secrets'
-  - shared-scanner-matrix / DeepScan Zero
   - SonarCloud Code Analysis
   - Codacy Static Code Analysis
-  - DeepScan
   pull_request_only:
   - Codacy Static Code Analysis
-  - DeepScan
   - qlty check
   - qlty coverage
   - qlty coverage diff
-  - shared-scanner-matrix / DeepScan Zero
 vendors:
   sonar:
     project_key_from_repo_slug: true

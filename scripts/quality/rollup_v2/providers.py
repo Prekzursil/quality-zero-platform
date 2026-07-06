@@ -12,7 +12,6 @@ PROVIDER_PRIORITY_RANK: Final[Mapping[str, int]] = {
     "DeepSource": 3,
     "Semgrep": 4,
     "QLTY": 5,
-    "DeepScan": 6,
     "Sentry": UNKNOWN_PROVIDER_RANK,
     "Chromatic": UNKNOWN_PROVIDER_RANK,
     "Applitools": UNKNOWN_PROVIDER_RANK,

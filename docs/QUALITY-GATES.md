@@ -78,7 +78,6 @@ The full scanner inventory the platform supports today:
 | `codacy_complexity` | Cyclomatic complexity > 15. | `ratchet` |
 | `codacy_clones` | Duplicate-code clones. | `info` |
 | `codacy_coverage` | Coverage thresholds (separate from CodeCov). | `block` |
-| `deepscan` | JS/TS-specific bug patterns. | `block` |
 | `deepsource_visible` | Cross-language visible issues (open beta). | `block` |
 | `semgrep` | Custom security/style rules. | `block` |
 | `sentry` | Production runtime errors (issue counts). | `block` |

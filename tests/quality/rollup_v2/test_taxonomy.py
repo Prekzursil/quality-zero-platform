@@ -27,10 +27,10 @@ class TaxonomyTests(unittest.TestCase):
     def test_unknown_provider_returns_none(self):
         self.assertIsNone(lookup("MysteryVendor", "anything"))
 
-    def test_load_all_taxonomies_returns_all_seven(self):
+    def test_load_all_taxonomies_returns_all_six(self):
         all_tax = load_all_taxonomies()
         for provider in ("Codacy", "SonarCloud", "DeepSource", "Semgrep",
-                         "CodeQL", "QLTY", "DeepScan"):
+                         "CodeQL", "QLTY"):
             self.assertIn(provider, all_tax)
 
 

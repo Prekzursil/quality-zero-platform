@@ -22,7 +22,6 @@ test('supports the full provider set for strict-zero admin work', () => {
     'applitools',
     'sonarcloud',
     'codacy',
-    'deepscan',
     'sentry'
   ]);
 });
@@ -54,7 +53,6 @@ test('provider targets can derive repo-specific URLs when supported', () => {
 });
 
 test('provider home URLs stay aligned with live provider entrypoints', () => {
-  assert.equal(resolveProviderTarget('deepscan').targetUrl, 'https://deepscan.io/dashboard');
   assert.equal(resolveProviderTarget('applitools').targetUrl, 'https://auth.applitools.com/users/login');
 });
 

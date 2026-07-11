@@ -81,9 +81,7 @@ def load_config(path: Path) -> dict[str, Any]:
     return data
 
 
-def build_entries(
-    config: dict[str, Any], only_repo: str | None = None
-) -> list[dict[str, Any]]:
+def build_entries(config: dict[str, Any], only_repo: str | None = None) -> list[dict[str, Any]]:
     """Expand the config into a flat list of dispatch entries.
 
     A full sweep (``only_repo`` is ``None``) includes every target with
@@ -145,13 +143,9 @@ def build_entries(
             )
 
     if wanted is not None and not matched_repo:
-        sys.stderr.write(
-            f"warning: --only-repo '{only_repo}' matched no target in the config\n"
-        )
+        sys.stderr.write(f"warning: --only-repo '{only_repo}' matched no target in the config\n")
     elif wanted is not None and not entries:
-        sys.stderr.write(
-            f"warning: --only-repo '{only_repo}' has no tasks defined; nothing to do\n"
-        )
+        sys.stderr.write(f"warning: --only-repo '{only_repo}' has no tasks defined; nothing to do\n")
     return entries
 
 
@@ -168,10 +162,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--only-repo",
         default=None,
-        help=(
-            "Restrict to a single repo (owner/name or bare name); "
-            "bypasses the 'enabled' flag."
-        ),
+        help=("Restrict to a single repo (owner/name or bare name); bypasses the 'enabled' flag."),
     )
     parser.add_argument(
         "--format",

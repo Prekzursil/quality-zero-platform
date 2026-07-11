@@ -1,0 +1,165 @@
+# Codex fleet-sweep targets -- the control-plane config for the autonomous Codex runner.
+#
+# This file is NON-SECRET (repo names + task text only), which is why it lives in the
+# PUBLIC quality-zero-platform (QZT) repo. It is the single source of truth read by:
+#   - .github/workflows/codex-fleet-wave.yml  (the scheduled HQ sweep; READS this)
+#   - scripts/build_codex_matrix.py           (parses this into the dispatch plan)
+#   - the codex-targets MCP / GUI editor       (WRITE this to enable repos / edit tasks)
+#
+# Each ENABLED target's tasks are dispatched to the PRIVATE runner
+# (Prekzursil/agent-skills-toolchain :: codex-runner.yml), which runs Codex on your
+# ChatGPT-subscription auth and opens a PROPOSE-ONLY DRAFT PR on the target. Nothing here
+# merges anything; you review every draft PR by hand.
+#
+# SAFETY POSTURE:
+#   * enabled defaults to FALSE. A repo runs only when you deliberately flip enabled: true
+#     AND give it at least one task. Sensitive repos (payment/auth, all private) ship OFF.
+#   * Keep task text conservative and PROPOSE-ONLY -- "Documentation only: ...",
+#     "Tests only: ..." -- and scope it ("Do NOT modify application code / CI / deps").
+#   * The runner caps blast radius with max_changed_files, forbidden-path guards, and a
+#     gitleaks secret-scan; a tight task is your first line of defence, not the last.
+#
+# SCHEMA:
+#   defaults:            # applied to every target unless the target overrides the key
+#     model: <slug>
+#     effort: <minimal|low|medium|high|xhigh|max|ultra>
+#     max_changed_files: <int>
+#   targets:
+#     - repo: <owner/name>
+#       enabled: <bool>            # false = skipped by the scheduled sweep
+#       tasks: [<string>, ...]     # one draft PR is proposed per task
+#       model: <slug>              # optional per-repo override
+#       effort: <...>              # optional per-repo override
+#       max_changed_files: <int>   # optional per-repo override
+
+defaults:
+  model: gpt-5.6-sol
+  effort: max
+  max_changed_files: 40
+
+targets:
+  # ---------------------------------------------------------------------------
+  # ENABLED (public, low-risk) -- conservative documentation/test seeds.
+  # ---------------------------------------------------------------------------
+  - repo: Prekzursil/Reframe
+    enabled: true
+    max_changed_files: 25
+    tasks:
+      - "Documentation only: proofread and update README.md and files under docs/ for stale commands, broken links, and version drift; add a concise Troubleshooting section if one is missing. Do NOT modify application code, build configuration, CI workflows, or dependencies."
+
+  - repo: Prekzursil/env-inspector
+    enabled: true
+    max_changed_files: 20
+    tasks:
+      - "Documentation and tests only: improve README usage examples and add unit tests covering currently-untested pure/helper functions. Do NOT change public API behaviour, CLI flags, output formats, or dependencies."
+
+  - repo: Prekzursil/omniaudit-mcp
+    enabled: true
+    max_changed_files: 15
+    tasks:
+      - "Documentation only: clarify the README setup and MCP-server registration steps and refresh the tool inventory to match the code; add a short CONTRIBUTING quickstart if absent. Do NOT modify server code, tool schemas, or MCP wire contracts."
+
+  - repo: Prekzursil/WebCoder
+    enabled: true
+    max_changed_files: 20
+    tasks:
+      - "Documentation and tests only: improve the README and add unit tests for existing untested utility/helper modules. Do NOT alter UI behaviour, routing, API endpoints, or build configuration."
+
+  # ---------------------------------------------------------------------------
+  # DISABLED -- payment/auth. EXTRA CAUTION: never enable without a hand-reviewed,
+  # tightly-scoped task, and never auto-merge anything it proposes.
+  # ---------------------------------------------------------------------------
+  - repo: Prekzursil/momentstudio
+    enabled: false
+    tasks: []
+
+  # ---------------------------------------------------------------------------
+  # DISABLED (public) -- ready to fill: flip enabled: true and add task text.
+  # ---------------------------------------------------------------------------
+  - repo: Prekzursil/quality-zero-platform
+    enabled: false
+    tasks: []
+
+  - repo: Prekzursil/bilbo-app
+    enabled: false
+    tasks: []
+
+  - repo: Prekzursil/abbyy-finereader-ocr-mcp
+    enabled: false
+    tasks: []
+
+  - repo: Prekzursil/DevExtreme-Filter-Go-Language
+    enabled: false
+    tasks: []
+
+  - repo: Prekzursil/codex-session-manager
+    enabled: false
+    tasks: []
+
+  - repo: Prekzursil/SWFOC-Mod-Menu
+    enabled: false
+    tasks: []
+
+  - repo: Prekzursil/grace-iberlef-2026
+    enabled: false
+    tasks: []
+
+  - repo: Prekzursil/codeblocks-pretty-prints-stable
+    enabled: false
+    tasks: []
+
+  - repo: Prekzursil/TanksFlashMobile
+    enabled: false
+    tasks: []
+
+  - repo: Prekzursil/Airline-Reservations-System
+    enabled: false
+    tasks: []
+
+  - repo: Prekzursil/Personal-Finance-Management
+    enabled: false
+    tasks: []
+
+  - repo: Prekzursil/Star-Wars-Galactic-Battlegrounds-Save-Game-Editor
+    enabled: false
+    tasks: []
+
+  - repo: Prekzursil/pbinfo-scrape
+    enabled: false
+    tasks: []
+
+  # ---------------------------------------------------------------------------
+  # DISABLED (private) -- all OFF by default. auth.json never leaves the runner repo;
+  # enabling any of these still routes through the same propose-only draft-PR flow.
+  # ---------------------------------------------------------------------------
+  - repo: Prekzursil/agent-skills-toolchain
+    enabled: false
+    tasks: []
+
+  - repo: Prekzursil/RESEARCH-noosphere-atlas-lyceum
+    enabled: false
+    tasks: []
+
+  - repo: Prekzursil/security-kb
+    enabled: false
+    tasks: []
+
+  - repo: Prekzursil/opusClip-bulk-downloader
+    enabled: false
+    tasks: []
+
+  - repo: Prekzursil/consiliere-ocr-pipeline
+    enabled: false
+    tasks: []
+
+  - repo: Prekzursil/battlecats-toolkit
+    enabled: false
+    tasks: []
+
+  - repo: Prekzursil/verdict-app
+    enabled: false
+    tasks: []
+
+  - repo: Prekzursil/yourfreedom-autocode
+    enabled: false
+    tasks: []

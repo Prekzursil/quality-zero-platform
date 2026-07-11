@@ -1,0 +1,1477 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Codex Fleet Control &middot; Quality Zero Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <!-- LOW-2: enforced CSP. connect-src is api.github.com only; add the device-flow
+       proxy origin here ONLY if that opt-in feature is enabled (off by default). -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src https://api.github.com; img-src https://*.githubusercontent.com data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+  <meta name="color-scheme" content="dark light">
+  <style>
+    /* ---- Theme tokens (dark default to match the parent QZ dashboard) ------ */
+    :root {
+      --bg: #0b1020; --panel: #121a31; --panel-2: #16203d; --panel-3: #0e1730;
+      --border: #1f2a44; --border-2: #33415c;
+      --text: #edf2f7; --muted: #a0aec0; --small: #cbd5e1;
+      --accent: #8cc8ff; --accent-2: #3b82f6; --accent-fg: #ffffff;
+      --ok-bg: #14532d; --ok-fg: #f0fdf4;
+      --err-bg: #7f1d1d; --err-fg: #fef2f2;
+      --warn-bg: #78350f; --warn-fg: #fffbeb;
+      --neutral-bg: #334155; --neutral-fg: #f8fafc;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius: 10px;
+    }
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme]) {
+        --bg: #f4f7fb; --panel: #ffffff; --panel-2: #eef2f8; --panel-3: #f8fafc;
+        --border: #d8e0ea; --border-2: #c2cede;
+        --text: #0b1020; --muted: #516079; --small: #41506a;
+        --accent: #1a6fd0; --accent-2: #2563eb; --accent-fg: #ffffff;
+        --ok-bg: #dcfce7; --ok-fg: #14532d;
+        --err-bg: #fee2e2; --err-fg: #7f1d1d;
+        --warn-bg: #fef3c7; --warn-fg: #78350f;
+        --neutral-bg: #e2e8f0; --neutral-fg: #334155;
+        --shadow: 0 10px 30px rgba(15,23,42,.10);
+      }
+    }
+    :root[data-theme="light"] {
+      --bg: #f4f7fb; --panel: #ffffff; --panel-2: #eef2f8; --panel-3: #f8fafc;
+      --border: #d8e0ea; --border-2: #c2cede;
+      --text: #0b1020; --muted: #516079; --small: #41506a;
+      --accent: #1a6fd0; --accent-2: #2563eb; --accent-fg: #ffffff;
+      --ok-bg: #dcfce7; --ok-fg: #14532d;
+      --err-bg: #fee2e2; --err-fg: #7f1d1d;
+      --warn-bg: #fef3c7; --warn-fg: #78350f;
+      --neutral-bg: #e2e8f0; --neutral-fg: #334155;
+      --shadow: 0 10px 30px rgba(15,23,42,.10);
+    }
+    * { box-sizing: border-box; }
+    html, body { max-width: 100%; overflow-x: hidden; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--text);
+      line-height: 1.45;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code, .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 16px 20px 64px; }
+
+    /* ---- Top bar ---------------------------------------------------------- */
+    .topbar {
+      position: sticky; top: 0; z-index: 5;
+      background: color-mix(in srgb, var(--bg) 88%, transparent);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border);
+    }
+    .topbar-inner {
+      max-width: 1180px; margin: 0 auto; padding: 14px 20px;
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    }
+    .brand { display: flex; flex-direction: column; gap: 2px; margin-right: auto; }
+    .brand h1 { margin: 0; font-size: 19px; letter-spacing: .2px; }
+    .brand p { margin: 0; font-size: 13px; color: var(--muted); }
+    .top-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+    /* ---- Reusable components --------------------------------------------- */
+    .panel {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px; margin-top: 18px;
+    }
+    .panel > h2 { margin: 0 0 4px; font-size: 16px; }
+    .panel > .desc { margin: 0 0 14px; font-size: 13px; color: var(--muted); }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+    .field { display: flex; flex-direction: column; gap: 5px; }
+    .field label { font-size: 12px; color: var(--muted); font-weight: 600; }
+    .field .hint { font-size: 11px; color: var(--muted); font-weight: 400; }
+    input[type=text], input[type=password], input[type=number], select, textarea {
+      background: var(--panel-3); color: var(--text);
+      border: 1px solid var(--border-2); border-radius: 8px;
+      padding: 9px 11px; font-size: 14px; font-family: inherit; width: 100%;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent);
+    }
+    textarea { resize: vertical; min-height: 44px; line-height: 1.4; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+      border-radius: 8px; padding: 9px 14px; font-size: 14px; font-weight: 600;
+      border: 1px solid var(--border-2); background: var(--panel-2); color: var(--text);
+      font-family: inherit; white-space: nowrap;
+    }
+    .btn:hover { border-color: var(--accent); }
+    .btn.primary { background: var(--accent-2); border-color: var(--accent-2); color: var(--accent-fg); }
+    .btn.primary:hover { filter: brightness(1.08); }
+    .btn.danger { background: var(--err-bg); border-color: var(--err-bg); color: var(--err-fg); }
+    .btn.ghost { background: transparent; }
+    .btn.small { padding: 6px 10px; font-size: 12.5px; }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn:disabled:hover { border-color: var(--border-2); }
+
+    .badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      border-radius: 999px; padding: 3px 9px; font-size: 12px; font-weight: 700;
+      background: var(--neutral-bg); color: var(--neutral-fg);
+    }
+    .badge.ok, .badge.success, .badge.completed { background: var(--ok-bg); color: var(--ok-fg); }
+    .badge.err, .badge.failure, .badge.cancelled, .badge.timed_out { background: var(--err-bg); color: var(--err-fg); }
+    .badge.warn, .badge.in_progress, .badge.queued, .badge.pending, .badge.waiting, .badge.requested {
+      background: var(--warn-bg); color: var(--warn-fg);
+    }
+    .badge.dot::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; display: inline-block; }
+    .muted { color: var(--muted); }
+    .small { font-size: 12.5px; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+      padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border-2); color: var(--muted);
+    }
+    .hidden { display: none !important; }
+
+    /* ---- Auth panel ------------------------------------------------------- */
+    .auth-state { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .avatar { width: 26px; height: 26px; border-radius: 50%; background: var(--panel-2); border: 1px solid var(--border-2); object-fit: cover; }
+    details.auth summary {
+      cursor: pointer; font-weight: 600; font-size: 14px; list-style: none;
+      display: flex; align-items: center; gap: 8px;
+    }
+    details.auth summary::-webkit-details-marker { display: none; }
+    details.auth summary::before { content: "\25B8"; color: var(--muted); transition: transform .15s; }
+    details.auth[open] summary::before { transform: rotate(90deg); }
+    .callout {
+      border-left: 3px solid var(--accent-2); background: var(--panel-2);
+      border-radius: 6px; padding: 10px 12px; font-size: 12.5px; color: var(--small); margin-top: 12px;
+    }
+    .callout.warn { border-left-color: #f59e0b; }
+
+    /* ---- Config editor ---------------------------------------------------- */
+    .defaults-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+    .repo-card {
+      border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--panel-3); margin-top: 12px; overflow: hidden;
+    }
+    .repo-card.disabled { opacity: .72; }
+    .repo-head {
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      padding: 12px 14px; background: var(--panel-2); border-bottom: 1px solid var(--border);
+    }
+    .repo-head .name { font-weight: 700; font-size: 14.5px; }
+    .repo-head .spacer { margin-left: auto; }
+    .repo-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 12px; }
+    .repo-overrides { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+    .tasks-list { display: flex; flex-direction: column; gap: 8px; }
+    .task-row { display: flex; gap: 8px; align-items: flex-start; }
+    .task-row textarea { flex: 1; }
+
+    /* Toggle switch */
+    .switch { position: relative; display: inline-block; width: 42px; height: 24px; flex: none; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .switch .track {
+      position: absolute; inset: 0; background: var(--neutral-bg); border-radius: 999px;
+      transition: .18s; cursor: pointer;
+    }
+    .switch .track::before {
+      content: ""; position: absolute; height: 18px; width: 18px; left: 3px; top: 3px;
+      background: #fff; border-radius: 50%; transition: .18s;
+    }
+    .switch input:checked + .track { background: var(--ok-bg); }
+    .switch input:checked + .track::before { transform: translateX(18px); }
+    .switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    /* ---- Status tables ---------------------------------------------------- */
+    .table-scroll { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; font-size: 12px; }
+    tbody tr:hover { background: var(--panel-2); }
+
+    /* ---- Log / toasts ----------------------------------------------------- */
+    #log { display: flex; flex-direction: column-reverse; gap: 6px; max-height: 240px; overflow-y: auto; }
+    .logline { font-size: 12.5px; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel-3); }
+    .logline .k { font-weight: 700; }
+    .logline.ok { border-color: var(--ok-bg); }
+    .logline.ok .k { color: var(--ok-fg); }
+    .logline.err { border-color: var(--err-bg); }
+    .logline.err .k { color: var(--err-fg); }
+    .logline .t { color: var(--muted); margin-right: 8px; }
+    #toasts { position: fixed; right: 16px; bottom: 16px; z-index: 30; display: flex; flex-direction: column; gap: 8px; max-width: min(92vw, 380px); }
+    .toast { padding: 11px 14px; border-radius: 8px; box-shadow: var(--shadow); font-size: 13px; border: 1px solid var(--border-2); background: var(--panel); }
+    .toast.ok { border-left: 4px solid var(--ok-bg); }
+    .toast.err { border-left: 4px solid var(--err-bg); }
+    .toast.warn { border-left: 4px solid #f59e0b; }
+
+    /* ---- Modal ------------------------------------------------------------ */
+    .overlay {
+      position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center;
+      background: rgba(2,6,23,.62); padding: 20px;
+    }
+    .modal {
+      background: var(--panel); border: 1px solid var(--border-2); border-radius: 12px;
+      box-shadow: var(--shadow); max-width: 560px; width: 100%; max-height: 88vh; overflow-y: auto; padding: 20px;
+    }
+    .modal h3 { margin: 0 0 8px; font-size: 17px; }
+    .modal .body { font-size: 13.5px; color: var(--small); }
+    .modal .modal-list { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-3); max-height: 220px; overflow-y: auto; }
+    .modal .modal-list li { margin: 3px 0; }
+    .modal .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+
+    .status-line { font-size: 12.5px; color: var(--muted); }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    @media (max-width: 820px) { .grid-2 { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <h1>Codex Fleet Control</h1>
+        <p>Edit <code>codex-targets.yml</code> and trigger the autonomous Codex sweep &mdash; propose-only, draft PRs.</p>
+      </div>
+      <div class="top-actions">
+        <div class="auth-state" id="authState">
+          <span class="pill" id="authPill">Not signed in</span>
+        </div>
+        <button class="btn small ghost" id="themeToggle" type="button" title="Toggle light / dark">Theme</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <!-- AUTH ---------------------------------------------------------------- -->
+    <section class="panel">
+      <details class="auth" id="authDetails">
+        <summary>Authentication <span class="muted small" id="authSummaryHint">&mdash; reads are public; sign in to Save or Run</span></summary>
+        <div style="margin-top:14px;">
+          <div class="row">
+            <div class="field" style="flex:1; min-width:260px;">
+              <label for="patInput">Fine-grained personal access token <span class="hint">(session-only &mdash; kept in this tab, never stored to disk or the repo)</span></label>
+              <input type="password" id="patInput" autocomplete="off" spellcheck="false" placeholder="github_pat_&hellip;">
+            </div>
+            <button class="btn primary" id="patSignIn" type="button">Use token</button>
+            <button class="btn ghost" id="signOut" type="button">Clear token</button>
+          </div>
+          <div class="callout warn">
+            <strong>Token scopes (fine-grained PAT):</strong>
+            <code>quality-zero-platform</code> &rarr; Contents: <b>Read&amp;Write</b>, Actions: <b>Read&amp;Write</b>;
+            <code>agent-skills-toolchain</code> (private runner) &rarr; Actions: <b>Read&amp;Write</b> (needed for per-repo "Dispatch now" + run status).
+            The token stays in <code>sessionStorage</code> for this tab only and is discarded on close or "Clear token".
+            Never commit a token; this page never writes it to the repo.
+          </div>
+          <div style="margin-top:12px;">
+            <button class="btn ghost small" id="deviceFlowBtn" type="button">Sign in with GitHub (Device Flow)</button>
+            <span class="muted small" id="deviceFlowNote"></span>
+          </div>
+        </div>
+      </details>
+    </section>
+
+    <!-- CONFIG -------------------------------------------------------------- -->
+    <section class="panel">
+      <div class="row" style="align-items:center;">
+        <div style="margin-right:auto;">
+          <h2 style="margin:0;">Fleet configuration</h2>
+          <p class="desc" style="margin:2px 0 0;">
+            <code id="cfgPathLabel">quality-zero-platform/codex-targets.yml</code>
+            <span id="cfgMeta" class="muted small"></span>
+          </p>
+        </div>
+        <button class="btn ghost small" id="reloadCfg" type="button">Reload from GitHub</button>
+      </div>
+
+      <div id="cfgLoading" class="callout" style="margin-top:14px;">Loading configuration&hellip;</div>
+
+      <div id="cfgEditor" class="hidden">
+        <!-- Defaults -->
+        <div class="panel" style="margin-top:16px; background:var(--panel-2);">
+          <h2 style="font-size:14px;">Defaults</h2>
+          <p class="desc">Applied to every target unless a repo overrides it.</p>
+          <div class="defaults-grid">
+            <div class="field">
+              <label for="defModel">model</label>
+              <input type="text" id="defModel" spellcheck="false">
+            </div>
+            <div class="field">
+              <label for="defEffort">effort</label>
+              <select id="defEffort"></select>
+            </div>
+            <div class="field">
+              <label for="defMaxFiles">max_changed_files</label>
+              <input type="number" id="defMaxFiles" min="1" step="1">
+            </div>
+          </div>
+        </div>
+
+        <!-- Targets -->
+        <div class="row" style="align-items:center; margin-top:18px;">
+          <h2 style="margin:0; font-size:15px; margin-right:auto;">Targets <span class="muted small" id="targetCount"></span></h2>
+          <select id="addRepoSelect" style="max-width:280px;"></select>
+          <button class="btn small" id="addRepoBtn" type="button">Add target</button>
+        </div>
+        <!-- LOW-4: clarify the per-repo Dispatch-now override semantics. -->
+        <p class="muted small" style="margin:8px 0 0;">Each card's <strong>Dispatch now</strong> runs that repo's runner immediately &mdash; even if the repo's <code>enabled</code> toggle is off (authorized override; a confirmation dialog appears first).</p>
+        <div id="reposContainer"></div>
+      </div>
+    </section>
+
+    <!-- ACTIONS ------------------------------------------------------------- -->
+    <section class="panel">
+      <h2>Actions</h2>
+      <p class="desc">Save commits the regenerated YAML to <code>main</code>. Run sweep triggers <code>codex-fleet-wave.yml</code>, which reads the <em>committed</em> config &mdash; save first.</p>
+      <div class="row" style="align-items:center;">
+        <button class="btn primary" id="saveBtn" type="button" disabled>Save configuration</button>
+        <button class="btn primary" id="runSweepBtn" type="button" disabled>Run full sweep</button>
+        <span id="dirtyFlag" class="pill hidden">Unsaved changes</span>
+        <details style="margin-left:auto;">
+          <summary class="muted small" style="cursor:pointer;">Advanced sweep inputs</summary>
+          <div class="field" style="margin-top:8px; min-width:280px;">
+            <label for="sweepInputs">Extra <code>workflow_dispatch</code> inputs (JSON) <span class="hint">leave blank unless codex-fleet-wave.yml defines inputs</span></label>
+            <input type="text" id="sweepInputs" spellcheck="false" placeholder='{ "dry_run": "true" }'>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <!-- STATUS -------------------------------------------------------------- -->
+    <section class="panel">
+      <div class="row" style="align-items:center;">
+        <h2 style="margin:0; margin-right:auto;">Fleet status</h2>
+        <button class="btn ghost small" id="refreshStatus" type="button">Refresh</button>
+      </div>
+      <p class="desc">Recent <code>codex-runner</code> runs (private runner repo) and open draft PRs it has opened.</p>
+      <div class="grid-2">
+        <div>
+          <h2 style="font-size:13px; color:var(--muted); margin:6px 0;">Recent runner runs</h2>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Status</th><th>Run</th><th>Started</th></tr></thead>
+              <tbody id="runsBody"><tr><td colspan="3" class="muted small">Sign in to load runs.</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <div class="row" style="align-items:flex-end;">
+            <div class="field" style="flex:1;">
+              <h2 style="font-size:13px; color:var(--muted); margin:6px 0;">Open Codex PRs</h2>
+              <input type="text" id="prQuery" spellcheck="false" value="is:pr is:open label:codex-runner">
+            </div>
+            <button class="btn small ghost" id="prSearchBtn" type="button">Search</button>
+          </div>
+          <div class="table-scroll" style="margin-top:8px;">
+            <table>
+              <thead><tr><th>Repo</th><th>Pull request</th></tr></thead>
+              <tbody id="prsBody"><tr><td colspan="2" class="muted small">Sign in to load PRs.</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- LOG ----------------------------------------------------------------- -->
+    <section class="panel">
+      <h2>Activity log</h2>
+      <p class="desc">Terminal-state results of the last operations this session.</p>
+      <div id="log"></div>
+    </section>
+
+    <p class="muted small" style="margin-top:24px;">
+      Quality Zero control plane &middot; propose-only Codex fleet &middot; this page holds no secrets and dispatches the private runner via the owner's session token only.
+    </p>
+  </main>
+
+  <div id="toasts" aria-live="polite"></div>
+  <div id="modalRoot"></div>
+
+  <script>
+  "use strict";
+  /* =====================================================================
+   * Codex Fleet Control — self-contained admin GUI.
+   * No build step, no external CDN. Talks only to api.github.com (+ an
+   * optional owner-configured device-flow proxy). All rendered data goes
+   * through textContent / element properties — never innerHTML — so repo
+   * names and task text cannot inject markup.
+   * ===================================================================== */
+
+  /* ---- One-time configuration constants ------------------------------- */
+  const CONFIG = {
+    owner: "Prekzursil",
+    configRepo: "quality-zero-platform",     // PUBLIC control-plane; holds codex-targets.yml
+    configPath: "codex-targets.yml",
+    branch: "main",
+    runnerRepo: "agent-skills-toolchain",    // PRIVATE; holds codex-runner.yml + auth.json
+    runnerWorkflow: "codex-runner.yml",
+    sweepWorkflow: "codex-fleet-wave.yml",   // in configRepo; reads codex-targets.yml
+    apiBase: "https://api.github.com",
+    // Optional GitHub OAuth/App Device Flow. Both must be set by the owner
+    // (one-time). Device-flow token endpoints on github.com are NOT
+    // CORS-enabled, so a static page needs a CORS proxy that forwards
+    // POSTs to https://github.com/login/device/code and
+    // https://github.com/login/oauth/access_token. Leave empty to disable
+    // (PAT mode remains the working MVP). See MANIFEST.md for setup.
+    deviceFlowClientId: "",
+    deviceFlowProxy: "",   // e.g. "https://your-proxy.example/gh"
+    // Effort allowlist mirrors codex-runner.yml's validation step.
+    efforts: ["minimal", "low", "medium", "high", "xhigh", "max", "ultra"]
+  };
+
+  /* ---- The owned fleet (scaffold source when codex-targets.yml is absent).
+   * GUI-only metadata; the YAML stores repo/enabled/tasks/overrides only. */
+  const FLEET = [
+    { repo: "agent-skills-toolchain", vis: "private" },
+    { repo: "RESEARCH-noosphere-atlas-lyceum", vis: "private" },
+    { repo: "security-kb", vis: "private" },
+    { repo: "opusClip-bulk-downloader", vis: "private" },
+    { repo: "consiliere-ocr-pipeline", vis: "private" },
+    { repo: "battlecats-toolkit", vis: "private" },
+    { repo: "verdict-app", vis: "private" },
+    { repo: "yourfreedom-autocode", vis: "private" },
+    { repo: "momentstudio", vis: "public", caution: "payment/auth — keep disabled unless deliberate" },
+    { repo: "Reframe", vis: "public" },
+    { repo: "quality-zero-platform", vis: "public" },
+    { repo: "omniaudit-mcp", vis: "public" },
+    { repo: "env-inspector", vis: "public" },
+    { repo: "WebCoder", vis: "public" },
+    { repo: "bilbo-app", vis: "public" },
+    { repo: "abbyy-finereader-ocr-mcp", vis: "public" },
+    { repo: "DevExtreme-Filter-Go-Language", vis: "public" },
+    { repo: "codex-session-manager", vis: "public" },
+    { repo: "SWFOC-Mod-Menu", vis: "public" },
+    { repo: "grace-iberlef-2026", vis: "public" },
+    { repo: "codeblocks-pretty-prints-stable", vis: "public" },
+    { repo: "TanksFlashMobile", vis: "public" },
+    { repo: "Airline-Reservations-System", vis: "public" },
+    { repo: "Personal-Finance-Management", vis: "public" },
+    { repo: "Star-Wars-Galactic-Battlegrounds-Save-Game-Editor", vis: "public" },
+    { repo: "pbinfo-scrape", vis: "public" }
+  ];
+  const FLEET_META = Object.create(null);
+  FLEET.forEach(function (f) { FLEET_META[CONFIG.owner + "/" + f.repo] = f; });
+
+  /* ---- Session state -------------------------------------------------- */
+  const state = {
+    token: "",
+    user: null,
+    sha: null,        // sha of codex-targets.yml (null => file absent / create)
+    fileExists: false,
+    config: { defaults: { model: "gpt-5.6-sol", effort: "max", max_changed_files: 40 }, targets: [] },
+    dirty: false
+  };
+
+  /* =====================================================================
+   * YAML — a focused parser/serializer for the codex-targets.yml schema.
+   * Handles both flow style ( defaults: { .. }, tasks: [ .. ] ) and block
+   * style. Tolerant of comments and unknown keys. Exposed on globalThis
+   * for the node self-test harness (no DOM dependency).
+   * ===================================================================== */
+  function leadingSpaces(l) { const m = l.match(/^( *)/); return m ? m[1].length : 0; }
+
+  function stripComments(text) {
+    return text.split("\n").map(function (line) {
+      let q = null, out = "";
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (q) {
+          out += c;
+          if (q === '"' && c === "\\") { out += (line[i + 1] || ""); i++; continue; }
+          if (c === q) q = null;
+          continue;
+        }
+        if (c === '"' || c === "'") { q = c; out += c; continue; }
+        if (c === "#" && (i === 0 || line[i - 1] === " " || line[i - 1] === "\t")) break;
+        out += c;
+      }
+      return out.replace(/\s+$/, "");
+    }).join("\n");
+  }
+
+  function unescapeDq(s) {
+    let out = "";
+    for (let i = 0; i < s.length; i++) {
+      if (s[i] === "\\" && i + 1 < s.length) {
+        const n = s[++i];
+        if (n === "n") out += "\n";
+        else if (n === "t") out += "\t";
+        else if (n === "r") out += "\r";
+        else if (n === "\\") out += "\\";
+        else if (n === '"') out += '"';
+        else if (n === "/") out += "/";
+        else out += n;
+      } else out += s[i];
+    }
+    return out;
+  }
+
+  function tokenizeScalar(raw) {
+    const s = (raw == null ? "" : String(raw)).trim();
+    if (s === "") return "";
+    if (s.length >= 2 && s[0] === '"' && s[s.length - 1] === '"') return unescapeDq(s.slice(1, -1));
+    if (s.length >= 2 && s[0] === "'" && s[s.length - 1] === "'") return s.slice(1, -1).replace(/''/g, "'");
+    if (s === "true" || s === "True") return true;
+    if (s === "false" || s === "False") return false;
+    if (s === "null" || s === "~") return null;
+    if (/^-?\d+$/.test(s)) return parseInt(s, 10);
+    return s;
+  }
+
+  function splitTopLevel(s) {
+    const out = []; let depth = 0, q = null, cur = "";
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (q) {
+        cur += c;
+        if (q === '"' && c === "\\") { cur += (s[i + 1] || ""); i++; continue; }
+        if (c === q) q = null;
+        continue;
+      }
+      if (c === '"' || c === "'") { q = c; cur += c; continue; }
+      if (c === "[" || c === "{") { depth++; cur += c; continue; }
+      if (c === "]" || c === "}") { depth--; cur += c; continue; }
+      if (c === "," && depth === 0) { out.push(cur); cur = ""; continue; }
+      cur += c;
+    }
+    out.push(cur);
+    return out.map(function (x) { return x.trim(); }).filter(function (x) { return x.length > 0; });
+  }
+
+  function splitKeyVal(s) {
+    let q = null;
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (q) {
+        if (q === '"' && c === "\\") { i++; continue; }
+        if (c === q) q = null;
+        continue;
+      }
+      if (c === '"' || c === "'") { q = c; continue; }
+      if (c === ":" && (i + 1 >= s.length || s[i + 1] === " " || s[i + 1] === "\t")) {
+        return [s.slice(0, i).trim(), s.slice(i + 1).trim()];
+      }
+    }
+    return [s.trim(), ""];
+  }
+
+  function parseFlowSeq(s) {
+    const inner = s.trim().replace(/^\[/, "").replace(/\]$/, "");
+    return splitTopLevel(inner).map(tokenizeScalar);
+  }
+  function parseFlowMap(s) {
+    const inner = s.trim().replace(/^\{/, "").replace(/\}$/, "");
+    const map = {};
+    splitTopLevel(inner).forEach(function (part) {
+      const kv = splitKeyVal(part); map[kv[0]] = tokenizeScalar(kv[1]);
+    });
+    return map;
+  }
+
+  function parseBlockMap(lines, i) {
+    const map = {};
+    while (i < lines.length && !lines[i].trim()) i++;
+    if (i >= lines.length) return [map, i];
+    const base = leadingSpaces(lines[i]);
+    if (base === 0) return [map, i];
+    while (i < lines.length) {
+      const l = lines[i];
+      if (!l.trim()) { i++; continue; }
+      if (leadingSpaces(l) < base) break;
+      const kv = l.trim().match(/^([A-Za-z0-9_]+):(.*)$/);
+      if (!kv) break;
+      map[kv[1]] = tokenizeScalar(kv[2].trim());
+      i++;
+    }
+    return [map, i];
+  }
+
+  function parseBlockSeq(lines, i, parentIndent) {
+    const arr = [];
+    while (i < lines.length) {
+      const l = lines[i];
+      if (!l.trim()) { i++; continue; }
+      if (leadingSpaces(l) <= parentIndent) break;
+      const dm = l.match(/^(\s*)-(\s*)(.*)$/);
+      if (!dm) break;
+      arr.push(tokenizeScalar(dm[3].trim()));
+      i++;
+    }
+    return [arr, i];
+  }
+
+  function processKeyLine(lines, i, text, keyIndent, item) {
+    const kv = text.match(/^([A-Za-z0-9_]+):(.*)$/);
+    if (!kv) return i;
+    const key = kv[1], rest = kv[2].trim();
+    if (key === "tasks") {
+      if (rest.startsWith("[")) item.tasks = parseFlowSeq(rest);
+      else if (rest === "") { const r = parseBlockSeq(lines, i, keyIndent); item.tasks = r[0]; return r[1]; }
+      else item.tasks = [tokenizeScalar(rest)];
+      return i;
+    }
+    item[key] = tokenizeScalar(rest);
+    return i;
+  }
+
+  function parseTargets(lines, i) {
+    const items = [];
+    while (i < lines.length) {
+      const raw = lines[i];
+      if (!raw.trim()) { i++; continue; }
+      const ind = leadingSpaces(raw);
+      if (ind === 0) break;
+      const dm = raw.match(/^(\s*)-(\s*)(.*)$/);
+      if (!dm) { i++; continue; }
+      const itemIndent = ind;
+      const contentCol = itemIndent + 1 + dm[2].length;
+      const item = { repo: "", enabled: false, tasks: [] };
+      i++;
+      if (dm[3].trim() !== "") i = processKeyLine(lines, i, dm[3].trim(), contentCol, item);
+      while (i < lines.length) {
+        const l2 = lines[i];
+        if (!l2.trim()) { i++; continue; }
+        if (leadingSpaces(l2) < contentCol) break;
+        const t2 = l2.trim();
+        if (t2.startsWith("-")) break;
+        i++;
+        i = processKeyLine(lines, i, t2, leadingSpaces(l2), item);
+      }
+      items.push(item);
+    }
+    return [items, i];
+  }
+
+  function parseYaml(text) {
+    const lines = stripComments(String(text || "")).split("\n").map(function (l) { return l.replace(/\r$/, ""); });
+    const cfg = { defaults: {}, targets: [] };
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      if (!line.trim()) { i++; continue; }
+      const m = line.match(/^([A-Za-z0-9_]+):(.*)$/);
+      if (m && leadingSpaces(line) === 0) {
+        const key = m[1], rest = m[2].trim();
+        if (key === "defaults") {
+          if (rest.startsWith("{")) { cfg.defaults = parseFlowMap(rest); i++; }
+          else { const r = parseBlockMap(lines, i + 1); cfg.defaults = r[0]; i = r[1]; }
+        } else if (key === "targets") {
+          if (rest.startsWith("[")) { cfg.targets = parseFlowSeq(rest).map(function () { return {}; }); i++; }
+          else { const r = parseTargets(lines, i + 1); cfg.targets = r[0]; i = r[1]; }
+        } else i++;
+      } else i++;
+    }
+    return normalizeConfig(cfg);
+  }
+
+  function normalizeConfig(cfg) {
+    const d = cfg.defaults || {};
+    const defaults = {
+      model: (d.model != null && d.model !== "") ? String(d.model) : "gpt-5.6-sol",
+      effort: (d.effort != null && d.effort !== "") ? String(d.effort) : "max",
+      max_changed_files: toInt(d.max_changed_files, 40)
+    };
+    const targets = (cfg.targets || []).map(function (t) {
+      const out = {
+        repo: t.repo != null ? String(t.repo) : "",
+        enabled: t.enabled === true || t.enabled === "true",
+        tasks: Array.isArray(t.tasks) ? t.tasks.map(function (x) { return x == null ? "" : String(x); }) : []
+      };
+      if (t.model != null && t.model !== "") out.model = String(t.model);
+      if (t.effort != null && t.effort !== "") out.effort = String(t.effort);
+      if (t.max_changed_files != null && t.max_changed_files !== "") {
+        const n = toInt(t.max_changed_files, null); if (n != null) out.max_changed_files = n;
+      }
+      return out;
+    });
+    return { defaults: defaults, targets: targets };
+  }
+
+  function toInt(v, fallback) {
+    if (v == null || v === "") return fallback;
+    const n = parseInt(v, 10);
+    return isNaN(n) ? fallback : n;
+  }
+
+  function needsQuote(v) { return !/^[A-Za-z0-9][A-Za-z0-9._/\-]*$/.test(v); }
+  function escapeDq(s) {
+    return String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"')
+      .replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t");
+  }
+  function emitScalar(v) {
+    if (typeof v === "number" || typeof v === "boolean") return String(v);
+    const s = String(v == null ? "" : v);
+    if (s === "") return '""';
+    return needsQuote(s) ? '"' + escapeDq(s) + '"' : s;
+  }
+  function emitDq(s) { return '"' + escapeDq(s == null ? "" : s) + '"'; }
+
+  function dumpYaml(cfg) {
+    const c = normalizeConfig(cfg);
+    const L = [];
+    L.push("# codex-targets.yml — Codex Fleet sweep configuration.");
+    L.push("# Managed by the Codex Fleet admin GUI (docs/admin/codex-fleet-github/).");
+    L.push("# Non-secret: repo names + task text only. Safe in the public QZT repo.");
+    L.push("defaults:");
+    L.push("  model: " + emitScalar(c.defaults.model));
+    L.push("  effort: " + emitScalar(c.defaults.effort));
+    L.push("  max_changed_files: " + String(c.defaults.max_changed_files));
+    L.push("targets:");
+    c.targets.forEach(function (t) {
+      L.push("  - repo: " + emitScalar(t.repo));
+      L.push("    enabled: " + (t.enabled ? "true" : "false"));
+      if (t.model) L.push("    model: " + emitScalar(t.model));
+      if (t.effort) L.push("    effort: " + emitScalar(t.effort));
+      if (t.max_changed_files != null && t.max_changed_files !== "") {
+        L.push("    max_changed_files: " + String(t.max_changed_files));
+      }
+      if (!t.tasks || t.tasks.length === 0) L.push("    tasks: []");
+      else { L.push("    tasks:"); t.tasks.forEach(function (task) { L.push("      - " + emitDq(task)); }); }
+    });
+    return L.join("\n") + "\n";
+  }
+
+  /* ---- Base64 (unicode-safe) ------------------------------------------ */
+  function b64EncodeUnicode(str) {
+    const bytes = new TextEncoder().encode(str);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    }
+    return btoa(bin);
+  }
+  function b64DecodeUnicode(b64) {
+    const clean = String(b64 || "").replace(/\s/g, "");
+    const bin = atob(clean);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+
+  /* Expose pure helpers for the node self-test harness. */
+  if (typeof globalThis !== "undefined") {
+    globalThis.CFPURE = {
+      parseYaml: parseYaml, dumpYaml: dumpYaml, normalizeConfig: normalizeConfig,
+      emitScalar: emitScalar, escapeDq: escapeDq, tokenizeScalar: tokenizeScalar,
+      splitTopLevel: splitTopLevel, b64EncodeUnicode: b64EncodeUnicode,
+      b64DecodeUnicode: b64DecodeUnicode
+    };
+  }
+
+  /* =====================================================================
+   * DOM helpers (XSS-safe: text via textContent, attrs via properties).
+   * ===================================================================== */
+  function $(id) { return document.getElementById(id); }
+  function el(tag, props, children) {
+    const node = document.createElement(tag);
+    if (props) {
+      Object.keys(props).forEach(function (k) {
+        if (k === "text") node.textContent = props[k] == null ? "" : String(props[k]);
+        else if (k === "class") node.className = props[k];
+        else if (k === "html") { /* intentionally unsupported — never inject HTML */ }
+        else if (k in node) { try { node[k] = props[k]; } catch (e) { node.setAttribute(k, props[k]); } }
+        else node.setAttribute(k, props[k]);
+      });
+    }
+    (children || []).forEach(function (ch) {
+      if (ch == null) return;
+      node.appendChild(typeof ch === "string" ? document.createTextNode(ch) : ch);
+    });
+    return node;
+  }
+  function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+
+  /* ---- Toast + log ----------------------------------------------------- */
+  function toast(kind, msg) {
+    const t = el("div", { class: "toast " + kind, text: msg });
+    $("toasts").appendChild(t);
+    setTimeout(function () { t.style.opacity = "0"; t.style.transition = "opacity .4s"; }, 4200);
+    setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 4800);
+  }
+  function logLine(ok, key, msg) {
+    const line = el("div", { class: "logline " + (ok ? "ok" : "err") }, [
+      el("span", { class: "t", text: new Date().toLocaleTimeString() }),
+      el("span", { class: "k", text: (ok ? "SUCCESS" : "FAILED") + (key ? ":" + key : "") + " " }),
+      el("span", { text: msg })
+    ]);
+    $("log").appendChild(line);
+  }
+
+  /* =====================================================================
+   * GitHub REST wrapper.
+   * ===================================================================== */
+  async function ghFetch(path, opts) {
+    opts = opts || {};
+    const headers = {
+      "Accept": "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28"
+    };
+    if (state.token) headers["Authorization"] = "Bearer " + state.token;
+    if (opts.body) headers["Content-Type"] = "application/json";
+    const res = await fetch(CONFIG.apiBase + path, {
+      method: opts.method || "GET",
+      headers: headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined
+    });
+    let data = null;
+    const text = await res.text();
+    if (text) { try { data = JSON.parse(text); } catch (e) { data = text; } }
+    if (!res.ok) {
+      const remaining = res.headers.get("x-ratelimit-remaining");
+      let msg = (data && data.message) ? data.message : ("HTTP " + res.status);
+      if (res.status === 401) msg = "Unauthorized — the token is missing, expired, or lacks scope. " + msg;
+      if (res.status === 403 && remaining === "0") {
+        const reset = res.headers.get("x-ratelimit-reset");
+        msg = "Rate limit exhausted" + (reset ? " (resets " + new Date(reset * 1000).toLocaleTimeString() + ")" : "") +
+          (state.token ? "." : " — sign in for a higher limit.");
+      }
+      const err = new Error(msg); err.status = res.status; err.data = data; throw err;
+    }
+    return { data: data, status: res.status, res: res };
+  }
+
+  function requireToken() {
+    if (!state.token) { toast("warn", "Sign in first (Authentication panel)."); $("authDetails").open = true; return false; }
+    return true;
+  }
+
+  /* =====================================================================
+   * Auth.
+   * ===================================================================== */
+  async function applyToken(tok) {
+    tok = (tok || "").trim();
+    if (!tok) { toast("warn", "Paste a token first."); return; }
+    state.token = tok;
+    try {
+      const me = await ghFetch("/user");
+      state.user = me.data;
+      try { sessionStorage.setItem("cf_token", tok); } catch (e) { /* private mode */ }
+      renderAuth();
+      logLine(true, "auth", "Signed in as " + (me.data.login || "user") + ".");
+      toast("ok", "Signed in as " + (me.data.login || "user"));
+      $("authDetails").open = false;
+      $("patInput").value = "";
+      refreshAll();
+    } catch (e) {
+      state.token = ""; state.user = null; renderAuth();
+      logLine(false, "auth", e.message);
+      toast("err", "Sign-in failed: " + e.message);
+    }
+  }
+
+  function signOut() {
+    state.token = ""; state.user = null;
+    try { sessionStorage.removeItem("cf_token"); } catch (e) {}
+    renderAuth();
+    toast("ok", "Token cleared for this tab.");
+  }
+
+  function renderAuth() {
+    const pill = $("authPill");
+    clear(pill);
+    if (state.user) {
+      pill.className = "pill";
+      if (state.user.avatar_url) pill.appendChild(el("img", { class: "avatar", src: state.user.avatar_url, alt: "", width: 20, height: 20 }));
+      pill.appendChild(el("span", { text: "Signed in: " + (state.user.login || "user") }));
+    } else {
+      pill.className = "pill";
+      pill.appendChild(el("span", { text: "Not signed in" }));
+    }
+    const authed = !!state.token;
+    $("saveBtn").disabled = !authed;
+    $("runSweepBtn").disabled = !authed;
+    updateDispatchButtons();
+  }
+
+  /* ---- Device Flow (optional; needs owner-configured client-id + proxy) */
+  function initDeviceFlowUi() {
+    const btn = $("deviceFlowBtn"), note = $("deviceFlowNote");
+    if (!CONFIG.deviceFlowClientId) {
+      btn.disabled = true;
+      note.textContent = " Device Flow needs one-time setup (client-id + CORS proxy — see MANIFEST). Use a token above.";
+      return;
+    }
+    if (!CONFIG.deviceFlowProxy) {
+      note.textContent = " Requires a CORS proxy for github.com/login/* (browsers cannot reach it directly).";
+    }
+    btn.addEventListener("click", startDeviceFlow);
+  }
+
+  async function startDeviceFlow() {
+    const base = CONFIG.deviceFlowProxy || "https://github.com";
+    try {
+      const r = await fetch(base + "/login/device/code", {
+        method: "POST", headers: { "Accept": "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify({ client_id: CONFIG.deviceFlowClientId, scope: "repo workflow" })
+      });
+      const d = await r.json();
+      if (!d.device_code) throw new Error(d.error_description || "device code request failed");
+      await modal({
+        title: "Authorize this device",
+        bodyNodes: [
+          el("p", { text: "1. Open " }),
+          el("p", {}, [el("a", { href: d.verification_uri, target: "_blank", rel: "noopener", text: d.verification_uri })]),
+          el("p", { text: "2. Enter this code:" }),
+          el("p", { class: "mono", style: "font-size:22px; letter-spacing:3px;", text: d.user_code }),
+          el("p", { class: "muted small", text: "Waiting for authorization…" })
+        ],
+        confirmLabel: "I have authorized", cancelLabel: "Cancel"
+      });
+      const tok = await pollDeviceToken(base, d.device_code, d.interval || 5, d.expires_in || 900);
+      if (tok) applyToken(tok);
+    } catch (e) {
+      logLine(false, "device-flow", e.message);
+      toast("err", "Device Flow failed (" + e.message + "). Use a token instead.");
+    }
+  }
+
+  async function pollDeviceToken(base, deviceCode, interval, expiresIn) {
+    const deadline = Date.now() + expiresIn * 1000;
+    while (Date.now() < deadline) {
+      await sleep(interval * 1000);
+      const r = await fetch(base + "/login/oauth/access_token", {
+        method: "POST", headers: { "Accept": "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify({ client_id: CONFIG.deviceFlowClientId, device_code: deviceCode, grant_type: "urn:ietf:params:oauth:grant-type:device_code" })
+      });
+      const d = await r.json();
+      if (d.access_token) return d.access_token;
+      if (d.error === "authorization_pending") continue;
+      if (d.error === "slow_down") { interval += 5; continue; }
+      throw new Error(d.error_description || d.error || "authorization failed");
+    }
+    throw new Error("device code expired");
+  }
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  /* =====================================================================
+   * Config: load / render / collect / save.
+   * ===================================================================== */
+  async function loadConfig() {
+    $("cfgLoading").classList.remove("hidden");
+    $("cfgLoading").textContent = "Loading configuration…";
+    $("cfgEditor").classList.add("hidden");
+    try {
+      const r = await ghFetch("/repos/" + CONFIG.owner + "/" + CONFIG.configRepo + "/contents/" +
+        encodeURIComponent(CONFIG.configPath) + "?ref=" + encodeURIComponent(CONFIG.branch));
+      state.sha = r.data.sha;
+      state.fileExists = true;
+      const yamlText = r.data.encoding === "base64" ? b64DecodeUnicode(r.data.content) : (r.data.content || "");
+      state.config = parseYaml(yamlText);
+      state.dirty = false;
+      renderConfig();
+      setMeta("Loaded · sha " + short(state.sha));
+      logLine(true, "config", "Loaded " + state.config.targets.length + " targets.");
+    } catch (e) {
+      if (e.status === 404) {
+        state.sha = null; state.fileExists = false;
+        renderScaffoldPrompt();
+        setMeta("Not found — not created yet.");
+        logLine(false, "config", "codex-targets.yml does not exist yet.");
+      } else {
+        $("cfgLoading").textContent = "Could not load configuration: " + e.message;
+        logLine(false, "config", e.message);
+      }
+    }
+  }
+
+  function renderScaffoldPrompt() {
+    const box = $("cfgLoading");
+    clear(box); box.classList.remove("hidden");
+    box.appendChild(el("p", { text: "codex-targets.yml does not exist in " + CONFIG.configRepo + " yet." }));
+    box.appendChild(el("p", { class: "muted small", text: "Scaffold all " + FLEET.length + " owned repos (every target disabled, no tasks — you opt in). Nothing runs until you enable a repo, add a task, save, and run the sweep." }));
+    const btn = el("button", { class: "btn primary", type: "button", text: "Scaffold from the 26-repo fleet" });
+    btn.addEventListener("click", function () {
+      state.config = scaffoldConfig();
+      state.dirty = true;
+      renderConfig();
+      markDirty();
+      toast("ok", "Scaffolded " + state.config.targets.length + " targets — review, then Save.");
+    });
+    box.appendChild(btn);
+  }
+
+  function scaffoldConfig() {
+    return {
+      defaults: { model: "gpt-5.6-sol", effort: "max", max_changed_files: 40 },
+      targets: FLEET.map(function (f) {
+        return { repo: CONFIG.owner + "/" + f.repo, enabled: false, tasks: [] };
+      })
+    };
+  }
+
+  function short(sha) { return sha ? String(sha).slice(0, 7) : "—"; }
+  function setMeta(t) { $("cfgMeta").textContent = " · " + t; }
+
+  function renderConfig() {
+    $("cfgLoading").classList.add("hidden");
+    $("cfgEditor").classList.remove("hidden");
+    const d = state.config.defaults;
+    $("defModel").value = d.model;
+    fillEffortSelect($("defEffort"), false);
+    $("defEffort").value = d.effort;
+    $("defMaxFiles").value = d.max_changed_files;
+    $("defModel").oninput = function () { d.model = this.value.trim(); markDirty(); };
+    $("defEffort").onchange = function () { d.effort = this.value; markDirty(); };
+    $("defMaxFiles").oninput = function () { d.max_changed_files = toInt(this.value, 40); markDirty(); };
+    renderTargets();
+    renderAddRepoSelect();
+  }
+
+  function fillEffortSelect(sel, allowInherit) {
+    clear(sel);
+    if (allowInherit) sel.appendChild(el("option", { value: "", text: "(inherit)" }));
+    CONFIG.efforts.forEach(function (e) { sel.appendChild(el("option", { value: e, text: e })); });
+  }
+
+  function renderTargets() {
+    const container = $("reposContainer");
+    clear(container);
+    $("targetCount").textContent = "(" + state.config.targets.length + ")";
+    state.config.targets.forEach(function (t, idx) { container.appendChild(renderRepoCard(t, idx)); });
+    if (state.config.targets.length === 0) {
+      container.appendChild(el("p", { class: "muted small", text: "No targets. Add one above." }));
+    }
+  }
+
+  function renderRepoCard(t, idx) {
+    const meta = FLEET_META[t.repo];
+    const card = el("div", { class: "repo-card" + (t.enabled ? "" : " disabled") });
+
+    /* Header: toggle + name + visibility + remove */
+    const sw = el("label", { class: "switch" });
+    const cb = el("input", { type: "checkbox", checked: t.enabled });
+    cb.addEventListener("change", function () {
+      t.enabled = cb.checked;
+      card.className = "repo-card" + (t.enabled ? "" : " disabled");
+      updateDispatchButtons();
+      warnIfEnabledNoTasks(t, warnEl);
+      markDirty();
+    });
+    sw.appendChild(cb); sw.appendChild(el("span", { class: "track" }));
+
+    const head = el("div", { class: "repo-head" }, [
+      sw,
+      el("span", { class: "name", text: t.repo }),
+      meta ? el("span", { class: "badge " + (meta.vis === "private" ? "warn" : ""), text: meta.vis }) : null,
+      (meta && meta.caution) ? el("span", { class: "badge err", title: meta.caution, text: "caution" }) : null
+    ]);
+    const spacer = el("span", { class: "spacer" });
+    head.appendChild(spacer);
+    const dispatchBtn = el("button", { class: "btn small ghost", type: "button", text: "Dispatch now",
+      title: "Runs this repo's runner immediately — even if its enabled toggle is off (authorized override; confirm required)." });
+    dispatchBtn.dataset.role = "dispatch";
+    dispatchBtn.addEventListener("click", function () { dispatchSingle(t); });
+    head.appendChild(dispatchBtn);
+    const rm = el("button", { class: "btn small ghost", type: "button", text: "Remove" });
+    rm.addEventListener("click", function () {
+      const at = state.config.targets.indexOf(t);
+      if (at >= 0) state.config.targets.splice(at, 1);
+      renderTargets(); renderAddRepoSelect(); markDirty();
+    });
+    head.appendChild(rm);
+    card.appendChild(head);
+
+    /* Body: overrides + tasks */
+    const warnEl = el("div", { class: "callout warn hidden" });
+    const body = el("div", { class: "repo-body" });
+
+    const overrides = el("div", { class: "repo-overrides" });
+    const modelField = field("model (override)", "blank = inherit");
+    const modelIn = el("input", { type: "text", value: t.model || "", placeholder: state.config.defaults.model, spellcheck: false });
+    modelIn.addEventListener("input", function () { setOpt(t, "model", modelIn.value.trim()); markDirty(); });
+    modelField.appendChild(modelIn);
+
+    const effortField = field("effort (override)", "");
+    const effortSel = el("select", {});
+    fillEffortSelect(effortSel, true);
+    effortSel.value = t.effort || "";
+    effortSel.addEventListener("change", function () { setOpt(t, "effort", effortSel.value); markDirty(); });
+    effortField.appendChild(effortSel);
+
+    const filesField = field("max_changed_files (override)", "");
+    const filesIn = el("input", { type: "number", min: "1", step: "1", value: (t.max_changed_files != null ? t.max_changed_files : ""), placeholder: String(state.config.defaults.max_changed_files) });
+    filesIn.addEventListener("input", function () {
+      const v = filesIn.value.trim();
+      if (v === "") delete t.max_changed_files; else t.max_changed_files = toInt(v, undefined);
+      markDirty();
+    });
+    filesField.appendChild(filesIn);
+
+    overrides.appendChild(modelField); overrides.appendChild(effortField); overrides.appendChild(filesField);
+    body.appendChild(overrides);
+
+    /* Tasks */
+    const tasksWrap = el("div", {});
+    tasksWrap.appendChild(el("label", { class: "small muted", style: "font-weight:600;", text: "Tasks (each becomes one Codex run / draft PR)" }));
+    const tasksList = el("div", { class: "tasks-list" });
+    renderTasks(t, tasksList, warnEl);
+    tasksWrap.appendChild(tasksList);
+    const addTask = el("button", { class: "btn small ghost", type: "button", text: "+ Add task" });
+    addTask.style.marginTop = "8px";
+    addTask.addEventListener("click", function () {
+      t.tasks.push(""); renderTasks(t, tasksList, warnEl); markDirty();
+    });
+    tasksWrap.appendChild(addTask);
+    body.appendChild(tasksWrap);
+    body.appendChild(warnEl);
+
+    card.appendChild(body);
+    warnIfEnabledNoTasks(t, warnEl);
+    return card;
+  }
+
+  function field(labelText, hint) {
+    return el("div", { class: "field" }, [
+      el("label", {}, [document.createTextNode(labelText), hint ? el("span", { class: "hint", text: " " + hint }) : null])
+    ]);
+  }
+  function setOpt(t, key, val) { if (val === "" || val == null) delete t[key]; else t[key] = val; }
+
+  function renderTasks(t, listNode, warnEl) {
+    clear(listNode);
+    t.tasks.forEach(function (task, ti) {
+      const ta = el("textarea", { rows: 2, value: task, placeholder: "e.g. Documentation only: expand the README quick-start" });
+      ta.addEventListener("input", function () { t.tasks[ti] = ta.value; markDirty(); warnIfEnabledNoTasks(t, warnEl); });
+      const del = el("button", { class: "btn small ghost", type: "button", text: "×", title: "Remove task" });
+      del.addEventListener("click", function () { t.tasks.splice(ti, 1); renderTasks(t, listNode, warnEl); markDirty(); warnIfEnabledNoTasks(t, warnEl); });
+      listNode.appendChild(el("div", { class: "task-row" }, [ta, del]));
+    });
+    if (t.tasks.length === 0) listNode.appendChild(el("p", { class: "muted small", text: "No tasks — this repo will be skipped by the sweep." }));
+    updateDispatchButtons();
+  }
+
+  function warnIfEnabledNoTasks(t, warnEl) {
+    if (!warnEl) return;
+    const bad = t.enabled && (!t.tasks || t.tasks.filter(function (x) { return x.trim(); }).length === 0);
+    warnEl.classList.toggle("hidden", !bad);
+    if (bad) warnEl.textContent = "Enabled but has no task — the sweep will have nothing to run for this repo.";
+  }
+
+  function renderAddRepoSelect() {
+    const sel = $("addRepoSelect");
+    clear(sel);
+    sel.appendChild(el("option", { value: "", text: "Add from fleet…" }));
+    const present = new Set(state.config.targets.map(function (t) { return t.repo; }));
+    FLEET.forEach(function (f) {
+      const full = CONFIG.owner + "/" + f.repo;
+      if (!present.has(full)) sel.appendChild(el("option", { value: full, text: f.repo + (f.vis === "private" ? " (private)" : "") }));
+    });
+    sel.appendChild(el("option", { value: "__custom__", text: "Custom owner/name…" }));
+  }
+
+  function addRepoFromSelect() {
+    const sel = $("addRepoSelect");
+    let full = sel.value;
+    if (!full) { toast("warn", "Pick a repo to add."); return; }
+    if (full === "__custom__") {
+      full = (window.prompt("Repository as owner/name:", CONFIG.owner + "/") || "").trim();
+      if (!full || !/^[^/\s]+\/[^/\s]+$/.test(full)) { if (full) toast("err", "Expected owner/name."); return; }
+    }
+    if (state.config.targets.some(function (t) { return t.repo === full; })) { toast("warn", "Already in the list."); return; }
+    state.config.targets.push({ repo: full, enabled: false, tasks: [] });
+    renderTargets(); renderAddRepoSelect(); markDirty();
+    toast("ok", "Added " + full + " (disabled). Enable it and add a task.");
+  }
+
+  function markDirty() {
+    state.dirty = true;
+    $("dirtyFlag").classList.remove("hidden");
+  }
+  function clearDirty() {
+    state.dirty = false;
+    $("dirtyFlag").classList.add("hidden");
+  }
+
+  async function saveConfig() {
+    if (!requireToken()) return;
+    const invalid = validateConfig();
+    if (invalid.length) { toast("err", invalid[0]); logLine(false, "validate", invalid[0]); return; }
+    const yamlText = dumpYaml(state.config);
+    const ok = await modal({
+      title: "Commit codex-targets.yml",
+      bodyNodes: [
+        el("p", { text: "Commit the regenerated configuration to " + CONFIG.configRepo + "@" + CONFIG.branch + "?" }),
+        el("p", { class: "muted small", text: (state.fileExists ? "Updating existing file (sha " + short(state.sha) + ")." : "Creating the file for the first time.") }),
+        el("pre", { class: "modal-list mono", style: "white-space:pre-wrap; font-size:11.5px;", text: yamlText })
+      ],
+      confirmLabel: "Commit", cancelLabel: "Cancel"
+    });
+    if (!ok) return;
+    try {
+      const body = {
+        message: "chore(codex-fleet-github): update codex-targets.yml via admin GUI",
+        content: b64EncodeUnicode(yamlText),
+        branch: CONFIG.branch
+      };
+      if (state.sha) body.sha = state.sha;
+      const r = await ghFetch("/repos/" + CONFIG.owner + "/" + CONFIG.configRepo + "/contents/" +
+        encodeURIComponent(CONFIG.configPath), { method: "PUT", body: body });
+      state.sha = r.data.content ? r.data.content.sha : state.sha;
+      state.fileExists = true;
+      clearDirty();
+      setMeta("Saved · sha " + short(state.sha));
+      logLine(true, "save", "Committed codex-targets.yml (sha " + short(state.sha) + ").");
+      toast("ok", "Saved.");
+    } catch (e) {
+      if (e.status === 409) toast("err", "Conflict — the file changed on GitHub. Reload, then re-apply your edits.");
+      else toast("err", "Save failed: " + e.message);
+      logLine(false, "save", e.message);
+    }
+  }
+
+  function validateConfig() {
+    const errs = [];
+    const d = state.config.defaults;
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(d.model || "")) errs.push("Default model slug is invalid.");
+    if (!(d.max_changed_files > 0)) errs.push("Default max_changed_files must be a positive integer.");
+    state.config.targets.forEach(function (t) {
+      if (!/^[^/\s]+\/[^/\s]+$/.test(t.repo || "")) errs.push("Target repo must be owner/name: '" + t.repo + "'.");
+      if (t.model && !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(t.model)) errs.push(t.repo + ": invalid model override.");
+      if (t.max_changed_files != null && !(t.max_changed_files > 0)) errs.push(t.repo + ": max_changed_files must be positive.");
+    });
+    return errs;
+  }
+
+  /* =====================================================================
+   * Dispatch: full sweep + single repo.
+   * ===================================================================== */
+  function enabledRunnable() {
+    return state.config.targets.filter(function (t) {
+      return t.enabled && t.tasks && t.tasks.filter(function (x) { return x.trim(); }).length > 0;
+    });
+  }
+  function enabledNoTask() {
+    return state.config.targets.filter(function (t) {
+      return t.enabled && (!t.tasks || t.tasks.filter(function (x) { return x.trim(); }).length === 0);
+    });
+  }
+
+  function updateDispatchButtons() {
+    const runnable = enabledRunnable().length;
+    const btn = $("runSweepBtn");
+    if (btn) btn.disabled = !state.token || runnable === 0;
+    document.querySelectorAll('button[data-role="dispatch"]').forEach(function (b) { b.disabled = !state.token; });
+  }
+
+  async function runSweep() {
+    if (!requireToken()) return;
+    const runnable = enabledRunnable();
+    const noTask = enabledNoTask();
+    if (runnable.length === 0) { toast("warn", "No enabled repo has a task. Nothing to run."); return; }
+    let inputs = null;
+    const rawInputs = $("sweepInputs").value.trim();
+    if (rawInputs) { try { inputs = JSON.parse(rawInputs); } catch (e) { toast("err", "Advanced inputs must be valid JSON."); return; } }
+
+    const listNodes = runnable.map(function (t) {
+      return el("li", {}, [
+        el("span", { class: "mono", text: t.repo }),
+        el("span", { class: "muted small", text: "  · " + t.tasks.filter(function (x) { return x.trim(); }).length + " task(s) · effort " + (t.effort || state.config.defaults.effort) })
+      ]);
+    });
+    const bodyNodes = [
+      el("p", { text: "Trigger the fleet sweep (" + CONFIG.sweepWorkflow + ") on the following " + runnable.length + " enabled repo(s):" }),
+      el("ul", { class: "modal-list" }, listNodes)
+    ];
+    if (state.dirty) bodyNodes.push(el("p", { class: "callout warn", text: "You have UNSAVED changes. The sweep reads the committed codex-targets.yml — Save first, or these edits will be ignored." }));
+    if (noTask.length) bodyNodes.push(el("p", { class: "muted small", text: noTask.length + " enabled repo(s) have no task and will be skipped." }));
+    bodyNodes.push(el("p", { class: "muted small", text: "This opens propose-only DRAFT PRs. Nothing is auto-merged." }));
+
+    const ok = await modal({ title: "Run the full Codex sweep?", bodyNodes: bodyNodes, confirmLabel: "Run sweep", cancelLabel: "Cancel", danger: true });
+    if (!ok) return;
+    try {
+      const body = { ref: CONFIG.branch };
+      if (inputs) body.inputs = inputs;
+      await ghFetch("/repos/" + CONFIG.owner + "/" + CONFIG.configRepo + "/actions/workflows/" +
+        encodeURIComponent(CONFIG.sweepWorkflow) + "/dispatches", { method: "POST", body: body });
+      logLine(true, "sweep", "Dispatched " + CONFIG.sweepWorkflow + " on " + CONFIG.configRepo + "@" + CONFIG.branch + ".");
+      toast("ok", "Sweep dispatched. Watch status below.");
+      setTimeout(loadRuns, 2500);
+    } catch (e) {
+      if (e.status === 404) toast("err", CONFIG.sweepWorkflow + " not found on " + CONFIG.branch + " yet (deploy the sweep workflow first).");
+      else toast("err", "Sweep dispatch failed: " + e.message);
+      logLine(false, "sweep", e.message);
+    }
+  }
+
+  async function dispatchSingle(t) {
+    if (!requireToken()) return;
+    const tasks = (t.tasks || []).filter(function (x) { return x.trim(); });
+    if (tasks.length === 0) { toast("warn", t.repo + " has no task to dispatch."); return; }
+
+    /* Pick which task if several. */
+    const bodyNodes = [el("p", { text: "Dispatch the private codex-runner directly for " })];
+    bodyNodes.push(el("p", { class: "mono", text: t.repo }));
+    let taskSelect = null;
+    if (tasks.length > 1) {
+      taskSelect = el("select", {});
+      tasks.forEach(function (task, i) { taskSelect.appendChild(el("option", { value: String(i), text: (task.length > 80 ? task.slice(0, 80) + "…" : task) })); });
+      bodyNodes.push(el("p", { class: "small muted", text: "Task:" })); bodyNodes.push(taskSelect);
+    } else {
+      bodyNodes.push(el("p", { class: "small muted", text: "Task: " + tasks[0] }));
+    }
+    bodyNodes.push(el("p", { class: "muted small", text: "Runs on " + CONFIG.runnerRepo + " (" + CONFIG.runnerWorkflow + "). Requires the token to have Actions:write on that private repo. Opens a propose-only draft PR." }));
+    if (!t.enabled) bodyNodes.push(el("p", { class: "callout warn", text: "This repo's enabled toggle is OFF. Dispatch now overrides that flag and runs it anyway (authorized override)." }));
+
+    const ok = await modal({ title: "Dispatch runner for one repo?", bodyNodes: bodyNodes, confirmLabel: "Dispatch", cancelLabel: "Cancel", danger: true });
+    if (!ok) return;
+    const task = taskSelect ? tasks[parseInt(taskSelect.value, 10)] : tasks[0];
+    try {
+      const inputs = {
+        target_repo: t.repo,
+        task: task,
+        model: t.model || state.config.defaults.model,
+        effort: t.effort || state.config.defaults.effort,
+        max_changed_files: String(t.max_changed_files != null ? t.max_changed_files : state.config.defaults.max_changed_files)
+      };
+      await ghFetch("/repos/" + CONFIG.owner + "/" + CONFIG.runnerRepo + "/actions/workflows/" +
+        encodeURIComponent(CONFIG.runnerWorkflow) + "/dispatches", { method: "POST", body: { ref: CONFIG.branch, inputs: inputs } });
+      logLine(true, "dispatch", "Dispatched codex-runner for " + t.repo + ".");
+      toast("ok", "Dispatched runner for " + t.repo + ".");
+      setTimeout(loadRuns, 2500);
+    } catch (e) {
+      if (e.status === 404) toast("err", "Runner workflow/repo not reachable — token needs access to the private " + CONFIG.runnerRepo + ".");
+      else if (e.status === 403) toast("err", "Forbidden — token lacks Actions:write on " + CONFIG.runnerRepo + ".");
+      else toast("err", "Dispatch failed: " + e.message);
+      logLine(false, "dispatch", e.message);
+    }
+  }
+
+  /* =====================================================================
+   * Status: runner runs + open PRs.
+   * ===================================================================== */
+  async function loadRuns() {
+    const body = $("runsBody");
+    if (!state.token) { setTableMessage(body, 3, "Sign in to load runs."); return; }
+    setTableMessage(body, 3, "Loading…");
+    try {
+      const r = await ghFetch("/repos/" + CONFIG.owner + "/" + CONFIG.runnerRepo + "/actions/workflows/" +
+        encodeURIComponent(CONFIG.runnerWorkflow) + "/runs?per_page=12");
+      clear(body);
+      const runs = (r.data && r.data.workflow_runs) || [];
+      if (runs.length === 0) { setTableMessage(body, 3, "No runs yet."); return; }
+      runs.forEach(function (run) {
+        const stat = run.status === "completed" ? (run.conclusion || "completed") : run.status;
+        const tr = el("tr", {}, [
+          el("td", {}, [el("span", { class: "badge dot " + String(stat).toLowerCase(), text: stat })]),
+          el("td", {}, [el("a", { href: run.html_url, target: "_blank", rel: "noopener", text: (run.display_title || run.name || ("run #" + run.run_number)) })]),
+          el("td", { class: "muted small", text: fmtTime(run.created_at) })
+        ]);
+        body.appendChild(tr);
+      });
+    } catch (e) {
+      if (e.status === 404 || e.status === 401) setTableMessage(body, 3, "Sign in with access to the private runner repo to see runs.");
+      else setTableMessage(body, 3, "Error: " + e.message);
+    }
+  }
+
+  async function loadPRs() {
+    const body = $("prsBody");
+    if (!state.token) { setTableMessage(body, 2, "Sign in to load PRs."); return; }
+    setTableMessage(body, 2, "Loading…");
+    const q = $("prQuery").value.trim() || "is:pr is:open label:codex-runner";
+    try {
+      const r = await ghFetch("/search/issues?per_page=20&sort=updated&q=" + encodeURIComponent(q));
+      clear(body);
+      const items = (r.data && r.data.items) || [];
+      if (items.length === 0) { setTableMessage(body, 2, "No matching open PRs."); return; }
+      items.forEach(function (pr) {
+        const repoName = (pr.repository_url || "").split("/repos/")[1] || "";
+        const tr = el("tr", {}, [
+          el("td", { class: "mono small", text: repoName }),
+          el("td", {}, [
+            el("a", { href: pr.html_url, target: "_blank", rel: "noopener", text: "#" + pr.number + " " + (pr.title || "") }),
+            pr.draft ? el("span", { class: "badge warn", style: "margin-left:6px;", text: "draft" }) : null
+          ])
+        ]);
+        body.appendChild(tr);
+      });
+    } catch (e) {
+      setTableMessage(body, 2, "Error: " + e.message);
+    }
+  }
+
+  function setTableMessage(tbody, cols, msg) {
+    clear(tbody);
+    tbody.appendChild(el("tr", {}, [el("td", { class: "muted small", colspan: String(cols), text: msg })]));
+  }
+  function fmtTime(iso) { if (!iso) return ""; const d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString(); }
+
+  function refreshAll() { loadConfig(); loadRuns(); loadPRs(); }
+
+  /* =====================================================================
+   * Modal.
+   * ===================================================================== */
+  function modal(opts) {
+    return new Promise(function (resolve) {
+      const root = $("modalRoot");
+      const confirmBtn = el("button", { class: "btn " + (opts.danger ? "danger" : "primary"), type: "button", text: opts.confirmLabel || "Confirm" });
+      const cancelBtn = el("button", { class: "btn ghost", type: "button", text: opts.cancelLabel || "Cancel" });
+      const box = el("div", { class: "modal" }, [
+        el("h3", { text: opts.title || "Confirm" }),
+        el("div", { class: "body" }, opts.bodyNodes || [el("p", { text: opts.message || "" })]),
+        el("div", { class: "actions" }, [cancelBtn, confirmBtn])
+      ]);
+      const overlay = el("div", { class: "overlay" }, [box]);
+      function close(v) { if (overlay.parentNode) root.removeChild(overlay); document.removeEventListener("keydown", onKey); resolve(v); }
+      function onKey(e) { if (e.key === "Escape") close(false); if (e.key === "Enter" && document.activeElement !== cancelBtn) close(true); }
+      confirmBtn.addEventListener("click", function () { close(true); });
+      cancelBtn.addEventListener("click", function () { close(false); });
+      overlay.addEventListener("click", function (e) { if (e.target === overlay) close(false); });
+      document.addEventListener("keydown", onKey);
+      root.appendChild(overlay);
+      confirmBtn.focus();
+    });
+  }
+
+  /* =====================================================================
+   * Theme.
+   * ===================================================================== */
+  function initTheme() {
+    let saved = null;
+    try { saved = localStorage.getItem("cf_theme"); } catch (e) {}
+    if (saved === "light" || saved === "dark") document.documentElement.setAttribute("data-theme", saved);
+    $("themeToggle").addEventListener("click", function () {
+      const cur = document.documentElement.getAttribute("data-theme");
+      const isDark = cur ? cur === "dark" : !window.matchMedia("(prefers-color-scheme: light)").matches;
+      const next = isDark ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", next);
+      try { localStorage.setItem("cf_theme", next); } catch (e) {}
+    });
+  }
+
+  /* =====================================================================
+   * Boot.
+   * ===================================================================== */
+  function init() {
+    initTheme();
+    initDeviceFlowUi();
+    $("patSignIn").addEventListener("click", function () { applyToken($("patInput").value); });
+    $("patInput").addEventListener("keydown", function (e) { if (e.key === "Enter") applyToken($("patInput").value); });
+    $("signOut").addEventListener("click", signOut);
+    $("reloadCfg").addEventListener("click", function () {
+      if (state.dirty && !window.confirm("Discard unsaved changes and reload from GitHub?")) return;
+      loadConfig();
+    });
+    $("saveBtn").addEventListener("click", saveConfig);
+    $("runSweepBtn").addEventListener("click", runSweep);
+    $("addRepoBtn").addEventListener("click", addRepoFromSelect);
+    $("refreshStatus").addEventListener("click", function () { loadRuns(); loadPRs(); });
+    $("prSearchBtn").addEventListener("click", loadPRs);
+    $("prQuery").addEventListener("keydown", function (e) { if (e.key === "Enter") loadPRs(); });
+    $("cfgPathLabel").textContent = CONFIG.configRepo + "/" + CONFIG.configPath;
+
+    window.addEventListener("beforeunload", function (e) {
+      if (state.dirty) { e.preventDefault(); e.returnValue = ""; return ""; }
+    });
+
+    /* Restore a session token if one exists in this tab. */
+    let tok = "";
+    try { tok = sessionStorage.getItem("cf_token") || ""; } catch (e) {}
+    renderAuth();
+    if (tok) applyToken(tok);
+    else { loadConfig(); }  /* public reads work unauthenticated */
+  }
+
+  if (typeof document !== "undefined" && document.addEventListener) {
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+    else init();
+  }
+  </script>
+</body>
+</html>

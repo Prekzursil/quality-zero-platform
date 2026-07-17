@@ -58,43 +58,31 @@ class CodacyZeroTests(unittest.TestCase):
     def test_build_urls_and_request_mode(self) -> None:
         """Cover build urls and request mode."""
         analysis_base_url = (
-            "https://app.codacy.com/api/v3/analysis/organizations/gh/"
-            "Prekzursil/repositories/quality-zero-platform"
+            "https://app.codacy.com/api/v3/analysis/organizations/gh/Prekzursil/repositories/quality-zero-platform"
         )
         issues_base_url = (
-            "https://api.codacy.com/api/v3/analysis/organizations/gh/"
-            "Prekzursil/repositories/quality-zero-platform"
+            "https://api.codacy.com/api/v3/analysis/organizations/gh/Prekzursil/repositories/quality-zero-platform"
         )
         self.assertEqual(_request_mode(self._base_query()), ("POST", {}))
         self.assertEqual(
             _request_mode(self._base_query(sha="abc123")),
             ("POST", {"commitUuid": "abc123"}),
         )
+        self.assertEqual(_request_mode(self._base_query(pull_request="5")), ("GET", None))
         self.assertEqual(
-            _request_mode(self._base_query(pull_request="5")), ("GET", None)
-        )
-        self.assertEqual(
-            build_issues_url(
-                "gh", "Prekzursil", "quality-zero-platform", pull_request=""
-            ),
+            build_issues_url("gh", "Prekzursil", "quality-zero-platform", pull_request=""),
             f"{issues_base_url}/issues/search?limit=1",
         )
         self.assertEqual(
-            build_issues_url(
-                "gh", "Prekzursil", "quality-zero-platform", pull_request="5"
-            ),
+            build_issues_url("gh", "Prekzursil", "quality-zero-platform", pull_request="5"),
             f"{analysis_base_url}/pull-requests/5/issues?status=new&limit=1",
         )
         self.assertEqual(
-            build_repository_analysis_url(
-                "gh", "Prekzursil", "quality-zero-platform"
-            ),
+            build_repository_analysis_url("gh", "Prekzursil", "quality-zero-platform"),
             analysis_base_url,
         )
         self.assertEqual(
-            build_pull_request_analysis_url(
-                "gh", "Prekzursil", "quality-zero-platform", "5"
-            ),
+            build_pull_request_analysis_url("gh", "Prekzursil", "quality-zero-platform", "5"),
             f"{analysis_base_url}/pull-requests/5",
         )
 
@@ -112,9 +100,7 @@ class CodacyZeroTests(unittest.TestCase):
                 "scripts.quality.check_codacy_zero.load_json_https",
                 return_value=(["invalid"], {}),
             ),
-            self.assertRaisesRegex(
-                RuntimeError, "Unexpected Codacy API response payload"
-            ),
+            self.assertRaisesRegex(RuntimeError, "Unexpected Codacy API response payload"),
         ):
             check_codacy_zero._request_json("https://api.codacy.com/test", "token")
 
@@ -134,9 +120,7 @@ class CodacyZeroTests(unittest.TestCase):
             return_value=({"issuesCount": 0}, {}),
         ):
             self.assertEqual(
-                check_codacy_zero._query_codacy_public_repository_issues(
-                    "gh", "Prekzursil", "quality-zero-platform"
-                ),
+                check_codacy_zero._query_codacy_public_repository_issues("gh", "Prekzursil", "quality-zero-platform"),
                 (0, []),
             )
         with (
@@ -144,21 +128,15 @@ class CodacyZeroTests(unittest.TestCase):
                 "scripts.quality.check_codacy_zero.load_json_https",
                 return_value=("bad", {}),
             ),
-            self.assertRaisesRegex(
-                RuntimeError, "Unexpected Codacy public repository payload"
-            ),
+            self.assertRaisesRegex(RuntimeError, "Unexpected Codacy public repository payload"),
         ):
-            check_codacy_zero._query_codacy_public_repository_issues(
-                "gh", "Prekzursil", "quality-zero-platform"
-            )
+            check_codacy_zero._query_codacy_public_repository_issues("gh", "Prekzursil", "quality-zero-platform")
         with patch(
             "scripts.quality.check_codacy_zero.load_json_https",
             return_value=({"items": []}, {}),
         ):
             self.assertEqual(
-                check_codacy_zero._query_codacy_public_repository_issues(
-                    "gh", "Prekzursil", "quality-zero-platform"
-                ),
+                check_codacy_zero._query_codacy_public_repository_issues("gh", "Prekzursil", "quality-zero-platform"),
                 (
                     None,
                     ["Codacy response did not include a parseable total issue count."],
@@ -169,9 +147,7 @@ class CodacyZeroTests(unittest.TestCase):
             return_value=({"issuesCount": 4}, {}),
         ):
             self.assertEqual(
-                check_codacy_zero._query_codacy_public_repository_issues(
-                    "gh", "Prekzursil", "quality-zero-platform"
-                ),
+                check_codacy_zero._query_codacy_public_repository_issues("gh", "Prekzursil", "quality-zero-platform"),
                 (4, ["Codacy reports 4 open issues (expected 0)."]),
             )
 
@@ -188,9 +164,7 @@ class CodacyZeroTests(unittest.TestCase):
                     ["Codacy response did not include a parseable total issue count."],
                 ),
             )
-        with patch(
-            "scripts.quality.check_codacy_zero._request_json", return_value={"total": 2}
-        ):
+        with patch("scripts.quality.check_codacy_zero._request_json", return_value={"total": 2}):
             self.assertEqual(
                 _query_codacy_provider(self._base_query(), "token"),
                 (2, ["Codacy reports 2 open issues (expected 0)."]),
@@ -241,9 +215,7 @@ class CodacyZeroTests(unittest.TestCase):
             ["gh", "github"],
             sleep_seconds=-1.0,
         )
-        self.assertEqual(
-            scoped.attempts, check_codacy_zero.SCOPED_ANALYSIS_RETRY_ATTEMPTS
-        )
+        self.assertEqual(scoped.attempts, check_codacy_zero.SCOPED_ANALYSIS_RETRY_ATTEMPTS)
         self.assertEqual(scoped.sleep_seconds, 0.0)
 
     def test_request_analysis_status_validates_payload_shape(self) -> None:
@@ -253,21 +225,15 @@ class CodacyZeroTests(unittest.TestCase):
                 "scripts.quality.check_codacy_zero.load_json_https",
                 return_value=("bad", {}),
             ),
-            self.assertRaisesRegex(
-                RuntimeError, "Unexpected Codacy analysis status payload"
-            ),
+            self.assertRaisesRegex(RuntimeError, "Unexpected Codacy analysis status payload"),
         ):
-            check_codacy_zero._request_analysis_status(
-                "https://app.codacy.com/api/v3/test", "token"
-            )
+            check_codacy_zero._request_analysis_status("https://app.codacy.com/api/v3/test", "token")
         with patch(
             "scripts.quality.check_codacy_zero.load_json_https",
             return_value=({"data": {}}, {}),
         ):
             self.assertEqual(
-                check_codacy_zero._request_analysis_status(
-                    "https://app.codacy.com/api/v3/test", "token"
-                ),
+                check_codacy_zero._request_analysis_status("https://app.codacy.com/api/v3/test", "token"),
                 {"data": {}},
             )
 
@@ -305,10 +271,7 @@ class CodacyZeroTests(unittest.TestCase):
         ):
             self.assertEqual(
                 check_codacy_zero._analysis_pending_message(pr_query, "token"),
-                (
-                    "Codacy analysis for pull request 5 is still on oldsha "
-                    "(waiting for targetsha)."
-                ),
+                ("Codacy analysis for pull request 5 is still on oldsha (waiting for targetsha)."),
             )
         with (
             patch.object(
@@ -343,10 +306,7 @@ class CodacyZeroTests(unittest.TestCase):
         ):
             self.assertEqual(
                 check_codacy_zero._analysis_pending_message(pr_query, "token"),
-                (
-                    "Codacy analysis for pull request 5 issues is still on oldsha "
-                    "(waiting for targetsha)."
-                ),
+                ("Codacy analysis for pull request 5 issues is still on oldsha (waiting for targetsha)."),
             )
         with (
             patch.object(
@@ -360,18 +320,12 @@ class CodacyZeroTests(unittest.TestCase):
                 return_value={"analyzed": True, "data": []},
             ),
         ):
-            self.assertIsNone(
-                check_codacy_zero._analysis_pending_message(pr_query, "token")
-            )
+            self.assertIsNone(check_codacy_zero._analysis_pending_message(pr_query, "token"))
 
     def test_analysis_pending_message_tracks_repository_state(self) -> None:
         """Cover analysis pending message tracks repository state."""
-        repo_query = CodacyQuery(
-            "gh", "Prekzursil", "quality-zero-platform", sha="targetsha"
-        )
-        with patch.object(
-            check_codacy_zero, "_request_analysis_status", return_value={"data": {}}
-        ):
+        repo_query = CodacyQuery("gh", "Prekzursil", "quality-zero-platform", sha="targetsha")
+        with patch.object(check_codacy_zero, "_request_analysis_status", return_value={"data": {}}):
             self.assertEqual(
                 check_codacy_zero._analysis_pending_message(repo_query, "token"),
                 "Codacy analysis for repository is not available yet.",
@@ -383,10 +337,7 @@ class CodacyZeroTests(unittest.TestCase):
         ):
             self.assertEqual(
                 check_codacy_zero._analysis_pending_message(repo_query, "token"),
-                (
-                    "Codacy analysis for repository is still on oldsha "
-                    "(waiting for targetsha)."
-                ),
+                ("Codacy analysis for repository is still on oldsha (waiting for targetsha)."),
             )
         with patch.object(
             check_codacy_zero,
@@ -400,14 +351,6 @@ class CodacyZeroTests(unittest.TestCase):
         with patch.object(
             check_codacy_zero,
             "_request_analysis_status",
-            return_value={
-                "data": {
-                    "lastAnalysedCommit": {"sha": "targetsha", "endedAnalysis": "done"}
-                }
-            },
+            return_value={"data": {"lastAnalysedCommit": {"sha": "targetsha", "endedAnalysis": "done"}}},
         ):
-            self.assertIsNone(
-                check_codacy_zero._analysis_pending_message(repo_query, "token")
-            )
-
-
+            self.assertIsNone(check_codacy_zero._analysis_pending_message(repo_query, "token"))

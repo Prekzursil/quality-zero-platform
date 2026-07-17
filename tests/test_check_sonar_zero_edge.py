@@ -1,6 +1,5 @@
 """Test check sonar zero -- retry and entrypoint edge cases."""
 
-
 from __future__ import absolute_import
 
 import argparse
@@ -11,13 +10,13 @@ import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
+from typing import List
 from unittest.mock import patch
+
+from tests._sonar_zero_helpers import SonarZeroHelpersMixin, raise_runtime_error
 
 from scripts.quality import check_sonar_zero
 from scripts.quality.check_sonar_zero import load_sonar_findings_with_retry
-from tests._sonar_zero_helpers import SonarZeroHelpersMixin, raise_runtime_error
-from typing import List
-
 
 _raise_runtime_error = raise_runtime_error
 
@@ -30,10 +29,7 @@ class SonarZeroEdgeTests(SonarZeroHelpersMixin, unittest.TestCase):
         args = argparse.Namespace(branch="main", pull_request="", sha="targetsha")
         attempts: List[int] = []
         pending_responses = [
-            (
-                "Sonar analysis for branch main is still on oldsha "
-                "(waiting for targetsha)."
-            ),
+            ("Sonar analysis for branch main is still on oldsha (waiting for targetsha)."),
             None,
         ]
 
@@ -127,14 +123,10 @@ class SonarZeroEdgeTests(SonarZeroHelpersMixin, unittest.TestCase):
         """Cover retry keyword only guards reject invalid invocations."""
         args = argparse.Namespace(branch="", pull_request="5")
 
-        with self.assertRaisesRegex(
-            TypeError, "expects argparse namespace and auth header"
-        ):
+        with self.assertRaisesRegex(TypeError, "expects argparse namespace and auth header"):
             load_sonar_findings_with_retry(args)
 
-        with self.assertRaisesRegex(
-            TypeError, "Unexpected load_sonar_findings_with_retry parameters: extra"
-        ):
+        with self.assertRaisesRegex(TypeError, "Unexpected load_sonar_findings_with_retry parameters: extra"):
             load_sonar_findings_with_retry(
                 args,
                 "auth",
@@ -180,9 +172,7 @@ class SonarZeroEdgeTests(SonarZeroHelpersMixin, unittest.TestCase):
 
         self.assertEqual(open_issues, 0)
         self.assertEqual(quality_gate, "OK")
-        self.assertEqual(
-            findings, ["Sonar analysis status request failed: pending broke"]
-        )
+        self.assertEqual(findings, ["Sonar analysis status request failed: pending broke"])
 
     def test_retry_returns_last_scoped_result_after_retry_budget_is_exhausted(
         self,
@@ -220,18 +210,14 @@ class SonarZeroEdgeTests(SonarZeroHelpersMixin, unittest.TestCase):
             args,
             "auth",
             fetch_fn=lambda _args, _auth: (0, "OK", []),
-            pending_fn=lambda _args, _auth: (
-                "Sonar analysis for branch main is not available yet."
-            ),
+            pending_fn=lambda _args, _auth: "Sonar analysis for branch main is not available yet.",
             attempts=2,
             sleep_seconds=0.0,
         )
 
         self.assertEqual(open_issues, 0)
         self.assertEqual(quality_gate, "OK")
-        self.assertEqual(
-            findings, ["Sonar analysis for branch main is not available yet."]
-        )
+        self.assertEqual(findings, ["Sonar analysis for branch main is not available yet."])
 
     def test_retry_default_budget_handles_transient_none_quality_gate_for_prs(
         self,
@@ -269,7 +255,7 @@ class SonarZeroEdgeTests(SonarZeroHelpersMixin, unittest.TestCase):
         """Cover main handles missing token success and report failures."""
         args = Namespace(
             project_key="Prekzursil_quality-zero-platform",
-            token=str(),
+            token="",
             branch="",
             pull_request="5",
             out_json="sonar-zero/sonar.json",
@@ -328,9 +314,7 @@ class SonarZeroEdgeTests(SonarZeroHelpersMixin, unittest.TestCase):
 
     def test_parse_args_render_markdown_and_script_entrypoint(self) -> None:
         """Cover parse args render markdown and script entrypoint."""
-        with patch.object(
-            sys, "argv", ["check_sonar_zero.py", "--project-key", "project"]
-        ):
+        with patch.object(sys, "argv", ["check_sonar_zero.py", "--project-key", "project"]):
             args = check_sonar_zero._parse_args()
         self.assertEqual(args.project_key, "project")
         markdown = check_sonar_zero._render_md(
@@ -348,14 +332,15 @@ class SonarZeroEdgeTests(SonarZeroHelpersMixin, unittest.TestCase):
         script_path = Path("scripts/quality/check_sonar_zero.py").resolve()
         root_text = str(Path.cwd().resolve())
         trimmed_sys_path = [item for item in sys.path if item != root_text]
-        with tempfile.TemporaryDirectory() as tmp, patch.dict(
-            "os.environ", {}, clear=True
-        ), patch.object(
-            sys,
-            "argv",
-            [str(script_path), "--project-key", "Prekzursil_quality-zero-platform"],
-        ), patch.object(
-            sys, "path", trimmed_sys_path[:]
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch.dict("os.environ", {}, clear=True),
+            patch.object(
+                sys,
+                "argv",
+                [str(script_path), "--project-key", "Prekzursil_quality-zero-platform"],
+            ),
+            patch.object(sys, "path", trimmed_sys_path[:]),
         ):
             cwd = Path(tmp)
             previous = Path.cwd()

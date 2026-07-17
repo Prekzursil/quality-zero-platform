@@ -22,9 +22,7 @@ _NEXT_LINK_RE = re.compile(r'<(?P<url>[^>]+)>;\s*rel="next"')
 
 def _parse_args() -> argparse.Namespace:
     """Handle parse args."""
-    parser = argparse.ArgumentParser(
-        description="Assert Dependabot alerts meet the configured threshold."
-    )
+    parser = argparse.ArgumentParser(description="Assert Dependabot alerts meet the configured threshold.")
     parser.add_argument("--repo", required=True)
     parser.add_argument("--token", default="")
     parser.add_argument("--policy", default="zero_critical")
@@ -43,10 +41,7 @@ def _request_alerts(repo: str, token: str, *, scope: str) -> List[Dict[str, Any]
         "X-GitHub-Api-Version": "2022-11-28",
         "User-Agent": "quality-zero-platform",
     }
-    next_url = (
-        f"{GITHUB_API_BASE}/repos/{repo}/dependabot/alerts"
-        f"?state=open&per_page=100{ecosystem}"
-    )
+    next_url = f"{GITHUB_API_BASE}/repos/{repo}/dependabot/alerts?state=open&per_page=100{ecosystem}"
     alerts: List[Dict[str, Any]] = []
     while next_url:
         payload, response_headers = load_json_https(
@@ -69,9 +64,7 @@ def filter_alerts(alerts: List[Dict[str, Any]], *, policy: str) -> List[Dict[str
     threshold = {"zero_critical": 3, "zero_high": 2, "zero_any": 0}[policy]
     filtered: List[Dict[str, Any]] = []
     for alert in alerts:
-        severity = str(
-            (alert.get("security_vulnerability") or {}).get("severity") or ""
-        ).lower()
+        severity = str((alert.get("security_vulnerability") or {}).get("severity") or "").lower()
         if order.get(severity, -1) >= threshold:
             filtered.append(alert)
     return filtered
@@ -98,11 +91,7 @@ def _render_md(payload: Mapping[str, Any]) -> str:
 def main() -> int:
     """Handle main."""
     args = _parse_args()
-    token = (
-        args.token
-        or os.environ.get("GITHUB_TOKEN", "")
-        or os.environ.get("GH_TOKEN", "")
-    ).strip()
+    token = (args.token or os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")).strip()
     findings: List[str] = []
     open_alerts: int | None = None
     status = "fail"
@@ -114,10 +103,7 @@ def main() -> int:
         filtered = filter_alerts(alerts, policy=args.policy)
         open_alerts = len(filtered)
         if open_alerts:
-            findings.append(
-                "Dependabot reports "
-                f"{open_alerts} open alerts matching policy {args.policy}."
-            )
+            findings.append(f"Dependabot reports {open_alerts} open alerts matching policy {args.policy}.")
         status = "pass" if not findings else "fail"
 
     payload = {

@@ -86,15 +86,20 @@ def assert_main_reports_provider_failure(
     config: Dict[str, object],
 ) -> None:
     """Assert that one provider-backed main() path reports a request failure."""
-    with patch.dict(ENVIRON_KEY, config["env"], clear=False), patch.object(
-        module,
-        "_parse_args",
-        return_value=config["args"],
-    ), patch.object(
-        module,
-        str(config["operation_name"]),
-        side_effect=RuntimeError(str(config["failure_message"])),
-    ), patch.object(module, "write_report", return_value=0) as write_report_mock:
+    with (
+        patch.dict(ENVIRON_KEY, config["env"], clear=False),
+        patch.object(
+            module,
+            "_parse_args",
+            return_value=config["args"],
+        ),
+        patch.object(
+            module,
+            str(config["operation_name"]),
+            side_effect=RuntimeError(str(config["failure_message"])),
+        ),
+        patch.object(module, "write_report", return_value=0) as write_report_mock,
+    ):
         test_case.assertEqual(module.main(), 1)
     test_case.assertEqual(
         write_report_mock.call_args.args[0]["findings"],

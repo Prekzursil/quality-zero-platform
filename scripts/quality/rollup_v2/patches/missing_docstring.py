@@ -1,4 +1,5 @@
 """Deterministic patch generator for `missing-docstring` category."""
+
 from __future__ import absolute_import
 
 import difflib
@@ -59,12 +60,14 @@ def generate(
     patched_lines = lines.copy()
     patched_lines.insert(insert_index, docstring_line)
 
-    diff = "".join(difflib.unified_diff(
-        lines,
-        patched_lines,
-        fromfile=f"a/{finding.file}",
-        tofile=f"b/{finding.file}",
-    ))
+    diff = "".join(
+        difflib.unified_diff(
+            lines,
+            patched_lines,
+            fromfile=f"a/{finding.file}",
+            tofile=f"b/{finding.file}",
+        )
+    )
     return PatchResult(
         unified_diff=diff,
         confidence="high",

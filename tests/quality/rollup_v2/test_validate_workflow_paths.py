@@ -1,4 +1,5 @@
 """Tests for validate_workflow_paths.py (per §B.2.2)."""
+
 from __future__ import absolute_import
 
 import sys
@@ -9,7 +10,7 @@ from pathlib import Path
 if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from scripts.quality.rollup_v2.validate_workflow_paths import validate_paths, main
+from scripts.quality.rollup_v2.validate_workflow_paths import main, validate_paths
 
 
 class ValidatePathsTests(unittest.TestCase):

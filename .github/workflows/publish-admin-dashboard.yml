@@ -37,6 +37,21 @@ jobs:
             --coverage-json quality-rollup/coverage-trend.json \
             --drift-jsonl audit/drift-sync.jsonl \
             --output-dir site
+      - name: Stage self-contained admin sub-pages (e.g. codex-fleet-github)
+        run: |
+          # build_admin_dashboard.py copies only the three root dashboard assets
+          # (index.html / styles.css / app.js). Self-contained single-file admin
+          # sub-pages live under docs/admin/<name>/ and are copied verbatim into
+          # the Pages site at /<name>/ here. Generic loop => future sub-pages
+          # publish automatically with no further workflow change.
+          shopt -s nullglob
+          for d in docs/admin/*/; do
+            [ -d "$d" ] || continue
+            name="$(basename "$d")"
+            mkdir -p "site/$name"
+            cp -R "$d." "site/$name/"
+            echo "staged admin sub-page: site/$name/"
+          done
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:

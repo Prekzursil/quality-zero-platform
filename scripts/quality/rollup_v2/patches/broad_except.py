@@ -1,4 +1,5 @@
 """Deterministic patch generator for `broad-except` category."""
+
 from __future__ import absolute_import
 
 import difflib
@@ -11,9 +12,7 @@ from scripts.quality.rollup_v2.schema.patch import PatchDeclined, PatchResult
 GENERATOR_VERSION = "broad_except/1.0.0"
 CATEGORY = "broad-except"
 
-_EXCEPT_PATTERN = re.compile(
-    r"^(\s*)except(\s+Exception|\s+BaseException|)(\s+as\s+\w+)?\s*:\s*$"
-)
+_EXCEPT_PATTERN = re.compile(r"^(\s*)except(\s+Exception|\s+BaseException|)(\s+as\s+\w+)?\s*:\s*$")
 
 
 def generate(
@@ -43,12 +42,14 @@ def generate(
     new_line = f"{indent}except (IOError, ValueError){as_clause}:\n"
     patched_lines = lines.copy()
     patched_lines[target_index] = new_line
-    diff = "".join(difflib.unified_diff(
-        lines,
-        patched_lines,
-        fromfile=f"a/{finding.file}",
-        tofile=f"b/{finding.file}",
-    ))
+    diff = "".join(
+        difflib.unified_diff(
+            lines,
+            patched_lines,
+            fromfile=f"a/{finding.file}",
+            tofile=f"b/{finding.file}",
+        )
+    )
     return PatchResult(
         unified_diff=diff,
         confidence="medium",

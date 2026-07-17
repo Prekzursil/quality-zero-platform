@@ -1,4 +1,5 @@
 """Golden fixture tests for deterministic rendering (per design §A.9 + §B.3.7 + §B.3.16)."""
+
 from __future__ import absolute_import
 
 import sys
@@ -25,9 +26,14 @@ _DEFAULT_FILES = (
 )
 _UNICODE_FILES = ("src/caf\u00e9.py", "src/\u65e5\u672c\u8a9e/app.py", "src/api/auth.py")
 _CATEGORIES = (
-    "unused-import", "broad-except", "hardcoded-secret",
-    "missing-docstring", "too-complex", "dead-code",
-    "unused-variable", "line-too-long",
+    "unused-import",
+    "broad-except",
+    "hardcoded-secret",
+    "missing-docstring",
+    "too-complex",
+    "dead-code",
+    "unused-variable",
+    "line-too-long",
 )
 _SEVERITIES = ("critical", "high", "medium", "low", "info")
 _PROVIDERS = ("QLTY", "SonarCloud", "Codacy", "DeepSource", "DeepScan")
@@ -37,13 +43,7 @@ _PATCH_SOURCES = ("deterministic", "none", "llm")
 def _patch_text_for(line: int, file: str, idx: int, patch_source: str) -> str | None:
     if patch_source == "none":
         return None
-    return (
-        f"--- a/{file}\n"
-        f"+++ b/{file}\n"
-        f"@@ -{line},1 +{line},1 @@\n"
-        f"-old line {idx}\n"
-        f"+new line {idx}"
-    )
+    return f"--- a/{file}\n+++ b/{file}\n@@ -{line},1 +{line},1 @@\n-old line {idx}\n+new line {idx}"
 
 
 def _patch_confidence_for(patch_source: str) -> str | None:
@@ -55,16 +55,17 @@ def _patch_confidence_for(patch_source: str) -> str | None:
 
 
 def _make_corroborator(
-    provider: str, rule_id: str, idx: int, category: str, *, unicode: bool,
+    provider: str,
+    rule_id: str,
+    idx: int,
+    category: str,
+    *,
+    unicode: bool,
 ) -> Corroborator:
     return Corroborator.from_provider(
         provider=provider,
         rule_id=rule_id,
-        rule_url=(
-            f"https://rules.example.com/{category}"
-            if idx % 3 == 0
-            else None
-        ),
+        rule_url=(f"https://rules.example.com/{category}" if idx % 3 == 0 else None),
         original_message=(
             f"\u65e5\u672c\u8a9e message for finding {idx}"
             if unicode and idx % 2 == 0
@@ -82,7 +83,11 @@ def _make_one_finding(idx: int, files: Tuple[str, ...], *, unicode: bool) -> Fin
     line = 10 + (idx * 3) % 100
 
     corr = _make_corroborator(
-        provider, f"rule-{idx:03d}", idx, category, unicode=unicode,
+        provider,
+        f"rule-{idx:03d}",
+        idx,
+        category,
+        unicode=unicode,
     )
     msg = (
         f"\u65e5\u672c\u8a9e: finding {idx}"
@@ -97,9 +102,7 @@ def _make_one_finding(idx: int, files: Tuple[str, ...], *, unicode: bool) -> Fin
         end_line=line,
         column=None,
         category=category,
-        category_group=(
-            "security" if category == "hardcoded-secret" else "quality"
-        ),
+        category_group=("security" if category == "hardcoded-secret" else "quality"),
         severity=severity,
         corroboration="single",
         primary_message=msg,
@@ -110,9 +113,7 @@ def _make_one_finding(idx: int, files: Tuple[str, ...], *, unicode: bool) -> Fin
         patch_confidence=_patch_confidence_for(patch_source),
         context_snippet=f"context line {idx}",
         source_file_hash="",
-        cwe=(
-            f"CWE-{100 + idx}" if category == "hardcoded-secret" else None
-        ),
+        cwe=(f"CWE-{100 + idx}" if category == "hardcoded-secret" else None),
         autofixable=(patch_source != "none"),
         tags=(),
     )
@@ -129,9 +130,7 @@ def _build_payload(findings: List[Finding]) -> Dict[str, Any]:
     # Build provider summaries
     from collections import defaultdict
 
-    by_provider: Dict[str, Dict[str, int]] = defaultdict(
-        lambda: {"total": 0, "high": 0, "medium": 0, "low": 0}
-    )
+    by_provider: Dict[str, Dict[str, int]] = defaultdict(lambda: {"total": 0, "high": 0, "medium": 0, "low": 0})
     for f in findings:
         for c in f.corroborators:
             counts = by_provider[c.provider]
@@ -140,9 +139,7 @@ def _build_payload(findings: List[Finding]) -> Dict[str, Any]:
             if sev in counts:
                 counts[sev] += 1
 
-    provider_summaries = [
-        {"provider": p, **counts} for p, counts in sorted(by_provider.items())
-    ]
+    provider_summaries = [{"provider": p, **counts} for p, counts in sorted(by_provider.items())]
 
     return {
         "schema_version": "qzp-rollup/1",
@@ -241,9 +238,7 @@ class GoldenNonAsciiTests(unittest.TestCase):
             self.skipTest("Golden file created -- re-run to validate.")
 
         expected = _read_golden(self.GOLDEN_PATH)
-        self.assertEqual(
-            rendered, expected, "Rendered output differs from golden fixture"
-        )
+        self.assertEqual(rendered, expected, "Rendered output differs from golden fixture")
 
     def test_nonascii_file_path_preserved(self) -> None:
         findings = _build_findings(5, unicode=True)

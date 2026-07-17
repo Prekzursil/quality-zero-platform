@@ -80,9 +80,7 @@ def _add_optional_input_fields(item: Mapping[str, Any], dest: Dict[str, Any]) ->
     if "flag" in item:
         dest["flag"] = str(item["flag"]).strip()
     if "sources" in item and isinstance(item["sources"], list):
-        dest["sources"] = [
-            str(s).strip() for s in item["sources"] if str(s).strip()
-        ]
+        dest["sources"] = [str(s).strip() for s in item["sources"] if str(s).strip()]
     if "min_percent" in item:
         # Drop the field on parse error so downstream consumers fall
         # back to the schema default rather than a malformed value.
@@ -99,11 +97,7 @@ def _normalize_one_input(item: Any) -> Dict[str, Any] | None:
         "name": str(item.get("name", "")).strip(),
         "path": str(item.get("path", "")).strip(),
     }
-    if (
-        normalized["format"] not in {"xml", "lcov"}
-        or not normalized["name"]
-        or not normalized["path"]
-    ):
+    if normalized["format"] not in {"xml", "lcov"} or not normalized["name"] or not normalized["path"]:
         return None
     _add_optional_input_fields(item, normalized)
     return normalized
@@ -181,11 +175,7 @@ def normalize_coverage_assert_mode(raw_assert_mode: Any) -> Dict[str, str]:
     if not isinstance(raw_assert_mode, dict):
         return {"default": "enforce"}
 
-    resolved = {
-        str(key): text
-        for key, value in raw_assert_mode.items()
-        if (text := str(value or "").strip())
-    }
+    resolved = {str(key): text for key, value in raw_assert_mode.items() if (text := str(value or "").strip())}
     return {"default": "enforce", **resolved}
 
 
@@ -203,9 +193,7 @@ def _resolve_required_sources(coverage: Dict[str, Any]) -> Tuple[List[str], str]
     """Resolve required coverage sources and whether they were explicit or inferred."""
     require_sources = dedupe_strings(coverage.get("require_sources", []))
     require_sources_mode = (
-        "explicit"
-        if require_sources
-        else str(coverage.get("require_sources_mode", "infer")).strip() or "infer"
+        "explicit" if require_sources else str(coverage.get("require_sources_mode", "infer")).strip() or "infer"
     )
     if require_sources_mode == "infer" and not require_sources:
         require_sources = infer_required_sources(coverage)
@@ -219,21 +207,15 @@ def normalize_coverage(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
     require_sources, require_sources_mode = _resolve_required_sources(coverage)
     resolved_shell = coverage.get("command_shell", coverage.get("shell", "bash"))
     coverage.pop("command_shell", None)
-    coverage["runner"] = (
-        str(coverage.get("runner", "ubuntu-latest")).strip() or "ubuntu-latest"
-    )
+    coverage["runner"] = str(coverage.get("runner", "ubuntu-latest")).strip() or "ubuntu-latest"
     coverage["shell"] = str(resolved_shell).strip() or "bash"
     coverage["command"] = str(coverage.get("command", "")).strip()
     coverage["inputs"] = inputs
     coverage["require_sources"] = require_sources
     coverage["require_sources_mode"] = require_sources_mode
     coverage["min_percent"] = float(coverage.get("min_percent", 100.0))
-    coverage["branch_min_percent"] = _normalize_branch_min_percent(
-        coverage.get("branch_min_percent")
-    )
-    coverage["assert_mode"] = normalize_coverage_assert_mode(
-        coverage.get("assert_mode", {})
-    )
+    coverage["branch_min_percent"] = _normalize_branch_min_percent(coverage.get("branch_min_percent"))
+    coverage["assert_mode"] = normalize_coverage_assert_mode(coverage.get("assert_mode", {}))
     coverage["evidence_note"] = str(coverage.get("evidence_note", "")).strip()
     coverage["setup"] = normalize_coverage_setup(coverage.get("setup", {}))
     return coverage

@@ -35,14 +35,12 @@ def _add_alert_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--open-alerts",
         action="store_true",
-        help="Open alert:secret-missing issues on the platform repo for "
-        "every missing required secret.",
+        help="Open alert:secret-missing issues on the platform repo for every missing required secret.",
     )
     parser.add_argument(
         "--dry-run-alerts",
         action="store_true",
-        help="With --open-alerts, produce the would-be issues but do not "
-        "invoke gh (safety net for testing).",
+        help="With --open-alerts, produce the would-be issues but do not invoke gh (safety net for testing).",
     )
     parser.add_argument(
         "--platform-slug",
@@ -52,16 +50,13 @@ def _add_alert_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--target-repo-slug",
         default="",
-        help="Repo the secrets are missing on (subject of the alert). "
-        "Defaults to --platform-slug when empty.",
+        help="Repo the secrets are missing on (subject of the alert). Defaults to --platform-slug when empty.",
     )
 
 
 def _parse_args() -> argparse.Namespace:
     """Handle parse args."""
-    parser = argparse.ArgumentParser(
-        description="Validate required quality-gate secrets and variables."
-    )
+    parser = argparse.ArgumentParser(description="Validate required quality-gate secrets and variables.")
     _add_collection_args(parser)
     parser.add_argument("--out-json", default="quality-secrets/secrets.json")
     parser.add_argument("--out-md", default="quality-secrets/secrets.md")
@@ -83,17 +78,13 @@ def _render_md(payload: Mapping[str, Any]) -> str:
         f"- Status: `{payload['status']}`",
         f"- Timestamp (UTC): `{payload['timestamp_utc']}`",
     ]
-    _append_missing_section(
-        lines, "## Missing secrets", payload.get("missing_secrets", [])
-    )
+    _append_missing_section(lines, "## Missing secrets", payload.get("missing_secrets", []))
     _append_missing_section(
         lines,
         "## Missing conditional secrets",
         payload.get("missing_conditional_secrets", []),
     )
-    _append_missing_section(
-        lines, "## Missing variables", payload.get("missing_vars", [])
-    )
+    _append_missing_section(lines, "## Missing variables", payload.get("missing_vars", []))
     _append_missing_section(
         lines,
         "## Missing conditional variables",
@@ -149,18 +140,22 @@ def open_secret_missing_alerts(
     so re-running this on the same set is a no-op after the first call.
     """
     triggers = alert_triggers.detect_secret_missing(
-        slug=target_repo_slug, missing_secrets=missing_secrets,
+        slug=target_repo_slug,
+        missing_secrets=missing_secrets,
     )
     results: List[Dict[str, Any]] = []
     for trigger in triggers:
         if dry_run:
-            results.append({
-                "number": 0,
-                "title": alerts.alert_issue_title(
-                    trigger.alert_type, trigger.subject,
-                ),
-                "created": False,
-            })
+            results.append(
+                {
+                    "number": 0,
+                    "title": alerts.alert_issue_title(
+                        trigger.alert_type,
+                        trigger.subject,
+                    ),
+                    "created": False,
+                }
+            )
             continue
         record = alerts.open_alert_issue(
             platform_slug,

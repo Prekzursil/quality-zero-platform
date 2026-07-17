@@ -1,4 +1,5 @@
 """Tests for taxonomy loader (per design §A.4.4)."""
+
 from __future__ import absolute_import
 
 import sys
@@ -8,7 +9,7 @@ from pathlib import Path
 if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from scripts.quality.rollup_v2.taxonomy import lookup, load_all_taxonomies
+from scripts.quality.rollup_v2.taxonomy import load_all_taxonomies, lookup
 
 
 class TaxonomyTests(unittest.TestCase):
@@ -29,14 +30,14 @@ class TaxonomyTests(unittest.TestCase):
 
     def test_load_all_taxonomies_returns_all_six(self):
         all_tax = load_all_taxonomies()
-        for provider in ("Codacy", "SonarCloud", "DeepSource", "Semgrep",
-                         "CodeQL", "QLTY"):
+        for provider in ("Codacy", "SonarCloud", "DeepSource", "Semgrep", "CodeQL", "QLTY"):
             self.assertIn(provider, all_tax)
 
 
 class UnmappedRulesCollectorTests(unittest.TestCase):
     def test_unmapped_rules_collector(self):
         from scripts.quality.rollup_v2.taxonomy import UnmappedRulesCollector
+
         collector = UnmappedRulesCollector()
         collector.record("Codacy", "Pylint_Unknown_1")
         collector.record("Codacy", "Pylint_Unknown_1")
@@ -48,11 +49,13 @@ class UnmappedRulesCollectorTests(unittest.TestCase):
 
     def test_empty_collector_returns_empty_list(self):
         from scripts.quality.rollup_v2.taxonomy import UnmappedRulesCollector
+
         collector = UnmappedRulesCollector()
         self.assertEqual(collector.as_list(), [])
 
     def test_entries_sorted_by_provider_then_rule(self):
         from scripts.quality.rollup_v2.taxonomy import UnmappedRulesCollector
+
         collector = UnmappedRulesCollector()
         collector.record("SonarCloud", "python:Sz")
         collector.record("Codacy", "Pylint_Z")

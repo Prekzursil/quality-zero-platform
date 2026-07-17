@@ -19,11 +19,7 @@ from pathlib import Path
 
 import yaml  # type: ignore[import-untyped]
 
-
-_WORKFLOW = (
-    Path(__file__).resolve().parents[1]
-    / ".github" / "workflows" / "scheduled-alerts.yml"
-)
+_WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "scheduled-alerts.yml"
 
 
 class ScheduledAlertsWorkflowTests(unittest.TestCase):
@@ -81,10 +77,7 @@ class ScheduledAlertsWorkflowTests(unittest.TestCase):
     def test_checkout_does_not_persist_credentials(self) -> None:
         """``persist-credentials: false`` — CodeQL safety."""
         steps = self.doc["jobs"]["dispatch"]["steps"]
-        checkout_steps = [
-            s for s in steps
-            if "uses" in s and s["uses"].startswith("actions/checkout")
-        ]
+        checkout_steps = [s for s in steps if "uses" in s and s["uses"].startswith("actions/checkout")]
         self.assertEqual(len(checkout_steps), 1)
         self.assertFalse(
             checkout_steps[0].get("with", {}).get("persist-credentials", True),

@@ -1,4 +1,5 @@
 """Deterministic patch generator for `unused-import` category."""
+
 from __future__ import absolute_import
 
 import re
@@ -13,9 +14,7 @@ _IMPORT_LINE = re.compile(r"^\s*(import\s+\S+|from\s+\S+\s+import\s+\S+)")
 
 generate = make_line_removal_generator(
     guard_pattern=_IMPORT_LINE,
-    guard_decline_reason_template=(
-        "line {line} does not look like an import statement"
-    ),
+    guard_decline_reason_template=("line {line} does not look like an import statement"),
     confidence="high",
     category=CATEGORY,
     generator_version=GENERATOR_VERSION,

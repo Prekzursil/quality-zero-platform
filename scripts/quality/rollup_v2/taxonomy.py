@@ -1,4 +1,5 @@
 """Canonical category taxonomy loader (per design §A.4.4)."""
+
 from __future__ import absolute_import
 
 from functools import lru_cache
@@ -49,7 +50,4 @@ class UnmappedRulesCollector:
 
     def as_list(self) -> List[Dict[str, object]]:
         """Return the collected entries as dicts sorted by (provider, rule_id)."""
-        return [
-            {"provider": p, "rule_id": r, "count": c}
-            for (p, r), c in sorted(self._counts.items())
-        ]
+        return [{"provider": p, "rule_id": r, "count": c} for (p, r), c in sorted(self._counts.items())]

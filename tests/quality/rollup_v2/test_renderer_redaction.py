@@ -1,4 +1,5 @@
 """Writer-side belt-and-suspenders redaction test (per §B.1.2)."""
+
 from __future__ import absolute_import
 
 import sys

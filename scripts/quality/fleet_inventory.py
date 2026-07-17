@@ -493,9 +493,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("--owner", default="Prekzursil")
-    parser.add_argument(
-        "--platform-slug", default="Prekzursil/quality-zero-platform"
-    )
+    parser.add_argument("--platform-slug", default="Prekzursil/quality-zero-platform")
     parser.add_argument(
         "--inventory",
         default=str(Path(__file__).resolve().parents[2] / "inventory" / "repos.yml"),
@@ -544,8 +542,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     except subprocess.CalledProcessError as exc:
         print(
-            f"fleet_inventory: gh call failed (exit={exc.returncode}):\n"
-            f"{exc.stderr}",
+            f"fleet_inventory: gh call failed (exit={exc.returncode}):\n{exc.stderr}",
             flush=True,
         )
         return 2

@@ -20,9 +20,7 @@ from scripts.quality.control_plane import (
 
 def _parse_args() -> argparse.Namespace:
     """Handle parse args."""
-    parser = argparse.ArgumentParser(
-        description="Generate JSON ruleset payloads from control-plane profiles."
-    )
+    parser = argparse.ArgumentParser(description="Generate JSON ruleset payloads from control-plane profiles.")
     parser.add_argument("--inventory", default="")
     parser.add_argument("--repo-slug", action="append", default=[])
     parser.add_argument("--output-dir", default="generated/rulesets")
@@ -41,9 +39,7 @@ def main() -> int:
         profile = load_repo_profile(inventory, repo_slug)
         payload = build_ruleset_payload(profile)
         out_path = output_dir / f"{profile['profile_id']}.json"
-        out_path.write_text(
-            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
+        out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         print(str(out_path))
     return 0
 

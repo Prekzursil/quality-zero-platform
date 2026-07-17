@@ -160,8 +160,7 @@ def not_found_findings(
 ) -> Tuple[int | None, List[str], Exception | None]:
     """Build the finding payload for provider aliases that all returned 404."""
     message = (
-        "Codacy API endpoint was not found for providers: "
-        f"{', '.join(str(item) for item in provider_candidates)}."
+        f"Codacy API endpoint was not found for providers: {', '.join(str(item) for item in provider_candidates)}."
     )
     findings = [message]
     if last_exc is not None:
@@ -221,11 +220,7 @@ def is_retryable_pr_not_found(
     last_exc: Exception | None,
 ) -> bool:
     """Return whether a missing PR endpoint should be retried after a delay."""
-    return (
-        bool(base_query.pull_request)
-        and isinstance(last_exc, urllib.error.HTTPError)
-        and last_exc.code == 404
-    )
+    return bool(base_query.pull_request) and isinstance(last_exc, urllib.error.HTTPError) and last_exc.code == 404
 
 
 def request_analysis_status(
@@ -259,10 +254,7 @@ def sha_wait_message(
     if not observed_sha:
         return f"Codacy analysis for {scope_label} is not available yet."
     if observed_sha != target_sha:
-        return (
-            f"Codacy analysis for {scope_label} is still on {observed_sha[:12]} "
-            f"(waiting for {target_sha[:12]})."
-        )
+        return f"Codacy analysis for {scope_label} is still on {observed_sha[:12]} (waiting for {target_sha[:12]})."
     return None
 
 
@@ -293,10 +285,7 @@ def pull_request_issue_pending_message(
 ) -> str | None:
     """Return the pending status for a Codacy pull-request issues payload."""
     if payload.get("analyzed") is False:
-        return (
-            f"Codacy issues for pull request {query.pull_request} are not "
-            "available yet."
-        )
+        return f"Codacy issues for pull request {query.pull_request} are not available yet."
 
     issue_records = payload.get("data")
     if not isinstance(issue_records, list) or not issue_records:
@@ -324,9 +313,7 @@ def repository_pending_message(
 ) -> str | None:
     """Return the pending status for the default-branch repository analysis."""
     repository = text_deps.mapping_or_empty(payload.get("data"))
-    last_analysed_commit = text_deps.mapping_or_empty(
-        repository.get("lastAnalysedCommit")
-    )
+    last_analysed_commit = text_deps.mapping_or_empty(repository.get("lastAnalysedCommit"))
     pending_message = sha_wait_message(
         "repository",
         text_deps.preferred_text(last_analysed_commit.get("sha")).lower(),
@@ -415,9 +402,7 @@ def stale_pull_request_findings(
         f"Codacy issues for pull request {normalized_pr} are not available yet.",
         f"Codacy analysis for pull request {normalized_pr} issues is still on ",
     )
-    return any(
-        any(item.startswith(prefix) for prefix in prefixes) for item in findings
-    )
+    return any(any(item.startswith(prefix) for prefix in prefixes) for item in findings)
 
 
 def load_codacy_findings_with_retry(

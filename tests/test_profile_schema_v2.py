@@ -21,6 +21,8 @@ from __future__ import absolute_import
 
 import unittest
 
+from tests.control_plane_support import ROOT
+
 from scripts.quality.control_plane import load_inventory, load_repo_profile
 from scripts.quality.profile_normalization import (
     normalize_mode,
@@ -29,7 +31,6 @@ from scripts.quality.profile_normalization import (
     normalize_scanners,
 )
 from scripts.quality.profile_shape import validate_profile_shape
-from tests.control_plane_support import ROOT
 
 
 class ProfileSchemaV2ShapeTests(unittest.TestCase):

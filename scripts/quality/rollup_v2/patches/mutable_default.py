@@ -1,4 +1,5 @@
 """Deterministic patch generator for `mutable-default` category."""
+
 from __future__ import absolute_import
 
 import difflib
@@ -13,9 +14,7 @@ GENERATOR_VERSION = "mutable_default/1.0.0"
 CATEGORY = "mutable-default"
 
 # Matches `def f(x=[])` or `def f(x={})` patterns in function signatures
-_MUTABLE_DEFAULT = re.compile(
-    r"^(\s*def\s+\w+\s*\([^)]*?)(\w+)\s*=\s*(\[\]|\{\})\s*([,)])"
-)
+_MUTABLE_DEFAULT = re.compile(r"^(\s*def\s+\w+\s*\([^)]*?)(\w+)\s*=\s*(\[\]|\{\})\s*([,)])")
 
 
 def _build_def_line_replacement(target_line: str, match: re.Match) -> str:
@@ -23,7 +22,7 @@ def _build_def_line_replacement(target_line: str, match: re.Match) -> str:
     prefix = match.group(1)
     param_name = match.group(2)
     trailing = match.group(4)
-    new_def_line = f"{prefix}{param_name}=None{trailing}{target_line[match.end():]}"
+    new_def_line = f"{prefix}{param_name}=None{trailing}{target_line[match.end() :]}"
     if not new_def_line.endswith("\n"):  # pragma: no cover -- splitlines(keepends=True) always retains \n
         new_def_line += "\n"
     return new_def_line
@@ -33,8 +32,7 @@ def _find_body_start(lines: List[str], target_index: int) -> int:
     """Skip blank lines after the ``def`` to find where the body begins."""
     body_start = target_index + 1
     while (  # pragma: no cover -- blank lines between def and body are rare
-        body_start < len(lines)
-        and lines[body_start].strip() == ""
+        body_start < len(lines) and lines[body_start].strip() == ""
     ):
         body_start += 1
     return body_start
@@ -76,12 +74,14 @@ def generate(
     patched_lines[target_index] = new_def_line
     patched_lines.insert(body_start, guard_line)
 
-    diff = "".join(difflib.unified_diff(
-        lines,
-        patched_lines,
-        fromfile=f"a/{finding.file}",
-        tofile=f"b/{finding.file}",
-    ))
+    diff = "".join(
+        difflib.unified_diff(
+            lines,
+            patched_lines,
+            fromfile=f"a/{finding.file}",
+            tofile=f"b/{finding.file}",
+        )
+    )
     return PatchResult(
         unified_diff=diff,
         confidence="medium",

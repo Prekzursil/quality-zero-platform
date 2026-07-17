@@ -15,13 +15,7 @@ from pathlib import Path
 
 import yaml  # type: ignore[import-untyped]
 
-
-_WORKFLOW = (
-    Path(__file__).resolve().parents[1]
-    / ".github"
-    / "workflows"
-    / "reusable-bootstrap-repo.yml"
-)
+_WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "reusable-bootstrap-repo.yml"
 
 
 class ReusableBootstrapRepoWorkflowTests(unittest.TestCase):
@@ -51,9 +45,16 @@ class ReusableBootstrapRepoWorkflowTests(unittest.TestCase):
         inputs = self.doc[True]["workflow_dispatch"]["inputs"]
         stack_options = set(inputs["stack"].get("options", []))
         for stack_id in (
-            "fullstack-web", "python-only", "react-vite-vitest",
-            "go", "rust", "swift", "cpp-cmake", "dotnet-wpf",
-            "gradle-java", "python-tooling",
+            "fullstack-web",
+            "python-only",
+            "react-vite-vitest",
+            "go",
+            "rust",
+            "swift",
+            "cpp-cmake",
+            "dotnet-wpf",
+            "gradle-java",
+            "python-tooling",
         ):
             with self.subTest(stack=stack_id):
                 self.assertIn(stack_id, stack_options)
@@ -81,7 +82,9 @@ class ReusableBootstrapRepoWorkflowTests(unittest.TestCase):
         # they should only appear on ``env:`` lines or on top-level step fields
         # (``if:``, ``run:`` shell lines that reference env vars, etc.).
         heredoc_bodies = re.findall(
-            r"<<'PY'(.+?)PY", self.text, flags=re.DOTALL,
+            r"<<'PY'(.+?)PY",
+            self.text,
+            flags=re.DOTALL,
         )
         for body in heredoc_bodies:
             with self.subTest(body_excerpt=body[:60]):
@@ -92,9 +95,7 @@ class ReusableBootstrapRepoWorkflowTests(unittest.TestCase):
         """Only open a PR when ``steps.plan.outputs.ready == 'true'``."""
         promote_job = self.doc["jobs"]["promote"]
         steps = promote_job["steps"]
-        gated_steps = [
-            s for s in steps if "if" in s and "steps.plan.outputs.ready" in s["if"]
-        ]
+        gated_steps = [s for s in steps if "if" in s and "steps.plan.outputs.ready" in s["if"]]
         self.assertTrue(
             gated_steps,
             "No promotion PR step gated on 'ready' — the workflow would "

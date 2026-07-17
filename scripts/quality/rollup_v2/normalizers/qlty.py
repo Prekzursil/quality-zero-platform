@@ -1,4 +1,5 @@
 """QLTY normalizer (per design §4.2 + §A.6)."""
+
 from __future__ import absolute_import
 
 from pathlib import Path
@@ -25,6 +26,7 @@ class QLTYNormalizer(BaseNormalizer):
 
     QLTY provides severity directly in its issues array.
     """
+
     provider = "QLTY"
 
     def parse(self, artifact: Any, repo_root: Path) -> Iterable[Finding]:
@@ -35,16 +37,18 @@ class QLTYNormalizer(BaseNormalizer):
             raw_severity = str(issue.get("severity", "medium")).lower()
             severity = _SEVERITY_MAP.get(raw_severity, "medium")
             message = str(issue.get("message", ""))
-            yield self._build_finding(FindingDraft(
-                finding_id=f"qlty-{index:04d}",
-                file=str(issue.get("file", "")),
-                line=int(issue.get("line") or 1),
-                category=category,
-                category_group=CATEGORY_GROUP_QUALITY,
-                severity=severity,
-                primary_message=message,
-                rule_id=rule_id,
-                rule_url=None,
-                original_message=message,
-                context_snippet="",
-            ))
+            yield self._build_finding(
+                FindingDraft(
+                    finding_id=f"qlty-{index:04d}",
+                    file=str(issue.get("file", "")),
+                    line=int(issue.get("line") or 1),
+                    category=category,
+                    category_group=CATEGORY_GROUP_QUALITY,
+                    severity=severity,
+                    primary_message=message,
+                    rule_id=rule_id,
+                    rule_url=None,
+                    original_message=message,
+                    context_snippet="",
+                )
+            )

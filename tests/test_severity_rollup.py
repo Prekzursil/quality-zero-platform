@@ -141,9 +141,7 @@ class ClassifyLanesTests(unittest.TestCase):
         """``fail`` / ``failure`` / ``error`` / ``red`` are all failures."""
         for status in ("fail", "failure", "error", "red", "FAIL", " Failure "):
             with self.subTest(status=status):
-                verdict = sr.classify_lanes(
-                    self._profile(), {"codecov": status}
-                )
+                verdict = sr.classify_lanes(self._profile(), {"codecov": status})
                 self.assertEqual(verdict.verdict, "fail")
 
 

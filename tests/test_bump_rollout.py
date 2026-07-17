@@ -87,20 +87,24 @@ class ClassifyStagingOutcomeTests(unittest.TestCase):
 
     def test_all_staging_green_means_rollout(self) -> None:
         """100% staging success → ``proceed_to_rollout=True``."""
-        outcome = bump_rollout.classify_staging_outcome(staging_results=[
-            {"slug": "a/b", "conclusion": "success"},
-            {"slug": "c/d", "conclusion": "success"},
-        ])
+        outcome = bump_rollout.classify_staging_outcome(
+            staging_results=[
+                {"slug": "a/b", "conclusion": "success"},
+                {"slug": "c/d", "conclusion": "success"},
+            ]
+        )
         self.assertTrue(outcome["proceed_to_rollout"])
         self.assertFalse(outcome["rollback_required"])
         self.assertEqual(outcome["failed_repos"], [])
 
     def test_any_staging_failure_means_rollback(self) -> None:
         """Any non-success conclusion → rollback path."""
-        outcome = bump_rollout.classify_staging_outcome(staging_results=[
-            {"slug": "a/b", "conclusion": "success"},
-            {"slug": "c/d", "conclusion": "failure"},
-        ])
+        outcome = bump_rollout.classify_staging_outcome(
+            staging_results=[
+                {"slug": "a/b", "conclusion": "success"},
+                {"slug": "c/d", "conclusion": "failure"},
+            ]
+        )
         self.assertFalse(outcome["proceed_to_rollout"])
         self.assertTrue(outcome["rollback_required"])
         self.assertEqual(outcome["failed_repos"], ["c/d"])

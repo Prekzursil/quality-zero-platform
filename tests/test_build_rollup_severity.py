@@ -60,7 +60,10 @@ class BuildRollupSeverityTests(unittest.TestCase):
         }
         # lane_payloads left empty → rows fall back to context statuses
         payload = br.build_rollup(
-            profile=profile, lane_payloads={}, contexts=contexts, sha="abc",
+            profile=profile,
+            lane_payloads={},
+            contexts=contexts,
+            sha="abc",
         )
         # One warn-severity failure + one info-severity failure → overall warn
         self.assertEqual(payload["status"], "warn")
@@ -78,7 +81,10 @@ class BuildRollupSeverityTests(unittest.TestCase):
             "Sentry Zero": {"source": "check_run", "state": "completed", "conclusion": "success"},
         }
         payload = br.build_rollup(
-            profile=profile, lane_payloads={}, contexts=contexts, sha="abc",
+            profile=profile,
+            lane_payloads={},
+            contexts=contexts,
+            sha="abc",
         )
         self.assertEqual(payload["status"], "fail")
         self.assertEqual(payload["severity"]["verdict"], "fail")
@@ -93,7 +99,10 @@ class BuildRollupSeverityTests(unittest.TestCase):
             "Sentry Zero": {"source": "check_run", "state": "completed", "conclusion": "failure"},
         }
         payload = br.build_rollup(
-            profile=profile, lane_payloads={}, contexts=contexts, sha="abc",
+            profile=profile,
+            lane_payloads={},
+            contexts=contexts,
+            sha="abc",
         )
         self.assertEqual(payload["status"], "pass")
         self.assertEqual(payload["severity"]["infos"], ["sentry"])
@@ -102,7 +111,9 @@ class BuildRollupSeverityTests(unittest.TestCase):
         """Every rollup has a ``severity`` sub-dict with the expected keys."""
         payload = br.build_rollup(
             profile={"slug": "x", "active_required_contexts": []},
-            lane_payloads={}, contexts={}, sha="s",
+            lane_payloads={},
+            contexts={},
+            sha="s",
         )
         self.assertIn("severity", payload)
         self.assertIn("verdict", payload["severity"])

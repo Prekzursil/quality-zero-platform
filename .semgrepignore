@@ -15,6 +15,15 @@
 # token. Cloud-config dashboard had this triaged as a false positive.
 .github/workflows/reusable-scanner-matrix.yml
 
+# Design/plan docs under docs/ document the secret-detection feature itself
+# with ILLUSTRATIVE example secrets — AWS's own canonical documentation example
+# access-key id and sample PEM private-key blocks used to explain the
+# ``.quality/opengrep`` generic-secret rules. They are documentation, not
+# source, so they are not SAST targets (mirrors the lean model: "docs/templates
+# are not SAST targets"). Any REAL secret committed under docs/ is still caught
+# by the gitleaks gate (gate 5), which scans everything.
+docs/
+
 # This module is QZP's Jinja2 renderer for YAML / TOML / source-file
 # templates (see ``profiles/templates/``). The auto-config rule
 # ``python.flask.security.xss.audit.direct-use-of-jinja2`` flags any

@@ -1,4 +1,5 @@
 """Tests for LLM fallback cache key computation (per design §5.2)."""
+
 from __future__ import absolute_import
 
 import sys

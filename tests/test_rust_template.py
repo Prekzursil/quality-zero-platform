@@ -32,9 +32,7 @@ class RustCiTemplateTests(unittest.TestCase):
 
     def test_custom_channel_propagates(self) -> None:
         """``coverage.setup.rust_channel`` overrides default."""
-        rendered = self._render({
-            "coverage": {"setup": {"rust_channel": "nightly"}}
-        })
+        rendered = self._render({"coverage": {"setup": {"rust_channel": "nightly"}}})
         self.assertIn("toolchain: nightly", rendered)
 
     def test_llvm_cov_coverage_command(self) -> None:

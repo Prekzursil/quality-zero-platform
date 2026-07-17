@@ -85,8 +85,7 @@ def _load_analysis_revision(
 ) -> str:
     """Load the currently indexed commit SHA for one Sonar scope."""
     payload = config.request_json(
-        f"{config.sonar_api_base}/api/{config.analysis_path}?project="
-        f"{config.url_quote(args.project_key, safe='')}",
+        f"{config.sonar_api_base}/api/{config.analysis_path}?project={config.url_quote(args.project_key, safe='')}",
         auth,
     )
     entry = config.named_entry(
@@ -185,14 +184,10 @@ def resolve_retry_settings(
     pending_fn = retry_kwargs.get("pending_fn", defaults.pending_fn)
     attempts = int(retry_kwargs.get("attempts", defaults.attempts))
     sleep_seconds = float(retry_kwargs.get("sleep_seconds", defaults.sleep_seconds))
-    unexpected = sorted(
-        set(retry_kwargs) - {"fetch_fn", "pending_fn", "attempts", "sleep_seconds"}
-    )
+    unexpected = sorted(set(retry_kwargs) - {"fetch_fn", "pending_fn", "attempts", "sleep_seconds"})
     if unexpected:
         names = ", ".join(unexpected)
-        raise TypeError(
-            f"Unexpected load_sonar_findings_with_retry parameters: {names}"
-        )
+        raise TypeError(f"Unexpected load_sonar_findings_with_retry parameters: {names}")
     return RetrySettings(
         fetch_fn=fetch_fn,
         pending_fn=pending_fn,
@@ -236,9 +231,7 @@ def should_retry_scoped_analysis(
     is_scoped_analysis: Callable[[Any], bool],
 ) -> bool:
     """Return whether the current Sonar scoped analysis should retry."""
-    return is_scoped_analysis(namespace) and bool(
-        findings or pending_message is not None
-    )
+    return is_scoped_analysis(namespace) and bool(findings or pending_message is not None)
 
 
 def final_retry_findings(

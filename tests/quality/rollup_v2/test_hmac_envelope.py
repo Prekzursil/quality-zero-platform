@@ -1,4 +1,5 @@
 """Tests for HMAC envelope encode/decode (per design §5.2 + §B.3.12)."""
+
 from __future__ import absolute_import
 
 import sys

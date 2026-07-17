@@ -6,6 +6,7 @@ Both ``test_quality_common.py`` (covers ``ReportSpec`` + I/O surfaces) and
 fixtures. Extracting them here removes the ~47-line duplication block qlty's
 smells gate previously flagged.
 """
+
 from __future__ import absolute_import
 
 import contextlib
@@ -34,9 +35,7 @@ def normalized_explicit_coverage() -> dict:
             "runner": " ",
             "shell": "",
             "command": "  qlty check  ",
-            "inputs": [
-                {"format": "xml", "name": "coverage", "path": "coverage.xml"}
-            ],
+            "inputs": [{"format": "xml", "name": "coverage", "path": "coverage.xml"}],
             "require_sources": [" source-a ", "source-a", "source-b"],
             "min_percent": "98.5",
             "assert_mode": {"default": "", "python": " warn "},

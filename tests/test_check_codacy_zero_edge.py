@@ -5,12 +5,11 @@ from __future__ import absolute_import
 import unittest
 from argparse import Namespace
 from email.message import Message
+from unittest.mock import Mock, patch
 from urllib.error import HTTPError
-from unittest.mock import patch
 
 import scripts.quality.check_codacy_zero as check_codacy_zero
 from scripts.quality import codacy_zero_support
-from unittest.mock import Mock
 from scripts.quality.check_codacy_zero import (
     CodacyQuery,
     CodacyRetryConfig,
@@ -164,13 +163,9 @@ class CodacyZeroEdgeTests(unittest.TestCase):
                 raise HTTPError(url, 404, "Not Found", hdrs=Message(), fp=None)
             return current
 
-        with patch(
-            "scripts.quality.check_codacy_zero._request_json", side_effect=fake_request
-        ):
+        with patch("scripts.quality.check_codacy_zero._request_json", side_effect=fake_request):
             self.assertEqual(
-                _query_codacy_open_issues(
-                    self._base_query(), "token", ["custom", "gh"]
-                ),
+                _query_codacy_open_issues(self._base_query(), "token", ["custom", "gh"]),
                 (0, [], None),
             )
 
@@ -186,9 +181,7 @@ class CodacyZeroEdgeTests(unittest.TestCase):
             side_effect=capture_request,
         ):
             self.assertEqual(
-                _query_codacy_open_issues(
-                    self._base_query(pull_request="5"), "token", ["gh"]
-                ),
+                _query_codacy_open_issues(self._base_query(pull_request="5"), "token", ["gh"]),
                 (0, [], None),
             )
         self.assertEqual(
@@ -206,19 +199,14 @@ class CodacyZeroEdgeTests(unittest.TestCase):
 
     def test_open_issue_http_error_and_not_found_paths(self) -> None:
         """Cover open issue http error and not found paths."""
-        error = HTTPError(
-            "https://api.codacy.com", 401, "Unauthorized", hdrs=Message(), fp=None
-        )
+        error = HTTPError("https://api.codacy.com", 401, "Unauthorized", hdrs=Message(), fp=None)
         with (
             patch(
                 "scripts.quality.check_codacy_zero._query_codacy_provider",
                 side_effect=error,
             ),
             patch(
-                (
-                    "scripts.quality.check_codacy_zero."
-                    "_query_codacy_public_repository_issues"
-                ),
+                ("scripts.quality.check_codacy_zero._query_codacy_public_repository_issues"),
                 return_value=(0, []),
             ) as fallback_mock,
         ):
@@ -226,17 +214,13 @@ class CodacyZeroEdgeTests(unittest.TestCase):
                 _query_codacy_open_issues(self._base_query(), "token", ["gh"]),
                 (0, [], None),
             )
-        fallback_mock.assert_called_once_with(
-            "gh", "Prekzursil", "quality-zero-platform"
-        )
+        fallback_mock.assert_called_once_with("gh", "Prekzursil", "quality-zero-platform")
 
         with patch(
             "scripts.quality.check_codacy_zero._query_codacy_provider",
             side_effect=HTTPError("u", 500, "Boom", hdrs=Message(), fp=None),
         ):
-            open_issues, findings, exc = _query_codacy_open_issues(
-                self._base_query(), "token", ["gh"]
-            )
+            open_issues, findings, exc = _query_codacy_open_issues(self._base_query(), "token", ["gh"])
         self.assertIsNone(open_issues)
         self.assertEqual(findings, ["Codacy API request failed: HTTP 500"])
         self.assertIsNotNone(exc)
@@ -245,18 +229,14 @@ class CodacyZeroEdgeTests(unittest.TestCase):
             "scripts.quality.check_codacy_zero._query_codacy_provider",
             side_effect=RuntimeError("network broke"),
         ):
-            open_issues, findings, exc = _query_codacy_open_issues(
-                self._base_query(), "token", ["gh"]
-            )
+            open_issues, findings, exc = _query_codacy_open_issues(self._base_query(), "token", ["gh"])
         self.assertIsNone(open_issues)
         self.assertEqual(findings, ["Codacy API request failed: network broke"])
         self.assertIsInstance(exc, RuntimeError)
 
         def fake_provider(*_args, **_kwargs):
             """Handle fake provider."""
-            raise HTTPError(
-                "https://api.codacy.com", 404, "Not Found", hdrs=Message(), fp=None
-            )
+            raise HTTPError("https://api.codacy.com", 404, "Not Found", hdrs=Message(), fp=None)
 
         with patch(
             "scripts.quality.check_codacy_zero._query_codacy_provider",
@@ -273,15 +253,9 @@ class CodacyZeroEdgeTests(unittest.TestCase):
 
     def test_fallback_and_http_error_helpers(self) -> None:
         """Cover fallback and http error helpers cover remaining branches."""
-        self.assertIsNone(
-            check_codacy_zero._fallback_public_issues(
-                self._base_query(pull_request="5")
-            )
-        )
+        self.assertIsNone(check_codacy_zero._fallback_public_issues(self._base_query(pull_request="5")))
 
-        error = HTTPError(
-            "https://api.codacy.com", 401, "Unauthorized", hdrs=Message(), fp=None
-        )
+        error = HTTPError("https://api.codacy.com", 401, "Unauthorized", hdrs=Message(), fp=None)
         with patch(
             "scripts.quality.check_codacy_zero._fallback_public_issues",
             return_value=None,
@@ -295,11 +269,9 @@ class CodacyZeroEdgeTests(unittest.TestCase):
             "scripts.quality.check_codacy_zero._fallback_public_issues",
             return_value=(None, [], RuntimeError("fallback broke")),
         ):
-            open_issues, findings, exc, should_return = (
-                check_codacy_zero._handle_codacy_http_error(
-                    error,
-                    self._base_query(),
-                )
+            open_issues, findings, exc, should_return = check_codacy_zero._handle_codacy_http_error(
+                error,
+                self._base_query(),
             )
         self.assertIsNone(open_issues)
         self.assertEqual(findings, [])
@@ -308,9 +280,7 @@ class CodacyZeroEdgeTests(unittest.TestCase):
 
     def test_direct_wrapper_helpers(self) -> None:
         """Cover direct wrapper helpers delegate to support functions."""
-        error = HTTPError(
-            "https://api.codacy.com", 401, "Unauthorized", hdrs=Message(), fp=None
-        )
+        error = HTTPError("https://api.codacy.com", 401, "Unauthorized", hdrs=Message(), fp=None)
 
         with patch(
             "scripts.quality.check_codacy_zero._fallback_public_issues",
@@ -323,10 +293,7 @@ class CodacyZeroEdgeTests(unittest.TestCase):
 
         self.assertEqual(
             check_codacy_zero._sha_wait_message("repository", "oldsha", "targetsha"),
-            (
-                "Codacy analysis for repository is still on oldsha "
-                "(waiting for targetsha)."
-            ),
+            ("Codacy analysis for repository is still on oldsha (waiting for targetsha)."),
         )
         self.assertIsNone(
             check_codacy_zero._pull_request_pending_message(
@@ -366,9 +333,7 @@ class CodacyZeroEdgeTests(unittest.TestCase):
             "_query_codacy_provider",
             side_effect=RuntimeError("provider broke"),
         ):
-            open_issues, findings, exc, should_return = _query_codacy_candidate(
-                query, "token"
-            )
+            open_issues, findings, exc, should_return = _query_codacy_candidate(query, "token")
         self.assertIsNone(open_issues)
         self.assertEqual(findings, ["Codacy API request failed: provider broke"])
         self.assertIsInstance(exc, RuntimeError)
@@ -391,14 +356,12 @@ class CodacyZeroEdgeTests(unittest.TestCase):
         """Cover not found findings without exception."""
         open_issues, findings, exc = check_codacy_zero._not_found_findings(["gh"], None)
         self.assertIsNone(open_issues)
-        self.assertEqual(
-            findings, ["Codacy API endpoint was not found for providers: gh."]
-        )
+        self.assertEqual(findings, ["Codacy API endpoint was not found for providers: gh."])
         self.assertIsNone(exc)
 
     def test_main_status_paths(self) -> None:
         """Cover main status paths."""
-        empty_value = str()
+        empty_value = ""
         args = Namespace(
             provider="gh",
             owner="Prekzursil",
@@ -411,9 +374,7 @@ class CodacyZeroEdgeTests(unittest.TestCase):
         with (
             patch.dict("os.environ", {}, clear=True),
             patch.object(check_codacy_zero, "_parse_args", return_value=args),
-            patch.object(
-                check_codacy_zero, "write_report", return_value=0
-            ) as write_report_mock,
+            patch.object(check_codacy_zero, "write_report", return_value=0) as write_report_mock,
         ):
             self.assertEqual(check_codacy_zero.main(), 1)
         self.assertEqual(
@@ -421,9 +382,7 @@ class CodacyZeroEdgeTests(unittest.TestCase):
             ["CODACY_API_TOKEN is missing."],
         )
 
-        success_args = Namespace(
-            **{**args.__dict__, "token": "explicit-token", "pull_request": "5"}
-        )
+        success_args = Namespace(**{**args.__dict__, "token": "explicit-token", "pull_request": "5"})
         with (
             patch.object(check_codacy_zero, "_parse_args", return_value=success_args),
             patch.object(
@@ -432,11 +391,11 @@ class CodacyZeroEdgeTests(unittest.TestCase):
                 return_value=(0, [], None),
             ),
             patch.object(
-                check_codacy_zero, "_quality_threshold_findings", return_value=[],
+                check_codacy_zero,
+                "_quality_threshold_findings",
+                return_value=[],
             ),
-            patch.object(
-                check_codacy_zero, "write_report", return_value=0
-            ) as write_report_mock,
+            patch.object(check_codacy_zero, "write_report", return_value=0) as write_report_mock,
         ):
             self.assertEqual(check_codacy_zero.main(), 0)
         self.assertEqual(write_report_mock.call_args.args[0]["status"], "pass")
@@ -449,7 +408,9 @@ class CodacyZeroEdgeTests(unittest.TestCase):
                 return_value=(0, [], None),
             ),
             patch.object(
-                check_codacy_zero, "_quality_threshold_findings", return_value=[],
+                check_codacy_zero,
+                "_quality_threshold_findings",
+                return_value=[],
             ),
             patch.object(check_codacy_zero, "write_report", return_value=7),
         ):
@@ -464,9 +425,10 @@ class CodacyZeroEdgeTests(unittest.TestCase):
                 return_value=(5, ["Codacy reports 5 open issues (expected 0)."], None),
             ),
             patch.object(
-                check_codacy_zero, "_quality_threshold_findings", return_value=[],
+                check_codacy_zero,
+                "_quality_threshold_findings",
+                return_value=[],
             ),
             patch.object(check_codacy_zero, "write_report", return_value=0),
         ):
             self.assertEqual(check_codacy_zero.main(), 0)
-

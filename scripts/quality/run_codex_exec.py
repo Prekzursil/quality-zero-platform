@@ -17,9 +17,7 @@ _CODEX_EXECUTABLE = "codex"
 
 def _parse_args() -> argparse.Namespace:
     """Handle parse args."""
-    parser = argparse.ArgumentParser(
-        description="Run `codex exec` non-interactively from a trusted runner."
-    )
+    parser = argparse.ArgumentParser(description="Run `codex exec` non-interactively from a trusted runner.")
     parser.add_argument("--repo-dir", required=True)
     parser.add_argument("--prompt-file", required=True)
     parser.add_argument("--output-last-message", required=True)
@@ -50,9 +48,7 @@ def _resolved_codex_executable_path() -> str:
     """Handle resolved codex executable path."""
     codex_executable = shutil.which(_CODEX_EXECUTABLE)
     if not codex_executable:
-        raise FileNotFoundError(
-            f"Unable to locate required executable: {_CODEX_EXECUTABLE}"
-        )
+        raise FileNotFoundError(f"Unable to locate required executable: {_CODEX_EXECUTABLE}")
     return codex_executable
 
 
@@ -115,9 +111,7 @@ def build_codex_command(args: argparse.Namespace) -> List[str]:
     return cmd
 
 
-def _run_codex_exec(
-    args: argparse.Namespace, prompt_text: str
-) -> subprocess.CompletedProcess:
+def _run_codex_exec(args: argparse.Namespace, prompt_text: str) -> subprocess.CompletedProcess:
     """Run codex with a static literal argv list and prompt text passed via stdin."""
     executable_path = _resolved_codex_executable_path()
     command = build_codex_command(args)

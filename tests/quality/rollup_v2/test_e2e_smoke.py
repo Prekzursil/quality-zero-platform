@@ -1,4 +1,5 @@
 """End-to-end smoke test for the rollup_v2 pipeline (per Phase 18.2)."""
+
 from __future__ import absolute_import
 
 import json
@@ -137,10 +138,14 @@ class E2ESmokeTest(unittest.TestCase):
                 "sys.argv",
                 [
                     "__main__.py",
-                    "--artifacts-dir", str(artifacts_dir),
-                    "--output-dir", str(output_dir),
-                    "--repo", "owner/repo",
-                    "--sha", "abc123",
+                    "--artifacts-dir",
+                    str(artifacts_dir),
+                    "--output-dir",
+                    str(output_dir),
+                    "--repo",
+                    "owner/repo",
+                    "--sha",
+                    "abc123",
                 ],
             ):
                 result = main()

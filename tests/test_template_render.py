@@ -141,9 +141,7 @@ class StrictUndefinedTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             tmp_root = Path(tmp)
             (tmp_root / "bad").mkdir()
-            (tmp_root / "bad" / "x.yml.j2").write_text(
-                "value: {{ missing_key }}\n", encoding="utf-8"
-            )
+            (tmp_root / "bad" / "x.yml.j2").write_text("value: {{ missing_key }}\n", encoding="utf-8")
             with self.assertRaises(UndefinedError):
                 tr.render_template(
                     "bad/x.yml.j2",
@@ -263,11 +261,7 @@ class DependabotTemplateTests(unittest.TestCase):
 
     def test_major_updates_are_ignored_by_default(self) -> None:
         """Every rendered update blocks major bumps — goes via ``bumps.yml``."""
-        profile = {
-            "dependabot": {
-                "updates": [{"ecosystem": "npm", "directory": "/ui"}]
-            }
-        }
+        profile = {"dependabot": {"updates": [{"ecosystem": "npm", "directory": "/ui"}]}}
         data = yaml.safe_load(self._render(profile))
         ignores = data["updates"][0]["ignore"]
         self.assertEqual(ignores[0]["dependency-name"], "*")
@@ -287,9 +281,7 @@ class CiFragmentTemplateTests(unittest.TestCase):
 
     def test_setup_python_defaults_to_3_12(self) -> None:
         """Fragment defaults to Python 3.12 when profile omits it."""
-        rendered = tr.render_template(
-            "common/ci-fragments/setup-python.yml.j2", {"coverage": {}}
-        )
+        rendered = tr.render_template("common/ci-fragments/setup-python.yml.j2", {"coverage": {}})
         self.assertIn("uses: actions/setup-python@v5", rendered)
         self.assertIn('python-version: "3.12"', rendered)
 
@@ -303,9 +295,7 @@ class CiFragmentTemplateTests(unittest.TestCase):
 
     def test_setup_node_omitted_when_profile_has_no_node(self) -> None:
         """Python-only stacks render the setup-node fragment as empty."""
-        rendered = tr.render_template(
-            "common/ci-fragments/setup-node.yml.j2", {"coverage": {}}
-        )
+        rendered = tr.render_template("common/ci-fragments/setup-node.yml.j2", {"coverage": {}})
         self.assertNotIn("setup-node", rendered)
 
     def test_setup_node_renders_when_profile_declares_it(self) -> None:
@@ -333,9 +323,7 @@ class EnvironmentContractTests(unittest.TestCase):
                 {% endfor %}
                 """
             )
-            (tmp_root / "common" / "list.yml.j2").write_text(
-                template_text, encoding="utf-8"
-            )
+            (tmp_root / "common" / "list.yml.j2").write_text(template_text, encoding="utf-8")
             rendered = tr.render_template(
                 "common/list.yml.j2",
                 {"names": ["alpha", "beta"]},

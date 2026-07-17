@@ -64,7 +64,8 @@ def _utc_now_iso() -> str:
 
 def make_gh_secret_setter(
     secret_value: str,
-    *, runner: ProcessRunner = subprocess.run,
+    *,
+    runner: ProcessRunner = subprocess.run,
 ) -> SecretSetter:
     """Build a ``SecretSetter`` closure capturing ``secret_value``.
 
@@ -74,17 +75,27 @@ def make_gh_secret_setter(
     opaque setter callable. This keeps ``sync_secret``'s scope free
     of tainted data for CodeQL's clear-text-sensitive-data check.
     """
+
     def _set(
-        secret_name: str, target_slug: str,
+        secret_name: str,
+        target_slug: str,
     ) -> "subprocess.CompletedProcess[str]":
         return runner(
             [
-                "gh", "secret", "set", secret_name,
-                "--repo", target_slug,
-                "--body", secret_value,
+                "gh",
+                "secret",
+                "set",
+                secret_name,
+                "--repo",
+                target_slug,
+                "--body",
+                secret_value,
             ],
-            capture_output=True, text=True, check=False,
+            capture_output=True,
+            text=True,
+            check=False,
         )  # nosec B603 — gh args are controlled by call site
+
     return _set
 
 
@@ -116,12 +127,14 @@ def sync_secret(
         else:
             completed = secret_setter(secret_name, target)
             status = "synced" if completed.returncode == 0 else "failed"
-        records.append({
-            "secret_name": secret_name,
-            "status": status,
-            "target_slug": target,
-            "timestamp_utc": _utc_now_iso(),
-        })
+        records.append(
+            {
+                "secret_name": secret_name,
+                "status": status,
+                "target_slug": target,
+                "timestamp_utc": _utc_now_iso(),
+            }
+        )
     return records
 
 
@@ -168,7 +181,8 @@ if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
         help="Env var holding the secret value (never a CLI arg).",
     )
     parser.add_argument(
-        "--targets", required=True,
+        "--targets",
+        required=True,
         help="Comma-separated list of owner/name slugs.",
     )
     parser.add_argument("--audit-log", default="audit/secrets-sync.jsonl")
@@ -182,10 +196,7 @@ if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
         sys.stderr.write("::error::secret value env var is empty\n")
         raise SystemExit(2)
     _targets = [s.strip() for s in _args.targets.split(",") if s.strip()]
-    _setter = (
-        None if _args.dry_run
-        else make_gh_secret_setter(_value)
-    )
+    _setter = None if _args.dry_run else make_gh_secret_setter(_value)
     _records = sync_secret(
         secret_name=_args.secret_name,
         target_slugs=_targets,
@@ -200,6 +211,5 @@ if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
     _synced = sum(1 for r in _records if r.get("status") == "synced")
     _failed = sum(1 for r in _records if r.get("status") == "failed")
     sys.stdout.write(
-        f"secrets-sync: {len(_records)} targets, "
-        f"{_synced} synced, {_failed} failed\n",
+        f"secrets-sync: {len(_records)} targets, {_synced} synced, {_failed} failed\n",
     )

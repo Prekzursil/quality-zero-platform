@@ -1,4 +1,5 @@
 """Deterministic patch generator for `dead-code` category."""
+
 from __future__ import absolute_import
 
 import difflib
@@ -66,12 +67,14 @@ def generate(
 
     patched_lines = lines[:target_index] + lines[end_index:]
 
-    diff = "".join(difflib.unified_diff(
-        lines,
-        patched_lines,
-        fromfile=f"a/{finding.file}",
-        tofile=f"b/{finding.file}",
-    ))
+    diff = "".join(
+        difflib.unified_diff(
+            lines,
+            patched_lines,
+            fromfile=f"a/{finding.file}",
+            tofile=f"b/{finding.file}",
+        )
+    )
     if not diff:  # pragma: no cover -- defensive; requires exact block removal to produce empty diff
         return PatchDeclined(
             reason_code="ambiguous-fix",

@@ -1,4 +1,5 @@
 """Secret redaction for quality-rollup-v2 canonical findings (per design B.1)."""
+
 from __future__ import absolute_import
 
 import re

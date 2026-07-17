@@ -63,7 +63,9 @@ def _coverage_data(payload: Mapping[str, Any]) -> Mapping[str, Any]:
 
 
 _COVERAGE_PERCENTAGE_KEYS = (
-    "coveragePercentage", "linesCoveragePercentage", "filesCoveragePercentage",
+    "coveragePercentage",
+    "linesCoveragePercentage",
+    "filesCoveragePercentage",
 )
 
 
@@ -73,10 +75,7 @@ def _coverage_uploaded(coverage: Mapping[str, Any]) -> bool:
     Codacy returns ``{"numberTotalFiles": N}`` even when no coverage report
     has been pushed — the file count alone is not a coverage signal.
     """
-    return any(
-        _coerce_number(coverage.get(key)) is not None
-        for key in _COVERAGE_PERCENTAGE_KEYS
-    )
+    return any(_coerce_number(coverage.get(key)) is not None for key in _COVERAGE_PERCENTAGE_KEYS)
 
 
 def _coverage_percentage(coverage: Mapping[str, Any]) -> float | None:
@@ -109,7 +108,10 @@ def parse_quality_snapshot(payload: Mapping[str, Any]) -> CodacyQualitySnapshot:
 
 
 def fetch_repository_quality(
-    repository_analysis_url: str, token: str, *, request_json: JsonRequester,
+    repository_analysis_url: str,
+    token: str,
+    *,
+    request_json: JsonRequester,
 ) -> CodacyQualitySnapshot:
     """Fetch one Codacy repository-analysis payload and parse it."""
     payload = request_json(repository_analysis_url, token)
@@ -122,10 +124,7 @@ def _complexity_finding(snapshot: CodacyQualitySnapshot) -> str | None:
     cap = snapshot.max_complex_files_percentage
     if actual is None or cap is None or actual <= cap:
         return None
-    return (
-        f"Codacy complex-files percentage is {actual:g}% "
-        f"(goal: <= {cap:g}%)."
-    )
+    return f"Codacy complex-files percentage is {actual:g}% (goal: <= {cap:g}%)."
 
 
 def _duplication_finding(snapshot: CodacyQualitySnapshot) -> str | None:
@@ -134,14 +133,13 @@ def _duplication_finding(snapshot: CodacyQualitySnapshot) -> str | None:
     cap = snapshot.max_duplicated_files_percentage
     if actual is None or cap is None or actual <= cap:
         return None
-    return (
-        f"Codacy duplication percentage is {actual:g}% "
-        f"(goal: <= {cap:g}%)."
-    )
+    return f"Codacy duplication percentage is {actual:g}% (goal: <= {cap:g}%)."
 
 
 def _coverage_findings(
-    snapshot: CodacyQualitySnapshot, *, coverage_floor: float,
+    snapshot: CodacyQualitySnapshot,
+    *,
+    coverage_floor: float,
 ) -> List[str]:
     """Return findings for missing or below-floor coverage."""
     if not snapshot.coverage_uploaded:
@@ -152,19 +150,19 @@ def _coverage_findings(
     actual = snapshot.coverage_percentage
     if actual is None:
         return [
-            "Codacy coverage payload omitted a percentage value — "
-            "treat as missing per strict-zero contract.",
+            "Codacy coverage payload omitted a percentage value — treat as missing per strict-zero contract.",
         ]
     if actual < coverage_floor:
         return [
-            f"Codacy coverage is {actual:g}% "
-            f"(strict-zero floor: {coverage_floor:g}% line+branch).",
+            f"Codacy coverage is {actual:g}% (strict-zero floor: {coverage_floor:g}% line+branch).",
         ]
     return []
 
 
 def evaluate_quality_thresholds(
-    snapshot: CodacyQualitySnapshot, *, coverage_floor: float = DEFAULT_COVERAGE_FLOOR,
+    snapshot: CodacyQualitySnapshot,
+    *,
+    coverage_floor: float = DEFAULT_COVERAGE_FLOOR,
 ) -> List[str]:
     """Return the list of threshold-violation findings for one snapshot.
 

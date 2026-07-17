@@ -78,17 +78,16 @@ def bump_pins_to_target(text: str, *, target_sha: str) -> Tuple[str, int]:
         if old_sha == target_sha:
             return match.group(0)
         bumps += 1
-        return (
-            f"Prekzursil/quality-zero-platform/.github/workflows/"
-            f"{match.group('name')}@{target_sha}"
-        )
+        return f"Prekzursil/quality-zero-platform/.github/workflows/{match.group('name')}@{target_sha}"
 
     new_text = _QZP_PIN_RE.sub(_replace, text)
     return new_text, bumps
 
 
 def bump_workflow_files(
-    files: Mapping[str, str], *, target_sha: str,
+    files: Mapping[str, str],
+    *,
+    target_sha: str,
 ) -> Dict[str, Dict[str, Any]]:
     """Apply ``bump_pins_to_target`` to every ``{path: text}`` pair.
 
@@ -119,15 +118,18 @@ def _run_cli() -> None:  # pragma: no cover — ad-hoc CLI
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--target-sha", required=True,
+        "--target-sha",
+        required=True,
         help="40-char hex SHA to pin all QZP reusable workflows to.",
     )
     parser.add_argument(
-        "--workflow-dir", default=".github/workflows",
+        "--workflow-dir",
+        default=".github/workflows",
         help="Directory whose .yml files should be bumped in-place.",
     )
     parser.add_argument(
-        "--apply", action="store_true",
+        "--apply",
+        action="store_true",
         help="Write changes to disk (default: dry-run, prints a summary).",
     )
     args = parser.parse_args()
@@ -137,23 +139,17 @@ def _run_cli() -> None:  # pragma: no cover — ad-hoc CLI
         print(f"workflow dir not found: {workflow_dir}", file=sys.stderr)
         raise SystemExit(2)
 
-    files = {
-        str(p): p.read_text(encoding="utf-8")
-        for p in sorted(workflow_dir.glob("*.yml"))
-    }
+    files = {str(p): p.read_text(encoding="utf-8") for p in sorted(workflow_dir.glob("*.yml"))}
     results = bump_workflow_files(files, target_sha=args.target_sha)
 
-    summary = {
-        path: result["bumped"] for path, result in results.items()
-    }
+    summary = {path: result["bumped"] for path, result in results.items()}
     print(json.dumps(summary, indent=2, sort_keys=True))
 
     if args.apply:
         for path, result in results.items():
             if result["bumped"]:
                 Path(path).write_text(result["new_text"], encoding="utf-8")
-                print(f"wrote {path} ({result['bumped']} pin(s) bumped)",
-                      file=sys.stderr)
+                print(f"wrote {path} ({result['bumped']} pin(s) bumped)", file=sys.stderr)
 
 
 if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI

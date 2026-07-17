@@ -74,9 +74,7 @@ class ContextWaitRequest:
 
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments for the quality rollup builder."""
-    parser = argparse.ArgumentParser(
-        description="Build one aggregated strict-zero rollup."
-    )
+    parser = argparse.ArgumentParser(description="Build one aggregated strict-zero rollup.")
     parser.add_argument("--profile-json", required=True)
     parser.add_argument("--repo", required=True)
     parser.add_argument("--sha", required=True)
@@ -160,10 +158,7 @@ def _wait_for_contexts(request: ContextWaitRequest) -> Dict[str, Dict[str, str]]
     final_contexts: Dict[str, Dict[str, str]] = {}
     while time.time() <= deadline:
         final_contexts = load_check_contexts(request.repo, request.sha, request.token)
-        statuses = [
-            _status_from_context(context_name, final_contexts)
-            for context_name in request.required_contexts
-        ]
+        statuses = [_status_from_context(context_name, final_contexts) for context_name in request.required_contexts]
         if "pending" not in statuses and "missing" not in statuses:
             break
         time.sleep(max(request.poll_seconds, 0))
@@ -269,9 +264,7 @@ def build_rollup(
         for context_name in required_contexts
     ]
     overall = _aggregate_rollup_status(rows)
-    severity_verdict = classify_lanes(
-        profile, _lane_statuses_from_rows(rows, reverse_map)
-    )
+    severity_verdict = classify_lanes(profile, _lane_statuses_from_rows(rows, reverse_map))
     severity_payload = failing_lanes_to_gate_output(severity_verdict)
     overall = _apply_severity_softening(overall, severity_verdict.verdict)
     return {
@@ -306,9 +299,7 @@ def main() -> int:
     """Run the quality rollup generator."""
     args = parse_args()
     profile = json.loads(Path(args.profile_json).read_text(encoding="utf-8"))
-    token = (
-        os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")
-    ).strip()
+    token = (os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")).strip()
     required_contexts = sorted(profile.get("active_required_contexts", []))
     contexts = (
         _wait_for_contexts(

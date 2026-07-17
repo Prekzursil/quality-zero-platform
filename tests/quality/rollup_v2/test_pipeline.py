@@ -1,4 +1,5 @@
 """Tests for pipeline orchestrator (per design §4.2 + §A.3.5)."""
+
 from __future__ import absolute_import
 
 import sys
@@ -96,9 +97,7 @@ class RunPipelineTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.repo_root = Path(self._tmp.name).resolve()
         (self.repo_root / "src").mkdir()
-        (self.repo_root / "src" / "app.py").write_text(
-            "x = 1\n" * 20, encoding="utf-8"
-        )
+        (self.repo_root / "src" / "app.py").write_text("x = 1\n" * 20, encoding="utf-8")
         self.output_dir = self.repo_root / "output"
         self.output_dir.mkdir()
 
@@ -108,9 +107,7 @@ class RunPipelineTests(unittest.TestCase):
     def test_empty_artifacts_produce_empty_rollup(self) -> None:
         from scripts.quality.rollup_v2.pipeline import run_pipeline
 
-        result = run_pipeline(
-            artifacts={}, repo_root=self.repo_root
-        )
+        result = run_pipeline(artifacts={}, repo_root=self.repo_root)
         self.assertEqual(result.findings, [])
         self.assertEqual(result.normalizer_errors, [])
         self.assertIn("0 findings", result.markdown)
@@ -131,10 +128,7 @@ class RunPipelineTests(unittest.TestCase):
                 ]
             }
         }
-        result = run_pipeline(
-            artifacts=artifacts,
-            repo_root=self.repo_root
-        )
+        result = run_pipeline(artifacts=artifacts, repo_root=self.repo_root)
         self.assertGreaterEqual(len(result.findings), 1)
         self.assertEqual(result.normalizer_errors, [])
 
@@ -154,10 +148,7 @@ class RunPipelineTests(unittest.TestCase):
                 ]
             }
         }
-        result = run_pipeline(
-            artifacts=artifacts,
-            repo_root=self.repo_root
-        )
+        result = run_pipeline(artifacts=artifacts, repo_root=self.repo_root)
         self.assertIn("provider_summaries", result.canonical_payload)
         summaries = result.canonical_payload["provider_summaries"]
         self.assertGreaterEqual(len(summaries), 1)
@@ -209,12 +200,15 @@ class ProviderSummaryBranchTests(unittest.TestCase):
             ),
         )
 
-        with patch(
-            "scripts.quality.rollup_v2.pipeline.NORMALIZER_REGISTRY",
-            {"qlty": MagicMock()},
-        ) as mock_registry, patch(
-            "scripts.quality.rollup_v2.pipeline.RESERVED_LANE_KEYS",
-            {"test_reserved": test_label},
+        with (
+            patch(
+                "scripts.quality.rollup_v2.pipeline.NORMALIZER_REGISTRY",
+                {"qlty": MagicMock()},
+            ) as mock_registry,
+            patch(
+                "scripts.quality.rollup_v2.pipeline.RESERVED_LANE_KEYS",
+                {"test_reserved": test_label},
+            ),
         ):
             mock_normalizer = mock_registry["qlty"]
             mock_normalizer.run.return_value = MagicMock(
@@ -222,17 +216,13 @@ class ProviderSummaryBranchTests(unittest.TestCase):
                 normalizer_errors=[],
                 security_drops=[],
             )
-            result = run_pipeline(
-                artifacts={"qlty": {"issues": []}},
-                repo_root=repo_root
-            )
+            result = run_pipeline(artifacts={"qlty": {"issues": []}}, repo_root=repo_root)
         tmp.cleanup()
 
         # The test_label should appear once (from the finding), not twice
         labels = [s["provider"] for s in result.canonical_payload["provider_summaries"]]
         count = labels.count(test_label)
         self.assertEqual(count, 1, f"{test_label} should appear exactly once")
-
 
     def test_not_configured_placeholder_appended_when_no_matching_finding(self) -> None:
         """Cover line 231: placeholder appended when provider NOT in configured_providers."""
@@ -244,17 +234,17 @@ class ProviderSummaryBranchTests(unittest.TestCase):
         output_dir.mkdir()
 
         # Mock a reserved key whose label does NOT appear in any finding
-        with patch(
-            "scripts.quality.rollup_v2.pipeline.NORMALIZER_REGISTRY",
-            {},
-        ), patch(
-            "scripts.quality.rollup_v2.pipeline.RESERVED_LANE_KEYS",
-            {"phantom": "Phantom Zero"},
+        with (
+            patch(
+                "scripts.quality.rollup_v2.pipeline.NORMALIZER_REGISTRY",
+                {},
+            ),
+            patch(
+                "scripts.quality.rollup_v2.pipeline.RESERVED_LANE_KEYS",
+                {"phantom": "Phantom Zero"},
+            ),
         ):
-            result = run_pipeline(
-                artifacts={},
-                repo_root=repo_root
-            )
+            result = run_pipeline(artifacts={}, repo_root=repo_root)
         tmp.cleanup()
 
         labels = [s["provider"] for s in result.canonical_payload["provider_summaries"]]
@@ -283,10 +273,7 @@ class PipelineErrorBoundaryTests(unittest.TestCase):
         artifacts = {
             "codacy": [1, 2, 3],  # list has no .get method -> AttributeError
         }
-        result = run_pipeline(
-            artifacts=artifacts,
-            repo_root=self.repo_root
-        )
+        result = run_pipeline(artifacts=artifacts, repo_root=self.repo_root)
         # Rollup is still produced
         self.assertIsNotNone(result.markdown)
         self.assertGreaterEqual(len(result.normalizer_errors), 1)
@@ -313,10 +300,7 @@ class PipelineErrorBoundaryTests(unittest.TestCase):
                 ]
             },
         }
-        result = run_pipeline(
-            artifacts=artifacts,
-            repo_root=self.repo_root
-        )
+        result = run_pipeline(artifacts=artifacts, repo_root=self.repo_root)
         # Valid findings from qlty are still processed
         self.assertGreaterEqual(len(result.findings), 1)
         # Codacy error captured

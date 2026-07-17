@@ -1,4 +1,5 @@
 """Tests for LLM patch prompt template rendering (per design §A.2.2)."""
+
 from __future__ import absolute_import
 
 import sys
@@ -18,19 +19,19 @@ from scripts.quality.rollup_v2.schema.finding import (
 
 
 def _sample_finding(**overrides: object) -> Finding:
-    defaults: dict = dict(
-        schema_version=SCHEMA_VERSION,
-        finding_id="f1",
-        file="src/app.py",
-        line=42,
-        end_line=42,
-        column=None,
-        category="broad-except",
-        category_group=CATEGORY_GROUP_QUALITY,
-        severity="medium",
-        corroboration="single",
-        primary_message="Too broad exception clause",
-        corroborators=(
+    defaults: dict = {
+        "schema_version": SCHEMA_VERSION,
+        "finding_id": "f1",
+        "file": "src/app.py",
+        "line": 42,
+        "end_line": 42,
+        "column": None,
+        "category": "broad-except",
+        "category_group": CATEGORY_GROUP_QUALITY,
+        "severity": "medium",
+        "corroboration": "single",
+        "primary_message": "Too broad exception clause",
+        "corroborators": (
             Corroborator.from_provider(
                 provider="Codacy",
                 rule_id="Pylint_W0703",
@@ -38,17 +39,17 @@ def _sample_finding(**overrides: object) -> Finding:
                 original_message="Too broad exception",
             ),
         ),
-        fix_hint=None,
-        patch=None,
-        patch_source="none",
-        patch_confidence=None,
-        context_snippet="try:\n    do_something()\nexcept Exception:\n    pass",
-        source_file_hash="sha256:abc",
-        cwe=None,
-        autofixable=False,
-        tags=(),
-        patch_error=None,
-    )
+        "fix_hint": None,
+        "patch": None,
+        "patch_source": "none",
+        "patch_confidence": None,
+        "context_snippet": "try:\n    do_something()\nexcept Exception:\n    pass",
+        "source_file_hash": "sha256:abc",
+        "cwe": None,
+        "autofixable": False,
+        "tags": (),
+        "patch_error": None,
+    }
     defaults.update(overrides)
     return Finding(**defaults)
 
@@ -84,9 +85,7 @@ class PromptTemplateTests(unittest.TestCase):
 
     def test_message_is_redacted(self):
         """Primary message secrets are redacted in the prompt."""
-        finding = _sample_finding(
-            primary_message='Found secret MY_TOKEN = "superlongsecretvalue1234"'
-        )
+        finding = _sample_finding(primary_message='Found secret MY_TOKEN = "superlongsecretvalue1234"')
         prompt = render_prompt(finding, "clean code")
         self.assertNotIn("superlongsecretvalue1234", prompt)
         self.assertIn("<REDACTED>", prompt)

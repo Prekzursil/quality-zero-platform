@@ -61,11 +61,11 @@ def _wrap_html(title: str, body: str) -> str:
     safe_title = html.escape(title)
     return (
         "<!doctype html>\n"
-        "<html lang=\"en\">\n"
+        '<html lang="en">\n'
         "<head>\n"
-        f"  <meta charset=\"utf-8\">\n"
+        f'  <meta charset="utf-8">\n'
         f"  <title>{safe_title}</title>\n"
-        "  <link rel=\"stylesheet\" href=\"styles.css\">\n"
+        '  <link rel="stylesheet" href="styles.css">\n'
         "</head>\n"
         "<body>\n"
         f"  <h1>{safe_title}</h1>\n"
@@ -76,7 +76,8 @@ def _wrap_html(title: str, body: str) -> str:
 
 
 def render_coverage_trend_page(
-    *, rows: List[Mapping[str, Any]],
+    *,
+    rows: List[Mapping[str, Any]],
 ) -> str:
     """Return the HTML for ``coverage.html``."""
     if not rows:
@@ -86,24 +87,31 @@ def render_coverage_trend_page(
     for row in rows:
         slug = html.escape(str(row.get("slug", "")))
         cov = row.get("coverage_percent")
-        cov_text = f"{cov:.1f}" if isinstance(cov, int | float) else html.escape(
-            str(cov or ""),
+        cov_text = (
+            f"{cov:.1f}"
+            if isinstance(cov, int | float)
+            else html.escape(
+                str(cov or ""),
+            )
         )
         tbl_rows.append(f"      <tr><td>{slug}</td><td>{cov_text}</td></tr>")
-    body = _NL.join((
-        "    <table>",
-        "      <thead><tr><th>Repo</th><th>Coverage %</th></tr></thead>",
-        "      <tbody>",
-        _NL.join(tbl_rows),
-        "      </tbody>",
-        "    </table>",
-        "",
-    ))
+    body = _NL.join(
+        (
+            "    <table>",
+            "      <thead><tr><th>Repo</th><th>Coverage %</th></tr></thead>",
+            "      <tbody>",
+            _NL.join(tbl_rows),
+            "      </tbody>",
+            "    </table>",
+            "",
+        )
+    )
     return _wrap_html("Coverage trend", body)
 
 
 def render_drift_page(
-    *, entries: List[Mapping[str, Any]],
+    *,
+    entries: List[Mapping[str, Any]],
 ) -> str:
     """Return the HTML for ``drift.html``."""
     if not entries:
@@ -114,19 +122,14 @@ def render_drift_page(
         slug = html.escape(str(entry.get("slug", "")))
         status = html.escape(str(entry.get("status", "")))
         pr_url = str(entry.get("pr_url", ""))
-        pr_cell = (
-            f'<a href="{html.escape(pr_url)}">{html.escape(pr_url)}</a>'
-            if pr_url
-            else "&mdash;"
-        )
+        pr_cell = f'<a href="{html.escape(pr_url)}">{html.escape(pr_url)}</a>' if pr_url else "&mdash;"
         rows.append(
             f"      <tr><td>{slug}</td><td>{status}</td><td>{pr_cell}</td></tr>",
         )
     body = (
         "    <table>\n"
         "      <thead><tr><th>Repo</th><th>Status</th><th>Sync PR</th></tr></thead>\n"
-        "      <tbody>\n"
-        + "\n".join(rows) + "\n"
+        "      <tbody>\n" + "\n".join(rows) + "\n"
         "      </tbody>\n"
         "    </table>\n"
     )
@@ -134,7 +137,8 @@ def render_drift_page(
 
 
 def render_audit_page(
-    *, entries: List[Mapping[str, Any]],
+    *,
+    entries: List[Mapping[str, Any]],
 ) -> str:
     """Return the HTML for ``audit.html`` (break-glass / skip feed)."""
     if not entries:
@@ -162,8 +166,7 @@ def render_audit_page(
         "      <thead><tr>"
         "<th>Time</th><th>Label</th><th>PR</th><th>Actor</th>"
         "<th>Incident</th></tr></thead>\n"
-        "      <tbody>\n"
-        + "\n".join(rows) + "\n"
+        "      <tbody>\n" + "\n".join(rows) + "\n"
         "      </tbody>\n"
         "    </table>\n"
     )
@@ -225,30 +228,27 @@ if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
     _out = safe_output_path(_args.output_dir, fallback="site")
     _out.mkdir(parents=True, exist_ok=True)
 
-    _cov_rows = redact_private_repos(
-        load_coverage_rows(Path(_args.coverage_json)) if _args.coverage_json else []
-    )
+    _cov_rows = redact_private_repos(load_coverage_rows(Path(_args.coverage_json)) if _args.coverage_json else [])
     _coverage_path = (_out / "coverage.html").resolve()
     _coverage_path.relative_to(_out.resolve())
     _coverage_path.write_text(
-        render_coverage_trend_page(rows=_cov_rows), encoding="utf-8",
+        render_coverage_trend_page(rows=_cov_rows),
+        encoding="utf-8",
     )
 
-    _drift_rows = redact_private_repos(
-        load_drift_entries(Path(_args.drift_jsonl)) if _args.drift_jsonl else []
-    )
+    _drift_rows = redact_private_repos(load_drift_entries(Path(_args.drift_jsonl)) if _args.drift_jsonl else [])
     _drift_path = (_out / "drift.html").resolve()
     _drift_path.relative_to(_out.resolve())
     _drift_path.write_text(
-        render_drift_page(entries=_drift_rows), encoding="utf-8",
+        render_drift_page(entries=_drift_rows),
+        encoding="utf-8",
     )
 
-    _audit_rows = (
-        load_audit_jsonl(Path(_args.audit_jsonl)) if _args.audit_jsonl else []
-    )
+    _audit_rows = load_audit_jsonl(Path(_args.audit_jsonl)) if _args.audit_jsonl else []
     _audit_path = (_out / "audit.html").resolve()
     _audit_path.relative_to(_out.resolve())
     _audit_path.write_text(
-        render_audit_page(entries=_audit_rows), encoding="utf-8",
+        render_audit_page(entries=_audit_rows),
+        encoding="utf-8",
     )
     print(f"Wrote coverage.html, drift.html, audit.html to {_out}")

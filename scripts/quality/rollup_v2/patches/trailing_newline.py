@@ -1,4 +1,5 @@
 """Deterministic patch generator for `trailing-newline` category."""
+
 from __future__ import absolute_import
 
 import difflib
@@ -26,12 +27,14 @@ def generate(
     patched = source_file_content.rstrip("\n") + "\n"
     lines = source_file_content.splitlines(keepends=True)
     patched_lines = patched.splitlines(keepends=True)
-    diff = "".join(difflib.unified_diff(
-        lines,
-        patched_lines,
-        fromfile=f"a/{finding.file}",
-        tofile=f"b/{finding.file}",
-    ))
+    diff = "".join(
+        difflib.unified_diff(
+            lines,
+            patched_lines,
+            fromfile=f"a/{finding.file}",
+            tofile=f"b/{finding.file}",
+        )
+    )
     if not diff:  # pragma: no cover -- rstrip+newline always differs from original when precondition met
         return PatchDeclined(
             reason_code="ambiguous-fix",

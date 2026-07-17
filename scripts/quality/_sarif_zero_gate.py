@@ -6,6 +6,7 @@ results across all SARIF runs and pass only when the total is zero. Centralising
 the dispatch keeps the per-analyzer wrappers ~3 lines and removes the 69-line
 duplication block qlty's smells gate previously flagged.
 """
+
 from __future__ import absolute_import
 
 import argparse
@@ -52,7 +53,9 @@ def run_zero_gate(*, provider: str, argv: List[str] | None = None) -> int:
         description=f"{provider} zero-finding gate",
     )
     parser.add_argument(
-        "--sarif", required=True, help=f"Path to {provider} SARIF output",
+        "--sarif",
+        required=True,
+        help=f"Path to {provider} SARIF output",
     )
     parser.add_argument("--out-json", default=None, help="Write JSON summary")
     parser.add_argument("--out-md", default=None, help="Write Markdown summary")

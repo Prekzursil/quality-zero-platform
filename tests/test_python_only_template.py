@@ -24,10 +24,12 @@ class PythonOnlyCiTemplateTests(unittest.TestCase):
 
     def test_default_profile_renders_valid_workflow(self) -> None:
         """A minimal profile produces parseable YAML with ``test`` job."""
-        rendered = self._render({
-            "default_branch": "main",
-            "coverage": {"command": "pytest --cov"},
-        })
+        rendered = self._render(
+            {
+                "default_branch": "main",
+                "coverage": {"command": "pytest --cov"},
+            }
+        )
         doc = yaml.safe_load(rendered)
         self.assertEqual(doc["name"], "Python CI")
         self.assertIn("test", doc["jobs"])
@@ -46,12 +48,14 @@ class PythonOnlyCiTemplateTests(unittest.TestCase):
 
     def test_custom_python_version_propagates(self) -> None:
         """``coverage.setup.python`` reaches the rendered setup-python step."""
-        rendered = self._render({
-            "coverage": {
-                "setup": {"python": "3.13"},
-                "command": "pytest",
-            },
-        })
+        rendered = self._render(
+            {
+                "coverage": {
+                    "setup": {"python": "3.13"},
+                    "command": "pytest",
+                },
+            }
+        )
         self.assertIn('python-version: "3.13"', rendered)
 
     def test_pinned_checkout_action(self) -> None:

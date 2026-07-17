@@ -20,16 +20,16 @@ class ReactViteVitestCiTemplateTests(unittest.TestCase):
     @staticmethod
     def _render(profile: dict) -> str:
         """Render against ``profile``."""
-        return tr.render_template(
-            "stack/react-vite-vitest/ci.yml.j2", profile
-        )
+        return tr.render_template("stack/react-vite-vitest/ci.yml.j2", profile)
 
     def test_workflow_has_all_frontend_gates(self) -> None:
         """Test + lint + prettier + tsc gates all render in the single job."""
-        rendered = self._render({
-            "default_branch": "main",
-            "coverage": {"setup": {"node": "20"}, "command": "npx vitest run --coverage"},
-        })
+        rendered = self._render(
+            {
+                "default_branch": "main",
+                "coverage": {"setup": {"node": "20"}, "command": "npx vitest run --coverage"},
+            }
+        )
         doc = yaml.safe_load(rendered)
         self.assertEqual(doc["name"], "React Vite Vitest CI")
         self.assertIn("test", doc["jobs"])
@@ -48,28 +48,24 @@ class ReactViteVitestCiTemplateTests(unittest.TestCase):
     def test_concurrency_group_distinguishes_from_python(self) -> None:
         """Each stack has its own concurrency group name."""
         rendered = self._render({"coverage": {}})
-        self.assertIn(
-            "group: react-vite-vitest-ci-${{ github.ref }}", rendered
-        )
+        self.assertIn("group: react-vite-vitest-ci-${{ github.ref }}", rendered)
 
     def test_default_branch_override(self) -> None:
         """Repos on non-``main`` default branches honour the profile field."""
-        rendered = self._render({
-            "default_branch": "trunk",
-            "coverage": {"setup": {"node": "20"}},
-        })
+        rendered = self._render(
+            {
+                "default_branch": "trunk",
+                "coverage": {"setup": {"node": "20"}},
+            }
+        )
         doc = yaml.safe_load(rendered)
         self.assertEqual(doc[True]["push"]["branches"], ["trunk"])
 
     def test_list_templates_surfaces_react_vite_vitest_ci(self) -> None:
         """``list_templates('react-vite-vitest')`` finds the template."""
         mapping = tr.list_templates("react-vite-vitest")
-        self.assertIn(
-            "stack/react-vite-vitest/ci.yml.j2", mapping
-        )
-        self.assertEqual(
-            mapping["stack/react-vite-vitest/ci.yml.j2"], "ci.yml"
-        )
+        self.assertIn("stack/react-vite-vitest/ci.yml.j2", mapping)
+        self.assertEqual(mapping["stack/react-vite-vitest/ci.yml.j2"], "ci.yml")
 
 
 if __name__ == "__main__":  # pragma: no cover

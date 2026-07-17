@@ -26,14 +26,7 @@ class ParseRegionsTests(unittest.TestCase):
 
     def test_single_region_captures_body_and_line_numbers(self) -> None:
         """The body is the exact text between BEGIN and END lines."""
-        text = (
-            "prelude\n"
-            "# BEGIN quality-zero:alpha\n"
-            "owned-line-1\n"
-            "owned-line-2\n"
-            "# END quality-zero:alpha\n"
-            "postlude\n"
-        )
+        text = "prelude\n# BEGIN quality-zero:alpha\nowned-line-1\nowned-line-2\n# END quality-zero:alpha\npostlude\n"
         regions = mr.parse_regions(text)
         self.assertEqual(len(regions), 1)
         region = regions[0]
@@ -58,11 +51,7 @@ class ParseRegionsTests(unittest.TestCase):
 
     def test_marker_inside_code_comment_still_recognised(self) -> None:
         """Any comment-prefix works — regex just searches for the token."""
-        text = (
-            "<!-- BEGIN quality-zero:html-block -->\n"
-            "<p>owned</p>\n"
-            "<!-- END quality-zero:html-block -->\n"
-        )
+        text = "<!-- BEGIN quality-zero:html-block -->\n<p>owned</p>\n<!-- END quality-zero:html-block -->\n"
         regions = mr.parse_regions(text)
         self.assertEqual(regions[0].body, "<p>owned</p>\n")
 
@@ -80,11 +69,7 @@ class ParseRegionsTests(unittest.TestCase):
 
     def test_mismatched_ids_raises(self) -> None:
         """BEGIN alpha followed by END beta is rejected."""
-        text = (
-            "# BEGIN quality-zero:alpha\n"
-            "body\n"
-            "# END quality-zero:beta\n"
-        )
+        text = "# BEGIN quality-zero:alpha\nbody\n# END quality-zero:beta\n"
         with self.assertRaises(mr.MismatchedRegionError) as ctx:
             mr.parse_regions(text)
         self.assertIn("alpha", str(ctx.exception))
@@ -108,58 +93,31 @@ class ReplaceRegionsTests(unittest.TestCase):
 
     def test_empty_overrides_round_trips_exactly(self) -> None:
         """With no overrides the output is byte-identical to the input."""
-        text = (
-            "header\n"
-            "# BEGIN quality-zero:a\n"
-            "owned\n"
-            "# END quality-zero:a\n"
-            "trailer\n"
-        )
+        text = "header\n# BEGIN quality-zero:a\nowned\n# END quality-zero:a\ntrailer\n"
         self.assertEqual(mr.replace_regions(text, {}), text)
 
     def test_single_region_replacement(self) -> None:
         """Only the body between BEGIN and END changes; everything else stays."""
-        original = (
-            "line-before\n"
-            "# BEGIN quality-zero:alpha\n"
-            "old body\n"
-            "# END quality-zero:alpha\n"
-            "line-after\n"
-        )
+        original = "line-before\n# BEGIN quality-zero:alpha\nold body\n# END quality-zero:alpha\nline-after\n"
         updated = mr.replace_regions(original, {"alpha": "NEW BODY\n"})
         self.assertEqual(
             updated,
-            "line-before\n"
-            "# BEGIN quality-zero:alpha\n"
-            "NEW BODY\n"
-            "# END quality-zero:alpha\n"
-            "line-after\n",
+            "line-before\n# BEGIN quality-zero:alpha\nNEW BODY\n# END quality-zero:alpha\nline-after\n",
         )
 
     def test_replacement_without_trailing_newline_adds_one(self) -> None:
         """Bodies missing a terminator still render legal files."""
-        original = (
-            "# BEGIN quality-zero:x\n"
-            "any\n"
-            "# END quality-zero:x\n"
-        )
+        original = "# BEGIN quality-zero:x\nany\n# END quality-zero:x\n"
         updated = mr.replace_regions(original, {"x": "no-newline"})
         self.assertEqual(
             updated,
-            "# BEGIN quality-zero:x\n"
-            "no-newline\n"
-            "# END quality-zero:x\n",
+            "# BEGIN quality-zero:x\nno-newline\n# END quality-zero:x\n",
         )
 
     def test_replacement_preserves_unmatched_region(self) -> None:
         """Regions not in the override map keep their original body."""
         original = (
-            "# BEGIN quality-zero:a\n"
-            "A-old\n"
-            "# END quality-zero:a\n"
-            "# BEGIN quality-zero:b\n"
-            "B-old\n"
-            "# END quality-zero:b\n"
+            "# BEGIN quality-zero:a\nA-old\n# END quality-zero:a\n# BEGIN quality-zero:b\nB-old\n# END quality-zero:b\n"
         )
         updated = mr.replace_regions(original, {"b": "B-NEW\n"})
         self.assertIn("A-old\n", updated)
@@ -168,31 +126,18 @@ class ReplaceRegionsTests(unittest.TestCase):
 
     def test_replacement_preserves_surrounding_lines(self) -> None:
         """Content outside any region is preserved byte-for-byte."""
-        original = (
-            "above-1\n"
-            "above-2\n"
-            "# BEGIN quality-zero:core\n"
-            "old\n"
-            "# END quality-zero:core\n"
-            "below-1\n"
-            "below-2\n"
-        )
+        original = "above-1\nabove-2\n# BEGIN quality-zero:core\nold\n# END quality-zero:core\nbelow-1\nbelow-2\n"
         updated = mr.replace_regions(original, {"core": "new\n"})
         self.assertTrue(updated.startswith("above-1\nabove-2\n"))
         self.assertTrue(updated.endswith("below-1\nbelow-2\n"))
 
     def test_replacement_handles_empty_body(self) -> None:
         """An empty-string override yields a region with zero body lines."""
-        original = (
-            "# BEGIN quality-zero:x\n"
-            "keep-above\n"
-            "# END quality-zero:x\n"
-        )
+        original = "# BEGIN quality-zero:x\nkeep-above\n# END quality-zero:x\n"
         updated = mr.replace_regions(original, {"x": ""})
         self.assertEqual(
             updated,
-            "# BEGIN quality-zero:x\n"
-            "# END quality-zero:x\n",
+            "# BEGIN quality-zero:x\n# END quality-zero:x\n",
         )
 
 
@@ -202,16 +147,13 @@ class ConvenienceHelperTests(unittest.TestCase):
     def test_region_ids_matches_parse(self) -> None:
         """The ids helper returns the same values as ``parse_regions``."""
         text = (
-            "# BEGIN quality-zero:one\nA\n# END quality-zero:one\n"
-            "# BEGIN quality-zero:two\nB\n# END quality-zero:two\n"
+            "# BEGIN quality-zero:one\nA\n# END quality-zero:one\n# BEGIN quality-zero:two\nB\n# END quality-zero:two\n"
         )
         self.assertEqual(mr.region_ids(text), ["one", "two"])
 
     def test_region_bodies_maps_id_to_body(self) -> None:
         """The bodies helper returns a flat ``{id: body}`` dict."""
-        text = (
-            "# BEGIN quality-zero:foo\nfoo-body\n# END quality-zero:foo\n"
-        )
+        text = "# BEGIN quality-zero:foo\nfoo-body\n# END quality-zero:foo\n"
         self.assertEqual(mr.region_bodies(text), {"foo": "foo-body\n"})
 
 

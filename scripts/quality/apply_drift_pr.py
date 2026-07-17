@@ -32,7 +32,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--default-branch", default="main")
     parser.add_argument("--platform-ref", default="main")
     parser.add_argument(
-        "--cwd", default=".",
+        "--cwd",
+        default=".",
         help="Working directory (consumer repo checkout). Defaults to current dir.",
     )
     parser.add_argument(
@@ -97,11 +98,17 @@ def _gh_pr_create(
     """
     runner(
         [
-            "gh", "pr", "create",
-            "--base", default_branch,
-            "--head", branch,
-            "--title", "chore(drift-sync): apply template updates from quality-zero-platform",
-            "--body", summary_body,
+            "gh",
+            "pr",
+            "create",
+            "--base",
+            default_branch,
+            "--head",
+            branch,
+            "--title",
+            "chore(drift-sync): apply template updates from quality-zero-platform",
+            "--body",
+            summary_body,
         ],
         cwd=str(cwd),
         check=True,
@@ -130,9 +137,7 @@ def _gh_pr_create(
         )
 
 
-def _build_body(
-    out_of_sync: List[Mapping[str, Any]], platform_ref: str
-) -> str:
+def _build_body(out_of_sync: List[Mapping[str, Any]], platform_ref: str) -> str:
     """Build the PR body summary from the drift entries."""
     lines = [
         "Automated template-drift sync from quality-zero-platform.",
@@ -153,26 +158,34 @@ def _load_report(report_path: Path) -> Dict[str, Any] | None:
     if not report_path.is_file():
         print(
             f"apply_drift_pr: drift report not found: {report_path}",
-            file=sys.stderr, flush=True,
+            file=sys.stderr,
+            flush=True,
         )
         return None
     return json.loads(report_path.read_text(encoding="utf-8"))
 
 
 def _git_commit_and_push(
-    branch: str, applied: List[str], cwd: Path, runner,
+    branch: str,
+    applied: List[str],
+    cwd: Path,
+    runner,
 ) -> None:
     """Run the git checkout/add/commit/push sequence."""
     _git(["checkout", "-b", branch], cwd, runner)
     _git(["add", *applied], cwd, runner)
     _git(
         [
-            "-c", "user.email=platform-bot@quality-zero.local",
-            "-c", "user.name=quality-zero-platform drift-sync",
+            "-c",
+            "user.email=platform-bot@quality-zero.local",
+            "-c",
+            "user.name=quality-zero-platform drift-sync",
             "commit",
-            "-m", "chore(drift-sync): apply template updates",
+            "-m",
+            "chore(drift-sync): apply template updates",
         ],
-        cwd, runner,
+        cwd,
+        runner,
     )
     _git(["push", "--set-upstream", "origin", branch], cwd, runner)
 
@@ -194,12 +207,14 @@ def _run_drift_pr(args: argparse.Namespace, runner) -> int:
         return 0
     _git_commit_and_push(branch, applied, cwd, runner)
     _gh_pr_create(
-        branch, args.default_branch, _build_body(out_of_sync, args.platform_ref),
-        cwd, runner,
+        branch,
+        args.default_branch,
+        _build_body(out_of_sync, args.platform_ref),
+        cwd,
+        runner,
     )
     print(
-        f"apply_drift_pr: opened PR on {args.repo_slug} "
-        f"with {len(applied)} file(s) updated.",
+        f"apply_drift_pr: opened PR on {args.repo_slug} with {len(applied)} file(s) updated.",
         flush=True,
     )
     return 0

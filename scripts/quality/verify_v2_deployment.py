@@ -121,7 +121,10 @@ class CheckResult:
 
 
 def _check_path(
-    repo_root: Path, relative: str, phase: str, required: bool,
+    repo_root: Path,
+    relative: str,
+    phase: str,
+    required: bool,
 ) -> CheckResult:
     """Return ``CheckResult`` for one expected artefact."""
     full = repo_root / relative
@@ -129,9 +132,7 @@ def _check_path(
         return CheckResult(path=relative, phase=phase, status="ok")
     status = "missing" if required else "warning"
     detail = (
-        "required artefact missing"
-        if required
-        else "Phase 5 WIP — absence tolerated while this phase is being built"
+        "required artefact missing" if required else "Phase 5 WIP — absence tolerated while this phase is being built"
     )
     return CheckResult(path=relative, phase=phase, status=status, detail=detail)
 
@@ -199,7 +200,8 @@ def main() -> int:
     if not repo_root.is_dir():
         print(
             f"verify_v2_deployment: repo root not found: {repo_root}",
-            file=sys.stderr, flush=True,
+            file=sys.stderr,
+            flush=True,
         )
         return 2
 
@@ -212,11 +214,7 @@ def main() -> int:
         print(payload)
     if args.all and summary["missing_count"]:
         for rel in summary["missing"]:
-            line = (
-                f"::error::missing deliverable: {rel}"
-                if args.emit_annotations
-                else f"missing deliverable: {rel}"
-            )
+            line = f"::error::missing deliverable: {rel}" if args.emit_annotations else f"missing deliverable: {rel}"
             print(line, file=sys.stderr, flush=True)
         return 1
     return 0

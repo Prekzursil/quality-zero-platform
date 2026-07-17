@@ -42,11 +42,16 @@ class DeclaredFlagsTests(unittest.TestCase):
 
     def test_returns_flag_value_when_present(self) -> None:
         """``flag`` is preferred over ``name`` when both exist."""
-        path = _write_temp_json({
-            "coverage": {"inputs": [
-                {"name": "ui-raw", "flag": "ui", "path": "ui/cov.xml"},
-            ]}
-        }, self)
+        path = _write_temp_json(
+            {
+                "coverage": {
+                    "inputs": [
+                        {"name": "ui-raw", "flag": "ui", "path": "ui/cov.xml"},
+                    ]
+                }
+            },
+            self,
+        )
         self.assertEqual(validate_codecov_flags._declared_flags(path), ["ui"])
 
     def test_falls_back_to_name_when_flag_missing(self) -> None:
@@ -67,30 +72,29 @@ class DeclaredFlagsTests(unittest.TestCase):
 
     def test_deduplicates_while_preserving_order(self) -> None:
         """Repeated flags appear once and keep first-seen ordering."""
-        path = _write_temp_json({
-            "coverage": {"inputs": [
-                {"flag": "b", "path": "a"},
-                {"flag": "a", "path": "b"},
-                {"flag": "b", "path": "c"},
-            ]}
-        }, self)
+        path = _write_temp_json(
+            {
+                "coverage": {
+                    "inputs": [
+                        {"flag": "b", "path": "a"},
+                        {"flag": "a", "path": "b"},
+                        {"flag": "b", "path": "c"},
+                    ]
+                }
+            },
+            self,
+        )
         self.assertEqual(validate_codecov_flags._declared_flags(path), ["b", "a"])
 
     def test_missing_coverage_or_inputs_yields_empty(self) -> None:
         """Profiles without coverage/inputs return ``[]`` rather than crashing."""
+        self.assertEqual(validate_codecov_flags._declared_flags(_write_temp_json({}, self)), [])
         self.assertEqual(
-            validate_codecov_flags._declared_flags(_write_temp_json({}, self)), []
-        )
-        self.assertEqual(
-            validate_codecov_flags._declared_flags(
-                _write_temp_json({"coverage": {}}, self)
-            ),
+            validate_codecov_flags._declared_flags(_write_temp_json({"coverage": {}}, self)),
             [],
         )
         self.assertEqual(
-            validate_codecov_flags._declared_flags(
-                _write_temp_json({"coverage": {"inputs": []}}, self)
-            ),
+            validate_codecov_flags._declared_flags(_write_temp_json({"coverage": {"inputs": []}}, self)),
             [],
         )
 
@@ -101,12 +105,17 @@ class DeclaredFlagsTests(unittest.TestCase):
 
     def test_blank_flag_and_name_skipped(self) -> None:
         """Items with both ``flag`` and ``name`` blank are dropped."""
-        path = _write_temp_json({
-            "coverage": {"inputs": [
-                {"flag": "", "name": "", "path": "a.xml"},
-                {"flag": "ok", "path": "b.xml"},
-            ]}
-        }, self)
+        path = _write_temp_json(
+            {
+                "coverage": {
+                    "inputs": [
+                        {"flag": "", "name": "", "path": "a.xml"},
+                        {"flag": "ok", "path": "b.xml"},
+                    ]
+                }
+            },
+            self,
+        )
         self.assertEqual(validate_codecov_flags._declared_flags(path), ["ok"])
 
 
@@ -174,13 +183,10 @@ class CommitUrlTests(unittest.TestCase):
 
     def test_valid_inputs_produce_expected_url(self) -> None:
         """Happy path: the constructed URL matches the Codecov v2 shape."""
-        url = validate_codecov_flags._codecov_commit_url(
-            "Prekzursil/event-link", "abc123def"
-        )
+        url = validate_codecov_flags._codecov_commit_url("Prekzursil/event-link", "abc123def")
         self.assertEqual(
             url,
-            "https://api.codecov.io/api/v2/github/Prekzursil/"
-            "repos/event-link/commits/abc123def/",
+            "https://api.codecov.io/api/v2/github/Prekzursil/repos/event-link/commits/abc123def/",
         )
 
     def test_bad_slug_rejected(self) -> None:
@@ -200,9 +206,7 @@ class FetchCodecovReportTests(unittest.TestCase):
     def test_refuses_non_codecov_url(self) -> None:
         """Defence-in-depth: raises if URL escaped the allowed prefix."""
         with self.assertRaises(ValueError):
-            validate_codecov_flags._fetch_codecov_report(
-                "https://evil.example.com/", ""
-            )
+            validate_codecov_flags._fetch_codecov_report("https://evil.example.com/", "")
 
     def test_sends_authorization_header_when_token_set(self) -> None:
         """A non-empty token populates the ``Authorization`` header."""
@@ -224,9 +228,7 @@ class FetchCodecovReportTests(unittest.TestCase):
                 "<<dummy>>",
             )
         self.assertEqual(result, {"totals": {}})
-        self.assertEqual(
-            captured["headers"]["Authorization"], "Bearer <<dummy>>"
-        )
+        self.assertEqual(captured["headers"]["Authorization"], "Bearer <<dummy>>")
         self.assertEqual(captured["headers"]["Accept"], "application/json")
         self.assertEqual(captured["allowed_hosts"], {"api.codecov.io"})
 
@@ -282,30 +284,22 @@ class FlagsPresentInReportTests(unittest.TestCase):
 
     def test_empty_report_yields_empty_set(self) -> None:
         """Unknown schema returns an empty set rather than raising."""
-        self.assertEqual(
-            validate_codecov_flags._flags_present_in_report({}), set()
-        )
+        self.assertEqual(validate_codecov_flags._flags_present_in_report({}), set())
 
     def test_non_dict_flag_entries_ignored(self) -> None:
         """String entries under ``totals.flags`` are defensively skipped."""
         report = {"totals": {"flags": ["weird", {"name": "ok"}]}}
-        self.assertEqual(
-            validate_codecov_flags._flags_present_in_report(report), {"ok"}
-        )
+        self.assertEqual(validate_codecov_flags._flags_present_in_report(report), {"ok"})
 
     def test_totals_flags_none_handled(self) -> None:
         """Codecov occasionally returns ``totals.flags: null`` — coerced to empty."""
         report = {"totals": {"flags": None}}
-        self.assertEqual(
-            validate_codecov_flags._flags_present_in_report(report), set()
-        )
+        self.assertEqual(validate_codecov_flags._flags_present_in_report(report), set())
 
     def test_flag_dict_without_name_ignored(self) -> None:
         """A flag entry with a blank ``name`` is dropped."""
         report = {"totals": {"flags": [{"name": ""}, {"name": "ok"}]}}
-        self.assertEqual(
-            validate_codecov_flags._flags_present_in_report(report), {"ok"}
-        )
+        self.assertEqual(validate_codecov_flags._flags_present_in_report(report), {"ok"})
 
     def test_non_dict_top_level_report_yields_empty(self) -> None:
         """A non-dict report (list/None) returns empty without crashing."""
@@ -325,26 +319,20 @@ class ValidateFlagsTests(unittest.TestCase):
     def test_all_declared_present(self) -> None:
         """Returns empty when every declared flag was reported."""
         self.assertEqual(
-            validate_codecov_flags.validate_flags(
-                ["a", "b"], {"a", "b", "c"}
-            ),
+            validate_codecov_flags.validate_flags(["a", "b"], {"a", "b", "c"}),
             [],
         )
 
     def test_subset_missing(self) -> None:
         """Missing flags preserve declared-order for stable error messages."""
         self.assertEqual(
-            validate_codecov_flags.validate_flags(
-                ["first", "second", "third"], {"second"}
-            ),
+            validate_codecov_flags.validate_flags(["first", "second", "third"], {"second"}),
             ["first", "third"],
         )
 
     def test_empty_present(self) -> None:
         """All declared flags absent when the report is empty."""
-        self.assertEqual(
-            validate_codecov_flags.validate_flags(["x"], set()), ["x"]
-        )
+        self.assertEqual(validate_codecov_flags.validate_flags(["x"], set()), ["x"])
 
 
 class PollForFlagsTests(unittest.TestCase):
@@ -369,13 +357,18 @@ class PollForFlagsTests(unittest.TestCase):
         """A 404 on the first call triggers a retry; second call wins."""
         report = {"totals": {"flags": [{"name": "ok"}]}}
         http_404 = urllib.error.HTTPError(
-            "u", 404, "not found", {}, None  # type: ignore[arg-type]
+            "u",
+            404,
+            "not found",
+            {},
+            None,  # type: ignore[arg-type]
         )
-        with patch(
-            "scripts.quality.validate_codecov_flags._fetch_codecov_report",
-            side_effect=[http_404, report],
-        ) as fetch_mock, patch(
-            "scripts.quality.validate_codecov_flags.time.sleep"
+        with (
+            patch(
+                "scripts.quality.validate_codecov_flags._fetch_codecov_report",
+                side_effect=[http_404, report],
+            ) as fetch_mock,
+            patch("scripts.quality.validate_codecov_flags.time.sleep"),
         ):
             out = validate_codecov_flags._poll_for_flags(
                 "https://api.codecov.io/api/v2/github/x/repos/y/commits/abc/",
@@ -388,14 +381,20 @@ class PollForFlagsTests(unittest.TestCase):
     def test_non_retryable_http_error_reraised(self) -> None:
         """A 403 (not in the retry allowlist) propagates immediately."""
         http_403 = urllib.error.HTTPError(
-            "u", 403, "forbidden", {}, None  # type: ignore[arg-type]
+            "u",
+            403,
+            "forbidden",
+            {},
+            None,  # type: ignore[arg-type]
         )
-        with patch(
-            "scripts.quality.validate_codecov_flags._fetch_codecov_report",
-            side_effect=http_403,
-        ), patch(
-            "scripts.quality.validate_codecov_flags.time.sleep"
-        ), self.assertRaises(urllib.error.HTTPError):
+        with (
+            patch(
+                "scripts.quality.validate_codecov_flags._fetch_codecov_report",
+                side_effect=http_403,
+            ),
+            patch("scripts.quality.validate_codecov_flags.time.sleep"),
+            self.assertRaises(urllib.error.HTTPError),
+        ):
             validate_codecov_flags._poll_for_flags(
                 "https://api.codecov.io/api/v2/github/x/repos/y/commits/abc/",
                 "",
@@ -410,12 +409,14 @@ class PollForFlagsTests(unittest.TestCase):
         having only five entries, not on the wall-clock deadline.
         """
         err = urllib.error.URLError("boom")
-        with patch(
-            "scripts.quality.validate_codecov_flags._fetch_codecov_report",
-            side_effect=err,
-        ), patch(
-            "scripts.quality.validate_codecov_flags.time.sleep"
-        ), self.assertRaises(TimeoutError) as ctx:
+        with (
+            patch(
+                "scripts.quality.validate_codecov_flags._fetch_codecov_report",
+                side_effect=err,
+            ),
+            patch("scripts.quality.validate_codecov_flags.time.sleep"),
+            self.assertRaises(TimeoutError) as ctx,
+        ):
             validate_codecov_flags._poll_for_flags(
                 "https://api.codecov.io/api/v2/github/x/repos/y/commits/abc/",
                 "",
@@ -431,14 +432,20 @@ class PollForFlagsTests(unittest.TestCase):
         or by the elapsed-wall-clock check (whichever hits first).
         """
         http_503 = urllib.error.HTTPError(
-            "u", 503, "unavail", {}, None  # type: ignore[arg-type]
+            "u",
+            503,
+            "unavail",
+            {},
+            None,  # type: ignore[arg-type]
         )
-        with patch(
-            "scripts.quality.validate_codecov_flags._fetch_codecov_report",
-            side_effect=http_503,
-        ), patch(
-            "scripts.quality.validate_codecov_flags.time.sleep"
-        ), self.assertRaises(TimeoutError) as ctx:
+        with (
+            patch(
+                "scripts.quality.validate_codecov_flags._fetch_codecov_report",
+                side_effect=http_503,
+            ),
+            patch("scripts.quality.validate_codecov_flags.time.sleep"),
+            self.assertRaises(TimeoutError) as ctx,
+        ):
             validate_codecov_flags._poll_for_flags(
                 "https://api.codecov.io/api/v2/github/x/repos/y/commits/abc/",
                 "",
@@ -448,11 +455,13 @@ class PollForFlagsTests(unittest.TestCase):
 
     def test_deadline_breach_before_any_attempt_still_raises(self) -> None:
         """``deadline_seconds=0`` causes an immediate TimeoutError."""
-        with patch(
-            "scripts.quality.validate_codecov_flags._fetch_codecov_report",
-        ) as fetch_mock, patch(
-            "scripts.quality.validate_codecov_flags.time.sleep"
-        ), self.assertRaises(TimeoutError):
+        with (
+            patch(
+                "scripts.quality.validate_codecov_flags._fetch_codecov_report",
+            ) as fetch_mock,
+            patch("scripts.quality.validate_codecov_flags.time.sleep"),
+            self.assertRaises(TimeoutError),
+        ):
             validate_codecov_flags._poll_for_flags(
                 "https://api.codecov.io/api/v2/github/x/repos/y/commits/abc/",
                 "",
@@ -472,11 +481,16 @@ class MainCliTests(unittest.TestCase):
 
     def test_profile_not_found_returns_2(self) -> None:
         """Exit code 2 when the profile JSON cannot be opened."""
-        rc = self._run_main([
-            "--repo-slug", "Prekzursil/event-link",
-            "--sha", "abc123",
-            "--inputs-json", "/does/not/exist.json",
-        ])
+        rc = self._run_main(
+            [
+                "--repo-slug",
+                "Prekzursil/event-link",
+                "--sha",
+                "abc123",
+                "--inputs-json",
+                "/does/not/exist.json",
+            ]
+        )
         self.assertEqual(rc, 2)
 
     @staticmethod
@@ -490,62 +504,98 @@ class MainCliTests(unittest.TestCase):
             "scripts.quality.validate_codecov_flags._poll_for_flags",
             side_effect=poll_exc,
         ):
-            return MainCliTests._run_main([
-                "--repo-slug", "Prekzursil/event-link",
-                "--sha", "abc123",
-                "--inputs-json", str(path),
-            ])
+            return MainCliTests._run_main(
+                [
+                    "--repo-slug",
+                    "Prekzursil/event-link",
+                    "--sha",
+                    "abc123",
+                    "--inputs-json",
+                    str(path),
+                ]
+            )
 
     def test_no_flags_declared_returns_0(self) -> None:
         """Empty ``inputs`` short-circuits to exit 0 before any HTTP call."""
         path = _write_temp_json({"coverage": {"inputs": []}}, self)
-        rc = self._run_main([
-            "--repo-slug", "Prekzursil/event-link",
-            "--sha", "abc123",
-            "--inputs-json", str(path),
-        ])
+        rc = self._run_main(
+            [
+                "--repo-slug",
+                "Prekzursil/event-link",
+                "--sha",
+                "abc123",
+                "--inputs-json",
+                str(path),
+            ]
+        )
         self.assertEqual(rc, 0)
 
     def test_all_flags_present_returns_0(self) -> None:
         """Exit 0 when Codecov reports every declared flag."""
-        path = _write_temp_json({
-            "coverage": {"inputs": [
-                {"name": "backend", "flag": "backend", "path": "a"},
-                {"name": "ui", "flag": "ui", "path": "b"},
-            ]}
-        }, self)
-        report = {"totals": {"flags": [
-            {"name": "backend"}, {"name": "ui"}, {"name": "extra"},
-        ]}}
+        path = _write_temp_json(
+            {
+                "coverage": {
+                    "inputs": [
+                        {"name": "backend", "flag": "backend", "path": "a"},
+                        {"name": "ui", "flag": "ui", "path": "b"},
+                    ]
+                }
+            },
+            self,
+        )
+        report = {
+            "totals": {
+                "flags": [
+                    {"name": "backend"},
+                    {"name": "ui"},
+                    {"name": "extra"},
+                ]
+            }
+        }
         with patch(
             "scripts.quality.validate_codecov_flags._poll_for_flags",
             return_value=report,
         ):
-            rc = self._run_main([
-                "--repo-slug", "Prekzursil/event-link",
-                "--sha", "abc123",
-                "--inputs-json", str(path),
-            ])
+            rc = self._run_main(
+                [
+                    "--repo-slug",
+                    "Prekzursil/event-link",
+                    "--sha",
+                    "abc123",
+                    "--inputs-json",
+                    str(path),
+                ]
+            )
         self.assertEqual(rc, 0)
 
     def test_missing_flag_returns_1(self) -> None:
         """Exit 1 when any declared flag is absent from the Codecov report."""
-        path = _write_temp_json({
-            "coverage": {"inputs": [
-                {"name": "backend", "flag": "backend", "path": "a"},
-                {"name": "ui", "flag": "ui", "path": "b"},
-            ]}
-        }, self)
+        path = _write_temp_json(
+            {
+                "coverage": {
+                    "inputs": [
+                        {"name": "backend", "flag": "backend", "path": "a"},
+                        {"name": "ui", "flag": "ui", "path": "b"},
+                    ]
+                }
+            },
+            self,
+        )
         report = {"totals": {"flags": [{"name": "backend"}]}}
         with patch(
             "scripts.quality.validate_codecov_flags._poll_for_flags",
             return_value=report,
         ):
-            rc = self._run_main([
-                "--repo-slug", "Prekzursil/event-link",
-                "--sha", "abc123",
-                "--inputs-json", str(path),
-            ])
+            rc = self._run_main(
+                [
+                    "--repo-slug",
+                    "Prekzursil/event-link",
+                    "--sha",
+                    "abc123",
+                    "--inputs-json",
+                    str(path),
+                ]
+            )
         self.assertEqual(rc, 1)
 
     def test_timeout_returns_3(self) -> None:
@@ -558,11 +608,16 @@ class MainCliTests(unittest.TestCase):
             "scripts.quality.validate_codecov_flags._poll_for_flags",
             side_effect=TimeoutError("timed out"),
         ):
-            rc = self._run_main([
-                "--repo-slug", "Prekzursil/event-link",
-                "--sha", "abc123",
-                "--inputs-json", str(path),
-            ])
+            rc = self._run_main(
+                [
+                    "--repo-slug",
+                    "Prekzursil/event-link",
+                    "--sha",
+                    "abc123",
+                    "--inputs-json",
+                    str(path),
+                ]
+            )
         self.assertEqual(rc, 3)
 
     def test_auth_http_errors_are_warn_and_skip(self) -> None:
@@ -583,7 +638,11 @@ class MainCliTests(unittest.TestCase):
         for code, reason in ((401, "Unauthorized"), (403, "Forbidden")):
             with self.subTest(code=code):
                 exc = urllib.error.HTTPError(
-                    "u", code, reason, {}, None  # type: ignore[arg-type]
+                    "u",
+                    code,
+                    reason,
+                    {},
+                    None,  # type: ignore[arg-type]
                 )
                 self.assertEqual(self._run_with_poll_error(exc, path), 0)
 
@@ -594,7 +653,11 @@ class MainCliTests(unittest.TestCase):
             self,
         )
         exc = urllib.error.HTTPError(
-            "u", 500, "Server Error", {}, None  # type: ignore[arg-type]
+            "u",
+            500,
+            "Server Error",
+            {},
+            None,  # type: ignore[arg-type]
         )
         with self.assertRaises(urllib.error.HTTPError):
             self._run_with_poll_error(exc, path)

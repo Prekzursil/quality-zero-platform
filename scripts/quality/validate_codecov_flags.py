@@ -95,12 +95,7 @@ def _declared_flags(profile_path: Path) -> List[str]:
     return flags
 
 
-_SAFE_SLUG_CHARS = set(
-    "abcdefghijklmnopqrstuvwxyz"
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    "0123456789"
-    ".-_/"
-)
+_SAFE_SLUG_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_/")
 _SAFE_SHA_CHARS = set("0123456789abcdefABCDEF")
 _ALLOWED_URL_PREFIX = f"{CODECOV_API_BASE}/"
 
@@ -110,9 +105,7 @@ def _validate_slug(repo_slug: str) -> None:
     if not repo_slug or repo_slug.count("/") != 1:
         raise ValueError(f"repo_slug must be 'owner/name', got {repo_slug!r}")
     if not set(repo_slug).issubset(_SAFE_SLUG_CHARS):
-        raise ValueError(
-            f"repo_slug contains unsafe characters: {repo_slug!r}"
-        )
+        raise ValueError(f"repo_slug contains unsafe characters: {repo_slug!r}")
 
 
 def _validate_sha(sha: str) -> None:
@@ -136,9 +129,7 @@ def _codecov_commit_url(repo_slug: str, sha: str) -> str:
     owner, _, name = repo_slug.partition("/")
     url = f"{CODECOV_API_BASE}/{owner}/repos/{name}/commits/{sha}/"
     if not url.startswith(_ALLOWED_URL_PREFIX):  # pragma: no cover — defence-in-depth
-        raise ValueError(
-            f"constructed URL escaped the Codecov prefix: {url!r}"
-        )
+        raise ValueError(f"constructed URL escaped the Codecov prefix: {url!r}")
     return url
 
 
@@ -197,14 +188,10 @@ def _flags_present_in_report(report: Dict[str, Any]) -> Set[str]:
     """
     if not isinstance(report, dict):
         return set()
-    return _flags_from_totals(report.get("totals")) | _flags_from_inner_report(
-        report.get("report")
-    )
+    return _flags_from_totals(report.get("totals")) | _flags_from_inner_report(report.get("report"))
 
 
-def _poll_for_flags(
-    url: str, token: str, deadline_seconds: int
-) -> Dict[str, Any]:
+def _poll_for_flags(url: str, token: str, deadline_seconds: int) -> Dict[str, Any]:
     """Return the Codecov report once the commit appears or raise TimeoutError."""
     start = time.monotonic()
     last_error: Optional[BaseException] = None
@@ -221,10 +208,7 @@ def _poll_for_flags(
         except urllib.error.URLError as exc:
             last_error = exc
         time.sleep(delay)
-    raise TimeoutError(
-        f"Codecov report for {url} not ready within {deadline_seconds}s "
-        f"(last error: {last_error!r})"
-    )
+    raise TimeoutError(f"Codecov report for {url} not ready within {deadline_seconds}s (last error: {last_error!r})")
 
 
 def validate_flags(
@@ -235,9 +219,7 @@ def validate_flags(
     return [flag for flag in declared_flags if flag not in present_flags]
 
 
-def _fetch_or_warn(
-    args: argparse.Namespace, token: str
-) -> Tuple[Optional[Dict[str, Any]], Optional[int]]:
+def _fetch_or_warn(args: argparse.Namespace, token: str) -> Tuple[Optional[Dict[str, Any]], Optional[int]]:
     """Return ``(report, None)`` on success or ``(None, exit_code)`` on soft-skip.
 
     Separates the networking concern from the top-level ``main`` so the
@@ -269,15 +251,13 @@ def _report_result(declared: List[str], present: Set[str]) -> int:
     missing = validate_flags(declared, present)
     if missing:
         print(
-            "validate_codecov_flags: Codecov did not record these flags: "
-            + ", ".join(missing),
+            "validate_codecov_flags: Codecov did not record these flags: " + ", ".join(missing),
             flush=True,
         )
         print(f"validate_codecov_flags: flags present in report: {sorted(present)}")
         return 1
     print(
-        f"validate_codecov_flags: all {len(declared)} declared flag(s) present: "
-        + ", ".join(declared),
+        f"validate_codecov_flags: all {len(declared)} declared flag(s) present: " + ", ".join(declared),
         flush=True,
     )
     return 0

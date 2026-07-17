@@ -1,4 +1,5 @@
 """Tests for Sentry normalizer (per §6.6)."""
+
 from __future__ import absolute_import
 
 import json
@@ -40,7 +41,7 @@ class SentryNormalizerTests(unittest.TestCase):
     def test_level_to_severity_mapping(self):
         artifact = json.loads(_FIXTURE.read_text("utf-8"))
         result = SentryNormalizer().run(artifact=artifact, repo_root=self.root)
-        self.assertEqual(result.findings[0].severity, "high")    # error
+        self.assertEqual(result.findings[0].severity, "high")  # error
         self.assertEqual(result.findings[1].severity, "medium")  # warning
 
     def test_metadata_filename_extraction(self):

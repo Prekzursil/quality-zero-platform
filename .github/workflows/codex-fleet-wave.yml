@@ -1,0 +1,221 @@
+name: Codex Fleet Wave
+
+# HQ control-plane sweep. Reads codex-targets.yml, then dispatches the PRIVATE Codex runner
+# (Prekzursil/agent-skills-toolchain :: codex-runner.yml) once per ENABLED target x task.
+#
+# SECURITY (deliberate -- do not weaken):
+#  - schedule + workflow_dispatch ONLY. NEVER pull_request_target or any fork-triggerable
+#    event: a fork must never be able to make QZT dispatch the auth-bearing runner.
+#  - QZT holds NO auth.json. It coordinates by TRIGGERING the runner through a scoped
+#    CODEX_DISPATCH_PAT (Actions: read+write on the runner repo). That PAT cannot read the
+#    runner's auth.json/contents/secrets -- see docs/codex-fleet-sweep-setup.md on the
+#    runner side (agent-skills-toolchain).
+#  - Inputs pass through env:, never spliced into a shell line (no code-injection).
+#  - Propose-only: the runner opens DRAFT PRs; this workflow never merges anything.
+#  - One credential = one lane. Dispatch is fully serial and waits for the runner to be
+#    idle between targets so GitHub's "1 pending run per group" limit never silently drops
+#    a queued dispatch.
+
+on:
+  schedule:
+    # Off-peak, 22:00 UTC daily. Cron is always UTC on GitHub Actions.
+    - cron: "0 22 * * *"
+  workflow_dispatch:
+    inputs:
+      only_repo:
+        description: "Dispatch only this repo (owner/name or bare name). Bypasses the enabled flag; must have tasks defined. Blank = full sweep of all enabled targets."
+        required: false
+        type: string
+        default: ""
+      dry_run:
+        description: "Preview the plan (what would be dispatched / skipped) without triggering the runner."
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codex-fleet-wave
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    # Generous cap: the job runs mostly idle, waiting for each single-lane runner dispatch
+    # to finish before sending the next. Anything not reached rolls to the next scheduled
+    # run (targets with an open runner proposal -- labeled OR the unlabeled fallback -- are
+    # deduped, so nothing is dispatched twice).
+    timeout-minutes: 350
+    steps:
+      - name: Harden runner (egress audit)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout QZT (codex-targets.yml + matrix script)
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML (pinned)
+        run: python -m pip install --disable-pip-version-check --quiet "pyyaml==6.0.2"
+
+      - name: Build dispatch plan (enabled targets x tasks)
+        shell: bash
+        env:
+          ONLY_REPO: ${{ inputs.only_repo }}
+        run: |
+          set -euo pipefail
+          args=(--config codex-targets.yml)
+          if [ -n "${ONLY_REPO:-}" ]; then args+=(--only-repo "$ONLY_REPO"); fi
+          python scripts/build_codex_matrix.py "${args[@]}" > "$RUNNER_TEMP/plan.json"
+          echo "plan entries: $(jq 'length' "$RUNNER_TEMP/plan.json")"
+          jq -r '.[] | "  - " + .repo + "  (model=" + .model + " effort=" + .effort + " cap=" + (.max_changed_files|tostring) + ")"' \
+            "$RUNNER_TEMP/plan.json" || true
+
+      - name: Dispatch runner (serial, deduped) + roll-up
+        shell: bash
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          # Actions: read+write on the runner repo ONLY -- triggers codex-runner.yml.
+          DISPATCH_TOKEN: ${{ secrets.CODEX_DISPATCH_PAT }}
+          # Optional: Pull requests: Read across the fleet -- used only for the open-PR dedupe.
+          # If unset, the dedupe falls back to DISPATCH_TOKEN (works when that PAT is
+          # fleet-scoped with PR:Read; see docs/codex-fleet-sweep-setup.md).
+          READ_TOKEN: ${{ secrets.CODEX_FLEET_READ_PAT }}
+          RUNNER_REPO: Prekzursil/agent-skills-toolchain
+          RUNNER_WORKFLOW: codex-runner.yml
+        run: |
+          set -uo pipefail   # NOT -e: per-entry failures are recorded and the loop continues.
+
+          if [ -z "${DISPATCH_TOKEN:-}" ]; then
+            echo "::error::CODEX_DISPATCH_PAT is not set. See docs/codex-fleet-sweep-setup.md (runner repo)."
+            exit 1
+          fi
+
+          DRY="false"; [ "${DRY_RUN:-}" = "true" ] && DRY="true"
+          FLEET_READ="${READ_TOKEN:-}"; [ -z "$FLEET_READ" ] && FLEET_READ="$DISPATCH_TOKEN"
+
+          PLAN="$RUNNER_TEMP/plan.json"
+          TOTAL="$(jq 'length' "$PLAN")"
+          ROWS="$RUNNER_TEMP/rows.md"; : > "$ROWS"
+          dispatched=0; skipped_pr=0; skipped_dry=0; errors=0
+
+          # Block until the runner has no in-flight (non-completed) codex-runner run, so we
+          # never stack more than one pending run. Bounded: on timeout/error we proceed
+          # (a single pending run is safe; two is what GitHub silently drops).
+          wait_for_idle() {
+            local repo="$1" waited=0 max=5400 busy
+            while [ "$waited" -lt "$max" ]; do
+              busy="$(GH_TOKEN="$DISPATCH_TOKEN" gh run list --repo "$RUNNER_REPO" \
+                --workflow "$RUNNER_WORKFLOW" --limit 50 --json status \
+                --jq '[.[] | select(.status != "completed")] | length' 2>/dev/null || echo "ERR")"
+              if [ "$busy" = "ERR" ]; then
+                echo "  idle-check error for $repo -- proceeding"; return 0
+              fi
+              [ "$busy" = "0" ] && return 0
+              echo "  runner lane busy ($busy in-flight) -- waiting before $repo"
+              sleep 30; waited=$((waited + 30))
+            done
+            echo "  idle-wait timed out (${max}s) -- proceeding for $repo"; return 0
+          }
+
+          while read -r entry; do
+            repo="$(printf '%s' "$entry" | jq -r '.repo')"
+            task="$(printf '%s' "$entry" | jq -r '.task')"
+            model="$(printf '%s' "$entry" | jq -r '.model')"
+            effort="$(printf '%s' "$entry" | jq -r '.effort')"
+            mcf="$(printf '%s' "$entry" | jq -r '.max_changed_files')"
+            short="$(printf '%s' "${task:0:70}" | tr '\n' ' ')"
+
+            # --- Dedupe: skip a target that already has an OPEN runner proposal. ---
+            # Two match passes, mirroring the MCP's fleet_core.list_open_prs. The runner
+            # (codex-runner.yml) labels its PRs "codex-runner", but FALLS BACK to an
+            # UNLABELED `gh pr create` when `--label codex-runner` fails -- which it does on
+            # any target that lacks the label (every fresh target). A label-only check
+            # returns 0 for those, so the scheduled wave would re-dispatch daily and pile up
+            # duplicate draft PRs. We therefore count a PR as an open proposal when it EITHER
+            # (pass 1) carries the "codex-runner" label OR (pass 2) matches the runner's
+            # unlabeled-fallback signature: title == "Codex: automated change" OR a head
+            # branch under "codex/". Done in ONE `gh pr list` + jq so each PR is counted once
+            # (no double-count across passes); robust to gh exit codes via the `|| ERR` guard.
+            open_prs="$(GH_TOKEN="$FLEET_READ" gh pr list --repo "$repo" --state open \
+              --limit 200 --json number,title,headRefName,labels \
+              --jq '[.[] | select(
+                       (any(.labels[]?; .name == "codex-runner"))
+                       or (.title == "Codex: automated change")
+                       or (.headRefName | startswith("codex/"))
+                     )] | length' 2>/dev/null || echo "ERR")"
+            if [ "$open_prs" = "ERR" ]; then
+              errors=$((errors + 1))
+              printf -- '| ERROR (dedupe check failed) | %s | %s |\n' "$repo" "$short" >> "$ROWS"
+              echo "::warning::dedupe check failed for $repo -- verify the fleet PR-read token (CODEX_FLEET_READ_PAT or a fleet-scoped CODEX_DISPATCH_PAT)"
+              continue
+            fi
+            if [ "$open_prs" != "0" ]; then
+              skipped_pr=$((skipped_pr + 1))
+              printf -- '| SKIP (open runner proposal) | %s | %s |\n' "$repo" "$short" >> "$ROWS"
+              echo "skip $repo -- $open_prs open runner proposal(s) (labeled or unlabeled fallback)"
+              continue
+            fi
+
+            if [ "$DRY" = "true" ]; then
+              skipped_dry=$((skipped_dry + 1))
+              printf -- '| DRY-RUN (would dispatch) | %s | model=%s effort=%s cap=%s -- %s |\n' \
+                "$repo" "$model" "$effort" "$mcf" "$short" >> "$ROWS"
+              echo "dry-run $repo -- would dispatch"
+              continue
+            fi
+
+            # --- Respect the single credential lane before firing. ---
+            wait_for_idle "$repo"
+
+            if GH_TOKEN="$DISPATCH_TOKEN" gh workflow run "$RUNNER_WORKFLOW" \
+                --repo "$RUNNER_REPO" --ref main \
+                -f target_repo="$repo" -f task="$task" -f model="$model" \
+                -f effort="$effort" -f max_changed_files="$mcf"; then
+              dispatched=$((dispatched + 1))
+              printf -- '| DISPATCHED | %s | model=%s effort=%s cap=%s -- %s |\n' \
+                "$repo" "$model" "$effort" "$mcf" "$short" >> "$ROWS"
+              echo "dispatched $repo"
+              sleep 15   # let the run register before the next iteration's idle-wait
+            else
+              errors=$((errors + 1))
+              printf -- '| ERROR (dispatch failed) | %s | %s |\n' "$repo" "$short" >> "$ROWS"
+              echo "::warning::dispatch failed for $repo"
+            fi
+          done < <(jq -c '.[]' "$PLAN")
+
+          # --- Roll-up to the run summary. ---
+          {
+            echo "# Codex Fleet Wave -- roll-up"
+            echo ""
+            if [ "$DRY" = "true" ]; then echo "**Mode:** dry-run (no dispatches sent)"; else echo "**Mode:** live"; fi
+            echo ""
+            echo "| Metric | Count |"
+            echo "| --- | ---: |"
+            echo "| Plan entries (repo x task) | $TOTAL |"
+            echo "| Dispatched | $dispatched |"
+            echo "| Skipped -- open PR | $skipped_pr |"
+            echo "| Skipped -- dry-run | $skipped_dry |"
+            echo "| Errors | $errors |"
+            echo ""
+            if [ -s "$ROWS" ]; then
+              echo "| Outcome | Repo | Detail |"
+              echo "| --- | --- | --- |"
+              cat "$ROWS"
+            else
+              echo "_No enabled targets with tasks -- nothing to dispatch._"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "wave complete: dispatched=$dispatched skipped_pr=$skipped_pr skipped_dry=$skipped_dry errors=$errors (of $TOTAL)"
+          # Surface genuine misconfiguration (token/scope) as a failed run; benign skips stay green.
+          [ "$errors" -gt 0 ] && exit 1 || exit 0

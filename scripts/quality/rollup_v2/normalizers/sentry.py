@@ -1,4 +1,5 @@
 """Sentry normalizer (per design §4.2 + §A.6)."""
+
 from __future__ import absolute_import
 
 from pathlib import Path
@@ -26,6 +27,7 @@ class SentryNormalizer(BaseNormalizer):
     Category is always 'runtime-error' since Sentry tracks runtime exceptions,
     not static analysis rules. Taxonomy lookup is bypassed.
     """
+
     provider = "Sentry"
 
     def parse(self, artifact: Any, repo_root: Path) -> Iterable[Finding]:
@@ -40,17 +42,19 @@ class SentryNormalizer(BaseNormalizer):
                 severity = _LEVEL_MAP.get(level, "medium")
                 metadata = issue.get("metadata") or {}
                 filename = str(metadata.get("filename", ""))
-                yield self._build_finding(FindingDraft(
-                    finding_id=f"sentry-{index:04d}",
-                    file=filename,
-                    line=1,
-                    category="runtime-error",
-                    category_group=CATEGORY_GROUP_QUALITY,
-                    severity=severity,
-                    primary_message=title,
-                    rule_id=f"sentry-issue-{issue_id}",
-                    rule_url=None,
-                    original_message=title,
-                    context_snippet="",
-                ))
+                yield self._build_finding(
+                    FindingDraft(
+                        finding_id=f"sentry-{index:04d}",
+                        file=filename,
+                        line=1,
+                        category="runtime-error",
+                        category_group=CATEGORY_GROUP_QUALITY,
+                        severity=severity,
+                        primary_message=title,
+                        rule_id=f"sentry-issue-{issue_id}",
+                        rule_url=None,
+                        original_message=title,
+                        context_snippet="",
+                    )
+                )
                 index += 1

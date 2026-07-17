@@ -1,4 +1,5 @@
 """Tests for lane key pre-reservation (per design §A.5 + Phase 15)."""
+
 from __future__ import absolute_import
 
 import sys
@@ -42,9 +43,7 @@ class LaneReservationTests(unittest.TestCase):
             output_dir = repo_root / "output"
             output_dir.mkdir()
 
-            result = run_pipeline(
-                artifacts={}, repo_root=repo_root
-            )
+            result = run_pipeline(artifacts={}, repo_root=repo_root)
             summaries = result.canonical_payload["provider_summaries"]
             not_configured = [s for s in summaries if s.get("status") == "not-configured"]
             self.assertEqual(len(not_configured), 0)
@@ -63,9 +62,7 @@ class LaneReservationTests(unittest.TestCase):
             # If we add data for a provider that matches a reserved lane label,
             # it should not also generate a not-configured placeholder.
             # Reserved lanes use provider labels like "Semgrep Zero", not raw providers.
-            result = run_pipeline(
-                artifacts={}, repo_root=repo_root
-            )
+            result = run_pipeline(artifacts={}, repo_root=repo_root)
             providers = [s["provider"] for s in result.canonical_payload["provider_summaries"]]
             # Check no duplicates
             self.assertEqual(len(providers), len(set(providers)))
@@ -79,9 +76,7 @@ class LaneReservationTests(unittest.TestCase):
             output_dir = repo_root / "output"
             output_dir.mkdir()
 
-            result = run_pipeline(
-                artifacts={}, repo_root=repo_root
-            )
+            result = run_pipeline(artifacts={}, repo_root=repo_root)
             # The markdown should mention providers (the empty state shows "0 findings across N providers")
             self.assertIn("providers", result.markdown)
 

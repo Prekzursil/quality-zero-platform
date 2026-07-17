@@ -13,7 +13,6 @@ from unittest.mock import patch
 
 from scripts.quality import verify_v2_deployment as vv
 
-
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -24,10 +23,7 @@ class ShippedRepoAuditTests(unittest.TestCase):
         """Every Phase 1-4 required path exists on the current checkout."""
         results = vv.audit_deployment(_REPO_ROOT)
         required_phases = ("phase1", "phase2", "phase3", "phase4")
-        missing = [
-            r for r in results
-            if r.phase in required_phases and r.status == "missing"
-        ]
+        missing = [r for r in results if r.phase in required_phases and r.status == "missing"]
         self.assertEqual(missing, [], f"missing Phase 1-4 artefacts: {missing}")
 
     def test_summarise_buckets_results(self) -> None:
@@ -67,9 +63,7 @@ class CliExitCodeTests(unittest.TestCase):
     def _run_capture(argv: list):
         """Invoke ``main()`` capturing ``(rc, stdout, stderr)``."""
         out, err = io.StringIO(), io.StringIO()
-        with patch.object(
-            sys, "argv", ["verify_v2_deployment.py", *argv]
-        ), redirect_stdout(out), redirect_stderr(err):
+        with patch.object(sys, "argv", ["verify_v2_deployment.py", *argv]), redirect_stdout(out), redirect_stderr(err):
             rc = vv.main()
         return rc, out.getvalue(), err.getvalue()
 
@@ -105,9 +99,7 @@ class CliExitCodeTests(unittest.TestCase):
     def test_emit_annotations_writes_workflow_commands_to_stderr(self) -> None:
         """``--emit-annotations`` opts in to ``::error::`` commands on stderr."""
         with tempfile.TemporaryDirectory() as tmp:
-            rc, stdout, stderr = self._run_capture(
-                ["--repo-root", tmp, "--all", "--emit-annotations"]
-            )
+            rc, stdout, stderr = self._run_capture(["--repo-root", tmp, "--all", "--emit-annotations"])
         self.assertEqual(rc, 1)
         self.assertIn("::error::missing deliverable:", stderr)
         self.assertNotIn("::error::", stdout)
@@ -127,10 +119,14 @@ class CliExitCodeTests(unittest.TestCase):
         """``--out-json`` writes the summary instead of printing to stdout."""
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "summary.json"
-            rc = self._run([
-                "--repo-root", str(_REPO_ROOT),
-                "--out-json", str(out),
-            ])
+            rc = self._run(
+                [
+                    "--repo-root",
+                    str(_REPO_ROOT),
+                    "--out-json",
+                    str(out),
+                ]
+            )
             self.assertEqual(rc, 0)
             payload = json.loads(out.read_text(encoding="utf-8"))
             self.assertIn("ok_count", payload)

@@ -1,4 +1,5 @@
 """Deterministic patch generator for `unused-variable` category."""
+
 from __future__ import absolute_import
 
 import re

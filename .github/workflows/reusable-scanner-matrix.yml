@@ -594,6 +594,13 @@ jobs:
         working-directory: repo
         env:
           DEEPSOURCE_DSN: ${{ secrets.DEEPSOURCE_DSN }}
+          # Pass the profile output through the environment instead of
+          # interpolating ${{ ... }} straight into the run script — the value
+          # is externally influenced (repo-configured coverage globs) so a
+          # direct `<<< "${{ ... }}"` splice is an Actions code-injection sink
+          # (CodeQL actions/code-injection/medium #248). Mirrors the safe
+          # pattern already used by the "Stage Codacy coverage files" step.
+          COVERAGE_INPUT_FILES: ${{ steps.profile.outputs.coverage_input_files }}
         run: |
           set -euo pipefail
           if [ -z "${DEEPSOURCE_DSN:-}" ]; then
@@ -602,7 +609,7 @@ jobs:
             exit 1
           fi
           curl -sSL https://deepsource.io/cli | sh
-          IFS=',' read -ra FILES <<< "${{ steps.profile.outputs.coverage_input_files }}"
+          IFS=',' read -ra FILES <<< "$COVERAGE_INPUT_FILES"
           for f in "${FILES[@]}"; do
             f=$(echo "$f" | xargs)
             [ -z "$f" ] && continue

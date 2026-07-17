@@ -85,32 +85,20 @@ _PAIR_RE = re.compile(r"^(?P<name>[^=]+)=(?P<path>.+)$")
 
 def _parse_args() -> argparse.Namespace:
     """Parse CLI options for the coverage assertion command."""
-    parser = argparse.ArgumentParser(
-        description="Assert minimum coverage for all declared components."
-    )
-    parser.add_argument(
-        "--xml", action="append", default=[], help="Coverage XML input: name=path"
-    )
-    parser.add_argument(
-        "--lcov", action="append", default=[], help="LCOV input: name=path"
-    )
+    parser = argparse.ArgumentParser(description="Assert minimum coverage for all declared components.")
+    parser.add_argument("--xml", action="append", default=[], help="Coverage XML input: name=path")
+    parser.add_argument("--lcov", action="append", default=[], help="LCOV input: name=path")
     parser.add_argument(
         "--require-source",
         action="append",
         default=[],
-        help=(
-            "Workspace-relative file or directory that must appear in the "
-            "coverage inputs."
-        ),
+        help=("Workspace-relative file or directory that must appear in the coverage inputs."),
     )
     parser.add_argument(
         "--min-percent",
         type=float,
         default=100.0,
-        help=(
-            "Minimum required coverage percentage for each component and the "
-            "combined summary."
-        ),
+        help=("Minimum required coverage percentage for each component and the combined summary."),
     )
     parser.add_argument(
         "--branch-min-percent",
@@ -138,23 +126,14 @@ def evaluate(
     """Evaluate coverage results against thresholds and required-source policy."""
     normalized_sources = request.reported_sources or set()
     findings = _coverage_threshold_findings(stats, request.min_percent)
-    findings.extend(
-        coverage_support._branch_threshold_findings(stats, request.branch_min_percent)
-    )
-    findings.extend(
-        _required_source_findings(
-            normalized_sources, list(request.required_sources or [])
-        )
-    )
+    findings.extend(coverage_support._branch_threshold_findings(stats, request.branch_min_percent))
+    findings.extend(_required_source_findings(normalized_sources, list(request.required_sources or [])))
     return ("pass" if not findings else "fail", findings)
 
 
 def _component_markdown_line(item: Mapping[str, Any]) -> str:
     """Render one component row for the markdown report."""
-    base_message = (
-        f"- `{item['name']}`: line=`{item['percent']:.2f}%` "
-        f"({item['covered']}/{item['total']})"
-    )
+    base_message = f"- `{item['name']}`: line=`{item['percent']:.2f}%` ({item['covered']}/{item['total']})"
     if item.get("branch_total", 0):
         return (
             f"{base_message}, branch=`{item['branch_percent']:.2f}%` "
@@ -185,9 +164,7 @@ def _branch_requirement_line(payload: Mapping[str, Any]) -> str:
     return f"- Minimum required branch coverage: `{branch_min_percent:.2f}%`"
 
 
-def _append_coverage_section(
-    lines: List[str], title: str, items: List[Any], *, formatter
-) -> None:
+def _append_coverage_section(lines: List[str], title: str, items: List[Any], *, formatter) -> None:
     """Append one titled markdown section and its bullet list."""
     lines.extend(["", title])
     _append_bullets(lines, items, formatter=formatter)
@@ -255,18 +232,14 @@ def _build_payload(*args: Any, **kwargs: Any) -> Dict[str, Any]:
     except KeyError as exc:  # pragma: no cover - defensive contract guard
         raise TypeError(f"Missing required payload field: {exc.args[0]}") from exc
     if kwargs:
-        raise TypeError(
-            f"Unexpected _build_payload parameters: {', '.join(sorted(kwargs))}"
-        )
+        raise TypeError(f"Unexpected _build_payload parameters: {', '.join(sorted(kwargs))}")
     return {
         "status": status,
         "timestamp_utc": utc_timestamp(),
         "min_percent": min_percent,
         "branch_min_percent": branch_min_percent,
         "components": [
-            asdict(item)
-            | {"percent": item.percent, "branch_percent": item.branch_percent}
-            for item in stats
+            asdict(item) | {"percent": item.percent, "branch_percent": item.branch_percent} for item in stats
         ],
         "covered_sources": sorted(covered_sources),
         "findings": findings,
@@ -278,9 +251,7 @@ def main() -> int:
     args = _parse_args()
     stats, covered_sources = _collect_coverage_inputs(args)
     if not stats:
-        raise SystemExit(
-            "No coverage files were provided; pass --xml and/or --lcov inputs."
-        )
+        raise SystemExit("No coverage files were provided; pass --xml and/or --lcov inputs.")
 
     min_percent = max(0.0, min(100.0, float(args.min_percent)))
     branch_min_percent = _normalized_branch_min_percent(args.branch_min_percent)

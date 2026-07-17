@@ -1,4 +1,5 @@
 """Severity ordering for canonical findings (per design §A.4.2)."""
+
 from __future__ import absolute_import
 
 from typing import Final, Sequence, Tuple

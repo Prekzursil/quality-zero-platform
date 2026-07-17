@@ -1,4 +1,5 @@
 """Tests for DeepSource normalizer (per §6.3)."""
+
 from __future__ import absolute_import
 
 import json
@@ -46,8 +47,8 @@ class DeepSourceNormalizerTests(unittest.TestCase):
         artifact = json.loads(_FIXTURE.read_text("utf-8"))
         result = DeepSourceNormalizer().run(artifact=artifact, repo_root=self.root)
         self.assertEqual(result.findings[0].severity, "medium")  # MAJOR
-        self.assertEqual(result.findings[1].severity, "low")     # MINOR
-        self.assertEqual(result.findings[2].severity, "high")    # CRITICAL
+        self.assertEqual(result.findings[1].severity, "low")  # MINOR
+        self.assertEqual(result.findings[2].severity, "high")  # CRITICAL
 
 
 if __name__ == "__main__":

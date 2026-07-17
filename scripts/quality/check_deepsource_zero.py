@@ -58,9 +58,7 @@ class VisibleZeroInputs:
 
 def _parse_args() -> argparse.Namespace:
     """Parse CLI arguments for the DeepSource visible-zero gate."""
-    parser = argparse.ArgumentParser(
-        description="Assert DeepSource has zero visible default-branch issues."
-    )
+    parser = argparse.ArgumentParser(description="Assert DeepSource has zero visible default-branch issues.")
     parser.add_argument("--repo", default="")
     parser.add_argument("--sha", default="")
     parser.add_argument("--issues-url", default="")
@@ -84,18 +82,12 @@ def _parse_args() -> argparse.Namespace:
 
 def _github_repo(args: argparse.Namespace) -> str:
     """Resolve the repository slug from flags or the GitHub Actions env."""
-    return (
-        args.repo
-        or os.environ.get("REPO_SLUG", "")
-        or os.environ.get("GITHUB_REPOSITORY", "")
-    ).strip()
+    return (args.repo or os.environ.get("REPO_SLUG", "") or os.environ.get("GITHUB_REPOSITORY", "")).strip()
 
 
 def _github_sha(args: argparse.Namespace) -> str:
     """Resolve the target commit SHA from flags or the GitHub Actions env."""
-    return (
-        args.sha or os.environ.get("TARGET_SHA", "") or os.environ.get("GITHUB_SHA", "")
-    ).strip()
+    return (args.sha or os.environ.get("TARGET_SHA", "") or os.environ.get("GITHUB_SHA", "")).strip()
 
 
 def _issues_url(args: argparse.Namespace) -> str:
@@ -145,11 +137,7 @@ def _status_contexts(payload: Mapping[str, Any], prefix: str) -> List[Dict[str, 
 def _status_target_urls(statuses: Sequence[Mapping[str, Any]]) -> List[str]:
     """Collect unique DeepSource target URLs from GitHub statuses."""
     return list(
-        dict.fromkeys(
-            target_url
-            for item in statuses
-            if (target_url := str(item.get("target_url") or "").strip())
-        )
+        dict.fromkeys(target_url for item in statuses if (target_url := str(item.get("target_url") or "").strip()))
     )
 
 
@@ -167,18 +155,12 @@ def _status_findings(statuses: Sequence[Mapping[str, Any]], prefix: str) -> List
     """Return gate findings for missing or failing DeepSource statuses."""
     if not statuses:
         return [f"{prefix} GitHub status contexts are missing."]
-    return [
-        finding
-        for item in statuses
-        if (finding := _status_finding(item, prefix)) is not None
-    ]
+    return [finding for item in statuses if (finding := _status_finding(item, prefix)) is not None]
 
 
 def _statuses_are_ready(statuses: Sequence[Mapping[str, Any]]) -> bool:
     """Return ``True`` when all observed statuses have settled."""
-    return bool(statuses) and all(
-        str(item.get("state") or "").strip() != "pending" for item in statuses
-    )
+    return bool(statuses) and all(str(item.get("state") or "").strip() != "pending" for item in statuses)
 
 
 def _wait_for_status_contexts(
@@ -205,15 +187,9 @@ def _evaluate_visible_issues(issues_url: str) -> Tuple[int, List[str]]:
         open_issues = 0 if not issue_links else len(issue_links)
     findings: List[str] = []
     if open_issues != 0:
-        findings.append(
-            f"DeepSource shows {open_issues} visible issues on the default branch "
-            f"(expected 0)."
-        )
+        findings.append(f"DeepSource shows {open_issues} visible issues on the default branch (expected 0).")
     elif issue_links:
-        findings.append(
-            "DeepSource returned issue cards even though the total issue count "
-            "resolved to 0."
-        )
+        findings.append("DeepSource returned issue cards even though the total issue count resolved to 0.")
     return open_issues, findings
 
 
@@ -256,9 +232,7 @@ def _visible_zero_inputs(args: argparse.Namespace) -> VisibleZeroInputs:
     except ValueError:
         issues_url = ""
     return VisibleZeroInputs(
-        token=(
-            os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")
-        ).strip(),
+        token=(os.environ.get("GITHUB_TOKEN", "") or os.environ.get("GH_TOKEN", "")).strip(),
         repo=_github_repo(args),
         sha=_github_sha(args),
         issues_url=issues_url,
@@ -324,11 +298,7 @@ def main() -> int:
         "status": status,
         "open_issues": open_issues,
         "issues_url": inputs.issues_url,
-        "status_contexts": [
-            str(item.get("context") or "").strip()
-            for item in statuses
-            if item.get("context")
-        ],
+        "status_contexts": [str(item.get("context") or "").strip() for item in statuses if item.get("context")],
         "target_urls": _status_target_urls(statuses),
         "timestamp_utc": utc_timestamp(),
         "findings": findings,

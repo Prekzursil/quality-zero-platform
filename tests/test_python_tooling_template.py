@@ -24,10 +24,12 @@ class PythonToolingCiTemplateTests(unittest.TestCase):
 
     def test_renders_test_and_lint_jobs(self) -> None:
         """Both ``test`` and ``lint`` jobs are present in the rendered workflow."""
-        rendered = self._render({
-            "default_branch": "main",
-            "coverage": {"command": "pytest --cov"},
-        })
+        rendered = self._render(
+            {
+                "default_branch": "main",
+                "coverage": {"command": "pytest --cov"},
+            }
+        )
         doc = yaml.safe_load(rendered)
         self.assertEqual(doc["name"], "Python Tooling CI")
         self.assertIn("test", doc["jobs"])

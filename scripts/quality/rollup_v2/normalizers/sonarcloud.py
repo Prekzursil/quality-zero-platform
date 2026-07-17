@@ -1,4 +1,5 @@
 """SonarCloud normalizer (per design §4.2 + §A.6)."""
+
 from __future__ import absolute_import
 
 from pathlib import Path
@@ -20,10 +21,17 @@ _SEVERITY_MAP = {
     "INFO": "info",
 }
 
-_SECURITY_CATEGORY_HINTS = frozenset({
-    "sql-injection", "command-injection", "hardcoded-password-string",
-    "weak-crypto", "insecure-random", "exec-used", "xss",
-})
+_SECURITY_CATEGORY_HINTS = frozenset(
+    {
+        "sql-injection",
+        "command-injection",
+        "hardcoded-password-string",
+        "weak-crypto",
+        "insecure-random",
+        "exec-used",
+        "xss",
+    }
+)
 
 
 def _extract_file_from_component(component: str) -> str:
@@ -44,23 +52,21 @@ class SonarCloudNormalizer(BaseNormalizer):
         for index, issue in enumerate(issues):
             rule = str(issue.get("rule", ""))
             category = lookup("SonarCloud", rule) or "uncategorized"
-            group = (
-                CATEGORY_GROUP_SECURITY
-                if category in _SECURITY_CATEGORY_HINTS
-                else CATEGORY_GROUP_QUALITY
-            )
+            group = CATEGORY_GROUP_SECURITY if category in _SECURITY_CATEGORY_HINTS else CATEGORY_GROUP_QUALITY
             component = str(issue.get("component", ""))
             file_path = _extract_file_from_component(component)
-            yield self._build_finding(FindingDraft(
-                finding_id=f"sonar-{index:04d}",
-                file=file_path,
-                line=int(issue.get("line") or 1),
-                category=category,
-                category_group=group,
-                severity=_SEVERITY_MAP.get(str(issue.get("severity", "MAJOR")), "medium"),
-                primary_message=str(issue.get("message", "")),
-                rule_id=rule,
-                rule_url=None,
-                original_message=str(issue.get("message", "")),
-                context_snippet="",
-            ))
+            yield self._build_finding(
+                FindingDraft(
+                    finding_id=f"sonar-{index:04d}",
+                    file=file_path,
+                    line=int(issue.get("line") or 1),
+                    category=category,
+                    category_group=group,
+                    severity=_SEVERITY_MAP.get(str(issue.get("severity", "MAJOR")), "medium"),
+                    primary_message=str(issue.get("message", "")),
+                    rule_id=rule,
+                    rule_url=None,
+                    original_message=str(issue.get("message", "")),
+                    context_snippet="",
+                )
+            )

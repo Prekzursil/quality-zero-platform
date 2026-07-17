@@ -3,6 +3,7 @@
 Steps: normalize -> collect findings -> dedup -> patch dispatch -> derive autofixable
        -> build canonical payload -> render markdown.
 """
+
 from __future__ import absolute_import
 
 from collections import defaultdict
@@ -66,10 +67,7 @@ def _derive_autofixable(findings: List[Finding]) -> List[Finding]:
     Called once per pipeline run AFTER patch dispatch.
     autofixable = (patch_source != "none")
     """
-    return [
-        replace(f, autofixable=f.patch_source != "none")
-        for f in findings
-    ]
+    return [replace(f, autofixable=f.patch_source != "none") for f in findings]
 
 
 def _read_source_file(file_path: str, repo_root: Path) -> str:
@@ -90,9 +88,7 @@ def _apply_patches(
     for f in findings:
         source_content = _read_source_file(f.file, repo_root)
         try:
-            patch_result = patch_dispatcher.dispatch(
-                f, source_file_content=source_content, repo_root=repo_root
-            )
+            patch_result = patch_dispatcher.dispatch(f, source_file_content=source_content, repo_root=repo_root)
         except Exception as exc:  # pylint: disable=broad-exception-caught
             # Error boundary: patch generation failure is non-fatal (§A.6)
             patched = replace(
@@ -117,9 +113,7 @@ def _apply_patches(
 
 def _build_provider_summaries(findings: List[Finding]) -> List[Dict[str, Any]]:
     """Build per-provider summary counts for the canonical payload."""
-    by_provider: Dict[str, Dict[str, int]] = defaultdict(
-        lambda: {"total": 0, "high": 0, "medium": 0, "low": 0}
-    )
+    by_provider: Dict[str, Dict[str, int]] = defaultdict(lambda: {"total": 0, "high": 0, "medium": 0, "low": 0})
     for f in findings:
         for c in f.corroborators:
             counts = by_provider[c.provider]

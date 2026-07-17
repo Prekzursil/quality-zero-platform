@@ -18,55 +18,33 @@ class IsSecurityFindingTests(unittest.TestCase):
 
     def test_dependabot_source_is_security(self) -> None:
         """A synthetic Dependabot finding is recognised by its scanner name."""
-        self.assertTrue(
-            sg.is_security_finding({"scanner": "dependabot", "id": "DEP-1"})
-        )
+        self.assertTrue(sg.is_security_finding({"scanner": "dependabot", "id": "DEP-1"}))
 
     def test_case_insensitive_scanner_match(self) -> None:
         """Scanner name matching is case-insensitive."""
-        self.assertTrue(
-            sg.is_security_finding({"scanner": "Semgrep", "id": "sem-1"})
-        )
+        self.assertTrue(sg.is_security_finding({"scanner": "Semgrep", "id": "sem-1"}))
 
     def test_is_security_flag_overrides(self) -> None:
         """Explicit ``is_security: True`` is enough to flag the finding."""
-        self.assertTrue(
-            sg.is_security_finding({"scanner": "custom", "is_security": True})
-        )
+        self.assertTrue(sg.is_security_finding({"scanner": "custom", "is_security": True}))
 
     def test_category_security_flag(self) -> None:
         """``category: security`` (and synonyms) flag the finding."""
         for category in ("security", "Security", "vulnerability", "secret"):
             with self.subTest(category=category):
-                self.assertTrue(
-                    sg.is_security_finding(
-                        {"scanner": "misc", "category": category}
-                    )
-                )
+                self.assertTrue(sg.is_security_finding({"scanner": "misc", "category": category}))
 
     def test_cwe_reference_in_id(self) -> None:
         """CWE-<n> in the finding id flags it as security-class."""
-        self.assertTrue(
-            sg.is_security_finding(
-                {"scanner": "custom", "id": "run-shell-injection CWE-78"}
-            )
-        )
+        self.assertTrue(sg.is_security_finding({"scanner": "custom", "id": "run-shell-injection CWE-78"}))
 
     def test_cwe_reference_in_tags(self) -> None:
         """CWE references inside ``tags`` are also recognised."""
-        self.assertTrue(
-            sg.is_security_finding(
-                {"scanner": "custom", "tags": ["style", "CWE-79"]}
-            )
-        )
+        self.assertTrue(sg.is_security_finding({"scanner": "custom", "tags": ["style", "CWE-79"]}))
 
     def test_owasp_reference_in_message(self) -> None:
         """``A01:2021`` style OWASP refs flag the finding."""
-        self.assertTrue(
-            sg.is_security_finding(
-                {"scanner": "custom", "message": "maps to A03:2021 Injection"}
-            )
-        )
+        self.assertTrue(sg.is_security_finding({"scanner": "custom", "message": "maps to A03:2021 Injection"}))
 
     def test_non_security_finding_returns_false(self) -> None:
         """Style/formatting findings with no security signal → False."""
@@ -118,7 +96,8 @@ class EnsurePrOnlyGuardTests(unittest.TestCase):
     def test_no_auto_merge_intent_is_silent(self) -> None:
         """When caller doesn't intend auto-merge, the guard never raises."""
         sg.ensure_pr_only_for_security(
-            [{"scanner": "dependabot"}], intends_auto_merge=False,
+            [{"scanner": "dependabot"}],
+            intends_auto_merge=False,
         )  # no exception expected
 
     def test_auto_merge_with_security_raises(self) -> None:

@@ -1,4 +1,5 @@
 """End-to-end integration test: normalizer -> redact -> canonical.json (no secret leaks)."""
+
 from __future__ import absolute_import
 
 import json
@@ -12,6 +13,7 @@ if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from tests.quality.rollup_v2.test_redaction import _build_test_token_shape
+
 from scripts.quality.rollup_v2.normalizers._base import BaseNormalizer, FindingDraft
 from scripts.quality.rollup_v2.schema.finding import CATEGORY_GROUP_QUALITY
 
@@ -20,7 +22,7 @@ _LEAKY_TOKEN = _build_test_token_shape()
 
 
 # Secret values used in the leaky normalizer -- each matches a known redaction pattern.
-_OPENAI_KEY = "sk-" + "a" * 40                   # OpenAI sk- pattern (full-match)
+_OPENAI_KEY = "sk-" + "a" * 40  # OpenAI sk- pattern (full-match)
 _NAMED_SECRET = "verylongsecretvaluegoeshereabcdef"  # named assignment pattern (via MY_SECRET =)
 
 
@@ -29,19 +31,21 @@ class _LeakyNormalizer(BaseNormalizer):
 
     def parse(self, artifact, repo_root):
         return [
-            self._build_finding(FindingDraft(
-                finding_id="leak-1",
-                file="a.py",
-                line=1,
-                category="broad-except",
-                category_group=CATEGORY_GROUP_QUALITY,
-                severity="medium",
-                primary_message=f"leaked key: {_OPENAI_KEY}",
-                rule_id="Pylint_W0703",
-                rule_url=None,
-                original_message=f"also leaked: token={_LEAKY_TOKEN}",
-                context_snippet=f'MY_SECRET = "{_NAMED_SECRET}"',
-            ))
+            self._build_finding(
+                FindingDraft(
+                    finding_id="leak-1",
+                    file="a.py",
+                    line=1,
+                    category="broad-except",
+                    category_group=CATEGORY_GROUP_QUALITY,
+                    severity="medium",
+                    primary_message=f"leaked key: {_OPENAI_KEY}",
+                    rule_id="Pylint_W0703",
+                    rule_url=None,
+                    original_message=f"also leaked: token={_LEAKY_TOKEN}",
+                    context_snippet=f'MY_SECRET = "{_NAMED_SECRET}"',
+                )
+            )
         ]
 
 

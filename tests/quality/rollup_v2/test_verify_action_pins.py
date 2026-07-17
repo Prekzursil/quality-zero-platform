@@ -1,4 +1,5 @@
 """Tests for verify_action_pins.py (per §B.3.6)."""
+
 from __future__ import absolute_import
 
 import sys
@@ -10,9 +11,9 @@ if str(Path(__file__).resolve().parents[3]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from scripts.quality.rollup_v2.verify_action_pins import (
+    main,
     scan_workflow,
     scan_workflows_dir,
-    main,
 )
 
 
@@ -184,9 +185,7 @@ class ScanWorkflowsDirTests(unittest.TestCase):
         self._tmp.cleanup()
 
     def test_scans_multiple_files(self):
-        (self.workflows_dir / "a.yml").write_text(
-            "jobs:\n  j:\n    steps:\n      - uses: bad/action@v1\n", "utf-8"
-        )
+        (self.workflows_dir / "a.yml").write_text("jobs:\n  j:\n    steps:\n      - uses: bad/action@v1\n", "utf-8")
         (self.workflows_dir / "b.yml").write_text(
             "jobs:\n  j:\n    steps:\n      - uses: actions/checkout@v4\n", "utf-8"
         )
@@ -226,9 +225,7 @@ class MainTests(unittest.TestCase):
         self.assertEqual(rc, 0)
 
     def test_main_returns_one_on_violation(self):
-        (self.workflows_dir / "bad.yml").write_text(
-            "jobs:\n  j:\n    steps:\n      - uses: bad/action@v2\n", "utf-8"
-        )
+        (self.workflows_dir / "bad.yml").write_text("jobs:\n  j:\n    steps:\n      - uses: bad/action@v2\n", "utf-8")
         rc = main(["--workflows-dir", str(self.workflows_dir)])
         self.assertEqual(rc, 1)
 

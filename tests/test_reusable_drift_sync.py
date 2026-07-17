@@ -14,11 +14,7 @@ from pathlib import Path
 
 import yaml  # type: ignore[import-untyped]
 
-
-_WORKFLOW = (
-    Path(__file__).resolve().parents[1]
-    / ".github" / "workflows" / "reusable-drift-sync.yml"
-)
+_WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "reusable-drift-sync.yml"
 
 
 class ReusableDriftSyncWorkflowTests(unittest.TestCase):
@@ -47,14 +43,11 @@ class ReusableDriftSyncWorkflowTests(unittest.TestCase):
         Without this escape the entire wave failed 15/15 — see the
         first run of ``drift-sync-wave.yml`` (24963891110)."""
         steps = self.doc["jobs"]["drift-sync"]["steps"]
-        compute_steps = [
-            s for s in steps
-            if s.get("id") == "artifact_name"
-        ]
+        compute_steps = [s for s in steps if s.get("id") == "artifact_name"]
         self.assertEqual(
-            len(compute_steps), 1,
-            "artifact_name step missing — upload-artifact will reject "
-            "names containing forward slashes",
+            len(compute_steps),
+            1,
+            "artifact_name step missing — upload-artifact will reject names containing forward slashes",
         )
         run_body = compute_steps[0].get("run", "")
         # Use a substitution that produces a slash-free identifier.
@@ -63,10 +56,7 @@ class ReusableDriftSyncWorkflowTests(unittest.TestCase):
     def test_upload_step_uses_artifact_safe_slug(self) -> None:
         """upload-artifact ``name:`` references the computed safe slug."""
         steps = self.doc["jobs"]["drift-sync"]["steps"]
-        upload_steps = [
-            s for s in steps
-            if "uses" in s and "upload-artifact" in s["uses"]
-        ]
+        upload_steps = [s for s in steps if "uses" in s and "upload-artifact" in s["uses"]]
         self.assertEqual(len(upload_steps), 1)
         name = upload_steps[0]["with"]["name"]
         self.assertIn("steps.artifact_name.outputs.slug_safe", name)
@@ -76,8 +66,10 @@ class ReusableDriftSyncWorkflowTests(unittest.TestCase):
         """Consumer-repo checkout falls back to ``github.token`` when no PAT."""
         steps = self.doc["jobs"]["drift-sync"]["steps"]
         consumer_checkouts = [
-            s for s in steps
-            if "uses" in s and s["uses"].startswith("actions/checkout")
+            s
+            for s in steps
+            if "uses" in s
+            and s["uses"].startswith("actions/checkout")
             and "inputs.repo_slug" in str(s.get("with", {}).get("repository", ""))
         ]
         self.assertEqual(len(consumer_checkouts), 1)

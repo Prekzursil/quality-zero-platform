@@ -73,9 +73,7 @@ class DotnetWpfCiTemplateTests(unittest.TestCase):
 
     def test_custom_dotnet_version_propagates(self) -> None:
         """``coverage.setup.dotnet`` override reaches setup-dotnet."""
-        rendered = _render(
-            "dotnet-wpf", {"coverage": {"setup": {"dotnet": "9.0.x"}}}
-        )
+        rendered = _render("dotnet-wpf", {"coverage": {"setup": {"dotnet": "9.0.x"}}})
         self.assertIn('dotnet-version: "9.0.x"', rendered)
 
 
@@ -108,10 +106,12 @@ class FullstackWebCiTemplateTests(unittest.TestCase):
 
     def test_three_parallel_jobs(self) -> None:
         """Backend + frontend + integration all appear."""
-        doc = yaml.safe_load(_render(
-            "fullstack-web",
-            {"coverage": {"setup": {"python": "3.12", "node": "20"}}},
-        ))
+        doc = yaml.safe_load(
+            _render(
+                "fullstack-web",
+                {"coverage": {"setup": {"python": "3.12", "node": "20"}}},
+            )
+        )
         self.assertEqual(doc["name"], "Fullstack Web CI")
         self.assertIn("backend", doc["jobs"])
         self.assertIn("frontend", doc["jobs"])
@@ -119,10 +119,12 @@ class FullstackWebCiTemplateTests(unittest.TestCase):
 
     def test_integration_waits_for_backend_and_frontend(self) -> None:
         """Integration depends on both coverage lanes via ``needs:``."""
-        doc = yaml.safe_load(_render(
-            "fullstack-web",
-            {"coverage": {"setup": {"python": "3.12", "node": "20"}}},
-        ))
+        doc = yaml.safe_load(
+            _render(
+                "fullstack-web",
+                {"coverage": {"setup": {"python": "3.12", "node": "20"}}},
+            )
+        )
         self.assertIn("backend", doc["jobs"]["integration"]["needs"])
         self.assertIn("frontend", doc["jobs"]["integration"]["needs"])
 
@@ -154,7 +156,11 @@ class ThisPrStacksCoveredTests(unittest.TestCase):
     """
 
     STACKS_IN_THIS_PR = (
-        "swift", "cpp-cmake", "dotnet-wpf", "gradle-java", "fullstack-web",
+        "swift",
+        "cpp-cmake",
+        "dotnet-wpf",
+        "gradle-java",
+        "fullstack-web",
     )
 
     def test_every_stack_has_ci_yml(self) -> None:

@@ -1,4 +1,5 @@
 """Canonical Finding dataclass (per design §3.1 + §A.3.2 + §A.4.1)."""
+
 from __future__ import absolute_import
 
 from dataclasses import dataclass
@@ -39,6 +40,7 @@ class Finding:  # pylint: disable=too-many-instance-attributes
     treat as flat. ``# pylint: disable=too-many-instance-attributes`` keeps
     the canonical-record intent without per-attribute justification noise.
     """
+
     schema_version: str
     finding_id: str
     file: str
@@ -60,22 +62,14 @@ class Finding:  # pylint: disable=too-many-instance-attributes
     cwe: str | None
     autofixable: bool
     tags: Tuple[str, ...]
-    patch_error: str | None = None   # per A.6 — set when a patch generator raised; none otherwise
+    patch_error: str | None = None  # per A.6 — set when a patch generator raised; none otherwise
 
     def __post_init__(self) -> None:
         if self.category_group not in _VALID_CATEGORY_GROUPS:
-            raise AssertionError(
-                f"category_group must be one of {_VALID_CATEGORY_GROUPS}, got {self.category_group!r}"
-            )
+            raise AssertionError(f"category_group must be one of {_VALID_CATEGORY_GROUPS}, got {self.category_group!r}")
         if self.patch_source not in _VALID_PATCH_SOURCES:
-            raise AssertionError(
-                f"patch_source must be one of {_VALID_PATCH_SOURCES}, got {self.patch_source!r}"
-            )
+            raise AssertionError(f"patch_source must be one of {_VALID_PATCH_SOURCES}, got {self.patch_source!r}")
         if self.corroboration not in _VALID_CORROBORATION:
-            raise AssertionError(
-                f"corroboration must be one of {_VALID_CORROBORATION}, got {self.corroboration!r}"
-            )
+            raise AssertionError(f"corroboration must be one of {_VALID_CORROBORATION}, got {self.corroboration!r}")
         if self.schema_version != SCHEMA_VERSION:
-            raise AssertionError(
-                f"schema_version must be {SCHEMA_VERSION!r}, got {self.schema_version!r}"
-            )
+            raise AssertionError(f"schema_version must be {SCHEMA_VERSION!r}, got {self.schema_version!r}")

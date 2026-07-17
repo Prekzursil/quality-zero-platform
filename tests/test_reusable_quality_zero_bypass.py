@@ -13,13 +13,7 @@ from pathlib import Path
 
 import yaml  # type: ignore[import-untyped]
 
-
-_WORKFLOW = (
-    Path(__file__).resolve().parents[1]
-    / ".github"
-    / "workflows"
-    / "reusable-quality-zero-bypass.yml"
-)
+_WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "reusable-quality-zero-bypass.yml"
 
 
 class ReusableBypassWorkflowTests(unittest.TestCase):
@@ -40,7 +34,11 @@ class ReusableBypassWorkflowTests(unittest.TestCase):
         """Every field the Python evaluator reads must be a declared input."""
         inputs = self.doc[True]["workflow_call"]["inputs"]
         for required in (
-            "label", "pr_slug", "pr_number", "head_sha", "actor",
+            "label",
+            "pr_slug",
+            "pr_number",
+            "head_sha",
+            "actor",
         ):
             with self.subTest(input=required):
                 self.assertIn(required, inputs)

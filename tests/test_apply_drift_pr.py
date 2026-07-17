@@ -28,9 +28,7 @@ class _FakeRunner:
         """Initialise an empty call log."""
         self.calls: List[List[str]] = []
 
-    def __call__(
-        self, cmd, cwd=None, check=False, capture_output=False, text=False
-    ) -> subprocess.CompletedProcess:
+    def __call__(self, cmd, cwd=None, check=False, capture_output=False, text=False) -> subprocess.CompletedProcess:
         """Record the invocation and return a success result."""
         self.calls.append(list(cmd))
         return subprocess.CompletedProcess(args=cmd, returncode=0)
@@ -135,17 +133,19 @@ class RunDriftPrTests(unittest.TestCase):
     def test_missing_report_returns_2(self) -> None:
         """Exit 2 when the report file doesn't exist."""
         args = argparse.Namespace(
-            report="/nope.json", repo_slug="x/y", default_branch="main",
-            platform_ref="main", cwd=".", runner=None,
+            report="/nope.json",
+            repo_slug="x/y",
+            default_branch="main",
+            platform_ref="main",
+            cwd=".",
+            runner=None,
         )
         rc = apr._run_drift_pr(args, _FakeRunner())
         self.assertEqual(rc, 2)
 
     def test_fully_in_sync_returns_0_without_git_calls(self) -> None:
         """All in_sync → exit 0 without invoking git/gh."""
-        rc, calls = self._run(
-            {"entries": [{"status": "in_sync", "output_path": "x"}]}
-        )
+        rc, calls = self._run({"entries": [{"status": "in_sync", "output_path": "x"}]})
         self.assertEqual(rc, 0)
         self.assertEqual(calls, [])
 
@@ -170,7 +170,8 @@ class RunDriftPrTests(unittest.TestCase):
         # Commit message asserts the drift-sync convention.
         commit_cmd = next(c for c in calls if "commit" in c)
         self.assertIn(
-            "chore(drift-sync): apply template updates", commit_cmd,
+            "chore(drift-sync): apply template updates",
+            commit_cmd,
         )
         # Phase 3 contract: drift PRs auto-merge on green CI.
         # The script issues ``gh pr merge <branch> --auto --squash`` after
@@ -193,22 +194,22 @@ class RunDriftPrTests(unittest.TestCase):
         orphan the drift PR — it stays open for manual merge. This
         test pins that asymmetric tolerance.
         """
-        path = _write_report({
-            "entries": [
-                {
-                    "status": "drift",
-                    "output_path": "codecov.yml",
-                    "proposed_content": "x\n",
-                }
-            ]
-        })
+        path = _write_report(
+            {
+                "entries": [
+                    {
+                        "status": "drift",
+                        "output_path": "codecov.yml",
+                        "proposed_content": "x\n",
+                    }
+                ]
+            }
+        )
         self.addCleanup(path.unlink, missing_ok=True)
 
         merge_attempts: List[List[str]] = []
 
-        def runner(
-            cmd, cwd=None, check=False, capture_output=False, text=False
-        ) -> subprocess.CompletedProcess:
+        def runner(cmd, cwd=None, check=False, capture_output=False, text=False) -> subprocess.CompletedProcess:
             """Succeed on everything except gh pr merge."""
             if cmd[:3] == ["gh", "pr", "merge"]:
                 merge_attempts.append(list(cmd))
@@ -259,18 +260,20 @@ class MainEntrypointTests(unittest.TestCase):
         """With a minimal argv + report, main() returns the delegate's rc."""
         path = _write_report({"entries": [{"status": "in_sync", "output_path": "x"}]})
         self.addCleanup(path.unlink, missing_ok=True)
-        with patch.object(
-            apr, "_run_drift_pr", return_value=42
-        ) as run_mock:
-            with patch(
+        with (
+            patch.object(apr, "_run_drift_pr", return_value=42) as run_mock,
+            patch(
                 "sys.argv",
                 [
                     "apply_drift_pr.py",
-                    "--report", str(path),
-                    "--repo-slug", "x/y",
+                    "--report",
+                    str(path),
+                    "--repo-slug",
+                    "x/y",
                 ],
-            ):
-                rc = apr.main()
+            ),
+        ):
+            rc = apr.main()
         self.assertEqual(rc, 42)
         run_mock.assert_called_once()
 

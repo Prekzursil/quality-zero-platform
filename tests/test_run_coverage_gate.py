@@ -10,15 +10,13 @@ from pathlib import Path
 from typing import List
 from unittest.mock import patch
 
-from scripts.quality.common import DEFAULT_COVERAGE_JSON, DEFAULT_COVERAGE_MD
-
-from scripts.quality import run_coverage_gate
-
-
 from tests._run_coverage_gate_helpers import (
     assert_run_shell_invocation,
     make_coverage_assert_fixture,
 )
+
+from scripts.quality import run_coverage_gate
+from scripts.quality.common import DEFAULT_COVERAGE_JSON, DEFAULT_COVERAGE_MD
 
 
 class RunCoverageGateTests(unittest.TestCase):
@@ -106,25 +104,17 @@ class RunCoverageGateTests(unittest.TestCase):
         """Cover run shell requires resolved shell executable."""
         with (
             patch("scripts.quality.run_coverage_gate._path_exists", return_value=False),
-            self.assertRaisesRegex(
-                FileNotFoundError, "Unable to locate required shell executable: bash"
-            ),
+            self.assertRaisesRegex(FileNotFoundError, "Unable to locate required shell executable: bash"),
         ):
-            run_coverage_gate._run_shell(
-                "echo coverage", shell_name="bash", cwd=Path.cwd()
-            )
+            run_coverage_gate._run_shell("echo coverage", shell_name="bash", cwd=Path.cwd())
 
     def test_run_shell_requires_resolved_powershell_executable(self) -> None:
         """Cover run shell requires resolved powershell executable."""
         with (
             patch("scripts.quality.run_coverage_gate._path_exists", return_value=False),
-            self.assertRaisesRegex(
-                FileNotFoundError, "Unable to locate required shell executable: pwsh"
-            ),
+            self.assertRaisesRegex(FileNotFoundError, "Unable to locate required shell executable: pwsh"),
         ):
-            run_coverage_gate._run_shell(
-                "echo coverage", shell_name="pwsh", cwd=Path.cwd()
-            )
+            run_coverage_gate._run_shell("echo coverage", shell_name="pwsh", cwd=Path.cwd())
 
     def test_path_exists_reports_real_files(self) -> None:
         """Cover path exists reports real files."""
@@ -133,15 +123,11 @@ class RunCoverageGateTests(unittest.TestCase):
             target.write_text("ok", encoding="utf-8")
 
             self.assertTrue(run_coverage_gate._path_exists(str(target)))
-            self.assertFalse(
-                run_coverage_gate._path_exists(str(target.with_name("missing.txt")))
-            )
+            self.assertFalse(run_coverage_gate._path_exists(str(target.with_name("missing.txt"))))
 
     def test_run_assert_coverage_invokes_module_in_repo_cwd(self) -> None:
         """Cover run assert coverage invokes module in repo cwd."""
-        temp_dir, repo_dir, platform_dir, coverage_dir, coverage = (
-            self._coverage_assert_fixture()
-        )
+        temp_dir, repo_dir, platform_dir, coverage_dir, coverage = self._coverage_assert_fixture()
         with temp_dir:
             observed_cwd = None
             observed_argv = None
@@ -186,9 +172,7 @@ class RunCoverageGateTests(unittest.TestCase):
 
     def test_run_assert_coverage_omits_branch_threshold_when_disabled(self) -> None:
         """Cover run assert coverage omits branch threshold when disabled."""
-        temp_dir, repo_dir, platform_dir, _coverage_dir, coverage = (
-            self._coverage_assert_fixture()
-        )
+        temp_dir, repo_dir, platform_dir, _coverage_dir, coverage = self._coverage_assert_fixture()
         coverage["branch_min_percent"] = None
         with temp_dir:
             observed_argv = None
@@ -258,9 +242,7 @@ class RunCoverageGateTests(unittest.TestCase):
                 result = run_coverage_gate.main()
 
         self.assertEqual(result, 23)
-        mock_shell.assert_called_once_with(
-            "echo coverage", shell_name="bash", cwd=repo_dir.resolve()
-        )
+        mock_shell.assert_called_once_with("echo coverage", shell_name="bash", cwd=repo_dir.resolve())
         mock_assert.assert_called_once()
 
     def test_evidence_only_mode_skips_assertion_and_returns_success(self) -> None:
@@ -284,9 +266,7 @@ class RunCoverageGateTests(unittest.TestCase):
 
             with (
                 patch("scripts.quality.run_coverage_gate._run_shell") as mock_shell,
-                patch(
-                    "scripts.quality.run_coverage_gate._run_assert_coverage_100"
-                ) as mock_assert,
+                patch("scripts.quality.run_coverage_gate._run_assert_coverage_100") as mock_assert,
                 patch.object(
                     sys,
                     "argv",
@@ -302,8 +282,5 @@ class RunCoverageGateTests(unittest.TestCase):
                 result = run_coverage_gate.main()
 
         self.assertEqual(result, 0)
-        mock_shell.assert_called_once_with(
-            "", shell_name="bash", cwd=Path.cwd().resolve()
-        )
+        mock_shell.assert_called_once_with("", shell_name="bash", cwd=Path.cwd().resolve())
         mock_assert.assert_not_called()
-

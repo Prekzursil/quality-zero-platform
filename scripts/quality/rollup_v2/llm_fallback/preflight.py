@@ -1,4 +1,5 @@
 """Fail-fast preflight for LLM fallback feature gate (per design §B.3.12)."""
+
 from __future__ import absolute_import
 
 from typing import Mapping

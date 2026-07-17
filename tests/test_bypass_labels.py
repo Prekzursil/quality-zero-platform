@@ -82,9 +82,7 @@ class EvaluateBreakGlassTests(unittest.TestCase):
         self.assertTrue(decision.allowed)
         self.assertEqual(decision.incident, "INC-1234")
         self.assertIsNotNone(decision.audit_record)
-        self.assertEqual(
-            decision.audit_record["pr"]["slug"], "owner/repo"
-        )
+        self.assertEqual(decision.audit_record["pr"]["slug"], "owner/repo")
         self.assertEqual(decision.audit_record["actor"], "alice")
         self.assertEqual(decision.label, bl.BREAK_GLASS_LABEL)
 
@@ -142,7 +140,11 @@ class EvaluateSkipTests(unittest.TestCase):
     def test_skip_has_no_tracking_issue(self) -> None:
         """Skip label doesn't require the post-merge follow-up issue."""
         decision = bl.evaluate_skip(
-            pr_body="", pr_slug="x/y", pr_number=5, head_sha="s", actor="a",
+            pr_body="",
+            pr_slug="x/y",
+            pr_number=5,
+            head_sha="s",
+            actor="a",
         )
         self.assertIsNone(decision.tracking_issue_title)
         self.assertIsNone(decision.tracking_issue_body)
@@ -151,7 +153,10 @@ class EvaluateSkipTests(unittest.TestCase):
         """Skip records don't include an incident field at all."""
         decision = bl.evaluate_skip(
             pr_body="Incident: INC-x",  # ignored
-            pr_slug="x/y", pr_number=5, head_sha="s", actor="a",
+            pr_slug="x/y",
+            pr_number=5,
+            head_sha="s",
+            actor="a",
         )
         self.assertNotIn("incident", decision.audit_record)
 
@@ -188,7 +193,10 @@ class IntegrationFlowTests(unittest.TestCase):
             audit = Path(tmp) / "audit" / "break-glass.jsonl"
             decision = bl.evaluate_break_glass(
                 pr_body="Incident: INC-42",
-                pr_slug="x/y", pr_number=1, head_sha="s", actor="a",
+                pr_slug="x/y",
+                pr_number=1,
+                head_sha="s",
+                actor="a",
             )
             bl.append_jsonl(audit, decision.audit_record)
             line = audit.read_text(encoding="utf-8").strip()
@@ -202,8 +210,11 @@ class IntegrationFlowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             audit = Path(tmp) / "audit" / "skip.jsonl"
             decision = bl.evaluate_skip(
-                pr_body="", pr_slug="x/y",
-                pr_number=2, head_sha="s", actor="a",
+                pr_body="",
+                pr_slug="x/y",
+                pr_number=2,
+                head_sha="s",
+                actor="a",
             )
             bl.append_jsonl(audit, decision.audit_record)
             line = audit.read_text(encoding="utf-8").strip()

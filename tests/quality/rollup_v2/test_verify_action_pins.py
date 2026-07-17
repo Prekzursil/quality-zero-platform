@@ -145,7 +145,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: qltysh/qlty-action/install@fd52dc852530a708d68c3b7342f8d33d1df4cd55
+      - uses: qltysh/qlty-action/install@08a0a862c159eae9b9003081da6663d96efef637
 """)
         violations = scan_workflow(wf)
         self.assertEqual(len(violations), 0)

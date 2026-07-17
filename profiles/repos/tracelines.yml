@@ -1,0 +1,70 @@
+slug: Prekzursil/tracelines
+version: 2
+stack: python-tooling
+mode:
+  phase: absolute
+scanners: {}
+overrides: []
+verify_command: python -m pytest
+required_contexts_mode: replace
+issue_policy:
+  mode: zero
+  pr_behavior: absolute
+  main_behavior: absolute
+# Lean member: the ruleset requires ONLY the repo's own CI checks
+# (.github/workflows/ci.yml on push main + all PRs) plus the
+# platform-mandated `codeql / CodeQL` security-baseline context (enrollment
+# invariant, same lean-gate shape as the QZP self-profile). No
+# shared-scanner-matrix / Sonar / Codacy / qlty / Codecov contexts — this
+# repo does not produce those artifacts. CAVEAT: the matrix-derived
+# `test <py> / <os>` context names are brittle — adding or dropping a
+# Python version renames them. CodeQL runs TODAY via GitHub DEFAULT setup
+# (GitHub-managed; it does NOT emit the `codeql / CodeQL` workflow
+# context) — the context goes live when the fleet CodeQL sweep seeds the
+# managed codeql.yml wrapper (rulesets are not auto-synced).
+enabled_scanners:
+  coverage: false
+  codecov: false
+  sonar: false
+  codacy: false
+  semgrep: false
+  sentry: false
+  qlty: false
+coverage:
+  min_percent: 0.0
+  branch_min_percent: null
+  assert_mode:
+    default: evidence_only
+  policy: informational
+  evidence_note: >-
+    Coverage is MEASURED but NOT enforced in tracelines CI. Every test leg
+    runs `pytest --cov=tracelines --cov-report=term-missing`, but there is no
+    --cov-fail-under and no [tool.coverage.report] fail_under in pyproject
+    (addopts are only `-m 'not network' -q`). Informational only; QZP
+    collects and gates no coverage artifact for this repo.
+required_contexts:
+  always:
+  - mypy
+  - test 3.10 / ubuntu-latest
+  - test 3.11 / ubuntu-latest
+  - test 3.12 / ubuntu-latest
+  - test 3.13 / ubuntu-latest
+  - test 3.12 / windows-latest
+  - test 3.12 / macos-latest
+  - codeql / CodeQL
+  pull_request_only: []
+  target:
+  - mypy
+  - test 3.10 / ubuntu-latest
+  - test 3.11 / ubuntu-latest
+  - test 3.12 / ubuntu-latest
+  - test 3.13 / ubuntu-latest
+  - test 3.12 / windows-latest
+  - test 3.12 / macos-latest
+  - codeql / CodeQL
+codeql:
+  languages:
+  - actions
+  - python
+dependabot:
+  updates: []

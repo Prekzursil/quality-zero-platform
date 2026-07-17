@@ -75,3 +75,18 @@ repos:
     rollout: phase1-wave6
     default_branch: main
     notes: Public fetch-and-package Code::Blocks control-plane repo with managed profile seeding and strict-zero governance.
+  - slug: Prekzursil/PrimariRo
+    profile: primariro
+    rollout: observe
+    default_branch: main
+    notes: Lean member (private repo). Ruleset models the repo's own aggregate CI gate (Required / all CI and privacy gates) plus the platform CodeQL baseline context; no active ruleset on main today; coverage informational, not CI-enforced.
+  - slug: Prekzursil/tracelines
+    profile: tracelines
+    rollout: observe
+    default_branch: main
+    notes: Lean member (public repo). Ruleset models the repo's own ci.yml checks (mypy + 6-leg test matrix) plus the platform CodeQL baseline context; matrix-derived context names are brittle across Python-version changes; coverage measured but informational; CodeQL runs today via GitHub default setup, which does not emit the managed workflow context.
+  - slug: Prekzursil/agent-skills-toolchain
+    profile: agent-skills-toolchain
+    rollout: observe
+    default_branch: main
+    notes: Lean member. The 7 gate-* quality.yml job contexts are already enforced by active repo ruleset 18297434 on main; the platform CodeQL baseline context is added on top; coverage is per-package 100 in repo CI, whole-repo aggregate deliberately not modeled.

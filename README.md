@@ -24,7 +24,7 @@ It replaces the old queue/template baseline with reusable workflows, shared qual
 
 ## Governed Repositories
 
-The current governed surface (per [`inventory/repos.yml`](inventory/repos.yml)) covers 15 repositories. Run `yq '.repos[].slug' inventory/repos.yml` for the current list; this README intentionally does not duplicate it to avoid drift.
+The current governed surface (per [`inventory/repos.yml`](inventory/repos.yml)) covers 18 repositories. Run `yq '.repos[].slug' inventory/repos.yml` for the current list; this README intentionally does not duplicate it to avoid drift.
 
 Phase-1 compatibility preserves the established public check names for the original strict-zero cohort while later cohorts (`event-link`, `momentstudio`, `quality-zero-platform`) join the governed inventory through the bootstrap flow described in [`docs/ONBOARDING.md`](docs/ONBOARDING.md).
 

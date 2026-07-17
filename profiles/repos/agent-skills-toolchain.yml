@@ -1,0 +1,74 @@
+slug: Prekzursil/agent-skills-toolchain
+version: 2
+stack: python-tooling
+mode:
+  phase: absolute
+scanners: {}
+overrides: []
+verify_command: npm test
+required_contexts_mode: replace
+issue_policy:
+  mode: zero
+  pr_behavior: absolute
+  main_behavior: absolute
+# Lean member: the ruleset requires ONLY the repo's own quality.yml gate
+# jobs (push main + PRs to main) plus the platform-mandated
+# `codeql / CodeQL` security-baseline context (enrollment invariant, same
+# lean-gate shape as the QZP self-profile). The 7 gate-* contexts are
+# ALREADY enforced today by active repository ruleset 18297434 on main;
+# this profile models that reality, and the CodeQL context goes live when
+# the fleet CodeQL sweep seeds the managed codeql.yml wrapper (rulesets are
+# not auto-synced). `quality` is the WORKFLOW name, not a check context —
+# the required status-check contexts are the JOB names below. No
+# shared-scanner-matrix / Sonar / Codacy / qlty / Codecov contexts — this
+# repo does not produce those artifacts.
+enabled_scanners:
+  coverage: false
+  codecov: false
+  sonar: false
+  codacy: false
+  semgrep: false
+  sentry: false
+  qlty: false
+coverage:
+  min_percent: 0.0
+  branch_min_percent: null
+  assert_mode:
+    default: evidence_only
+  policy: per-package-100-in-repo-ci
+  evidence_note: >-
+    Coverage IS enforced by the repo's OWN CI, per-package: quality.yml runs
+    `pytest --cov ... --cov-branch --cov-fail-under=100` for each governed
+    python package (mcp-manager, scholarly-access-mcp, taskwatch_monitor,
+    monitorcore) plus node-workspace tests (agentify-desktop). Whole-repo
+    aggregate coverage is DELIBERATELY not modeled — the workflow documents
+    that a whole-repo 100% lane cannot pass a monorepo of independent
+    packages; per-package lanes are the charter. QZP collects no repo-level
+    coverage artifact; any such artifact stays informational.
+required_contexts:
+  always:
+  - gate-lint-format (ruff)
+  - gate-types (basedpyright)
+  - gate-tests-coverage (node workspaces)
+  - gate-tests-coverage (python packages)
+  - gate-sast (opengrep)
+  - gate-secrets (gitleaks)
+  - gate-deps (osv-scanner)
+  - codeql / CodeQL
+  pull_request_only: []
+  target:
+  - gate-lint-format (ruff)
+  - gate-types (basedpyright)
+  - gate-tests-coverage (node workspaces)
+  - gate-tests-coverage (python packages)
+  - gate-sast (opengrep)
+  - gate-secrets (gitleaks)
+  - gate-deps (osv-scanner)
+  - codeql / CodeQL
+codeql:
+  languages:
+  - actions
+  - python
+  - javascript-typescript
+dependabot:
+  updates: []

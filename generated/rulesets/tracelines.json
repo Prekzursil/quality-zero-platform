@@ -1,0 +1,67 @@
+{
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "exclude": [],
+      "include": [
+        "refs/heads/main"
+      ]
+    }
+  },
+  "enforcement": "active",
+  "name": "quality-zero-platform / tracelines",
+  "profile_id": "tracelines",
+  "repo_slug": "Prekzursil/tracelines",
+  "rules": [
+    {
+      "parameters": {
+        "dismiss_stale_reviews_on_push": false,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_approving_review_count": 0,
+        "required_review_thread_resolution": false
+      },
+      "type": "pull_request"
+    },
+    {
+      "parameters": {
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          {
+            "context": "mypy"
+          },
+          {
+            "context": "test 3.10 / ubuntu-latest"
+          },
+          {
+            "context": "test 3.11 / ubuntu-latest"
+          },
+          {
+            "context": "test 3.12 / ubuntu-latest"
+          },
+          {
+            "context": "test 3.13 / ubuntu-latest"
+          },
+          {
+            "context": "test 3.12 / windows-latest"
+          },
+          {
+            "context": "test 3.12 / macos-latest"
+          },
+          {
+            "context": "codeql / CodeQL"
+          }
+        ],
+        "strict_required_status_checks_policy": true
+      },
+      "type": "required_status_checks"
+    },
+    {
+      "type": "non_fast_forward"
+    },
+    {
+      "type": "deletion"
+    }
+  ],
+  "target": "branch"
+}

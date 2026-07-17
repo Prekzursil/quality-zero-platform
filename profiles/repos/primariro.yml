@@ -1,0 +1,55 @@
+slug: Prekzursil/PrimariRo
+version: 2
+stack: fullstack-web
+mode:
+  phase: absolute
+scanners: {}
+overrides: []
+verify_command: 'python -m pytest -q -m "not live" pipeline'
+required_contexts_mode: replace
+issue_policy:
+  mode: zero
+  pr_behavior: absolute
+  main_behavior: absolute
+# Lean member: the ruleset requires ONLY the repo's own aggregate CI gate
+# plus the platform-mandated `codeql / CodeQL` security-baseline context
+# (enrollment invariant, same lean-gate shape as the QZP self-profile).
+# No shared-scanner-matrix / Sonar / Codacy / qlty / Codecov contexts —
+# this repo does not produce those artifacts. The CodeQL context is the
+# managed baseline target; it goes live on the repo when the fleet CodeQL
+# sweep seeds the codeql.yml wrapper (rulesets are not auto-synced).
+enabled_scanners:
+  coverage: false
+  codecov: false
+  sonar: false
+  codacy: false
+  semgrep: false
+  sentry: false
+  qlty: false
+coverage:
+  min_percent: 0.0
+  branch_min_percent: null
+  assert_mode:
+    default: evidence_only
+  policy: informational
+  evidence_note: >-
+    Coverage is NOT measured or enforced in PrimariRo CI. The Python job runs
+    `python -m pytest -q -m "not live" pipeline` with no coverage flags, and
+    pipeline/pyproject.toml addopts carry no coverage options. The
+    coverage.json artifact in its CI is election-DATA coverage, not test
+    coverage. The locally claimed ~100% pipeline coverage is informational
+    only; QZP collects and gates no coverage artifact for this repo.
+required_contexts:
+  always:
+  - Required / all CI and privacy gates
+  - codeql / CodeQL
+  pull_request_only: []
+  target:
+  - Required / all CI and privacy gates
+  - codeql / CodeQL
+codeql:
+  languages:
+  - actions
+  - python
+dependabot:
+  updates: []

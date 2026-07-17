@@ -25,13 +25,13 @@ Each emitted entry is a flat object::
 Pure standard library plus PyYAML. No network, no side effects.
 """
 
-from __future__ import annotations
+from __future__ import absolute_import
 
 import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 try:
     import yaml
@@ -42,7 +42,7 @@ except ModuleNotFoundError:  # pragma: no cover - dependency guard
 # Per-repo keys that may override the top-level ``defaults`` block.
 OVERRIDABLE = ("model", "effort", "max_changed_files")
 # Last-resort defaults if the config omits a ``defaults`` block entirely.
-FALLBACK_DEFAULTS: dict[str, Any] = {
+FALLBACK_DEFAULTS: Dict[str, Any] = {
     "model": "gpt-5.6-sol",
     "effort": "max",
     "max_changed_files": 40,
@@ -63,7 +63,7 @@ def _coerce_cap(value: Any, fallback: int) -> int:
     return cap if cap > 0 else fallback
 
 
-def load_config(path: Path) -> dict[str, Any]:
+def load_config(path: Path) -> Dict[str, Any]:
     """Read and parse the fleet config, exiting non-zero on any structural error."""
     try:
         raw = path.read_text(encoding="utf-8")
@@ -81,7 +81,7 @@ def load_config(path: Path) -> dict[str, Any]:
     return data
 
 
-def build_entries(config: dict[str, Any], only_repo: str | None = None) -> list[dict[str, Any]]:
+def build_entries(config: Dict[str, Any], only_repo: Optional[str] = None) -> List[Dict[str, Any]]:
     """Expand the config into a flat list of dispatch entries.
 
     A full sweep (``only_repo`` is ``None``) includes every target with
@@ -104,7 +104,7 @@ def build_entries(config: dict[str, Any], only_repo: str | None = None) -> list[
 
     wanted = normalize_repo(only_repo) if only_repo else None
     matched_repo = False
-    entries: list[dict[str, Any]] = []
+    entries: List[Dict[str, Any]] = []
 
     for target in targets:
         if not isinstance(target, dict):
@@ -149,7 +149,7 @@ def build_entries(config: dict[str, Any], only_repo: str | None = None) -> list[
     return entries
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         description="Build the Codex fleet-sweep dispatch plan from codex-targets.yml.",
     )

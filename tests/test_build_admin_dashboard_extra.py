@@ -8,8 +8,20 @@ from argparse import Namespace
 from pathlib import Path
 from typing import Any, List, Mapping
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 from scripts.quality import build_admin_dashboard
+
+
+def _http_error(code: int, reason: str) -> HTTPError:
+    """Build an ``HTTPError`` like ``security_helpers._read_json_response`` raises."""
+    return HTTPError(
+        "https://api.github.com/repos/Prekzursil/agent-skills-toolchain",
+        code,
+        reason,
+        hdrs=None,
+        fp=None,
+    )
 
 
 class BuildAdminDashboardExtraTests(unittest.TestCase):
@@ -95,6 +107,76 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
             live = build_admin_dashboard._live_health("token", "Prekzursil/example", "main")
         self.assertEqual(live["default_branch_health"], "success")
         self.assertEqual(live["open_pr_health"], "success")
+        self.assertTrue(live["ruleset_present"])
+        self.assertEqual(live["visibility"], "public")
+
+    def test_live_health_treats_404_resources_as_absent_and_redacts(self) -> None:
+        """A private governed repo with no visible resources must not abort the build.
+
+        Regression test for the Publish Admin Dashboard failure: a
+        newly-registered PRIVATE repo (agent-skills-toolchain — no Pages
+        site, unreadable by the workflow token) 404s on every per-repo
+        GitHub fetch. Each 404 must be treated as "resource absent" —
+        health ``unknown``, no ruleset — and the repo marked ``private``
+        so ``redact_private_repos`` masks the slug instead of leaking it.
+        """
+        with patch.object(
+            build_admin_dashboard,
+            "_github_payload",
+            side_effect=[
+                _http_error(404, "Not Found"),  # actions/runs
+                _http_error(404, "Not Found"),  # rulesets
+                _http_error(404, "Not Found"),  # repo metadata
+            ],
+        ) as payload_mock:
+            live = build_admin_dashboard._live_health("token", "Prekzursil/agent-skills-toolchain", "main")
+        self.assertEqual(payload_mock.call_count, 3)
+        self.assertEqual(live["default_branch_health"], "unknown")
+        self.assertEqual(live["open_pr_health"], "unknown")
+        self.assertFalse(live["ruleset_present"])
+        self.assertEqual(live["visibility"], "private")
+
+    def test_live_health_reraises_non_404_http_errors(self) -> None:
+        """Only 404 is tolerated; rate-limits/server errors still abort loudly."""
+        with (
+            patch.object(
+                build_admin_dashboard,
+                "_github_payload",
+                side_effect=_http_error(403, "rate limited"),
+            ),
+            self.assertRaises(HTTPError) as caught,
+        ):
+            build_admin_dashboard._live_health("token", "Prekzursil/example", "main")
+        self.assertEqual(caught.exception.code, 403)
+
+    def test_live_health_partial_404_keeps_reachable_data_and_public_default(self) -> None:
+        """A 404 on one resource degrades only that field; unusable metadata stays public."""
+        runs_payload = {"workflow_runs": [{"event": "push", "conclusion": "success"}]}
+        with patch.object(
+            build_admin_dashboard,
+            "_github_payload",
+            side_effect=[
+                runs_payload,  # actions/runs reachable
+                _http_error(404, "Not Found"),  # rulesets absent
+                ["unexpected"],  # metadata reachable but not a dict
+            ],
+        ):
+            live = build_admin_dashboard._live_health("token", "Prekzursil/tracelines", "main")
+        self.assertEqual(live["default_branch_health"], "success")
+        self.assertFalse(live["ruleset_present"])
+        self.assertEqual(live["visibility"], "public")
+
+        with patch.object(
+            build_admin_dashboard,
+            "_github_payload",
+            side_effect=[
+                _http_error(404, "Not Found"),  # actions/runs absent
+                [{"id": 1}],  # rulesets reachable
+                {"visibility": "   "},  # metadata dict with blank visibility
+            ],
+        ):
+            live = build_admin_dashboard._live_health("token", "Prekzursil/tracelines", "main")
+        self.assertEqual(live["default_branch_health"], "unknown")
         self.assertTrue(live["ruleset_present"])
         self.assertEqual(live["visibility"], "public")
 

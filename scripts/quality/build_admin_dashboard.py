@@ -10,6 +10,7 @@ import shutil
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Sequence, Set
+from urllib.error import HTTPError
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -190,6 +191,28 @@ def _github_payload(url: str, token: str) -> Any:
     return payload
 
 
+def _github_payload_or_none(url: str, token: str) -> Any:
+    """Fetch ``url``; return ``None`` when GitHub reports the resource 404.
+
+    A newly-registered governed repo can be PRIVATE and/or lack the fetched
+    resource entirely (no Pages site, no rulesets, or a repo the workflow
+    token cannot read at all) — GitHub reports every one of those as HTTP
+    404. That is a per-repo "resource is absent" signal, not a build-stopping
+    error: the caller degrades that repo's row (health ``unknown``, redacted
+    slug) instead of aborting the whole dashboard publish, mirroring how
+    ``redact_private_repos`` already tolerates private repos. Any other
+    ``HTTPError`` (403 rate-limit, 5xx, ...) still propagates. The SSRF
+    hardening in ``scripts.security_helpers`` keeps raising unconditionally;
+    only this caller decides a 404 is tolerable.
+    """
+    try:
+        return _github_payload(url, token)
+    except HTTPError as exc:
+        if exc.code == 404:
+            return None
+        raise
+
+
 def _select_runs(workflow_runs: Sequence[Mapping[str, Any]], *, filter_fn=None) -> List[Mapping[str, Any]]:
     """Handle select runs."""
     if filter_fn is None:
@@ -213,20 +236,29 @@ def _compute_health(workflow_runs: Sequence[Mapping[str, Any]], *, filter_fn=Non
 
 def _live_health(token: str, repo_slug: str, default_branch: str) -> Dict[str, Any]:
     """Handle live health."""
-    runs = _github_payload(
+    # Every per-repo fetch is 404-tolerant: a 404 means "this repo has no
+    # such resource visible to the token" (private repo, no runs, no
+    # rulesets) and must degrade that ONE row, never abort the whole
+    # dashboard build.
+    runs = _github_payload_or_none(
         (f"{GITHUB_API_BASE}/repos/{repo_slug}/actions/runs?branch={default_branch}&per_page=20"),
         token,
     )
-    rulesets = _github_payload(f"{GITHUB_API_BASE}/repos/{repo_slug}/rulesets", token)
+    rulesets = _github_payload_or_none(f"{GITHUB_API_BASE}/repos/{repo_slug}/rulesets", token)
     # Fetch repo metadata to capture visibility for the redaction step
     # in ``build_dashboard_payload``. Using the same token lets private
     # repos (where the bot has read access) report their true visibility;
-    # repos visible only as public report ``"public"``. Defaults to
-    # ``"public"`` on any failure so a missing/erroring metadata fetch
-    # cannot accidentally redact (or leak via mis-default).
-    repo_meta = _github_payload(f"{GITHUB_API_BASE}/repos/{repo_slug}", token)
+    # repos visible only as public report ``"public"``. A 404 here means
+    # the token cannot see the repo AT ALL — a public repo's metadata is
+    # visible to any token, so an unreadable governed repo is private (or
+    # gone). Worst-case default to ``"private"`` so ``redact_private_repos``
+    # masks the slug on the public dashboard instead of leaking it
+    # (Phase 5 §8). Reachable-but-unusable metadata keeps ``"public"``.
+    repo_meta = _github_payload_or_none(f"{GITHUB_API_BASE}/repos/{repo_slug}", token)
     visibility = "public"
-    if isinstance(repo_meta, dict):
+    if repo_meta is None:
+        visibility = "private"
+    elif isinstance(repo_meta, dict):
         raw_visibility = repo_meta.get("visibility")
         if isinstance(raw_visibility, str) and raw_visibility.strip():
             visibility = raw_visibility.strip().lower()

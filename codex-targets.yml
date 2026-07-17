@@ -65,6 +65,12 @@ targets:
     tasks:
       - "Documentation and tests only: improve the README and add unit tests for existing untested utility/helper modules. Do NOT alter UI behaviour, routing, API endpoints, or build configuration."
 
+  - repo: Prekzursil/svcoverage
+    enabled: true
+    max_changed_files: 20
+    tasks:
+      - "Documentation and tests only: improve README/docs usage examples and add hermetic unit tests for currently-untested pure/helper functions (tile math, MVT/KartaView parsers, fusion, export). Do NOT modify the HARD-RULE filter (is_official_panoid, the source=='launch' allowlist, providers/google_sl.py, stitch/fuse logic), the public API, CLI flags, the output GeoJSON schema, CI workflows, or dependencies."
+
   # ---------------------------------------------------------------------------
   # DISABLED -- payment/auth. EXTRA CAUTION: never enable without a hand-reviewed,
   # tightly-scoped task, and never auto-merge anything it proposes.

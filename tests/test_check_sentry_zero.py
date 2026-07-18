@@ -11,14 +11,10 @@ import unittest
 from argparse import Namespace
 from email.message import Message
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
 from unittest.mock import patch
 from urllib.error import HTTPError
 
 from scripts.quality import check_sentry_zero as sentry_module
-
-if TYPE_CHECKING:
-    from importlib.machinery import ModuleSpec
 
 
 class SentryZeroTests(unittest.TestCase):
@@ -34,7 +30,7 @@ class SentryZeroTests(unittest.TestCase):
         )
         if spec is None or spec.loader is None:  # pragma: no cover
             self.fail("Expected a concrete module spec for check_sentry_zero")
-        module = importlib.util.module_from_spec(cast("ModuleSpec", spec))
+        module = importlib.util.module_from_spec(spec)
         original_path = list(sys.path)
         sys.path = [entry for entry in sys.path if entry != repo_root]
         try:

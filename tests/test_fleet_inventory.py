@@ -815,7 +815,7 @@ class CoverageClosureTests(unittest.TestCase):
         import io
         from contextlib import redirect_stdout
 
-        import scripts.quality.fleet_inventory as module_under_test
+        from scripts.quality import fleet_inventory as module_under_test
 
         original_fetch_user = module_under_test.fetch_user_repos
         original_fetch_auth = module_under_test.fetch_authenticated_repos
@@ -858,7 +858,7 @@ class CoverageClosureTests(unittest.TestCase):
         import io
         from contextlib import redirect_stdout
 
-        import scripts.quality.fleet_inventory as module_under_test
+        from scripts.quality import fleet_inventory as module_under_test
 
         original_fetch_user = module_under_test.fetch_user_repos
 
@@ -900,7 +900,7 @@ class MainCLITests(unittest.TestCase):
                 "version: 1\nrepos:\n  - slug: Prekzursil/alpha\n",
                 encoding="utf-8",
             )
-            import scripts.quality.fleet_inventory as module_under_test
+            from scripts.quality import fleet_inventory as module_under_test
 
             original_fetch_user = module_under_test.fetch_user_repos
             original_fetch_auth = module_under_test.fetch_authenticated_repos
@@ -933,7 +933,7 @@ class MainCLITests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw:
             inventory = Path(raw) / "repos.yml"
             inventory.write_text("version: 1\nrepos: []\n", encoding="utf-8")
-            import scripts.quality.fleet_inventory as module_under_test
+            from scripts.quality import fleet_inventory as module_under_test
 
             original_fetch_user = module_under_test.fetch_user_repos
             original_fetch_auth = module_under_test.fetch_authenticated_repos

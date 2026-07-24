@@ -1,0 +1,11 @@
+{
+  "findings": [
+    "GITHUB_TOKEN is missing for github_check_context mode.",
+    "REPO_SLUG or GITHUB_REPOSITORY is missing for github_check_context mode.",
+    "TARGET_SHA or GITHUB_SHA is missing for github_check_context mode."
+  ],
+  "open_issues": null,
+  "open_issues_url": "",
+  "status": "fail",
+  "timestamp_utc": "2026-06-15T20:50:29.785900+00:00"
+}

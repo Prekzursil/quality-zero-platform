@@ -64,6 +64,9 @@
             "context": "shared-scanner-matrix / DeepScan Zero"
           },
           {
+            "context": "shared-scanner-matrix / DeepSource Visible Zero"
+          },
+          {
             "context": "aggregate-gate / Quality Zero Gate"
           },
           {

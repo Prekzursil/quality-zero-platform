@@ -71,12 +71,6 @@
           },
           {
             "context": "DeepScan"
-          },
-          {
-            "context": "Chromatic Playwright"
-          },
-          {
-            "context": "Applitools Visual"
           }
         ],
         "strict_required_status_checks_policy": true

@@ -648,10 +648,39 @@ jobs:
       # resolvable deps, or only files osv treats as non-lockfiles), so the scanner
       # still exits 128 (observed fleet red: star-wars, a zero-dependency repo).
       # The authoritative "nothing to scan" signal is osv-scanner's OWN exit 128.
-      # We therefore: (1) keep the cheap pre-check skip, AND (2) run the scanner
-      # without aborting the step on its exit, then map exit 128 ("no package
-      # sources found") to PASS. Any OTHER non-zero exit (e.g. 1 = vulnerabilities
-      # found) still fails the gate. "Nothing to scan" is not a failure.
+      #
+      # Round-4: osv-scanner's exit codes are NOT a 0-vs-non-zero split. Verbatim
+      # from cmd/osv-scanner/internal/cmd/run.go at the pinned tag v2.3.8:
+      #     130 = HasErroredBecauseInvalidConfig()   (checked FIRST, takes priority)
+      #       1 = ErrVulnerabilitiesFound            <- the ONLY vulnerability code
+      #     128 = ErrNoPackagesFound                 <- nothing to scan
+      #     129 = ErrAPIFailed                       <- OSV.dev API unreachable
+      #     127 = HasErrored()                       <- generic "an error was logged"
+      #       0 = success, no vulnerabilities
+      # Round-3 mapped 128 -> PASS but funnelled EVERY other non-zero code into one
+      # "FAIL gate-deps ... (vulnerabilities found or scanner error)" branch, so a
+      # third-party outage was indistinguishable from a security regression.
+      # Observed fleet red: momentstudio run 30144541486 (both attempts) printed
+      # "FAIL gate-deps: osv-scanner exited 127" because the deps.dev gRPC resolver
+      # was down for its Python manifests ("rpc error: code = Unavailable desc =
+      # service unavailable"), while the scanner's own report in the same log said
+      # "Total 0 packages affected by 0 known vulnerabilities".
+      #
+      # Measured with the pinned 2.3.8 binary: a tree holding BOTH a vulnerable
+      # lockfile AND an unextractable one exits 1, not 127 — the switch returns on
+      # ErrVulnerabilitiesFound before the HasErrored() check at run.go:113 is ever
+      # reached. So exit 127 provably means "no vulnerability was detected in
+      # whatever WAS scanned"; it cannot mask a finding the scanner actually made.
+      # What it DOES leave unknown is the manifests that failed to resolve, so the
+      # scan-error class still BLOCKS: an incomplete scan is not evidence of a
+      # clean tree, and auto-passing it would fail open exactly where this gate
+      # exists to fail closed. It is reported with an unmistakably different
+      # message and its own exit code (75 = EX_TEMPFAIL, "temporary failure, retry
+      # later") so it is never read — or dashboarded — as a CVE. Short transient
+      # resolver blips are absorbed first by a bounded retry (3 attempts, 20s then
+      # 40s backoff); 130 is deterministic so it is not retried. For a prolonged
+      # upstream outage the escape hatch stays the audited quality-zero:break-glass
+      # label path, NOT a silent pass here.
       - name: gate-deps osv-scanner
         if: steps.detect.outputs.osv == 'true'
         shell: bash
@@ -663,15 +692,49 @@ jobs:
             echo "No dependency manifests or lockfiles present - nothing for osv-scanner to scan; deps gate passes."
             exit 0
           fi
+
+          # "The scan itself did not complete" — none of these is a vuln finding.
+          is_scan_error() { case "$1" in 127|129|130) return 0 ;; *) return 1 ;; esac; }
+          # Of those, the ones a transient upstream outage produces. 130 (invalid
+          # config) is deterministic, so retrying it only burns runner minutes.
+          is_retryable() { case "$1" in 127|129) return 0 ;; *) return 1 ;; esac; }
+
+          attempt=1
+          max_attempts=3
           rc=0
-          osv-scanner scan source --config=osv-scanner.toml --recursive . || rc=$?
+          while : ; do
+            rc=0
+            osv-scanner scan source --config=osv-scanner.toml --recursive . || rc=$?
+            if ! is_retryable "$rc" || [ "$attempt" -ge "$max_attempts" ]; then
+              break
+            fi
+            backoff=$(( attempt * 20 ))
+            echo "RETRY gate-deps: osv-scanner exited $rc without completing the scan (attempt ${attempt}/${max_attempts}) - this is NOT a vulnerability finding; retrying in ${backoff}s." >&2
+            sleep "$backoff"
+            attempt=$(( attempt + 1 ))
+          done
+
           if [ "$rc" -eq 0 ]; then
             echo "PASS gate-deps: osv-scanner found 0 actionable CVEs."
           elif [ "$rc" -eq 128 ]; then
             echo "osv-scanner exited 128 (no package sources found) - nothing to scan; deps gate passes."
+          elif [ "$rc" -eq 1 ]; then
+            echo "FAIL gate-deps: osv-scanner found actionable vulnerabilities (exit 1). This IS a security finding - fix or triage the CVEs listed above." >&2
+            exit 1
+          elif is_scan_error "$rc"; then
+            why='an unexpected scanner failure'
+            case "$rc" in
+              127) why='the scanner logged an error - commonly a deps.dev / registry resolver outage ("rpc error: code = Unavailable desc = service unavailable")' ;;
+              129) why='the OSV.dev API was unreachable (ErrAPIFailed)' ;;
+              130) why='the osv-scanner config file was rejected (invalid config)' ;;
+            esac
+            echo "ERROR gate-deps: osv-scanner could not complete the scan (exit $rc) - this is NOT a vulnerability finding." >&2
+            echo "ERROR gate-deps: exit $rc means $why." >&2
+            echo "ERROR gate-deps: attempts made ${attempt}/${max_attempts}. The dependency tree was NOT fully scanned, so this gate cannot certify it clean; it blocks rather than passing silently. Re-run the job once upstream recovers, or use the quality-zero:break-glass label for a prolonged outage." >&2
+            exit 75
           else
-            echo "FAIL gate-deps: osv-scanner exited $rc (vulnerabilities found or scanner error)." >&2
-            exit "$rc"
+            echo "ERROR gate-deps: osv-scanner exited $rc, which is not a documented exit code for the pinned 2.3.8 (0/1/127/128/129/130) - treating it as a scan failure, NOT a vulnerability finding." >&2
+            exit 75
           fi
 
       # ── Charter ↔ active-gate consistency (fails if gate set != 6-charter) ─

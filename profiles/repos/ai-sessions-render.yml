@@ -1,0 +1,88 @@
+slug: Prekzursil/ai-sessions-render
+version: 2
+stack: python-tooling
+mode:
+  phase: absolute
+scanners: {}
+overrides: []
+verify_command: python -m pytest
+required_contexts_mode: replace
+issue_policy:
+  mode: zero
+  pr_behavior: absolute
+  main_behavior: absolute
+# Lean member (public repo, dual-language Python + JS/TS). The ruleset models the
+# repo's OWN ci.yml checks -- a Python test matrix (3.9/3.13 on ubuntu, 3.13 on
+# windows/macos), a JS test matrix (node 20/22), and two packaged-artifact smoke
+# jobs -- plus the advanced CodeQL security-baseline. No shared-scanner-matrix /
+# Sonar / Codacy / qlty / Codecov / Sentry contexts: this repo produces none of
+# those artifacts (same lean-gate shape as tracelines / the QZP self-profile).
+#
+# UNLIKE tracelines, coverage IS enforced -- but by the repo's OWN CI, not by a
+# QZP-collected artifact: the Python legs run `pytest --cov-fail-under=100`
+# (statements AND branches) and the JS legs run vitest with 100%
+# statement/line/function thresholds. So a coverage regression turns the repo's
+# own `tests ...` / `js tests ...` contexts red, which the ruleset already requires.
+#
+# CodeQL runs via an ADVANCED codeql.yml wrapper (languages: python +
+# javascript-typescript), so its contexts are the per-language analyze jobs
+# ("analyze (python)" / "analyze (javascript-typescript)"), NOT the default-setup
+# `codeql / CodeQL` context other lean members list. Rollout is `observe`: no
+# active ruleset on main today, so no required-context can strand the branch red
+# (required subset of enabled -- lean-gate charter invariant).
+enabled_scanners:
+  coverage: false   # not a QZP-collected artifact; enforced in-repo instead
+  codecov: false
+  sonar: false
+  codacy: false
+  semgrep: false
+  sentry: false
+  qlty: false
+coverage:
+  min_percent: 100.0
+  branch_min_percent: 100.0
+  assert_mode:
+    default: evidence_only
+  policy: repo_enforced
+  evidence_note: >-
+    Coverage is ENFORCED by the repo's own CI, not by QZP. The Python legs run
+    pytest with --cov-fail-under=100 (statements AND branches, wired in
+    pyproject addopts + [tool.coverage.run] branch=true). The JS legs run vitest
+    with 100% statement/line/function thresholds; branch is floored at 88%
+    because TypeScript's null-safety idiom (x ?? d, a || b, the get()/s()
+    helpers) emits a falsy-side branch for every defensive guard, many
+    type-proven unreachable. QZP collects and gates no coverage artifact here.
+required_contexts:
+  always:
+  - tests (ubuntu-latest py3.9)
+  - tests (ubuntu-latest py3.13)
+  - tests (windows-latest py3.13)
+  - tests (macos-latest py3.13)
+  - js tests (node 20)
+  - js tests (node 22)
+  - packaged-artifact smoke test
+  - packaged npm artifact smoke test
+  - analyze (python)
+  - analyze (javascript-typescript)
+  pull_request_only: []
+  target:
+  - tests (ubuntu-latest py3.9)
+  - tests (ubuntu-latest py3.13)
+  - tests (windows-latest py3.13)
+  - tests (macos-latest py3.13)
+  - js tests (node 20)
+  - js tests (node 22)
+  - packaged-artifact smoke test
+  - packaged npm artifact smoke test
+  - analyze (python)
+  - analyze (javascript-typescript)
+trigger:
+  mode: push-and-pr
+  pr_head_sha: false
+codeql:
+  languages:
+  - actions
+  - python
+  - javascript-typescript
+dependabot:
+  updates: []

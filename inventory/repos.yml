@@ -85,6 +85,11 @@ repos:
     rollout: observe
     default_branch: main
     notes: Lean member (public repo). Ruleset models the repo's own ci.yml checks (mypy + 6-leg test matrix) plus the platform CodeQL baseline context; matrix-derived context names are brittle across Python-version changes; coverage measured but informational; CodeQL runs today via GitHub default setup, which does not emit the managed workflow context.
+  - slug: Prekzursil/ai-sessions-render
+    profile: ai-sessions-render
+    rollout: observe
+    default_branch: main
+    notes: Lean member (public repo, dual-language Python + JS/TS). Ruleset models the repo's own ci.yml (Python 4-leg matrix + JS 2-leg matrix + two packaged-artifact smoke jobs) plus the advanced CodeQL baseline (python + javascript-typescript analyze jobs). UNLIKE tracelines, coverage is ENFORCED in-repo (pytest --cov-fail-under=100 statements+branches; vitest 100% stmt/line/func), so a regression reddens the repo's own test contexts; QZP collects no coverage artifact. Dependabot + Private Vulnerability Reporting enabled at the repo. No active ruleset on main today (observe).
   - slug: Prekzursil/agent-skills-toolchain
     profile: agent-skills-toolchain
     rollout: observe

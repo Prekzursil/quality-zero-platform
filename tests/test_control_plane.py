@@ -30,10 +30,32 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
             self.assertIn(context, ruleset_contexts)
             self.assertIn(context, ruleset_status_checks)
 
-    def test_inventory_expands_to_18_repos(self) -> None:
-        """Inventory should continue to expose the full enrolled repo set."""
+    def test_inventory_expands_to_the_enrolled_repo_set(self) -> None:
+        """Inventory should continue to expose the full enrolled repo set.
+
+        Was 18 until Prekzursil/codex-session-manager was retired: the repo is
+        archived on GitHub, so it could never merge a governance PR again, while
+        still costing a scan, a rendered ruleset and a row in every fleet count.
+
+        The bare count is kept so an accidental deletion is still caught, but it is
+        paired with the inventory-to-profile invariant. A count alone cannot tell a
+        deliberate removal from a corrupted parse, and it invites bumping the number
+        until the assertion means nothing.
+        """
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
-        self.assertEqual(len(inventory["repos"]), 18)
+        self.assertEqual(len(inventory["repos"]), 17)
+
+        # Every enrolled repo must have a profile, and every profile must be
+        # enrolled. This is the failure a stale membership row actually produces.
+        enrolled = {entry["profile"] for entry in inventory["repos"]}
+        on_disk = {path.stem for path in (ROOT / "profiles" / "repos").glob("*.yml")}
+        self.assertEqual(
+            enrolled,
+            on_disk,
+            "inventory/repos.yml and profiles/repos/ disagree; "
+            f"enrolled-without-profile={sorted(enrolled - on_disk)}, "
+            f"profile-without-entry={sorted(on_disk - enrolled)}",
+        )
 
     def test_common_phase1_template_contexts_resolve(self) -> None:
         """Phase-1 overlays should keep their shared required-context defaults."""

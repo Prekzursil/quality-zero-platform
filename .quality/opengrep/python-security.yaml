@@ -118,3 +118,54 @@ rules:
       cwe: "CWE-347: Improper Verification of Cryptographic Signature"
     patterns:
       - pattern: jwt.decode(..., verify=False, ...)
+
+  # ── DATAFLOW rule. Every rule above matches SYNTAX, which means the same
+  # vulnerability written across two statements escapes it. Measured on the
+  # pinned CI engine (opengrep v1.22.0) with the fleet's real Go ruleset:
+  # `db.Query(fmt.Sprintf(...))` fires, while `q := fmt.Sprintf(...)` followed
+  # by `db.Query(q)` — arguably the more idiomatic form — escapes ALL FOUR
+  # curated rules. The file WAS scanned (`paths.scanned` contains it), so that
+  # is a rule-precision gap, not a targeting artifact: it makes a clean zero
+  # from a syntax-only set much weaker evidence than it looks.
+  #
+  # `mode: taint` closes it by following the value instead of the shape.
+  # Both-states corpus, all on opengrep v1.22.0 (BAD must fire, GOOD must not):
+  #   BAD   f-string    -> local -> cur.execute(q)          FIRES
+  #   BAD   %-format    -> local -> cur.execute(q)          FIRES
+  #   BAD   .format()   -> local -> cur.executemany(q)      FIRES
+  #   BAD   f-string -> local -> local -> cur.execute(q)    FIRES  (two hops)
+  #   GOOD  cur.execute("... ?", (name,))  (bound params)   silent
+  #   GOOD  f"SELECT count(*) FROM users"  (no interpolation) silent
+  #   GOOD  f"hello {name}" -> print()     (no SQL sink)    silent
+  - id: python-sql-format-taint
+    languages: [python]
+    severity: ERROR
+    mode: taint
+    message: >-
+      Possible SQL injection: an interpolated/concatenated string flows into a
+      SQL execution API. This rule follows DATAFLOW, so it also catches the
+      two-statement form (build the query into a local, then execute it) that a
+      syntax-only pattern cannot see. Use bound parameters —
+      cursor.execute(sql, params) — instead.
+    metadata:
+      category: security
+      cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
+    pattern-sources:
+      - pattern-either:
+          # An f-string is a source only when it actually INTERPOLATES; the
+          # `{$X}` is load-bearing. Note a `pattern-not: f"..."` guard here
+          # LOOKS like it excludes only constant f-strings, but in fact negates
+          # EVERY f-string and silently drops both f-string cases — measured
+          # against the corpus above, which is how it was caught.
+          - pattern: f"...{$X}..."
+          - pattern: "$FMT % $ARGS"
+          - pattern: $FMT.format(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $CUR.execute($Q, ...)
+              - pattern: $CUR.executemany($Q, ...)
+              - pattern: $CUR.executescript($Q, ...)
+              - pattern: sqlalchemy.text($Q)
+              - pattern: text($Q)
+          - focus-metavariable: $Q

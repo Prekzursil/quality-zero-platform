@@ -13,6 +13,7 @@ source = [
   # this repo's scripts/ tree in a caller checkout), so their logic must be
   # 100%-covered here — the workflow copy is byte-identical by contract test.
   "scripts.quality.osv_severity_gate",
+  "scripts.quality.jsts_coverage_assert",
 ]
 branch = true
 omit = [

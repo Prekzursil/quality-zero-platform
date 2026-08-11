@@ -29,6 +29,7 @@ MARKER_PREFIX = "QZP_EMBED_"
 #: marker -> the source-of-truth module the embedded copy must equal.
 EMBEDDED_HELPERS: Dict[str, Path] = {
     "osv_severity_gate": ROOT / "scripts" / "quality" / "osv_severity_gate.py",
+    "jsts_coverage_assert": ROOT / "scripts" / "quality" / "jsts_coverage_assert.py",
 }
 
 RESYNC_HINT = (
@@ -151,6 +152,41 @@ class EmbeddedHelperWiringTests(unittest.TestCase):
             'echo "FAIL gate-deps: osv-scanner found actionable vulnerabilities (exit 1).',
             self.workflow_text,
         )
+
+    def test_the_jsts_lane_asserts_the_measured_number(self) -> None:
+        """Exit 0 from the caller's coverage script is not evidence of coverage."""
+        self.assertIn(
+            'python3 "${RUNNER_TEMP}/qzp-lean-gate/jsts_coverage_assert.py"',
+            self.workflow_text,
+        )
+        self.assertIn('--project-dir "$1" --log "$log" --min-percent "$JSTS_COVERAGE_MIN"', self.workflow_text)
+        # The old text asserted only that a script RAN, never a number.
+        self.assertNotIn(
+            'echo "PASS gate-tests-coverage jsts: ran coverage in',
+            self.workflow_text,
+        )
+
+    def test_the_materialize_step_is_unconditional(self) -> None:
+        """An `if:` guard here is a standing drift hazard for future lanes."""
+        import yaml
+
+        document = yaml.safe_load(self.workflow_text)
+        step = next(
+            s
+            for s in document["jobs"]["quality"]["steps"]
+            if s.get("name") == "Materialize the lean-gate helper scripts"
+        )
+        self.assertNotIn("if", step)
+
+    def test_helpers_are_materialized_before_the_first_gate_that_uses_them(self) -> None:
+        """A helper written after its consumer would fail with 'No such file'."""
+        import yaml
+
+        document = yaml.safe_load(self.workflow_text)
+        names = [str(s.get("name", "")) for s in document["jobs"]["quality"]["steps"]]
+        materialize = names.index("Materialize the lean-gate helper scripts")
+        for consumer in ("gate-tests-coverage jsts", "gate-deps osv-scanner"):
+            self.assertLess(materialize, names.index(consumer), consumer)
 
     def test_the_other_osv_exit_codes_keep_their_documented_behaviour(self) -> None:
         """0 / 127 / 128 / 129 / 130 semantics are untouched by the severity floor."""

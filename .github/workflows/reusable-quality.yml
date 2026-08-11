@@ -24,7 +24,9 @@
 #   1. Lint+format (SELF-CONTAINED — the workflow's OWN pinned CLIs, NOT the
 #      caller's pre-commit): Ruff[py] · Oxlint+Biome[ts/js]
 #   2. Types:        tsc --noEmit[ts] · basedpyright (standard mode)[py]
-#   3. Tests+cov:    STRICT 100% line+branch (standing policy; ratchet retired)
+#   3. Tests+cov:    STRICT 100% line+branch (standing policy; ratchet retired),
+#                    ASSERTED by this workflow for py/jsts, and measured for
+#                    go/c++ via the caller's own coverage gate
 #   4. SAST:         Opengrep (Semgrep CE acceptable), pinned in-repo ruleset
 #   5. Secrets:      gitleaks (pinned + allowlist) — SELF-CONTAINED (always)
 #   6. Deps:         osv-scanner + Dependabot (no Renovate), T0 severity floor
@@ -145,6 +147,17 @@ on:
         type: string
         required: false
         default: "."
+      jsts-coverage-min:
+        description: >-
+          Required JS/TS line AND branch coverage percentage, asserted by gate 3
+          against the summary the caller's coverage script actually produced.
+          Must be in (0, 100]; the default is the charter's STRICT 100. Lowering
+          it declares an interim bar VISIBLY, in the caller's own workflow file,
+          and it can never restore a silent pass: a run that produces no
+          parseable coverage summary fails at any setting.
+        type: number
+        required: false
+        default: 100
       coverage-gate-script:
         description: >-
           Repo-relative path to the caller's OWN test+coverage gate script, used
@@ -390,460 +403,298 @@ jobs:
             https://github.com/google/osv-scanner/releases/download/v2.3.8/osv-scanner_linux_amd64
           chmod +x /usr/local/bin/osv-scanner
 
-      # ── GATE 1 (ts/js) — SELF-CONTAINED lint + format (Oxlint + Biome) ───────
-      # GAP 2 FIX — the lean charter's gate-1 for ts/js runs SELF-CONTAINED in THIS
-      # workflow (the Reframe pattern), NOT the caller's ad-hoc eslint. A caller
-      # .pre-commit-config.yaml that contains a repo-LOCAL `frontend-eslint`-style
-      # hook shelling out to a not-yet-installed tool ("sh: 1: eslint: not found",
-      # exit 127) used to short-circuit the whole gate-1 step (observed:
-      # momentstudio). We therefore run the workflow's OWN pinned linter + formatter
-      # over the caller's ts/js directly, independent of the caller's local hooks.
-      # They need nothing from the caller (npx fetches the pinned CLIs).
-      #
-      # round-3 FIX 1 — FORMATTER SWAP (decided design): the format check is now
-      # BIOME (formatter-only; linting stays with Oxlint), mirroring the PROVEN
-      # Reframe lean gate (Prekzursil/Reframe .github/workflows/quality.yml +
-      # biome.json: biome 2.5.0, `formatter.enabled`, `linter.enabled:false`,
-      # `assist.enabled:false`). `biome ci --formatter-enabled --linter-enabled=false
-      # --assist-enabled=false` is check-only (no writes) and exits non-zero on any
-      # unformatted file. If the caller ships its OWN biome.json/biome.jsonc we honor
-      # it (biome auto-discovers it from cwd); otherwise we point biome at the
-      # template's bundled minimal config (docs/lean-gate/biome.template.json, the
-      # same style as Reframe's: 2-space, single quotes, trailingCommas all,
-      # semicolons always, lineWidth 100, lf) via --config-path so formatting is
-      # deterministic across callers. Oxlint linting is unchanged. Pins: oxlint
-      # 1.69.0 (mirrors Reframe), biome 2.5.0 (mirrors Reframe). Keep in sync with
-      # docs/lean-gate/pre-commit-config.template.yaml + docs/lean-gate/biome.template.json.
-      - name: gate-lint-format-jsts (self-contained oxlint + biome)
-        if: steps.detect.outputs.jsts == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "::group::oxlint@1.69.0 (--deny-warnings)"
-          # --no-error-on-unmatched-pattern: when a caller has NO first-party
-          # lintable JS (everything ignored/vendored), oxlint otherwise exits 1
-          # with "No files found to lint" — a false FAIL. With the flag, an empty
-          # match set exits 0 (PASS). This does NOT weaken the gate: when lintable
-          # JS exists, --deny-warnings still runs and still fails on any warning.
-          # **/*.min.js (and node_modules above) are obvious build artifacts that
-          # must never be linted; real source is NOT broadly ignored.
-          npx --yes oxlint@1.69.0 --deny-warnings \
-            --no-error-on-unmatched-pattern \
-            --ignore-pattern '**/node_modules/**' \
-            --ignore-pattern '**/dist/**' \
-            --ignore-pattern '**/build/**' \
-            --ignore-pattern '**/out/**' \
-            --ignore-pattern '**/.venv/**' \
-            --ignore-pattern '**/vendor/**' \
-            --ignore-pattern '**/*.min.js' \
-            .
-          echo "::endgroup::"
-          echo "::group::biome@2.5.0 (format --check, formatter-only)"
-          # Honor a caller-shipped biome config if present (biome auto-discovers
-          # biome.json/biome.jsonc from cwd); otherwise use the template's bundled
-          # minimal config so formatting is deterministic across callers.
-          biome_cfg_args=()
-          if [ ! -f biome.json ] && [ ! -f biome.jsonc ]; then
-            tmp_biome_dir="$(mktemp -d)"
-            # Bundled minimal config (single-line printf to avoid any YAML/heredoc
-            # indentation pitfalls). Mirrors Reframe's biome.json style.
-            # NB: NO "vcs.useIgnoreFile" here — biome errors ("couldn't find an
-            # ignore file") on a caller without a .gitignore; we exclude vendored
-            # trees explicitly via files.includes negations instead. The config dir
-            # is a mktemp dir OUTSIDE the scanned tree, so biome does not treat it
-            # as a "nested root configuration".
-            printf '%s' '{"$schema":"https://biomejs.dev/schemas/2.5.0/schema.json","files":{"includes":["**/*.ts","**/*.tsx","**/*.js","**/*.jsx","**/*.mjs","**/*.cjs","!**/node_modules/**","!**/dist/**","!**/build/**","!**/out/**","!**/.venv/**","!**/vendor/**"]},"formatter":{"enabled":true,"indentStyle":"space","indentWidth":2,"lineWidth":100,"lineEnding":"lf"},"javascript":{"formatter":{"quoteStyle":"single","trailingCommas":"all","semicolons":"always"}},"linter":{"enabled":false},"assist":{"enabled":false}}' > "$tmp_biome_dir/biome.json"
-            biome_cfg_args=(--config-path "$tmp_biome_dir")
-            echo "No caller biome.json/biome.jsonc - using the lean template's bundled biome config."
-          else
-            echo "Honoring caller-shipped biome config."
-          fi
-          # `biome ci` is the non-mutating check command; restrict it to the
-          # formatter (linting is Oxlint's job, assist disabled).
-          npx --yes @biomejs/biome@2.5.0 ci \
-            --formatter-enabled=true --linter-enabled=false --assist-enabled=false \
-            "${biome_cfg_args[@]}" . || {
-            echo "FAIL gate-lint-format-jsts: biome found unformatted ts/js (run 'biome format --write' / the biome pre-commit hook to fix)." >&2
-            exit 1
-          }
-          echo "::endgroup::"
-
-      # ── GATE 1 (py) — SELF-CONTAINED lint + format (Ruff) ───────────────────
-      # round-6 FIX — the lean charter's Python lint/format runs the workflow's OWN
-      # pinned ruff directly, NOT the caller's `.pre-commit-config.yaml`. The old
-      # `gate-lint-format-secrets` step ran `pre-commit run --all-files`, which
-      # dragged in each repo's BESPOKE pre-commit env (a root npm lockfile for the
-      # frontend-eslint hook's `npm ci`, the .NET SDK for dotnet-format, caller-
-      # local eslint/tsc/prettier, ...) and red-failed for caller-ENVIRONMENT
-      # reasons even when the repo's real lean quality was fine. We now run ruff
-      # ourselves: `ruff check` (lint) + `ruff format --check` (format), honoring a
-      # caller [tool.ruff] in pyproject.toml or a ruff.toml/.ruff.toml when present
-      # (ruff auto-discovers it from cwd); otherwise ruff's own defaults apply.
-      # This is NOT weakening — ruff is the SAME charter tool the pre-commit hook
-      # ran (pinned to Reframe's ruff 0.15.17); ruff lint issues or unformatted
-      # Python still FAIL. Pin: ruff 0.15.17 (mirrors Reframe). Keep in sync with
-      # docs/lean-gate/pre-commit-config.template.yaml.
-      - name: gate-lint-format-py (self-contained ruff)
-        if: steps.detect.outputs.python == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "::group::ruff check (lint)"
-          # --output-format=github surfaces findings as GH annotations. ruff honors
-          # a caller [tool.ruff]/ruff.toml automatically (cwd discovery); no caller
-          # pre-commit/eslint/SDK environment is touched.
-          ruff check --output-format=github .
-          echo "::endgroup::"
-          echo "::group::ruff format --check"
-          ruff format --check . || {
-            echo "FAIL gate-lint-format-py: ruff found unformatted Python (run 'ruff format' / the ruff pre-commit hook to fix)." >&2
-            exit 1
-          }
-          echo "::endgroup::"
-
-      # ── GATE 2 — types ────────────────────────────────────────────────────
-      # tsc per tsconfig.json so monorepo / nested-project shapes (e.g. an `ui/`
-      # subproject with its own tsconfig and no root tsconfig — event-link) are
-      # type-checked instead of hard-failing. Root tsconfig => `tsc --noEmit`;
-      # otherwise discover every nested tsconfig and run `tsc -p <dir> --noEmit`.
-      # Each project's deps are installed from its own package.json when present.
-      - name: gate-types tsc
-        if: steps.detect.outputs.ts == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          install_deps() { # $1 = dir containing package.json
-            if [ -f "$1/package.json" ]; then
-              ( cd "$1" && { npm ci || npm install; } )
-            fi
-          }
-          if [ -f tsconfig.json ]; then
-            install_deps .
-            npx --yes tsc --noEmit
-          else
-            # No root tsconfig — discover nested project configs (excluding vendored trees).
-            mapfile -t configs < <(git ls-files '**/tsconfig.json' tsconfig*.json \
-              | grep -Ev '(^|/)(node_modules|dist|out|build|\.venv)/' || true)
-            if [ "${#configs[@]}" -eq 0 ]; then
-              echo "ts/tsx present but no tsconfig.json (root or nested) - nothing for tsc to check."
-              exit 0
-            fi
-            for cfg in "${configs[@]}"; do
-              dir="$(dirname "$cfg")"
-              echo "::group::tsc -p $cfg"
-              install_deps "$dir"
-              ( cd "$dir" && npx --yes tsc -p "$(basename "$cfg")" --noEmit )
-              echo "::endgroup::"
-            done
-          fi
-
-      # round-5 FIX A — basedpyright at the STANDARD bar (consistency with Reframe).
-      # basedpyright's DEFAULT mode is stricter than upstream pyright: it turns on
-      # reportAny / reportUnknown* / reportUnusedCallResult, which flood untyped
-      # utility scripts with thousands of non-bug "errors" (observed: momentstudio
-      # 2774, swfoc 39, pbinfo 11 — all from scripts/utils). Reframe runs basedpyright
-      # at typeCheckingMode = "standard" via [tool.basedpyright]. So: if the CALLER
-      # ships a basedpyright/pyright config (pyrightconfig.json, basedpyrightconfig.json,
-      # or a pyproject.toml with a [tool.(based)pyright] table) we honor it verbatim
-      # (run basedpyright as-is); otherwise we pass `--typecheckingmode standard` so
-      # the gate uses the proven standard bar instead of basedpyright's stricter
-      # default. This is NOT weakening — standard is the proven bar and reportAny-
-      # everywhere is gold-plating; REAL type errors at standard level still FAIL.
-      - name: gate-types basedpyright
-        if: steps.detect.outputs.python == 'true'
-        shell: bash
-        env:
-          PYRIGHTCFG: ${{ steps.detect.outputs.pyrightcfg }}
-        run: |
-          set -euo pipefail
-          if [ "$PYRIGHTCFG" = "true" ]; then
-            echo "Honoring caller-shipped basedpyright/pyright config (running as-is)."
-            basedpyright
-          else
-            echo "No caller basedpyright/pyright config - using standard typeCheckingMode (mirrors Reframe)."
-            basedpyright --typecheckingmode standard
-          fi
-
-      # ── GATE 3 — tests + coverage (STRICT 100% line+branch) ───────────────
-      # Python via coverage.py; JS/TS via the caller's `test:coverage` script.
-      # SILENT-PASS HOLE CLOSED: the old guard `&& hashFiles(pyproject/setup.cfg/
-      # tox.ini)` let a Python repo with code but no coverage config pass GREEN
-      # without ever measuring coverage. Now: if Python source exists we ALWAYS
-      # measure. The ONLY skip is the documented narrow case — Python source with
-      # ZERO test files (no tests, no coverage config) = "no test surface by
-      # design". Source + tests but no cov config (or source + cov config) => FAIL
-      # unless 100%. The 100% gate cannot pass unmeasured.
-      - name: gate-tests-coverage python
-        if: steps.detect.outputs.python == 'true'
-        shell: bash
-        env:
-          PYCOVCFG: ${{ steps.detect.outputs.pycovcfg }}
-          PYTESTS: ${{ steps.detect.outputs.pytests }}
-        run: |
-          set -euo pipefail
-          if [ "$PYCOVCFG" != "true" ] && [ "$PYTESTS" != "true" ]; then
-            echo "Python source present with NO test files and NO coverage config - no test surface by design; coverage lane skipped."
-            exit 0
-          fi
-          if [ "$PYCOVCFG" != "true" ] && [ "$PYTESTS" == "true" ]; then
-            echo "FAIL gate-tests-coverage python: Python source + tests are present but no coverage config (pyproject.toml/setup.cfg/tox.ini/.coveragerc/pytest.ini) - the 100% gate cannot pass unmeasured. Add coverage config." >&2
-            exit 1
-          fi
-          # GAP 1 FIX — install the CALLER's Python RUNTIME deps before running the
-          # tests. Without this, a repo whose tests import a runtime dependency
-          # fails with ModuleNotFoundError (observed: env-inspector -> "No module
-          # named defusedxml"; the lane previously installed only pytest/coverage).
-          # Priority order: requirements*.txt -> pyproject.toml / setup.cfg /
-          # setup.py (PEP 517 install of the project itself, which pulls its
-          # declared dependencies, incl. Poetry's [tool.poetry.dependencies]).
-          # If NONE exist the repo is pure-stdlib -> proceed (no-op). Best-effort:
-          # a failing optional/heavy install must not mask the real test result,
-          # so each install is guarded and only logged on failure.
-          installed_runtime_deps=false
-          mapfile -t reqs < <(git ls-files \
-            requirements.txt 'requirements/*.txt' 'requirements-*.txt' 'requirements*.txt' \
-            '**/requirements.txt' 2>/dev/null \
-            | grep -Ev '(^|/)(node_modules|\.venv|venv|dist|build|out)/' \
-            | grep -Eiv 'requirements.*(dev|test|lint|doc|ci).*\.txt$' || true)
-          if [ "${#reqs[@]}" -gt 0 ]; then
-            for r in "${reqs[@]}"; do
-              echo "::group::pip install -r $r"
-              pip install -r "$r" || echo "WARN: 'pip install -r $r' failed; continuing (tests will surface any missing import)."
-              echo "::endgroup::"
-            done
-            installed_runtime_deps=true
-          elif [ -f pyproject.toml ] || [ -f setup.cfg ] || [ -f setup.py ]; then
-            echo "::group::pip install . (project deps from pyproject/setup.cfg/setup.py)"
-            pip install . || echo "WARN: 'pip install .' failed; continuing (tests will surface any missing import)."
-            echo "::endgroup::"
-            installed_runtime_deps=true
-          fi
-          [ "$installed_runtime_deps" = "true" ] || echo "No Python runtime manifest (requirements*.txt / pyproject.toml / setup.cfg / setup.py) - assuming pure-stdlib; proceeding."
-          if grep -rqs 'pytest' pyproject.toml setup.cfg tox.ini pytest.ini 2>/dev/null; then
-            pip install pytest pytest-cov
-            python -m pytest --cov --cov-branch --cov-fail-under=100
-          else
-            pip install coverage
-            python -m coverage run -m unittest discover
-            python -m coverage report --fail-under=100 --show-missing
-          fi
-
-      # SILENT-PASS HOLE CLOSED: the old else-branch printed a message and passed
-      # GREEN when ts/js source existed but no `test:coverage` script — code with
-      # zero measured coverage slipped through the 100% gate. Now: if a coverage
-      # script (or vitest/jest coverage equivalent) is present we run it; if ts/js
-      # source + tests exist but no coverage script => FAIL. The ONLY skip is the
-      # documented narrow case — ts/js source with ZERO test files = "no test
-      # surface by design". A ts/js repo with code + tests but no coverage script
-      # must NOT pass unmeasured.
-      #
-      # round-3 FIX 5 — NESTED-MONOREPO DISCOVERY: the coverage lane used to inspect
-      # ONLY the ROOT package.json, so a nested project (the package.json lives in a
-      # subdir, root has none — observed: webcoder, package.json in frontend/
-      # webcoder_ui) hard-FAILED "no coverage script" even though the nested project
-      # has one. Mirror the tsc lane (round-1 FIX): if there is a root package.json
-      # use it; otherwise DISCOVER every nested package.json (excluding vendored
-      # trees) and run coverage in each project dir that has a coverage script /
-      # vitest|jest --coverage test script. The silent-pass hole stays closed: a
-      # nested project with test files but NO coverage runner FAILS; the only skip
-      # is the documented "no test surface by design" (zero ts/js test files).
-      - name: gate-tests-coverage jsts
-        if: steps.detect.outputs.jsts == 'true'
-        shell: bash
-        env:
-          JSTSTESTS: ${{ steps.detect.outputs.jststests }}
-        run: |
-          set -euo pipefail
-          # has_cov_lane: does <dir>/package.json define a runnable coverage lane?
-          # Echoes "script" (test:coverage) | "runner" (vitest/jest --coverage in
-          # `test`) | "" (none). Reads only that dir's package.json.
-          has_cov_lane() {
-            # NB: node's require() treats a bare path ('dir/package.json') as a
-            # MODULE lookup, not a relative file - it MUST be './'-prefixed. With
-            # d='.' this yields './././package.json' (valid); with a nested dir it
-            # yields './frontend/ui/package.json' (valid).
-            local d="./$1"
-            if node -e "process.exit((require('$d/package.json').scripts||{})['test:coverage']?0:1)" 2>/dev/null; then
-              echo "script"; return 0
-            fi
-            if node -e "const s=(require('$d/package.json').scripts||{}).test||'';process.exit(/(vitest|jest).*--coverage|--coverage.*(vitest|jest)/.test(s)?0:1)" 2>/dev/null; then
-              echo "runner"; return 0
-            fi
-            echo ""; return 0
-          }
-          run_cov_in_dir() { # $1 dir, $2 lane-kind
-            echo "::group::coverage in $1 ($2)"
-            ( cd "$1" && { npm ci || npm install; } \
-              && if [ "$2" = "script" ]; then npm run test:coverage; else npm test; fi )
-            echo "::endgroup::"
-          }
-          # Build the candidate project dir list: root if it has package.json,
-          # otherwise every nested package.json dir (excluding vendored trees).
-          declare -a proj_dirs=()
-          if [ -f package.json ]; then
-            proj_dirs=(.)
-          else
-            mapfile -t pkgs < <(git ls-files '**/package.json' \
-              | grep -Ev '(^|/)(node_modules|dist|out|build|\.venv|vendor)/' || true)
-            for p in "${pkgs[@]}"; do proj_dirs+=("$(dirname "$p")"); done
-          fi
-          ran_any=false
-          if [ "${#proj_dirs[@]}" -gt 0 ]; then
-            for d in "${proj_dirs[@]}"; do
-              lane="$(has_cov_lane "$d")"
-              if [ -n "$lane" ]; then
-                run_cov_in_dir "$d" "$lane"
-                ran_any=true
-              fi
-            done
-          fi
-          if [ "$ran_any" = "true" ]; then
-            echo "PASS gate-tests-coverage jsts: ran coverage in ${#proj_dirs[@]} project dir(s)."
-          elif [ "$JSTSTESTS" != "true" ]; then
-            echo "ts/js source present with NO test files and no coverage script - no test surface by design; coverage lane skipped."
-            exit 0
-          else
-            echo "FAIL gate-tests-coverage jsts: ts/js present (with test files) but no coverage script in any project dir (root or nested) - the 100% gate cannot pass unmeasured. Add a 'test:coverage' npm script (or a vitest/jest '--coverage' test script) in the project package.json." >&2
-            exit 1
-          fi
-
-      # ── GATE 3 (go / c++) — tests + coverage via the CALLER's own gate ────
-      # ROUND-7 REGRESSION FIX. round-6 removed the caller pre-commit run and the
-      # per-language toolchains, which together were the ONLY path by which a
-      # compiled language reached gate 3. Both compiled languages then fell
-      # through to the narrow "no test surface by design" skip and the step
-      # reported SUCCESS. Measured on the live fleet:
-      #   * DevExtreme-Filter-Go-Language — 236,928 bytes of Go, 30+ root-level
-      #     *_test.go files, and a .pre-commit-config.yaml whose gate-3 hook
-      #     `go-test-cover-100` runs exactly `bash scripts/coverage-gate.sh`.
-      #     Its own config header still names reusable-quality.yml as the
-      #     entrypoint for that hook. Coverage: never measured, always green.
-      #   * Airline-Reservations-System — 190,349 bytes of C++ with ten
-      #     *_test.cpp files under tests/ and no lane of any kind.
-      #
-      # WHY THE CALLER'S SCRIPT AND NOT A DIRECT LANE: the Go coverage gate
-      # already EXISTS in the caller repo — the pre-commit hook is a thin
-      # wrapper around `bash scripts/coverage-gate.sh`. Running that script
-      # directly is strictly more robust than restoring `pre-commit run
-      # --all-files`: it needs no pre-commit install, no caller hook
-      # environment, and it CANNOT drag in the bespoke frontend-eslint /
-      # dotnet-format hooks that round-6 removed for good reason. For C++ there
-      # is no safely auto-configurable instrumented build (the workflow cannot
-      # know the build system, the flags, or how to add --coverage), so a blind
-      # clang-tidy+gcovr lane would be a gate the owner could not drive to
-      # green. Deliberately NOT added here: golangci-lint and go vet. Those are
-      # gate-1/gate-2 concerns, they are autofixer-class red, and this commit is
-      # scoped to closing the measured coverage hole.
-      #
-      # The skip stays reachable ONLY for its documented narrow case (source
-      # present, ZERO test files). With test files present this lane can no
-      # longer skip — proven behaviourally, not by text assertion, in
-      # tests/test_lean_gate_compiled_coverage_lane.py, which extracts this very
-      # script and executes it across the whole truth table.
-      - name: gate-tests-coverage compiled (go / c++)
-        if: steps.detect.outputs.go == 'true' || steps.detect.outputs.cpp == 'true'
-        shell: bash
-        env:
-          GO_PRESENT: ${{ steps.detect.outputs.go }}
-          GO_TESTS: ${{ steps.detect.outputs.gotests }}
-          GO_MOD: ${{ steps.detect.outputs.gomod }}
-          CPP_PRESENT: ${{ steps.detect.outputs.cpp }}
-          CPP_TESTS: ${{ steps.detect.outputs.cpptests }}
-          COVERAGE_GATE_SCRIPT: ${{ inputs.coverage-gate-script }}
-        run: |
-          set -euo pipefail
-          # Which compiled languages have a DEMONSTRABLE test surface. Built with
-          # explicit `if` blocks, not `[ ... ] && ...` chains: under `set -e` a
-          # false test at the end of a chain aborts the whole step.
-          needs=""
-          if [ "$GO_PRESENT" = "true" ] && [ "$GO_TESTS" = "true" ]; then
-            needs="go"
-          fi
-          if [ "$CPP_PRESENT" = "true" ] && [ "$CPP_TESTS" = "true" ]; then
-            needs="${needs:+$needs+}c++"
-          fi
-
-          if [ -z "$needs" ]; then
-            echo "Compiled source present (go=$GO_PRESENT c++=$CPP_PRESENT) with ZERO test files - no test surface by design; coverage lane skipped."
-            exit 0
-          fi
-          echo "Compiled test surface DETECTED ($needs). This lane CANNOT skip: the 100% gate cannot pass unmeasured."
-
-          # Go needs a toolchain, and the toolchain step keys off a root go.mod.
-          # Go tests with no go.mod is a real hole, not a design decision.
-          case "$needs" in
-            *go*)
-              if [ "$GO_MOD" != "true" ]; then
-                echo "FAIL gate-tests-coverage ($needs): *_test.go files exist but there is no root go.mod, so no Go toolchain was set up and coverage cannot be measured. Add a root go.mod (or move the module to the repo root)." >&2
-                exit 1
-              fi
-              go version
-              ;;
-          esac
-
-          # ONE invocation even for a mixed go+c++ repo: the caller's script is
-          # the repo's whole compiled-language coverage gate, not a per-language
-          # one, so running it twice would only burn runner minutes.
-          if [ ! -f "$COVERAGE_GATE_SCRIPT" ]; then
-            echo "FAIL gate-tests-coverage ($needs): this repo has compiled-language test files but no coverage gate at '$COVERAGE_GATE_SCRIPT', so the STRICT 100% gate cannot pass unmeasured." >&2
-            echo "FAIL gate-tests-coverage ($needs): remediation - add an executable 'scripts/coverage-gate.sh' that runs the tests, measures coverage and exits non-zero below the bar (for Go: 'go test -covermode=atomic -coverprofile=... ./...' then 'go tool cover -func'), or point the 'coverage-gate-script' workflow input at the script you already have." >&2
-            exit 1
-          fi
-
-          echo "::group::bash $COVERAGE_GATE_SCRIPT ($needs)"
-          bash "$COVERAGE_GATE_SCRIPT"
-          echo "::endgroup::"
-          echo "PASS gate-tests-coverage ($needs): the caller's own coverage gate '$COVERAGE_GATE_SCRIPT' measured the tests and passed."
-
-      # ── GATE 4 — SAST (opengrep, curated in-repo ruleset, clean-zero) ─────
-      - name: gate-sast opengrep
-        if: steps.detect.outputs.opengrep == 'true'
-        shell: bash
-        env:
-          OPENGREP_PATHS: ${{ inputs.opengrep-paths }}
-        run: |
-          # OPENGREP_PATHS is an optional space-separated list of scan paths.
-          # Passed via env (NOT an inline GHA expression in this run block) to
-          # avoid GitHub Actions run-step expression injection -- note that GHA
-          # expands expression tokens textually over the whole run string,
-          # comments included, so even a literal token here is a real sink.
-          # The value is then split into a bash ARRAY so each path is a
-          # distinct argument WITHOUT an unquoted expansion (an unquoted $VAR of an
-          # injectable input still trips CodeQL actions/code-injection). Empty
-          # value => zero extra args (default = scan repo root via the config).
-          read -ra opengrep_paths <<< "$OPENGREP_PATHS"
-          opengrep scan --config .quality/opengrep --error \
-            --exclude .venv --exclude node_modules --exclude dist --exclude out --exclude build \
-            "${opengrep_paths[@]}"
-
-      # ── GATE 5 (verify) — secrets, gitleaks over working tree (0 findings) ─
-      # round-6 FIX — gitleaks is now ALWAYS self-contained: it runs whenever the
-      # caller ships a .gitleaks.toml allowlist, regardless of any pre-commit config
-      # (the caller pre-commit is no longer executed). Honors the caller's
-      # .gitleaks.toml allowlist. Findings still FAIL the gate. Pin: gitleaks
-      # 8.30.1 (mirrors Reframe), installed above.
-      - name: gate-secrets gitleaks (self-contained)
-        if: steps.detect.outputs.gitleaks == 'true'
-        run: gitleaks detect --no-banner --redact --config .gitleaks.toml
-
-      # ── GATE 6 helper — the T0 severity-floor classifier (EMBEDDED) ──────
+      # ── Lean-gate helper scripts (EMBEDDED VERBATIM) ─────────────────────
       # This reusable workflow runs inside the CALLER's checkout and has NO
-      # access to quality-zero-platform's own `scripts/` tree, so the classifier
-      # is embedded here VERBATIM rather than fetched (a fetch would either be
-      # unpinned or skew against a caller pinned to an older workflow ref).
+      # access to quality-zero-platform's own `scripts/` tree, so its Python
+      # helpers are embedded here VERBATIM rather than fetched (a fetch would
+      # either be unpinned or skew against a caller pinned to an older workflow
+      # ref, and checking the platform out into the caller's workspace would
+      # pollute the very tree the SAST / secrets / deps gates scan).
       #
-      # `scripts/quality/osv_severity_gate.py` in quality-zero-platform is the
-      # unit-tested source of truth (100% line+branch, real-data fixtures for
-      # both the momentstudio lockfile and a Go `go.mod`). The copy below is
-      # asserted BYTE-IDENTICAL to it by
-      # `tests/test_lean_gate_embedded_helpers.py`, so the two cannot drift:
-      # edit the module, then re-paste it here, or that test goes red.
-      - name: Materialize the gate-deps severity classifier
-        if: steps.detect.outputs.osv == 'true'
+      # Each module in quality-zero-platform is the unit-tested source of truth
+      # (100% line+branch, real-data fixtures). The copies below are asserted
+      # BYTE-IDENTICAL to them by `tests/test_lean_gate_embedded_helpers.py`,
+      # whose extractor is detector-controlled, so the two cannot drift: edit
+      # the module, re-paste it here, or that test goes red.
+      #
+      # Deliberately UNCONDITIONAL. Writing two small files costs nothing, and
+      # an `if:` guard here is a standing drift hazard: a future lane that needs
+      # a helper but whose guard was not added to this step would fail with a
+      # confusing "No such file" instead of running.
+      - name: Materialize the lean-gate helper scripts
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "${RUNNER_TEMP}/qzp-lean-gate"
+          cat > "${RUNNER_TEMP}/qzp-lean-gate/jsts_coverage_assert.py" <<'QZP_EMBED_jsts_coverage_assert'
+          #!/usr/bin/env python3
+          """Assert the JS/TS coverage number the gate-3 lane just produced.
+
+          The jsts lane used to run the caller's coverage script and pass on exit 0. It
+          passed NO threshold and checked NO number: enforcement was delegated entirely to
+          the caller's vitest/karma config, and the gate never verified that one existed.
+          Measured 2026-08-11 on momentstudio's frontend, the run printed
+          ``Statements : 49.57%`` and the lane printed ``PASS gate-tests-coverage jsts``.
+
+          This module reads the summary the run just produced and compares it to a number.
+          Evidence is taken in strength order, machine-readable artifacts first because a
+          printed table is a rendering of the data, not the data:
+
+          1. ``coverage/**/coverage-summary.json``  (istanbul ``json-summary``)
+          2. ``coverage/**/clover.xml``             (vitest's default reporter set)
+          3. ``coverage/**/lcov.info``              (karma / Angular default)
+          4. the coverage run's own printed summary (istanbul text-summary block, or the
+             ``All files`` row of the text table)
+
+          The property that holds regardless of any threshold: **a run that produces no
+          parseable summary FAILS.** ``--min-percent`` can move the bar but can never
+          switch off the requirement that a real number was measured, and it is rejected
+          outside ``(0, 100]`` so a "0% bar" silent pass is not expressible.
+
+          Branch coverage is compared too (the charter is 100% line AND branch), except
+          where the report says the project has zero conditionals — that is "not
+          applicable", not 0%.
+
+          XML is parsed with a regex rather than ``xml.etree``, mirroring
+          ``scripts/quality/coverage_parsers.py``: it avoids the XML-parser attack surface
+          the ``S`` lint rules flag, and clover's metrics live in element attributes.
+
+          Exit codes: ``0`` at or above the bar, ``1`` below it or unmeasured, ``2`` the
+          threshold argument itself is invalid.
+          """
+
+          from __future__ import absolute_import
+
+          import argparse
+          import json
+          import re
+          import sys
+          from dataclasses import dataclass
+          from pathlib import Path
+          from typing import Any, List, Optional
+
+          DEFAULT_MIN_PERCENT = 100.0
+          COVERAGE_DIR = "coverage"
+          EXIT_OK = 0
+          EXIT_BELOW_BAR = 1
+          EXIT_CONFIG_ERROR = 2
+
+          _CLOVER_METRIC = re.compile(r'(\w+)\s*=\s*"(\d+)"')
+          _TEXT_ROW = re.compile(r"^\s*(Statements|Branches|Lines)\s*:\s*([0-9.]+)%\s*\(\s*(\d+)\s*/\s*(\d+)\s*\)", re.MULTILINE)
+          _ALL_FILES_ROW = re.compile(r"^[|\s]*All files\s*\|(.+)$", re.MULTILINE)
+
+
+          @dataclass(frozen=True)
+          class CoverageSummary:
+              """A measured coverage result and where the number came from."""
+
+              origin: str
+              lines_pct: float
+              branches_pct: Optional[float]
+
+
+          def _percent(covered: int, total: int) -> Optional[float]:
+              """Return a percentage, or ``None`` when the denominator is zero."""
+              if total <= 0:
+                  return None
+              return round(covered * 100.0 / total, 2)
+
+
+          def _as_float(value: Any) -> Optional[float]:
+              """Coerce a reported percentage to a float, or ``None`` when it is not one."""
+              try:
+                  return float(value)
+              except (TypeError, ValueError):
+                  return None
+
+
+          def summary_from_json_summary(path: Path) -> Optional[CoverageSummary]:
+              """Parse an istanbul ``json-summary`` report."""
+              try:
+                  document = json.loads(path.read_text(encoding="utf-8"))
+              except (OSError, ValueError):
+                  return None
+              if not isinstance(document, dict):
+                  return None
+              total = document.get("total")
+              if not isinstance(total, dict):
+                  return None
+              lines = total.get("lines") if isinstance(total.get("lines"), dict) else {}
+              branches = total.get("branches") if isinstance(total.get("branches"), dict) else {}
+              lines_pct = _as_float(lines.get("pct"))
+              if lines_pct is None or _as_float(lines.get("total")) in (None, 0.0):
+                  return None
+              branches_total = _as_float(branches.get("total"))
+              branches_pct = None if branches_total in (None, 0.0) else _as_float(branches.get("pct"))
+              return CoverageSummary(origin=str(path), lines_pct=lines_pct, branches_pct=branches_pct)
+
+
+          def summary_from_clover(path: Path) -> Optional[CoverageSummary]:
+              """Parse the project-level ``<metrics .../>` of a clover report."""
+              try:
+                  text = path.read_text(encoding="utf-8")
+              except OSError:
+                  return None
+              match = re.search(r"<metrics\b([^>]*)>", text)
+              if match is None:
+                  return None
+              metrics = {key.lower(): int(value) for key, value in _CLOVER_METRIC.findall(match.group(1))}
+              lines_pct = _percent(metrics.get("coveredstatements", 0), metrics.get("statements", 0))
+              if lines_pct is None:
+                  return None
+              branches_pct = _percent(metrics.get("coveredconditionals", 0), metrics.get("conditionals", 0))
+              return CoverageSummary(origin=str(path), lines_pct=lines_pct, branches_pct=branches_pct)
+
+
+          def summary_from_lcov(path: Path) -> Optional[CoverageSummary]:
+              """Sum the ``LF``/``LH`` and ``BRF``/``BRH`` counters of an lcov report."""
+              try:
+                  text = path.read_text(encoding="utf-8")
+              except OSError:
+                  return None
+              totals = {"LF": 0, "LH": 0, "BRF": 0, "BRH": 0}
+              for line in text.splitlines():
+                  key, _, raw = line.partition(":")
+                  if key not in totals:
+                      continue
+                  try:
+                      totals[key] += int(raw.strip())
+                  except ValueError:
+                      continue
+              lines_pct = _percent(totals["LH"], totals["LF"])
+              if lines_pct is None:
+                  return None
+              return CoverageSummary(origin=str(path), lines_pct=lines_pct, branches_pct=_percent(totals["BRH"], totals["BRF"]))
+
+
+          def _summary_from_text_block(text: str) -> Optional[CoverageSummary]:
+              """Parse the istanbul ``Coverage summary`` block."""
+              rows = {}
+              for label, pct, _covered, total in _TEXT_ROW.findall(text):
+                  if int(total) > 0:
+                      rows[label] = float(pct)
+              lines_pct = rows.get("Lines", rows.get("Statements"))
+              if lines_pct is None:
+                  return None
+              return CoverageSummary(
+                  origin="the coverage run's printed summary",
+                  lines_pct=lines_pct,
+                  branches_pct=rows.get("Branches"),
+              )
+
+
+          def _summary_from_text_table(text: str) -> Optional[CoverageSummary]:
+              """Parse the ``All files`` row of the istanbul / vitest text table."""
+              match = _ALL_FILES_ROW.search(text)
+              if match is None:
+                  return None
+              cells = [cell.strip() for cell in match.group(1).split("|")]
+              if len(cells) < 4:
+                  return None
+              statements, branches, _functions, lines = (_as_float(cell) for cell in cells[:4])
+              if lines is None or statements is None:
+                  return None
+              return CoverageSummary(
+                  origin="the coverage run's printed summary",
+                  lines_pct=lines,
+                  branches_pct=branches,
+              )
+
+
+          def summary_from_text(text: str) -> Optional[CoverageSummary]:
+              """Parse whichever printed coverage shape the runner emitted."""
+              return _summary_from_text_block(text) or _summary_from_text_table(text)
+
+
+          def discover(project_dir: Path, log_text: str) -> Optional[CoverageSummary]:
+              """Find the strongest available coverage evidence for ``project_dir``."""
+              readers = (
+                  ("coverage-summary.json", summary_from_json_summary),
+                  ("clover.xml", summary_from_clover),
+                  ("lcov.info", summary_from_lcov),
+              )
+              coverage_root = project_dir / COVERAGE_DIR
+              for filename, reader in readers:
+                  for candidate in sorted(coverage_root.rglob(filename)):
+                      summary = reader(candidate)
+                      if summary is not None:
+                          return summary
+              return summary_from_text(log_text)
+
+
+          def evaluate(summary: CoverageSummary, min_percent: float) -> List[str]:
+              """Return one finding per coverage dimension that is below the bar."""
+              findings: List[str] = []
+              if summary.lines_pct < min_percent:
+                  findings.append(f"line coverage {summary.lines_pct:.2f}% is below the required {min_percent:.2f}%")
+              if summary.branches_pct is not None and summary.branches_pct < min_percent:
+                  findings.append(f"branch coverage {summary.branches_pct:.2f}% is below the required {min_percent:.2f}%")
+              return findings
+
+
+          def _read_log(log_path: Optional[str]) -> str:
+              """Read the captured coverage-run output, tolerating a missing file."""
+              if not log_path:
+                  return ""
+              try:
+                  return Path(log_path).read_text(encoding="utf-8", errors="replace")
+              except OSError:
+                  return ""
+
+
+          def _build_parser() -> argparse.ArgumentParser:
+              """Build the CLI parser."""
+              parser = argparse.ArgumentParser(description="Assert the coverage a JS/TS project just measured.")
+              parser.add_argument("--project-dir", required=True, help="Directory the coverage script ran in.")
+              parser.add_argument("--log", default=None, help="File holding the coverage run's captured output.")
+              parser.add_argument(
+                  "--min-percent",
+                  type=float,
+                  default=DEFAULT_MIN_PERCENT,
+                  help=f"Required line and branch coverage, in (0, 100] (default {DEFAULT_MIN_PERCENT}).",
+              )
+              return parser
+
+
+          def main(argv: Optional[List[str]] = None) -> int:
+              """Assert the measured coverage and return the lane's exit code."""
+              args = _build_parser().parse_args(argv)
+              if not 0 < args.min_percent <= 100:
+                  print(
+                      f"ERROR gate-tests-coverage jsts: --min-percent {args.min_percent} must be greater than 0 "
+                      "and at most 100. A 0% bar is a silent pass wearing a number; a bar above 100 is unreachable.",
+                      file=sys.stderr,
+                  )
+                  return EXIT_CONFIG_ERROR
+              project_dir = Path(args.project_dir)
+              summary = discover(project_dir, _read_log(args.log))
+              if summary is None:
+                  print(
+                      f"FAIL gate-tests-coverage jsts: the coverage script ran in '{project_dir}' but produced NO parseable "
+                      "coverage summary, so the gate cannot pass it unmeasured. Looked for "
+                      "coverage/**/coverage-summary.json, coverage/**/clover.xml, coverage/**/lcov.info and a printed "
+                      "summary. Remediation: add the 'json-summary' (or 'lcov') coverage reporter to the project's "
+                      "vitest/jest/karma config.",
+                      file=sys.stderr,
+                  )
+                  return EXIT_BELOW_BAR
+              branches = "n/a (no conditionals)" if summary.branches_pct is None else f"{summary.branches_pct:.2f}%"
+              print(
+                  f"gate-tests-coverage jsts: measured line {summary.lines_pct:.2f}%, branch {branches} "
+                  f"against a required {args.min_percent:.2f}% (source: {summary.origin})"
+              )
+              findings = evaluate(summary, args.min_percent)
+              if findings:
+                  for finding in findings:
+                      print(f"FAIL gate-tests-coverage jsts: {finding}.", file=sys.stderr)
+                  return EXIT_BELOW_BAR
+              print("PASS gate-tests-coverage jsts: the measured coverage meets the required threshold.")
+              return EXIT_OK
+
+
+          if __name__ == "__main__":
+              raise SystemExit(main())
+          QZP_EMBED_jsts_coverage_assert
           cat > "${RUNNER_TEMP}/qzp-lean-gate/osv_severity_gate.py" <<'QZP_EMBED_osv_severity_gate'
           #!/usr/bin/env python3
           """Severity floor for gate 6 (deps) - the T0 tier of the lean gate.
@@ -1176,8 +1027,472 @@ jobs:
           if __name__ == "__main__":
               raise SystemExit(main())
           QZP_EMBED_osv_severity_gate
-          python3 -c "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))" \
-            "${RUNNER_TEMP}/qzp-lean-gate/osv_severity_gate.py"
+          # Fail loudly HERE if a paste ever lands mis-indented, rather than
+          # deep inside a gate where it would read as a scanner failure.
+          for helper in jsts_coverage_assert osv_severity_gate; do
+            python3 -c "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))" \
+              "${RUNNER_TEMP}/qzp-lean-gate/${helper}.py"
+            echo "materialized ${helper}.py"
+          done
+
+      # ── GATE 1 (ts/js) — SELF-CONTAINED lint + format (Oxlint + Biome) ───────
+      # GAP 2 FIX — the lean charter's gate-1 for ts/js runs SELF-CONTAINED in THIS
+      # workflow (the Reframe pattern), NOT the caller's ad-hoc eslint. A caller
+      # .pre-commit-config.yaml that contains a repo-LOCAL `frontend-eslint`-style
+      # hook shelling out to a not-yet-installed tool ("sh: 1: eslint: not found",
+      # exit 127) used to short-circuit the whole gate-1 step (observed:
+      # momentstudio). We therefore run the workflow's OWN pinned linter + formatter
+      # over the caller's ts/js directly, independent of the caller's local hooks.
+      # They need nothing from the caller (npx fetches the pinned CLIs).
+      #
+      # round-3 FIX 1 — FORMATTER SWAP (decided design): the format check is now
+      # BIOME (formatter-only; linting stays with Oxlint), mirroring the PROVEN
+      # Reframe lean gate (Prekzursil/Reframe .github/workflows/quality.yml +
+      # biome.json: biome 2.5.0, `formatter.enabled`, `linter.enabled:false`,
+      # `assist.enabled:false`). `biome ci --formatter-enabled --linter-enabled=false
+      # --assist-enabled=false` is check-only (no writes) and exits non-zero on any
+      # unformatted file. If the caller ships its OWN biome.json/biome.jsonc we honor
+      # it (biome auto-discovers it from cwd); otherwise we point biome at the
+      # template's bundled minimal config (docs/lean-gate/biome.template.json, the
+      # same style as Reframe's: 2-space, single quotes, trailingCommas all,
+      # semicolons always, lineWidth 100, lf) via --config-path so formatting is
+      # deterministic across callers. Oxlint linting is unchanged. Pins: oxlint
+      # 1.69.0 (mirrors Reframe), biome 2.5.0 (mirrors Reframe). Keep in sync with
+      # docs/lean-gate/pre-commit-config.template.yaml + docs/lean-gate/biome.template.json.
+      - name: gate-lint-format-jsts (self-contained oxlint + biome)
+        if: steps.detect.outputs.jsts == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::oxlint@1.69.0 (--deny-warnings)"
+          # --no-error-on-unmatched-pattern: when a caller has NO first-party
+          # lintable JS (everything ignored/vendored), oxlint otherwise exits 1
+          # with "No files found to lint" — a false FAIL. With the flag, an empty
+          # match set exits 0 (PASS). This does NOT weaken the gate: when lintable
+          # JS exists, --deny-warnings still runs and still fails on any warning.
+          # **/*.min.js (and node_modules above) are obvious build artifacts that
+          # must never be linted; real source is NOT broadly ignored.
+          npx --yes oxlint@1.69.0 --deny-warnings \
+            --no-error-on-unmatched-pattern \
+            --ignore-pattern '**/node_modules/**' \
+            --ignore-pattern '**/dist/**' \
+            --ignore-pattern '**/build/**' \
+            --ignore-pattern '**/out/**' \
+            --ignore-pattern '**/.venv/**' \
+            --ignore-pattern '**/vendor/**' \
+            --ignore-pattern '**/*.min.js' \
+            .
+          echo "::endgroup::"
+          echo "::group::biome@2.5.0 (format --check, formatter-only)"
+          # Honor a caller-shipped biome config if present (biome auto-discovers
+          # biome.json/biome.jsonc from cwd); otherwise use the template's bundled
+          # minimal config so formatting is deterministic across callers.
+          biome_cfg_args=()
+          if [ ! -f biome.json ] && [ ! -f biome.jsonc ]; then
+            tmp_biome_dir="$(mktemp -d)"
+            # Bundled minimal config (single-line printf to avoid any YAML/heredoc
+            # indentation pitfalls). Mirrors Reframe's biome.json style.
+            # NB: NO "vcs.useIgnoreFile" here — biome errors ("couldn't find an
+            # ignore file") on a caller without a .gitignore; we exclude vendored
+            # trees explicitly via files.includes negations instead. The config dir
+            # is a mktemp dir OUTSIDE the scanned tree, so biome does not treat it
+            # as a "nested root configuration".
+            printf '%s' '{"$schema":"https://biomejs.dev/schemas/2.5.0/schema.json","files":{"includes":["**/*.ts","**/*.tsx","**/*.js","**/*.jsx","**/*.mjs","**/*.cjs","!**/node_modules/**","!**/dist/**","!**/build/**","!**/out/**","!**/.venv/**","!**/vendor/**"]},"formatter":{"enabled":true,"indentStyle":"space","indentWidth":2,"lineWidth":100,"lineEnding":"lf"},"javascript":{"formatter":{"quoteStyle":"single","trailingCommas":"all","semicolons":"always"}},"linter":{"enabled":false},"assist":{"enabled":false}}' > "$tmp_biome_dir/biome.json"
+            biome_cfg_args=(--config-path "$tmp_biome_dir")
+            echo "No caller biome.json/biome.jsonc - using the lean template's bundled biome config."
+          else
+            echo "Honoring caller-shipped biome config."
+          fi
+          # `biome ci` is the non-mutating check command; restrict it to the
+          # formatter (linting is Oxlint's job, assist disabled).
+          npx --yes @biomejs/biome@2.5.0 ci \
+            --formatter-enabled=true --linter-enabled=false --assist-enabled=false \
+            "${biome_cfg_args[@]}" . || {
+            echo "FAIL gate-lint-format-jsts: biome found unformatted ts/js (run 'biome format --write' / the biome pre-commit hook to fix)." >&2
+            exit 1
+          }
+          echo "::endgroup::"
+
+      # ── GATE 1 (py) — SELF-CONTAINED lint + format (Ruff) ───────────────────
+      # round-6 FIX — the lean charter's Python lint/format runs the workflow's OWN
+      # pinned ruff directly, NOT the caller's `.pre-commit-config.yaml`. The old
+      # `gate-lint-format-secrets` step ran `pre-commit run --all-files`, which
+      # dragged in each repo's BESPOKE pre-commit env (a root npm lockfile for the
+      # frontend-eslint hook's `npm ci`, the .NET SDK for dotnet-format, caller-
+      # local eslint/tsc/prettier, ...) and red-failed for caller-ENVIRONMENT
+      # reasons even when the repo's real lean quality was fine. We now run ruff
+      # ourselves: `ruff check` (lint) + `ruff format --check` (format), honoring a
+      # caller [tool.ruff] in pyproject.toml or a ruff.toml/.ruff.toml when present
+      # (ruff auto-discovers it from cwd); otherwise ruff's own defaults apply.
+      # This is NOT weakening — ruff is the SAME charter tool the pre-commit hook
+      # ran (pinned to Reframe's ruff 0.15.17); ruff lint issues or unformatted
+      # Python still FAIL. Pin: ruff 0.15.17 (mirrors Reframe). Keep in sync with
+      # docs/lean-gate/pre-commit-config.template.yaml.
+      - name: gate-lint-format-py (self-contained ruff)
+        if: steps.detect.outputs.python == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::group::ruff check (lint)"
+          # --output-format=github surfaces findings as GH annotations. ruff honors
+          # a caller [tool.ruff]/ruff.toml automatically (cwd discovery); no caller
+          # pre-commit/eslint/SDK environment is touched.
+          ruff check --output-format=github .
+          echo "::endgroup::"
+          echo "::group::ruff format --check"
+          ruff format --check . || {
+            echo "FAIL gate-lint-format-py: ruff found unformatted Python (run 'ruff format' / the ruff pre-commit hook to fix)." >&2
+            exit 1
+          }
+          echo "::endgroup::"
+
+      # ── GATE 2 — types ────────────────────────────────────────────────────
+      # tsc per tsconfig.json so monorepo / nested-project shapes (e.g. an `ui/`
+      # subproject with its own tsconfig and no root tsconfig — event-link) are
+      # type-checked instead of hard-failing. Root tsconfig => `tsc --noEmit`;
+      # otherwise discover every nested tsconfig and run `tsc -p <dir> --noEmit`.
+      # Each project's deps are installed from its own package.json when present.
+      - name: gate-types tsc
+        if: steps.detect.outputs.ts == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          install_deps() { # $1 = dir containing package.json
+            if [ -f "$1/package.json" ]; then
+              ( cd "$1" && { npm ci || npm install; } )
+            fi
+          }
+          if [ -f tsconfig.json ]; then
+            install_deps .
+            npx --yes tsc --noEmit
+          else
+            # No root tsconfig — discover nested project configs (excluding vendored trees).
+            mapfile -t configs < <(git ls-files '**/tsconfig.json' tsconfig*.json \
+              | grep -Ev '(^|/)(node_modules|dist|out|build|\.venv)/' || true)
+            if [ "${#configs[@]}" -eq 0 ]; then
+              echo "ts/tsx present but no tsconfig.json (root or nested) - nothing for tsc to check."
+              exit 0
+            fi
+            for cfg in "${configs[@]}"; do
+              dir="$(dirname "$cfg")"
+              echo "::group::tsc -p $cfg"
+              install_deps "$dir"
+              ( cd "$dir" && npx --yes tsc -p "$(basename "$cfg")" --noEmit )
+              echo "::endgroup::"
+            done
+          fi
+
+      # round-5 FIX A — basedpyright at the STANDARD bar (consistency with Reframe).
+      # basedpyright's DEFAULT mode is stricter than upstream pyright: it turns on
+      # reportAny / reportUnknown* / reportUnusedCallResult, which flood untyped
+      # utility scripts with thousands of non-bug "errors" (observed: momentstudio
+      # 2774, swfoc 39, pbinfo 11 — all from scripts/utils). Reframe runs basedpyright
+      # at typeCheckingMode = "standard" via [tool.basedpyright]. So: if the CALLER
+      # ships a basedpyright/pyright config (pyrightconfig.json, basedpyrightconfig.json,
+      # or a pyproject.toml with a [tool.(based)pyright] table) we honor it verbatim
+      # (run basedpyright as-is); otherwise we pass `--typecheckingmode standard` so
+      # the gate uses the proven standard bar instead of basedpyright's stricter
+      # default. This is NOT weakening — standard is the proven bar and reportAny-
+      # everywhere is gold-plating; REAL type errors at standard level still FAIL.
+      - name: gate-types basedpyright
+        if: steps.detect.outputs.python == 'true'
+        shell: bash
+        env:
+          PYRIGHTCFG: ${{ steps.detect.outputs.pyrightcfg }}
+        run: |
+          set -euo pipefail
+          if [ "$PYRIGHTCFG" = "true" ]; then
+            echo "Honoring caller-shipped basedpyright/pyright config (running as-is)."
+            basedpyright
+          else
+            echo "No caller basedpyright/pyright config - using standard typeCheckingMode (mirrors Reframe)."
+            basedpyright --typecheckingmode standard
+          fi
+
+      # ── GATE 3 — tests + coverage (STRICT 100% line+branch) ───────────────
+      # Python via coverage.py; JS/TS via the caller's `test:coverage` script.
+      # SILENT-PASS HOLE CLOSED: the old guard `&& hashFiles(pyproject/setup.cfg/
+      # tox.ini)` let a Python repo with code but no coverage config pass GREEN
+      # without ever measuring coverage. Now: if Python source exists we ALWAYS
+      # measure. The ONLY skip is the documented narrow case — Python source with
+      # ZERO test files (no tests, no coverage config) = "no test surface by
+      # design". Source + tests but no cov config (or source + cov config) => FAIL
+      # unless 100%. The 100% gate cannot pass unmeasured.
+      - name: gate-tests-coverage python
+        if: steps.detect.outputs.python == 'true'
+        shell: bash
+        env:
+          PYCOVCFG: ${{ steps.detect.outputs.pycovcfg }}
+          PYTESTS: ${{ steps.detect.outputs.pytests }}
+        run: |
+          set -euo pipefail
+          if [ "$PYCOVCFG" != "true" ] && [ "$PYTESTS" != "true" ]; then
+            echo "Python source present with NO test files and NO coverage config - no test surface by design; coverage lane skipped."
+            exit 0
+          fi
+          if [ "$PYCOVCFG" != "true" ] && [ "$PYTESTS" == "true" ]; then
+            echo "FAIL gate-tests-coverage python: Python source + tests are present but no coverage config (pyproject.toml/setup.cfg/tox.ini/.coveragerc/pytest.ini) - the 100% gate cannot pass unmeasured. Add coverage config." >&2
+            exit 1
+          fi
+          # GAP 1 FIX — install the CALLER's Python RUNTIME deps before running the
+          # tests. Without this, a repo whose tests import a runtime dependency
+          # fails with ModuleNotFoundError (observed: env-inspector -> "No module
+          # named defusedxml"; the lane previously installed only pytest/coverage).
+          # Priority order: requirements*.txt -> pyproject.toml / setup.cfg /
+          # setup.py (PEP 517 install of the project itself, which pulls its
+          # declared dependencies, incl. Poetry's [tool.poetry.dependencies]).
+          # If NONE exist the repo is pure-stdlib -> proceed (no-op). Best-effort:
+          # a failing optional/heavy install must not mask the real test result,
+          # so each install is guarded and only logged on failure.
+          installed_runtime_deps=false
+          mapfile -t reqs < <(git ls-files \
+            requirements.txt 'requirements/*.txt' 'requirements-*.txt' 'requirements*.txt' \
+            '**/requirements.txt' 2>/dev/null \
+            | grep -Ev '(^|/)(node_modules|\.venv|venv|dist|build|out)/' \
+            | grep -Eiv 'requirements.*(dev|test|lint|doc|ci).*\.txt$' || true)
+          if [ "${#reqs[@]}" -gt 0 ]; then
+            for r in "${reqs[@]}"; do
+              echo "::group::pip install -r $r"
+              pip install -r "$r" || echo "WARN: 'pip install -r $r' failed; continuing (tests will surface any missing import)."
+              echo "::endgroup::"
+            done
+            installed_runtime_deps=true
+          elif [ -f pyproject.toml ] || [ -f setup.cfg ] || [ -f setup.py ]; then
+            echo "::group::pip install . (project deps from pyproject/setup.cfg/setup.py)"
+            pip install . || echo "WARN: 'pip install .' failed; continuing (tests will surface any missing import)."
+            echo "::endgroup::"
+            installed_runtime_deps=true
+          fi
+          [ "$installed_runtime_deps" = "true" ] || echo "No Python runtime manifest (requirements*.txt / pyproject.toml / setup.cfg / setup.py) - assuming pure-stdlib; proceeding."
+          if grep -rqs 'pytest' pyproject.toml setup.cfg tox.ini pytest.ini 2>/dev/null; then
+            pip install pytest pytest-cov
+            python -m pytest --cov --cov-branch --cov-fail-under=100
+          else
+            pip install coverage
+            python -m coverage run -m unittest discover
+            python -m coverage report --fail-under=100 --show-missing
+          fi
+
+      # SILENT-PASS HOLE CLOSED: the old else-branch printed a message and passed
+      # GREEN when ts/js source existed but no `test:coverage` script — code with
+      # zero measured coverage slipped through the 100% gate. Now: if a coverage
+      # script (or vitest/jest coverage equivalent) is present we run it; if ts/js
+      # source + tests exist but no coverage script => FAIL. The ONLY skip is the
+      # documented narrow case — ts/js source with ZERO test files = "no test
+      # surface by design". A ts/js repo with code + tests but no coverage script
+      # must NOT pass unmeasured.
+      #
+      # round-3 FIX 5 — NESTED-MONOREPO DISCOVERY: the coverage lane used to inspect
+      # ONLY the ROOT package.json, so a nested project (the package.json lives in a
+      # subdir, root has none — observed: webcoder, package.json in frontend/
+      # webcoder_ui) hard-FAILED "no coverage script" even though the nested project
+      # has one. Mirror the tsc lane (round-1 FIX): if there is a root package.json
+      # use it; otherwise DISCOVER every nested package.json (excluding vendored
+      # trees) and run coverage in each project dir that has a coverage script /
+      # vitest|jest --coverage test script. The silent-pass hole stays closed: a
+      # nested project with test files but NO coverage runner FAILS; the only skip
+      # is the documented "no test surface by design" (zero ts/js test files).
+      #
+      # round-7 FIX — ASSERT THE NUMBER. This lane used to run the caller's
+      # coverage script and pass on exit 0, passing NO threshold and checking NO
+      # number: enforcement was delegated entirely to the caller's vitest/karma
+      # config and the gate never verified one existed. Measured 2026-08-11,
+      # momentstudio's frontend printed `Statements : 49.57%` and the lane
+      # printed `PASS gate-tests-coverage jsts`. The run's output is now captured
+      # and the summary it produced is parsed and compared. A run that yields NO
+      # parseable summary FAILS — that property is unconditional and cannot be
+      # switched off by `jsts-coverage-min`, which only moves the numeric bar and
+      # is itself rejected outside (0, 100].
+      - name: gate-tests-coverage jsts
+        if: steps.detect.outputs.jsts == 'true'
+        shell: bash
+        env:
+          JSTSTESTS: ${{ steps.detect.outputs.jststests }}
+          JSTS_COVERAGE_MIN: ${{ inputs.jsts-coverage-min }}
+        run: |
+          set -euo pipefail
+          # has_cov_lane: does <dir>/package.json define a runnable coverage lane?
+          # Echoes "script" (test:coverage) | "runner" (vitest/jest --coverage in
+          # `test`) | "" (none). Reads only that dir's package.json.
+          has_cov_lane() {
+            # NB: node's require() treats a bare path ('dir/package.json') as a
+            # MODULE lookup, not a relative file - it MUST be './'-prefixed. With
+            # d='.' this yields './././package.json' (valid); with a nested dir it
+            # yields './frontend/ui/package.json' (valid).
+            local d="./$1"
+            if node -e "process.exit((require('$d/package.json').scripts||{})['test:coverage']?0:1)" 2>/dev/null; then
+              echo "script"; return 0
+            fi
+            if node -e "const s=(require('$d/package.json').scripts||{}).test||'';process.exit(/(vitest|jest).*--coverage|--coverage.*(vitest|jest)/.test(s)?0:1)" 2>/dev/null; then
+              echo "runner"; return 0
+            fi
+            echo ""; return 0
+          }
+          run_cov_in_dir() { # $1 dir, $2 lane-kind
+            local slug log
+            slug="$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '_')"
+            log="${RUNNER_TEMP}/qzp-lean-gate/jsts-coverage-${slug}.log"
+            echo "::group::coverage in $1 ($2)"
+            # `tee` keeps the run visible in the job log while capturing the
+            # printed coverage summary, which is the last-resort evidence when a
+            # project ships no machine-readable reporter. pipefail is already on,
+            # so a failing coverage script still reds the lane through the pipe.
+            ( cd "$1" && { npm ci || npm install; } \
+              && if [ "$2" = "script" ]; then npm run test:coverage; else npm test; fi ) 2>&1 | tee "$log"
+            echo "::endgroup::"
+            # THE number check. Exit 0 from the caller's script is not evidence
+            # of coverage; a parsed figure at or above the bar is.
+            python3 "${RUNNER_TEMP}/qzp-lean-gate/jsts_coverage_assert.py" \
+              --project-dir "$1" --log "$log" --min-percent "$JSTS_COVERAGE_MIN"
+          }
+          # Build the candidate project dir list: root if it has package.json,
+          # otherwise every nested package.json dir (excluding vendored trees).
+          declare -a proj_dirs=()
+          if [ -f package.json ]; then
+            proj_dirs=(.)
+          else
+            mapfile -t pkgs < <(git ls-files '**/package.json' \
+              | grep -Ev '(^|/)(node_modules|dist|out|build|\.venv|vendor)/' || true)
+            for p in "${pkgs[@]}"; do proj_dirs+=("$(dirname "$p")"); done
+          fi
+          ran_any=false
+          if [ "${#proj_dirs[@]}" -gt 0 ]; then
+            for d in "${proj_dirs[@]}"; do
+              lane="$(has_cov_lane "$d")"
+              if [ -n "$lane" ]; then
+                run_cov_in_dir "$d" "$lane"
+                ran_any=true
+              fi
+            done
+          fi
+          if [ "$ran_any" = "true" ]; then
+            echo "PASS gate-tests-coverage jsts: measured coverage in ${#proj_dirs[@]} project dir(s) and every measured figure met the ${JSTS_COVERAGE_MIN}% bar."
+          elif [ "$JSTSTESTS" != "true" ]; then
+            echo "ts/js source present with NO test files and no coverage script - no test surface by design; coverage lane skipped."
+            exit 0
+          else
+            echo "FAIL gate-tests-coverage jsts: ts/js present (with test files) but no coverage script in any project dir (root or nested) - the 100% gate cannot pass unmeasured. Add a 'test:coverage' npm script (or a vitest/jest '--coverage' test script) in the project package.json." >&2
+            exit 1
+          fi
+
+      # ── GATE 3 (go / c++) — tests + coverage via the CALLER's own gate ────
+      # ROUND-7 REGRESSION FIX. round-6 removed the caller pre-commit run and the
+      # per-language toolchains, which together were the ONLY path by which a
+      # compiled language reached gate 3. Both compiled languages then fell
+      # through to the narrow "no test surface by design" skip and the step
+      # reported SUCCESS. Measured on the live fleet:
+      #   * DevExtreme-Filter-Go-Language — 236,928 bytes of Go, 30+ root-level
+      #     *_test.go files, and a .pre-commit-config.yaml whose gate-3 hook
+      #     `go-test-cover-100` runs exactly `bash scripts/coverage-gate.sh`.
+      #     Its own config header still names reusable-quality.yml as the
+      #     entrypoint for that hook. Coverage: never measured, always green.
+      #   * Airline-Reservations-System — 190,349 bytes of C++ with ten
+      #     *_test.cpp files under tests/ and no lane of any kind.
+      #
+      # WHY THE CALLER'S SCRIPT AND NOT A DIRECT LANE: the Go coverage gate
+      # already EXISTS in the caller repo — the pre-commit hook is a thin
+      # wrapper around `bash scripts/coverage-gate.sh`. Running that script
+      # directly is strictly more robust than restoring `pre-commit run
+      # --all-files`: it needs no pre-commit install, no caller hook
+      # environment, and it CANNOT drag in the bespoke frontend-eslint /
+      # dotnet-format hooks that round-6 removed for good reason. For C++ there
+      # is no safely auto-configurable instrumented build (the workflow cannot
+      # know the build system, the flags, or how to add --coverage), so a blind
+      # clang-tidy+gcovr lane would be a gate the owner could not drive to
+      # green. Deliberately NOT added here: golangci-lint and go vet. Those are
+      # gate-1/gate-2 concerns, they are autofixer-class red, and this commit is
+      # scoped to closing the measured coverage hole.
+      #
+      # The skip stays reachable ONLY for its documented narrow case (source
+      # present, ZERO test files). With test files present this lane can no
+      # longer skip — proven behaviourally, not by text assertion, in
+      # tests/test_lean_gate_compiled_coverage_lane.py, which extracts this very
+      # script and executes it across the whole truth table.
+      - name: gate-tests-coverage compiled (go / c++)
+        if: steps.detect.outputs.go == 'true' || steps.detect.outputs.cpp == 'true'
+        shell: bash
+        env:
+          GO_PRESENT: ${{ steps.detect.outputs.go }}
+          GO_TESTS: ${{ steps.detect.outputs.gotests }}
+          GO_MOD: ${{ steps.detect.outputs.gomod }}
+          CPP_PRESENT: ${{ steps.detect.outputs.cpp }}
+          CPP_TESTS: ${{ steps.detect.outputs.cpptests }}
+          COVERAGE_GATE_SCRIPT: ${{ inputs.coverage-gate-script }}
+        run: |
+          set -euo pipefail
+          # Which compiled languages have a DEMONSTRABLE test surface. Built with
+          # explicit `if` blocks, not `[ ... ] && ...` chains: under `set -e` a
+          # false test at the end of a chain aborts the whole step.
+          needs=""
+          if [ "$GO_PRESENT" = "true" ] && [ "$GO_TESTS" = "true" ]; then
+            needs="go"
+          fi
+          if [ "$CPP_PRESENT" = "true" ] && [ "$CPP_TESTS" = "true" ]; then
+            needs="${needs:+$needs+}c++"
+          fi
+
+          if [ -z "$needs" ]; then
+            echo "Compiled source present (go=$GO_PRESENT c++=$CPP_PRESENT) with ZERO test files - no test surface by design; coverage lane skipped."
+            exit 0
+          fi
+          echo "Compiled test surface DETECTED ($needs). This lane CANNOT skip: the 100% gate cannot pass unmeasured."
+
+          # Go needs a toolchain, and the toolchain step keys off a root go.mod.
+          # Go tests with no go.mod is a real hole, not a design decision.
+          case "$needs" in
+            *go*)
+              if [ "$GO_MOD" != "true" ]; then
+                echo "FAIL gate-tests-coverage ($needs): *_test.go files exist but there is no root go.mod, so no Go toolchain was set up and coverage cannot be measured. Add a root go.mod (or move the module to the repo root)." >&2
+                exit 1
+              fi
+              go version
+              ;;
+          esac
+
+          # ONE invocation even for a mixed go+c++ repo: the caller's script is
+          # the repo's whole compiled-language coverage gate, not a per-language
+          # one, so running it twice would only burn runner minutes.
+          if [ ! -f "$COVERAGE_GATE_SCRIPT" ]; then
+            echo "FAIL gate-tests-coverage ($needs): this repo has compiled-language test files but no coverage gate at '$COVERAGE_GATE_SCRIPT', so the STRICT 100% gate cannot pass unmeasured." >&2
+            echo "FAIL gate-tests-coverage ($needs): remediation - add an executable 'scripts/coverage-gate.sh' that runs the tests, measures coverage and exits non-zero below the bar (for Go: 'go test -covermode=atomic -coverprofile=... ./...' then 'go tool cover -func'), or point the 'coverage-gate-script' workflow input at the script you already have." >&2
+            exit 1
+          fi
+
+          echo "::group::bash $COVERAGE_GATE_SCRIPT ($needs)"
+          bash "$COVERAGE_GATE_SCRIPT"
+          echo "::endgroup::"
+          echo "PASS gate-tests-coverage ($needs): the caller's own coverage gate '$COVERAGE_GATE_SCRIPT' measured the tests and passed."
+
+      # ── GATE 4 — SAST (opengrep, curated in-repo ruleset, clean-zero) ─────
+      - name: gate-sast opengrep
+        if: steps.detect.outputs.opengrep == 'true'
+        shell: bash
+        env:
+          OPENGREP_PATHS: ${{ inputs.opengrep-paths }}
+        run: |
+          # OPENGREP_PATHS is an optional space-separated list of scan paths.
+          # Passed via env (NOT an inline GHA expression in this run block) to
+          # avoid GitHub Actions run-step expression injection -- note that GHA
+          # expands expression tokens textually over the whole run string,
+          # comments included, so even a literal token here is a real sink.
+          # The value is then split into a bash ARRAY so each path is a
+          # distinct argument WITHOUT an unquoted expansion (an unquoted $VAR of an
+          # injectable input still trips CodeQL actions/code-injection). Empty
+          # value => zero extra args (default = scan repo root via the config).
+          read -ra opengrep_paths <<< "$OPENGREP_PATHS"
+          opengrep scan --config .quality/opengrep --error \
+            --exclude .venv --exclude node_modules --exclude dist --exclude out --exclude build \
+            "${opengrep_paths[@]}"
+
+      # ── GATE 5 (verify) — secrets, gitleaks over working tree (0 findings) ─
+      # round-6 FIX — gitleaks is now ALWAYS self-contained: it runs whenever the
+      # caller ships a .gitleaks.toml allowlist, regardless of any pre-commit config
+      # (the caller pre-commit is no longer executed). Honors the caller's
+      # .gitleaks.toml allowlist. Findings still FAIL the gate. Pin: gitleaks
+      # 8.30.1 (mirrors Reframe), installed above.
+      - name: gate-secrets gitleaks (self-contained)
+        if: steps.detect.outputs.gitleaks == 'true'
+        run: gitleaks detect --no-banner --redact --config .gitleaks.toml
 
       # ── GATE 6 — deps (osv-scanner, 0 actionable CVEs) ───────────────────
       # osv-scanner exits 128 ("no package sources found") on a zero-dependency

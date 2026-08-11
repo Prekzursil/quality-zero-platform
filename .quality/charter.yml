@@ -46,6 +46,11 @@ gates:
     # is the narrow "no test surface by design" case — source present with ZERO
     # test files (e.g. type-stub-only / generated-only package).
     no_silent_pass: true
+    # round-7: the jsts lane now ASSERTS the measured figure instead of trusting
+    # the caller's vitest/karma config to enforce it, and Go / C++ have a lane
+    # again (via the caller's own coverage-gate script) after round-6 removed
+    # the only path by which a compiled language reached this gate.
+    languages: [python, ts_js, go, c_cpp]
   - id: 4
     name: sast
     workflow_step: "gate-sast"

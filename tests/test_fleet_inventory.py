@@ -88,6 +88,33 @@ class BuildExpectedFleetTests(unittest.TestCase):
             ["Prekzursil/pbinfo-get-unsolved"],
         )
 
+    def test_private_observe_members_included_as_explicit_exceptions(self) -> None:
+        """The two private ``rollout: observe`` members must survive the filter.
+
+        Real-fleet bug surfaced 2026-08-11: PR #274 enrolled
+        ``PrimariRo`` and ``agent-skills-toolchain`` in
+        ``inventory/repos.yml`` (with profiles and generated ruleset
+        payloads) but never touched this module, so the private-repo
+        filter kept excluding them. A live
+        ``fleet_inventory.py --json`` sweep therefore reported both
+        governed repos in ``dead`` — i.e. the enrollment record and the
+        fleet filter disagreed about the roster, permanently.
+
+        The module contract is that adding a private repo takes a data
+        edit AND a code change + PR; only the data half had happened.
+        """
+        repos = [
+            _repo(name="PrimariRo", private=True),
+            _repo(name="agent-skills-toolchain", private=True),
+        ]
+        self.assertEqual(
+            build_expected_fleet(repos),
+            [
+                "Prekzursil/PrimariRo",
+                "Prekzursil/agent-skills-toolchain",
+            ],
+        )
+
     def test_dedupes_and_sorts_output(self) -> None:
         """Duplicate slugs collapse; output is stable sorted."""
         repos = [
@@ -104,6 +131,31 @@ class BuildExpectedFleetTests(unittest.TestCase):
         """The exception list must be immutable to prevent silent edits."""
         self.assertIsInstance(PRIVATE_INCLUDE_SLUGS, frozenset)
         self.assertIn("Prekzursil/pbinfo-get-unsolved", PRIVATE_INCLUDE_SLUGS)
+        self.assertIn("Prekzursil/PrimariRo", PRIVATE_INCLUDE_SLUGS)
+        self.assertIn("Prekzursil/agent-skills-toolchain", PRIVATE_INCLUDE_SLUGS)
+
+    def test_visibility_exceptions_are_all_enrolled(self) -> None:
+        """Every whitelisted slug must actually be in ``inventory/repos.yml``.
+
+        The two lists are only meaningful as a pair. A whitelist entry
+        for a slug nobody enrolls is dead config, and — the direction
+        that actually bit on 2026-08-11 — an enrolled repo missing from
+        the whitelist is silently reported as ``dead`` by every sweep.
+        This closes the stale-whitelist half; the membership assertions
+        above close the missing-whitelist half.
+
+        Repo visibility is not recorded anywhere on disk, so the
+        enrolled-private-but-unlisted direction cannot be derived
+        offline; it is asserted explicitly per slug instead.
+        """
+        root = Path(__file__).resolve().parents[1]
+        inventoried = set(load_inventory_slugs(root / "inventory" / "repos.yml"))
+        for whitelist in (PRIVATE_INCLUDE_SLUGS, FORK_INCLUDE_SLUGS):
+            self.assertEqual(
+                whitelist - inventoried,
+                set(),
+                f"whitelisted but not enrolled: {sorted(whitelist - inventoried)}",
+            )
 
     def test_fork_pbinfo_included_as_explicit_exception(self) -> None:
         """``pbinfo-get-unsolved`` is included even when GitHub reports it as a fork.

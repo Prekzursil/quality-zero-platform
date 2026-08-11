@@ -198,6 +198,56 @@ Default `dry_run=true` is the safe default for the cron schedule
 (no surprise `alert:*` issue creation from a cron firing on
 incomplete fleet state).
 
+### `scheduled-cve-scan.yml` (cron)
+
+The standing dependency-advisory surface. Runs daily at 05:41 UTC, reads the
+roster from `inventory/repos.yml`, scans every governed repo with the **same
+pinned `osv-scanner v2.3.8` gate 6 uses**, and maintains **one auto-updated
+`alert:cve-watch` issue per repo** — updated in place, closed when the findings
+clear.
+
+Why it exists, and why it is not gate 6 again: a dependency advisory is
+**time-varying**, so a PR-diff gate cannot fire for one published against
+unchanged code. Measured 2026-08-11, DevExtreme's unchanged `go 1.25.11`
+directive returned ONE advisory on 2026-07-25 and TWO on a same-binary re-scan.
+Gate 6's T0 floor (PR #286) correctly stopped dev-only / unscored / unfixable
+findings from reddening a branch — this workflow is what makes the demoted T2
+tier visible instead of discarded.
+
+```bash
+# Real sweep of the whole fleet (the cron default)
+gh workflow run scheduled-cve-scan.yml --ref main -f dry_run=false
+
+# Preview one repo without touching any issue
+gh workflow run scheduled-cve-scan.yml --ref main -f dry_run=true -f only=momentstudio
+
+# Same thing locally
+python -m scripts.quality.scheduled_cve_scan --only momentstudio --dry-run
+```
+
+Reading the result:
+
+| exit | meaning |
+| --- | --- |
+| `0` | every governed repo was scanned **and** its issue reconciled. Findings alone still exit 0 — see below. |
+| `1` | the sweep was **INCOMPLETE**: a repo could not be scanned (`osv-scanner` 127/129/130, or a clone failure) or its issue could not be reconciled. **Not a clean-fleet result.** |
+| `2` | the roster itself could not be resolved, so nothing was scanned. |
+
+Two invariants worth knowing before you touch this workflow:
+
+- **It must never become a required status check.** Its whole value is that it
+  can report freely without reddening a branch — which is what lets it show the
+  T2 tier at all. `tests/test_scheduled_cve_scan.py` asserts its name appears in
+  no `generated/rulesets/*.json` `required_status_checks`.
+- **A scan error never clears anything.** On 127/129/130 the tracking issue is
+  left completely untouched (no create, no update, no close) and the run exits
+  non-zero. An incomplete scan is not evidence of a clean tree.
+
+Private fleet members (`pbinfo-get-unsolved`, `PrimariRo`,
+`agent-skills-toolchain`) are unreachable with the default `GITHUB_TOKEN` and
+are therefore reported as `scan-error`, never as clean. Setting the optional
+`CODEX_FLEET_READ_PAT` (Contents: Read across the fleet) closes that gap.
+
 ---
 
 ## Verification gates before emitting completion

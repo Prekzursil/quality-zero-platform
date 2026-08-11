@@ -31,9 +31,19 @@ ProcessRunner = Callable[..., subprocess.CompletedProcess[str]]
 # The canonical list of private-repo exceptions. Kept tiny and explicit
 # so adding a new private repo to the fleet requires a code change + PR,
 # rather than a silent data-only edit.
+#
+# ``PrimariRo`` and ``agent-skills-toolchain`` are the two private
+# ``rollout: observe`` members. PR #274 enrolled them in
+# ``inventory/repos.yml`` with profiles and generated ruleset payloads but
+# never made the matching code change here, so the filter kept excluding
+# them and every sweep reported both as ``dead`` — the enrollment record
+# and the fleet filter disagreeing about the roster. This is the code half
+# of that enrollment.
 PRIVATE_INCLUDE_SLUGS: FrozenSet[str] = frozenset(
     {
         "Prekzursil/pbinfo-get-unsolved",
+        "Prekzursil/PrimariRo",
+        "Prekzursil/agent-skills-toolchain",
     }
 )
 

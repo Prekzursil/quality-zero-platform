@@ -75,7 +75,9 @@
 #
 # No silent-pass: the coverage lane (gate 3) NEVER passes a language green
 # without measuring it. If a language has source AND test files but no coverage
-# config/script, the lane FAILS (the 100% gate cannot pass unmeasured). The ONLY
+# config/script, the lane FAILS (the 100% gate cannot pass unmeasured). This now
+# covers Python, JS/TS, Go and C++ — see the round-7 note below for the two
+# compiled languages that were silently exempt. The ONLY
 # coverage skip is the narrow, documented "no test surface by design" case —
 # source present with ZERO test files (e.g. a pure type-stub or generated-only
 # package). Robustness: the pip cache is enabled only when a Python manifest is
@@ -105,6 +107,25 @@
 # they back gate-2 (basedpyright / tsc), gate-3 (coverage) and the self-contained
 # gate-1 lint/format (ruff / oxlint+biome). Each runs ONLY when its language is
 # detected; all actions are SHA-pinned.
+#
+# ── round-7 FIX (compiled-language coverage REGRESSION) ─────────────────────
+# round-6's reasoning above is sound for LINT, and this round does not walk any
+# of it back: no per-language autofixer returns. But dropping the caller
+# pre-commit AND the toolchains together also removed the only path by which a
+# compiled language reached GATE 3, and nothing replaced it. Both Go and C++ then
+# fell through to the narrow "no test surface by design" skip while the step
+# reported success. Measured on the live fleet 2026-08-11:
+#   * DevExtreme-Filter-Go-Language — 236,928 bytes of Go, 30+ *_test.go files,
+#     and a pre-commit hook `go-test-cover-100` = `bash scripts/coverage-gate.sh`
+#     whose own config header still names THIS workflow as its CI entrypoint.
+#     Coverage was never measured and the gate was green anyway.
+#   * Airline-Reservations-System — 190,349 bytes of C++, ten *_test.cpp files
+#     under tests/, no lane at all.
+# So round-7 restores setup-go (gate 3 ONLY, pinned by the caller's own go.mod)
+# and adds `gate-tests-coverage compiled (go / c++)`, which runs the CALLER's own
+# coverage gate — by default `scripts/coverage-gate.sh`, the exact command
+# DevExtreme's own pre-commit hook already runs, overridable with the
+# `coverage-gate-script` input. With test files present that lane cannot skip.
 
 on:
   workflow_call:
@@ -124,6 +145,16 @@ on:
         type: string
         required: false
         default: "."
+      coverage-gate-script:
+        description: >-
+          Repo-relative path to the caller's OWN test+coverage gate script, used
+          by gate 3 for compiled languages (Go / C++) whose coverage cannot be
+          measured generically. Default is the fleet convention already in use
+          by DevExtreme-Filter-Go-Language, whose pre-commit `go-test-cover-100`
+          hook runs exactly `bash scripts/coverage-gate.sh`.
+        type: string
+        required: false
+        default: "scripts/coverage-gate.sh"
 
 permissions:
   contents: read
@@ -217,6 +248,20 @@ jobs:
             '*.test.ts' '*.test.tsx' '*.test.js' '*.test.jsx' '*.test.mjs' '*.test.cjs' \
             '*.spec.ts' '*.spec.tsx' '*.spec.js' '*.spec.jsx' '*.spec.mjs' '*.spec.cjs' \
             '**/*.test.*' '**/*.spec.*' '__tests__/**' '**/__tests__/**' 2>/dev/null | head -1)"
+          # COMPILED-LANGUAGE test surface (round-7). round-6 removed the ONLY
+          # path by which Go / C++ reached gate 3, so both languages hit the
+          # "no test surface by design" skip and the step reported success even
+          # for a repo that is 93% Go with 30+ *_test.go files (DevExtreme).
+          # `*_test.go` is the only Go test-file convention. For C++ there is no
+          # single convention, so match the two shapes actually in the fleet:
+          # a `_test`/`test_` filename anywhere, and any source under tests/ or
+          # test/ (Airline-Reservations-System ships tests/<name>_test.cpp).
+          go_tests="$(git ls-files '*_test.go' '**/*_test.go' 2>/dev/null | head -1)"
+          cpp_tests="$(git ls-files \
+            '*_test.cpp' '**/*_test.cpp' '*_test.cc' '**/*_test.cc' \
+            '*_test.cxx' '**/*_test.cxx' '*_tests.cpp' '**/*_tests.cpp' \
+            'test_*.cpp' '**/test_*.cpp' '*Test.cpp' '**/*Test.cpp' \
+            'tests/**/*.cpp' 'test/**/*.cpp' 'tests/**/*.cc' 'test/**/*.cc' 2>/dev/null | head -1)"
           {
             echo "python=$(has '*.py')"
             echo "ts=$(has '*.ts' '*.tsx')"
@@ -231,6 +276,11 @@ jobs:
             echo "pycovcfg=$(any "$py_cov_cfg")"
             echo "pytests=$(any "$py_tests")"
             echo "jststests=$(any "$jsts_tests")"
+            echo "go=$(has '*.go')"
+            echo "gomod=$(file_exists go.mod)"
+            echo "gotests=$(any "$go_tests")"
+            echo "cpp=$(has '*.cpp' '*.cc' '*.cxx' '*.hpp' '*.hh' '*.hxx')"
+            echo "cpptests=$(any "$cpp_tests")"
           } >> "$GITHUB_OUTPUT"
           # Multiline output (round-3 FIX 3): the newline-separated manifest paths
           # for setup-python's cache-dependency-path. Heredoc delimiter form is
@@ -277,7 +327,31 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
 
-      # round-6: setup-go / setup-dotnet / setup-java / rust-toolchain were REMOVED.
+      # round-7: setup-go is RESTORED — but only for gate 3, never for a lint
+      # autofixer. round-6's stated reason for dropping the per-language setups
+      # was that they existed solely to feed the caller pre-commit's autofixers
+      # (golangci-lint / dotnet-format / spotless / clippy+rustfmt), which
+      # red-failed for caller-ENVIRONMENT reasons. That reasoning holds and is
+      # preserved: no autofixer comes back here. What round-6 ALSO removed by
+      # accident was the only way a Go coverage script could run at all, which
+      # is why a 236,928-byte Go repo with 30+ *_test.go files was certified
+      # green with zero measured coverage. Gate 3 needs a toolchain; gate 1
+      # does not get one.
+      #
+      # `go-version-file: go.mod` pins the toolchain to the CALLER's own `go`
+      # directive, so this adds no unpinned dependency. `cache: false` is
+      # deliberate: setup-go's dependency cache hard-fails when it cannot
+      # resolve go.sum, and a toolchain step that can red the job BEFORE any
+      # gate runs is exactly the class of failure this workflow keeps fixing
+      # (see the setup-python cached/no-cache split above).
+      - name: Set up Go
+        if: steps.detect.outputs.gomod == 'true'
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      # round-6: setup-dotnet / setup-java / rust-toolchain remain REMOVED.
       # They were added in round-5 FIX B solely so the caller pre-commit's
       # per-language autofixers (golangci-lint / dotnet-format / spotless /
       # clippy+rustfmt) had a toolchain. round-6 stopped running the caller
@@ -632,6 +706,94 @@ jobs:
             echo "FAIL gate-tests-coverage jsts: ts/js present (with test files) but no coverage script in any project dir (root or nested) - the 100% gate cannot pass unmeasured. Add a 'test:coverage' npm script (or a vitest/jest '--coverage' test script) in the project package.json." >&2
             exit 1
           fi
+
+      # ── GATE 3 (go / c++) — tests + coverage via the CALLER's own gate ────
+      # ROUND-7 REGRESSION FIX. round-6 removed the caller pre-commit run and the
+      # per-language toolchains, which together were the ONLY path by which a
+      # compiled language reached gate 3. Both compiled languages then fell
+      # through to the narrow "no test surface by design" skip and the step
+      # reported SUCCESS. Measured on the live fleet:
+      #   * DevExtreme-Filter-Go-Language — 236,928 bytes of Go, 30+ root-level
+      #     *_test.go files, and a .pre-commit-config.yaml whose gate-3 hook
+      #     `go-test-cover-100` runs exactly `bash scripts/coverage-gate.sh`.
+      #     Its own config header still names reusable-quality.yml as the
+      #     entrypoint for that hook. Coverage: never measured, always green.
+      #   * Airline-Reservations-System — 190,349 bytes of C++ with ten
+      #     *_test.cpp files under tests/ and no lane of any kind.
+      #
+      # WHY THE CALLER'S SCRIPT AND NOT A DIRECT LANE: the Go coverage gate
+      # already EXISTS in the caller repo — the pre-commit hook is a thin
+      # wrapper around `bash scripts/coverage-gate.sh`. Running that script
+      # directly is strictly more robust than restoring `pre-commit run
+      # --all-files`: it needs no pre-commit install, no caller hook
+      # environment, and it CANNOT drag in the bespoke frontend-eslint /
+      # dotnet-format hooks that round-6 removed for good reason. For C++ there
+      # is no safely auto-configurable instrumented build (the workflow cannot
+      # know the build system, the flags, or how to add --coverage), so a blind
+      # clang-tidy+gcovr lane would be a gate the owner could not drive to
+      # green. Deliberately NOT added here: golangci-lint and go vet. Those are
+      # gate-1/gate-2 concerns, they are autofixer-class red, and this commit is
+      # scoped to closing the measured coverage hole.
+      #
+      # The skip stays reachable ONLY for its documented narrow case (source
+      # present, ZERO test files). With test files present this lane can no
+      # longer skip — proven behaviourally, not by text assertion, in
+      # tests/test_lean_gate_compiled_coverage_lane.py, which extracts this very
+      # script and executes it across the whole truth table.
+      - name: gate-tests-coverage compiled (go / c++)
+        if: steps.detect.outputs.go == 'true' || steps.detect.outputs.cpp == 'true'
+        shell: bash
+        env:
+          GO_PRESENT: ${{ steps.detect.outputs.go }}
+          GO_TESTS: ${{ steps.detect.outputs.gotests }}
+          GO_MOD: ${{ steps.detect.outputs.gomod }}
+          CPP_PRESENT: ${{ steps.detect.outputs.cpp }}
+          CPP_TESTS: ${{ steps.detect.outputs.cpptests }}
+          COVERAGE_GATE_SCRIPT: ${{ inputs.coverage-gate-script }}
+        run: |
+          set -euo pipefail
+          # Which compiled languages have a DEMONSTRABLE test surface. Built with
+          # explicit `if` blocks, not `[ ... ] && ...` chains: under `set -e` a
+          # false test at the end of a chain aborts the whole step.
+          needs=""
+          if [ "$GO_PRESENT" = "true" ] && [ "$GO_TESTS" = "true" ]; then
+            needs="go"
+          fi
+          if [ "$CPP_PRESENT" = "true" ] && [ "$CPP_TESTS" = "true" ]; then
+            needs="${needs:+$needs+}c++"
+          fi
+
+          if [ -z "$needs" ]; then
+            echo "Compiled source present (go=$GO_PRESENT c++=$CPP_PRESENT) with ZERO test files - no test surface by design; coverage lane skipped."
+            exit 0
+          fi
+          echo "Compiled test surface DETECTED ($needs). This lane CANNOT skip: the 100% gate cannot pass unmeasured."
+
+          # Go needs a toolchain, and the toolchain step keys off a root go.mod.
+          # Go tests with no go.mod is a real hole, not a design decision.
+          case "$needs" in
+            *go*)
+              if [ "$GO_MOD" != "true" ]; then
+                echo "FAIL gate-tests-coverage ($needs): *_test.go files exist but there is no root go.mod, so no Go toolchain was set up and coverage cannot be measured. Add a root go.mod (or move the module to the repo root)." >&2
+                exit 1
+              fi
+              go version
+              ;;
+          esac
+
+          # ONE invocation even for a mixed go+c++ repo: the caller's script is
+          # the repo's whole compiled-language coverage gate, not a per-language
+          # one, so running it twice would only burn runner minutes.
+          if [ ! -f "$COVERAGE_GATE_SCRIPT" ]; then
+            echo "FAIL gate-tests-coverage ($needs): this repo has compiled-language test files but no coverage gate at '$COVERAGE_GATE_SCRIPT', so the STRICT 100% gate cannot pass unmeasured." >&2
+            echo "FAIL gate-tests-coverage ($needs): remediation - add an executable 'scripts/coverage-gate.sh' that runs the tests, measures coverage and exits non-zero below the bar (for Go: 'go test -covermode=atomic -coverprofile=... ./...' then 'go tool cover -func'), or point the 'coverage-gate-script' workflow input at the script you already have." >&2
+            exit 1
+          fi
+
+          echo "::group::bash $COVERAGE_GATE_SCRIPT ($needs)"
+          bash "$COVERAGE_GATE_SCRIPT"
+          echo "::endgroup::"
+          echo "PASS gate-tests-coverage ($needs): the caller's own coverage gate '$COVERAGE_GATE_SCRIPT' measured the tests and passed."
 
       # ── GATE 4 — SAST (opengrep, curated in-repo ruleset, clean-zero) ─────
       - name: gate-sast opengrep

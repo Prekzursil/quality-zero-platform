@@ -60,6 +60,13 @@ gates:
     name: deps
     workflow_step: "gate-deps"
     tools: [osv-scanner, dependabot]      # NO Renovate
+    # T0 severity floor (2026-08-11). osv-scanner exit 1 means "an advisory
+    # matched" — not "the branch must go red". BLOCK requires all three of:
+    # NOT dev-only, max_severity >= 7.0, AND a published fixed version. Anything
+    # else (dev-only / unscored / below-floor / unfixable) is T2 inventory:
+    # printed in full, never blocking. Pinning the TOOL does not pin the CVE
+    # FEED, so an unbounded gate 6 is a treadmill by construction.
+    policy: "T0 blocks fixable High+ production CVEs; everything else is printed T2 inventory"
 
 # DELETED as gates (must NOT appear as enforced gate steps in the reusable
 # workflow). The charter-check fails if any of these names is wired as a gate.

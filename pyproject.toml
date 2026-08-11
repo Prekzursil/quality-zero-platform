@@ -8,6 +8,12 @@ source = [
   "scripts/quality/rollup_v2",
   "scripts.quality.fleet_inventory",
   "scripts.quality.migrate_profiles_to_v2",
+  # Lean-gate tiering modules. These are EMBEDDED verbatim into
+  # .github/workflows/reusable-quality.yml (the reusable gate has no access to
+  # this repo's scripts/ tree in a caller checkout), so their logic must be
+  # 100%-covered here — the workflow copy is byte-identical by contract test.
+  "scripts.quality.osv_severity_gate",
+  "scripts.quality.jsts_coverage_assert",
 ]
 branch = true
 omit = [

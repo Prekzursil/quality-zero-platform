@@ -13,6 +13,8 @@ from typing import Tuple
 from unittest.mock import patch
 from urllib.parse import urlparse
 
+from tests.workspace_isolation import isolated_cwd
+
 from scripts import security_helpers
 from scripts.quality import (
     check_codacy_zero,
@@ -302,6 +304,9 @@ class BranchGapRemediationTests(unittest.TestCase):
         )
         completed = SimpleNamespace(stdout="", stderr="warn", returncode=0)
         with (
+            # json_log is cwd-relative, so run_codex_exec would drop run.json
+            # into the repo root; keep it in a throwaway directory.
+            isolated_cwd(),
             patch("scripts.quality.run_codex_exec._parse_args", return_value=args),
             patch("pathlib.Path.read_text", return_value="hello"),
             patch("scripts.quality.run_codex_exec._run_codex_exec", return_value=completed),

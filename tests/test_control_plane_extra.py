@@ -286,12 +286,12 @@ invalid codacy.dashboard_url
         """Check profile-shape validation still allows the legacy command shell key."""
         findings = profile_shape.validate_profile_shape(
             {
-                "slug": "Prekzursil/codex-session-manager",
+                "slug": "Prekzursil/SWFOC-Mod-Menu",
                 "coverage": {
                     "command_shell": "pwsh",
                 },
             },
-            slug="Prekzursil/codex-session-manager",
+            slug="Prekzursil/SWFOC-Mod-Menu",
         )
 
         self.assertFalse(any("unexpected coverage key `command_shell`" in item for item in findings))

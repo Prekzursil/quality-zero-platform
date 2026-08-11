@@ -98,10 +98,6 @@ targets:
     enabled: false
     tasks: []
 
-  - repo: Prekzursil/codex-session-manager
-    enabled: false
-    tasks: []
-
   - repo: Prekzursil/SWFOC-Mod-Menu
     enabled: false
     tasks: []

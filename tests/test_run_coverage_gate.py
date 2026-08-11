@@ -14,6 +14,7 @@ from tests._run_coverage_gate_helpers import (
     assert_run_shell_invocation,
     make_coverage_assert_fixture,
 )
+from tests.workspace_isolation import isolated_cwd
 
 from scripts.quality import run_coverage_gate
 from scripts.quality.common import DEFAULT_COVERAGE_JSON, DEFAULT_COVERAGE_MD
@@ -278,9 +279,12 @@ class RunCoverageGateTests(unittest.TestCase):
                         "push",
                     ],
                 ),
+                # No --repo-dir, so the gate falls back to cwd AND writes
+                # coverage-100/coverage.* there; keep that out of the repo.
+                isolated_cwd() as sandbox,
             ):
                 result = run_coverage_gate.main()
 
         self.assertEqual(result, 0)
-        mock_shell.assert_called_once_with("", shell_name="bash", cwd=Path.cwd().resolve())
+        mock_shell.assert_called_once_with("", shell_name="bash", cwd=sandbox)
         mock_assert.assert_not_called()

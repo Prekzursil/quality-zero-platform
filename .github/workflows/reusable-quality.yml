@@ -24,10 +24,38 @@
 #   1. Lint+format (SELF-CONTAINED — the workflow's OWN pinned CLIs, NOT the
 #      caller's pre-commit): Ruff[py] · Oxlint+Biome[ts/js]
 #   2. Types:        tsc --noEmit[ts] · basedpyright (standard mode)[py]
-#   3. Tests+cov:    STRICT 100% line+branch (standing policy; ratchet retired)
+#   3. Tests+cov:    STRICT 100% line+branch (standing policy; ratchet retired),
+#                    ASSERTED by this workflow for py/jsts, and measured for
+#                    go/c++ via the caller's own coverage gate
 #   4. SAST:         Opengrep (Semgrep CE acceptable), pinned in-repo ruleset
-#   5. Secrets:      gitleaks (pinned + allowlist) — SELF-CONTAINED (always)
-#   6. Deps:         osv-scanner + Dependabot (no Renovate)
+#   5. Secrets:      gitleaks (pinned) — SELF-CONTAINED, ALWAYS runs; a caller
+#                    .gitleaks.toml is an optional allowlist, NOT the trigger
+#   6. Deps:         osv-scanner + Dependabot (no Renovate), T0 severity floor
+#
+# ── gate-6 T0 SEVERITY FLOOR (2026-08-11) ───────────────────────────────────
+# `osv-scanner` exits 1 for ANY advisory match, with no severity, dev/prod or
+# fix-availability signal. Mapping that straight onto a red branch is what left
+# 22 of 34 open fleet PRs BLOCKED on 2026-08-11 — including DevExtreme PR #40,
+# itself a security bump, stuck 17 days behind an UNSCORED Go stdlib advisory
+# (`max_severity: ""`) that nothing in that PR could clear. The escape valve was
+# saturated too: momentstudio had already ignored GHSA-mh99-v99m-4gvg and then
+# failed on GHSA-rgw5-rvv9-x895, a DIFFERENT advisory in the SAME package.
+#
+# Pinning a TOOL does not pin its DATA: a CVE feed refreshes upstream, so gate 6
+# could go red with zero developer action. That is the treadmill the lean charter
+# exists to escape, reproduced inside the lean gate itself.
+#
+# So gate 6 now tiers its findings (exit codes 0/127/128/129/130 are UNCHANGED —
+# only the rc==1 branch is re-decided):
+#   T0 BLOCK  — NOT dev-only AND CVSS >= 7.0 AND a fixed version is published.
+#               Every blocking row names the version to bump to, so every block
+#               is closable by an action the owner controls.
+#   T2 REPORT — dev-only, unscored, below the floor, or no published fix.
+#               PRINTED IN FULL and non-blocking. Demoted is not hidden.
+# Measured on real data: momentstudio's frontend lockfile has 29 finding-groups
+# and exactly 4 clear T0 (@angular/common 8.8, platform-server 8.6, compiler 7.6,
+# core 7.6 — all production, all fixable); a `go 1.25.11` go.mod has 2 and blocks
+# on neither. Both are committed as fixtures under tests/fixtures/osv/.
 #
 # round-6 FIX (self-contained gate 1+5): gate-1 lint/format and gate-5 secrets
 # NO LONGER run the caller's `.pre-commit-config.yaml` via `pre-commit run
@@ -45,12 +73,18 @@
 # Auto-detection: the single `quality` job inspects the CALLER's checked-out
 # tree and runs ONLY the lanes whose language is present. A repo with no Python
 # skips the Python lanes, a repo with no JS/TS skips tsc, etc. The lint lanes run
-# whenever their language is present; gitleaks/opengrep/osv run when their config
-# is present (gitleaks runs whenever a .gitleaks.toml allowlist is shipped).
+# whenever their language is present; opengrep/osv run when their config is
+# present. GITLEAKS IS THE EXCEPTION AND ALWAYS RUNS (round-7): its trigger used
+# to be "a .gitleaks.toml exists", but that file is an ALLOWLIST, so the presence
+# of things we decided to IGNORE was the opt-in signal for secret scanning and a
+# clean repo got none at all. Secret scanning is T0 absolute-zero; the allowlist
+# is now an optional input to the scan rather than a guard on it.
 #
 # No silent-pass: the coverage lane (gate 3) NEVER passes a language green
 # without measuring it. If a language has source AND test files but no coverage
-# config/script, the lane FAILS (the 100% gate cannot pass unmeasured). The ONLY
+# config/script, the lane FAILS (the 100% gate cannot pass unmeasured). This now
+# covers Python, JS/TS, Go and C++ — see the round-7 note below for the two
+# compiled languages that were silently exempt. The ONLY
 # coverage skip is the narrow, documented "no test surface by design" case —
 # source present with ZERO test files (e.g. a pure type-stub or generated-only
 # package). Robustness: the pip cache is enabled only when a Python manifest is
@@ -80,6 +114,27 @@
 # they back gate-2 (basedpyright / tsc), gate-3 (coverage) and the self-contained
 # gate-1 lint/format (ruff / oxlint+biome). Each runs ONLY when its language is
 # detected; all actions are SHA-pinned.
+#
+# ── round-7 FIX (compiled-language coverage REGRESSION) ─────────────────────
+# round-6's reasoning above is sound for LINT, and this round does not walk any
+# of it back: no per-language autofixer returns. But dropping the caller
+# pre-commit AND the toolchains together also removed the only path by which a
+# compiled language reached GATE 3, and nothing replaced it. Both Go and C++ then
+# fell through to the narrow "no test surface by design" skip while the step
+# reported success. Measured on the live fleet 2026-08-11:
+#   * DevExtreme-Filter-Go-Language — 236,928 bytes of Go, 30+ *_test.go files,
+#     and a pre-commit hook `go-test-cover-100` = `bash scripts/coverage-gate.sh`
+#     whose own config header still names THIS workflow as its CI entrypoint.
+#     Coverage was never measured and the gate was green anyway.
+#   * Airline-Reservations-System — 166,743 bytes of C/C++ across 32 files
+#     (.cpp/.cc/.hpp/.h; 32.6% of source bytes, 9.0% of all blob bytes)
+#     and 11 *_test.cpp files under tests/, with no lane at all. Second-
+#     largest language there after Python (239,129 B), none of it measured.
+# So round-7 restores setup-go (gate 3 ONLY, pinned by the caller's own go.mod)
+# and adds `gate-tests-coverage compiled (go / c++)`, which runs the CALLER's own
+# coverage gate — by default `scripts/coverage-gate.sh`, the exact command
+# DevExtreme's own pre-commit hook already runs, overridable with the
+# `coverage-gate-script` input. With test files present that lane cannot skip.
 
 on:
   workflow_call:
@@ -99,6 +154,27 @@ on:
         type: string
         required: false
         default: "."
+      jsts-coverage-min:
+        description: >-
+          Required JS/TS line AND branch coverage percentage, asserted by gate 3
+          against the summary the caller's coverage script actually produced.
+          Must be in (0, 100]; the default is the charter's STRICT 100. Lowering
+          it declares an interim bar VISIBLY, in the caller's own workflow file,
+          and it can never restore a silent pass: a run that produces no
+          parseable coverage summary fails at any setting.
+        type: number
+        required: false
+        default: 100
+      coverage-gate-script:
+        description: >-
+          Repo-relative path to the caller's OWN test+coverage gate script, used
+          by gate 3 for compiled languages (Go / C++) whose coverage cannot be
+          measured generically. Default is the fleet convention already in use
+          by DevExtreme-Filter-Go-Language, whose pre-commit `go-test-cover-100`
+          hook runs exactly `bash scripts/coverage-gate.sh`.
+        type: string
+        required: false
+        default: "scripts/coverage-gate.sh"
 
 permissions:
   contents: read
@@ -192,13 +268,31 @@ jobs:
             '*.test.ts' '*.test.tsx' '*.test.js' '*.test.jsx' '*.test.mjs' '*.test.cjs' \
             '*.spec.ts' '*.spec.tsx' '*.spec.js' '*.spec.jsx' '*.spec.mjs' '*.spec.cjs' \
             '**/*.test.*' '**/*.spec.*' '__tests__/**' '**/__tests__/**' 2>/dev/null | head -1)"
+          # COMPILED-LANGUAGE test surface (round-7). round-6 removed the ONLY
+          # path by which Go / C++ reached gate 3, so both languages hit the
+          # "no test surface by design" skip and the step reported success even
+          # for a repo that is 93% Go with 30+ *_test.go files (DevExtreme).
+          # `*_test.go` is the only Go test-file convention. For C++ there is no
+          # single convention, so match the two shapes actually in the fleet:
+          # a `_test`/`test_` filename anywhere, and any source under tests/ or
+          # test/ (Airline-Reservations-System ships tests/<name>_test.cpp).
+          go_tests="$(git ls-files '*_test.go' '**/*_test.go' 2>/dev/null | head -1)"
+          cpp_tests="$(git ls-files \
+            '*_test.cpp' '**/*_test.cpp' '*_test.cc' '**/*_test.cc' \
+            '*_test.cxx' '**/*_test.cxx' '*_tests.cpp' '**/*_tests.cpp' \
+            'test_*.cpp' '**/test_*.cpp' '*Test.cpp' '**/*Test.cpp' \
+            'tests/**/*.cpp' 'test/**/*.cpp' 'tests/**/*.cc' 'test/**/*.cc' 2>/dev/null | head -1)"
           {
             echo "python=$(has '*.py')"
             echo "ts=$(has '*.ts' '*.tsx')"
             echo "jsts=$(has '*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs' '*.cjs')"
             echo "pyrightcfg=$(any "$py_pyright_cfg")"
             echo "opengrep=$([ -d .quality/opengrep ] && echo true || echo false)"
-            echo "gitleaks=$(file_exists .gitleaks.toml)"
+            # NOT a guard on gate 5 (round-7): .gitleaks.toml is an ALLOWLIST,
+            # so gating the SCAN on it made "things we decided to ignore" the
+            # opt-in signal for secret scanning. This output now only tells the
+            # gate whether to pass --config; the scan itself always runs.
+            echo "gitleaksallowlist=$(file_exists .gitleaks.toml)"
             echo "osv=$(file_exists osv-scanner.toml)"
             echo "charter=$([ -f .quality/charter.yml ] && echo true || echo false)"
             echo "pymanifest=$(any "$py_manifest")"
@@ -206,6 +300,11 @@ jobs:
             echo "pycovcfg=$(any "$py_cov_cfg")"
             echo "pytests=$(any "$py_tests")"
             echo "jststests=$(any "$jsts_tests")"
+            echo "go=$(has '*.go')"
+            echo "gomod=$(file_exists go.mod)"
+            echo "gotests=$(any "$go_tests")"
+            echo "cpp=$(has '*.cpp' '*.cc' '*.cxx' '*.hpp' '*.hh' '*.hxx')"
+            echo "cpptests=$(any "$cpp_tests")"
           } >> "$GITHUB_OUTPUT"
           # Multiline output (round-3 FIX 3): the newline-separated manifest paths
           # for setup-python's cache-dependency-path. Heredoc delimiter form is
@@ -252,7 +351,31 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
 
-      # round-6: setup-go / setup-dotnet / setup-java / rust-toolchain were REMOVED.
+      # round-7: setup-go is RESTORED — but only for gate 3, never for a lint
+      # autofixer. round-6's stated reason for dropping the per-language setups
+      # was that they existed solely to feed the caller pre-commit's autofixers
+      # (golangci-lint / dotnet-format / spotless / clippy+rustfmt), which
+      # red-failed for caller-ENVIRONMENT reasons. That reasoning holds and is
+      # preserved: no autofixer comes back here. What round-6 ALSO removed by
+      # accident was the only way a Go coverage script could run at all, which
+      # is why a 236,928-byte Go repo with 30+ *_test.go files was certified
+      # green with zero measured coverage. Gate 3 needs a toolchain; gate 1
+      # does not get one.
+      #
+      # `go-version-file: go.mod` pins the toolchain to the CALLER's own `go`
+      # directive, so this adds no unpinned dependency. `cache: false` is
+      # deliberate: setup-go's dependency cache hard-fails when it cannot
+      # resolve go.sum, and a toolchain step that can red the job BEFORE any
+      # gate runs is exactly the class of failure this workflow keeps fixing
+      # (see the setup-python cached/no-cache split above).
+      - name: Set up Go
+        if: steps.detect.outputs.gomod == 'true'
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      # round-6: setup-dotnet / setup-java / rust-toolchain remain REMOVED.
       # They were added in round-5 FIX B solely so the caller pre-commit's
       # per-language autofixers (golangci-lint / dotnet-format / spotless /
       # clippy+rustfmt) had a toolchain. round-6 stopped running the caller
@@ -276,8 +399,10 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh | bash -s -- -v v1.22.0
           echo "$HOME/.opengrep/cli/latest" >> "$GITHUB_PATH"
 
+      # Unconditional: gate 5 is T0 absolute-zero and always runs, so the binary
+      # is always needed. It is NOT gated on the .gitleaks.toml allowlist —
+      # that inversion is the bug this restores.
       - name: Install gitleaks
-        if: steps.detect.outputs.gitleaks == 'true'
         run: |
           curl -sSL -o /tmp/gitleaks.tar.gz \
             https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
@@ -290,6 +415,638 @@ jobs:
           curl -sSL -o /usr/local/bin/osv-scanner \
             https://github.com/google/osv-scanner/releases/download/v2.3.8/osv-scanner_linux_amd64
           chmod +x /usr/local/bin/osv-scanner
+
+      # ── Lean-gate helper scripts (EMBEDDED VERBATIM) ─────────────────────
+      # This reusable workflow runs inside the CALLER's checkout and has NO
+      # access to quality-zero-platform's own `scripts/` tree, so its Python
+      # helpers are embedded here VERBATIM rather than fetched (a fetch would
+      # either be unpinned or skew against a caller pinned to an older workflow
+      # ref, and checking the platform out into the caller's workspace would
+      # pollute the very tree the SAST / secrets / deps gates scan).
+      #
+      # Each module in quality-zero-platform is the unit-tested source of truth
+      # (100% line+branch, real-data fixtures). The copies below are asserted
+      # BYTE-IDENTICAL to them by `tests/test_lean_gate_embedded_helpers.py`,
+      # whose extractor is detector-controlled, so the two cannot drift: edit
+      # the module, re-paste it here, or that test goes red.
+      #
+      # Deliberately UNCONDITIONAL. Writing two small files costs nothing, and
+      # an `if:` guard here is a standing drift hazard: a future lane that needs
+      # a helper but whose guard was not added to this step would fail with a
+      # confusing "No such file" instead of running.
+      - name: Materialize the lean-gate helper scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/qzp-lean-gate"
+          cat > "${RUNNER_TEMP}/qzp-lean-gate/jsts_coverage_assert.py" <<'QZP_EMBED_jsts_coverage_assert'
+          #!/usr/bin/env python3
+          """Assert the JS/TS coverage number the gate-3 lane just produced.
+
+          The jsts lane used to run the caller's coverage script and pass on exit 0. It
+          passed NO threshold and checked NO number: enforcement was delegated entirely to
+          the caller's vitest/karma config, and the gate never verified that one existed.
+          Measured 2026-08-11 on momentstudio's frontend, the run printed
+          ``Statements : 49.57%`` and the lane printed ``PASS gate-tests-coverage jsts``.
+
+          This module reads the summary the run just produced and compares it to a number.
+          Evidence is taken in strength order, machine-readable artifacts first because a
+          printed table is a rendering of the data, not the data:
+
+          1. ``coverage/**/coverage-summary.json``  (istanbul ``json-summary``)
+          2. ``coverage/**/clover.xml``             (vitest's default reporter set)
+          3. ``coverage/**/lcov.info``              (karma / Angular default)
+          4. the coverage run's own printed summary (istanbul text-summary block, or the
+             ``All files`` row of the text table)
+
+          The property that holds regardless of any threshold: **a run that produces no
+          parseable summary FAILS.** ``--min-percent`` can move the bar but can never
+          switch off the requirement that a real number was measured, and it is rejected
+          outside ``(0, 100]`` so a "0% bar" silent pass is not expressible.
+
+          Branch coverage is compared too (the charter is 100% line AND branch), except
+          where the report says the project has zero conditionals - that is "not
+          applicable", not 0%.
+
+          XML is parsed with a regex rather than ``xml.etree``, mirroring
+          ``scripts/quality/coverage_parsers.py``: it avoids the XML-parser attack surface
+          the ``S`` lint rules flag, and clover's metrics live in element attributes.
+
+          Exit codes: ``0`` at or above the bar, ``1`` below it or unmeasured, ``2`` the
+          threshold argument itself is invalid.
+          """
+
+          from __future__ import absolute_import
+
+          import argparse
+          import json
+          import re
+          import sys
+          from dataclasses import dataclass
+          from pathlib import Path
+          from typing import Any, List, Optional
+
+          DEFAULT_MIN_PERCENT = 100.0
+          COVERAGE_DIR = "coverage"
+          EXIT_OK = 0
+          EXIT_BELOW_BAR = 1
+          EXIT_CONFIG_ERROR = 2
+
+          _CLOVER_METRIC = re.compile(r'(\w+)\s*=\s*"(\d+)"')
+          _TEXT_ROW = re.compile(r"^\s*(Statements|Branches|Lines)\s*:\s*([0-9.]+)%\s*\(\s*(\d+)\s*/\s*(\d+)\s*\)", re.MULTILINE)
+          _ALL_FILES_ROW = re.compile(r"^[|\s]*All files\s*\|(.+)$", re.MULTILINE)
+
+
+          @dataclass(frozen=True)
+          class CoverageSummary:
+              """A measured coverage result and where the number came from."""
+
+              origin: str
+              lines_pct: float
+              branches_pct: Optional[float]
+
+
+          def _percent(covered: int, total: int) -> Optional[float]:
+              """Return a percentage, or ``None`` when the denominator is zero."""
+              if total <= 0:
+                  return None
+              return round(covered * 100.0 / total, 2)
+
+
+          def _as_float(value: Any) -> Optional[float]:
+              """Coerce a reported percentage to a float, or ``None`` when it is not one."""
+              try:
+                  return float(value)
+              except (TypeError, ValueError):
+                  return None
+
+
+          def summary_from_json_summary(path: Path) -> Optional[CoverageSummary]:
+              """Parse an istanbul ``json-summary`` report."""
+              try:
+                  document = json.loads(path.read_text(encoding="utf-8"))
+              except (OSError, ValueError):
+                  return None
+              if not isinstance(document, dict):
+                  return None
+              total = document.get("total")
+              if not isinstance(total, dict):
+                  return None
+              lines = total.get("lines") if isinstance(total.get("lines"), dict) else {}
+              branches = total.get("branches") if isinstance(total.get("branches"), dict) else {}
+              lines_pct = _as_float(lines.get("pct"))
+              if lines_pct is None or _as_float(lines.get("total")) in (None, 0.0):
+                  return None
+              branches_total = _as_float(branches.get("total"))
+              branches_pct = None if branches_total in (None, 0.0) else _as_float(branches.get("pct"))
+              return CoverageSummary(origin=str(path), lines_pct=lines_pct, branches_pct=branches_pct)
+
+
+          def summary_from_clover(path: Path) -> Optional[CoverageSummary]:
+              """Parse the project-level ``<metrics .../>` of a clover report."""
+              try:
+                  text = path.read_text(encoding="utf-8")
+              except OSError:
+                  return None
+              match = re.search(r"<metrics\b([^>]*)>", text)
+              if match is None:
+                  return None
+              metrics = {key.lower(): int(value) for key, value in _CLOVER_METRIC.findall(match.group(1))}
+              lines_pct = _percent(metrics.get("coveredstatements", 0), metrics.get("statements", 0))
+              if lines_pct is None:
+                  return None
+              branches_pct = _percent(metrics.get("coveredconditionals", 0), metrics.get("conditionals", 0))
+              return CoverageSummary(origin=str(path), lines_pct=lines_pct, branches_pct=branches_pct)
+
+
+          def summary_from_lcov(path: Path) -> Optional[CoverageSummary]:
+              """Sum the ``LF``/``LH`` and ``BRF``/``BRH`` counters of an lcov report."""
+              try:
+                  text = path.read_text(encoding="utf-8")
+              except OSError:
+                  return None
+              totals = {"LF": 0, "LH": 0, "BRF": 0, "BRH": 0}
+              for line in text.splitlines():
+                  key, _, raw = line.partition(":")
+                  if key not in totals:
+                      continue
+                  try:
+                      totals[key] += int(raw.strip())
+                  except ValueError:
+                      continue
+              lines_pct = _percent(totals["LH"], totals["LF"])
+              if lines_pct is None:
+                  return None
+              return CoverageSummary(origin=str(path), lines_pct=lines_pct, branches_pct=_percent(totals["BRH"], totals["BRF"]))
+
+
+          def _summary_from_text_block(text: str) -> Optional[CoverageSummary]:
+              """Parse the istanbul ``Coverage summary`` block."""
+              rows = {}
+              for label, pct, _covered, total in _TEXT_ROW.findall(text):
+                  if int(total) > 0:
+                      rows[label] = float(pct)
+              lines_pct = rows.get("Lines", rows.get("Statements"))
+              if lines_pct is None:
+                  return None
+              return CoverageSummary(
+                  origin="the coverage run's printed summary",
+                  lines_pct=lines_pct,
+                  branches_pct=rows.get("Branches"),
+              )
+
+
+          def _summary_from_text_table(text: str) -> Optional[CoverageSummary]:
+              """Parse the ``All files`` row of the istanbul / vitest text table."""
+              match = _ALL_FILES_ROW.search(text)
+              if match is None:
+                  return None
+              cells = [cell.strip() for cell in match.group(1).split("|")]
+              if len(cells) < 4:
+                  return None
+              statements, branches, _functions, lines = (_as_float(cell) for cell in cells[:4])
+              if lines is None or statements is None:
+                  return None
+              return CoverageSummary(
+                  origin="the coverage run's printed summary",
+                  lines_pct=lines,
+                  branches_pct=branches,
+              )
+
+
+          def summary_from_text(text: str) -> Optional[CoverageSummary]:
+              """Parse whichever printed coverage shape the runner emitted."""
+              return _summary_from_text_block(text) or _summary_from_text_table(text)
+
+
+          def discover(project_dir: Path, log_text: str) -> Optional[CoverageSummary]:
+              """Find the strongest available coverage evidence for ``project_dir``."""
+              readers = (
+                  ("coverage-summary.json", summary_from_json_summary),
+                  ("clover.xml", summary_from_clover),
+                  ("lcov.info", summary_from_lcov),
+              )
+              coverage_root = project_dir / COVERAGE_DIR
+              for filename, reader in readers:
+                  for candidate in sorted(coverage_root.rglob(filename)):
+                      summary = reader(candidate)
+                      if summary is not None:
+                          return summary
+              return summary_from_text(log_text)
+
+
+          def evaluate(summary: CoverageSummary, min_percent: float) -> List[str]:
+              """Return one finding per coverage dimension that is below the bar."""
+              findings: List[str] = []
+              if summary.lines_pct < min_percent:
+                  findings.append(f"line coverage {summary.lines_pct:.2f}% is below the required {min_percent:.2f}%")
+              if summary.branches_pct is not None and summary.branches_pct < min_percent:
+                  findings.append(f"branch coverage {summary.branches_pct:.2f}% is below the required {min_percent:.2f}%")
+              return findings
+
+
+          def _read_log(log_path: Optional[str]) -> str:
+              """Read the captured coverage-run output, tolerating a missing file."""
+              if not log_path:
+                  return ""
+              try:
+                  return Path(log_path).read_text(encoding="utf-8", errors="replace")
+              except OSError:
+                  return ""
+
+
+          def _build_parser() -> argparse.ArgumentParser:
+              """Build the CLI parser."""
+              parser = argparse.ArgumentParser(description="Assert the coverage a JS/TS project just measured.")
+              parser.add_argument("--project-dir", required=True, help="Directory the coverage script ran in.")
+              parser.add_argument("--log", default=None, help="File holding the coverage run's captured output.")
+              parser.add_argument(
+                  "--min-percent",
+                  type=float,
+                  default=DEFAULT_MIN_PERCENT,
+                  help=f"Required line and branch coverage, in (0, 100] (default {DEFAULT_MIN_PERCENT}).",
+              )
+              return parser
+
+
+          def main(argv: Optional[List[str]] = None) -> int:
+              """Assert the measured coverage and return the lane's exit code."""
+              args = _build_parser().parse_args(argv)
+              if not 0 < args.min_percent <= 100:
+                  print(
+                      f"ERROR gate-tests-coverage jsts: --min-percent {args.min_percent} must be greater than 0 "
+                      "and at most 100. A 0% bar is a silent pass wearing a number; a bar above 100 is unreachable.",
+                      file=sys.stderr,
+                  )
+                  return EXIT_CONFIG_ERROR
+              project_dir = Path(args.project_dir)
+              summary = discover(project_dir, _read_log(args.log))
+              if summary is None:
+                  print(
+                      f"FAIL gate-tests-coverage jsts: the coverage script ran in '{project_dir}' but produced NO parseable "
+                      "coverage summary, so the gate cannot pass it unmeasured. Looked for "
+                      "coverage/**/coverage-summary.json, coverage/**/clover.xml, coverage/**/lcov.info and a printed "
+                      "summary. Remediation: add the 'json-summary' (or 'lcov') coverage reporter to the project's "
+                      "vitest/jest/karma config.",
+                      file=sys.stderr,
+                  )
+                  return EXIT_BELOW_BAR
+              branches = "n/a (no conditionals)" if summary.branches_pct is None else f"{summary.branches_pct:.2f}%"
+              print(
+                  f"gate-tests-coverage jsts: measured line {summary.lines_pct:.2f}%, branch {branches} "
+                  f"against a required {args.min_percent:.2f}% (source: {summary.origin})"
+              )
+              findings = evaluate(summary, args.min_percent)
+              if findings:
+                  for finding in findings:
+                      print(f"FAIL gate-tests-coverage jsts: {finding}.", file=sys.stderr)
+                  return EXIT_BELOW_BAR
+              print("PASS gate-tests-coverage jsts: the measured coverage meets the required threshold.")
+              return EXIT_OK
+
+
+          if __name__ == "__main__":
+              raise SystemExit(main())
+          QZP_EMBED_jsts_coverage_assert
+          cat > "${RUNNER_TEMP}/qzp-lean-gate/osv_severity_gate.py" <<'QZP_EMBED_osv_severity_gate'
+          #!/usr/bin/env python3
+          """Severity floor for gate 6 (deps) - the T0 tier of the lean gate.
+
+          ``osv-scanner`` exits 1 for ANY finding. The lean gate used to map that exit
+          straight onto a red branch, with no severity floor, no dev/prod split and no
+          check that a fix even exists. Measured consequence (2026-08-11): 22 of 34 open
+          fleet PRs were BLOCKED on ``gate-deps``, and DevExtreme PR #40 - itself a
+          *security* bump - sat blocked for 17 days behind an UNSCORED Go stdlib
+          advisory that no version bump in that PR could clear.
+
+          This module re-reads the SAME scan as JSON and splits it in two:
+
+          ``BLOCK``
+              NOT dev-only **AND** ``max_severity`` parses to a float >= the floor
+              (default 7.0 = CVSS High) **AND** the report names a fixed version.
+
+          ``T2``
+              Everything else - dev-only, unscored, below the floor, or unfixable.
+              T2 findings are **printed in full**. Demoted is not hidden.
+
+          Design constraint this encodes: a gate the owner cannot drive to green is a
+          defect regardless of what it detects. Every BLOCK row names a fixed version,
+          so every BLOCK is closable by an action the owner controls.
+
+          Schema notes, measured against the pinned ``osv-scanner v2.3.8`` binary:
+
+          * ``results[].packages[].dependency_groups`` is **ABSENT** for production
+            dependencies (and for Go), ``["dev"]`` / ``["dev","optional"]`` otherwise.
+          * ``results[].packages[].groups[].max_severity`` is a **string** and is the
+            **empty string** for unscored advisories (every Go stdlib advisory is
+            unscored). It is not ``null`` - parse it defensively either way.
+          * A group's ``ids`` are not guaranteed to appear in ``vulnerabilities[]``;
+            when they do not, no fixed version can be established and the finding is
+            demoted rather than blocking on data we do not have.
+
+          Exit codes: ``0`` no blocking findings, ``1`` at least one blocking finding,
+          ``2`` the report could not be read or parsed (never treated as "clean").
+          """
+
+          from __future__ import absolute_import
+
+          import argparse
+          import json
+          import sys
+          from dataclasses import dataclass, replace
+          from pathlib import Path
+          from typing import Any, Iterable, List, Mapping, Optional, Sequence, TextIO, Tuple
+
+          SEVERITY_FLOOR = 7.0
+          """Default CVSS floor. 7.0 is the CVSS v3 boundary between Medium and High."""
+
+          DEV_ONLY_GROUPS = frozenset(("dev", "optional"))
+          """Dependency groups that may take part in a dev-only demotion.
+
+          ``optional`` alone is deliberately NOT enough: an npm ``optionalDependency``
+          IS installed in production. Only a package that is reachable *via* the dev
+          tree (i.e. its group set contains ``dev``) is demoted for scope.
+          """
+
+          UNKNOWN = "<unknown>"
+
+          EXIT_OK = 0
+          EXIT_BLOCKED = 1
+          EXIT_INPUT_ERROR = 2
+
+
+          class ReportInputError(RuntimeError):
+              """The osv-scanner report could not be read or parsed."""
+
+
+          @dataclass(frozen=True)
+          class Finding:
+              """One osv-scanner finding-GROUP (a package x advisory-group pair)."""
+
+              source: str
+              package: str
+              version: str
+              ecosystem: str
+              dependency_groups: Tuple[str, ...]
+              ids: Tuple[str, ...]
+              max_severity_raw: str
+              severity: Optional[float]
+              fixed_versions: Tuple[str, ...]
+              dev_only: bool
+              reasons: Tuple[str, ...] = ()
+
+
+          def parse_severity(raw_value: Any) -> Optional[float]:
+              """Parse ``max_severity`` into a float, or ``None`` when it is unscored.
+
+              ``max_severity`` is a STRING and is ``""`` for unscored advisories. An
+              unscored advisory must never collapse to ``0.0`` (that would silently read
+              as "below the floor" for the wrong reason) nor to a crash.
+              """
+              try:
+                  return float(raw_value)
+              except (TypeError, ValueError):
+                  return None
+
+
+          def normalize_groups(raw_value: Any) -> Tuple[str, ...]:
+              """Normalise ``dependency_groups`` to a lowercased tuple.
+
+              The key is ABSENT (``None``) for production dependencies, so anything that
+              is not a list is treated as "no groups" == production.
+              """
+              if not isinstance(raw_value, list):
+                  return ()
+              return tuple(str(item).strip().lower() for item in raw_value)
+
+
+          def is_dev_only(groups: Sequence[str]) -> bool:
+              """Return True when every group is a dev-tree group AND ``dev`` is one."""
+              if not groups:
+                  return False
+              if not set(groups) <= DEV_ONLY_GROUPS:
+                  return False
+              return "dev" in groups
+
+
+          def fixed_versions_for(package_entry: Mapping[str, Any], advisory_ids: Iterable[str]) -> Tuple[str, ...]:
+              """Collect every ``fixed`` version published for ``advisory_ids``.
+
+              An empty result means "this report names no fix", which is a demotion
+              reason: the owner cannot bump their way out of it.
+              """
+              wanted = set(advisory_ids)
+              found = set()
+              for vulnerability in package_entry.get("vulnerabilities") or []:
+                  if not isinstance(vulnerability, dict) or vulnerability.get("id") not in wanted:
+                      continue
+                  for affected in vulnerability.get("affected") or []:
+                      if not isinstance(affected, dict):
+                          continue
+                      for affected_range in affected.get("ranges") or []:
+                          if not isinstance(affected_range, dict):
+                              continue
+                          for event in affected_range.get("events") or []:
+                              if isinstance(event, dict) and "fixed" in event:
+                                  found.add(str(event["fixed"]))
+              return tuple(sorted(found))
+
+
+          def _finding_from_group(
+              *,
+              source_path: str,
+              meta: Mapping[str, Any],
+              groups: Tuple[str, ...],
+              dev_only: bool,
+              package_entry: Mapping[str, Any],
+              group: Mapping[str, Any],
+          ) -> Finding:
+              """Build one ``Finding`` from a single ``groups[]`` entry."""
+              ids = tuple(str(item) for item in group.get("ids") or [])
+              raw_severity = group.get("max_severity", "")
+              return Finding(
+                  source=source_path,
+                  package=str(meta.get("name", UNKNOWN)),
+                  version=str(meta.get("version", UNKNOWN)),
+                  ecosystem=str(meta.get("ecosystem", UNKNOWN)),
+                  dependency_groups=groups,
+                  ids=ids,
+                  max_severity_raw=str(raw_severity),
+                  severity=parse_severity(raw_severity),
+                  fixed_versions=fixed_versions_for(package_entry, ids),
+                  dev_only=dev_only,
+              )
+
+
+          def iter_findings(document: Any) -> List[Finding]:
+              """Flatten an osv-scanner JSON report into one ``Finding`` per group."""
+              findings: List[Finding] = []
+              if not isinstance(document, dict):
+                  return findings
+              for result in document.get("results") or []:
+                  if not isinstance(result, dict):
+                      continue
+                  source_block = result.get("source")
+                  source_path = str(source_block.get("path", UNKNOWN)) if isinstance(source_block, dict) else UNKNOWN
+                  for package_entry in result.get("packages") or []:
+                      if not isinstance(package_entry, dict):
+                          continue
+                      raw_meta = package_entry.get("package")
+                      meta = raw_meta if isinstance(raw_meta, dict) else {}
+                      groups = normalize_groups(package_entry.get("dependency_groups"))
+                      dev_only = is_dev_only(groups)
+                      for group in package_entry.get("groups") or []:
+                          if not isinstance(group, dict):
+                              continue
+                          findings.append(
+                              _finding_from_group(
+                                  source_path=source_path,
+                                  meta=meta,
+                                  groups=groups,
+                                  dev_only=dev_only,
+                                  package_entry=package_entry,
+                                  group=group,
+                              )
+                          )
+              return findings
+
+
+          def demotion_reasons(finding: Finding, floor: float) -> Tuple[str, ...]:
+              """Return every reason this finding is T2 rather than blocking (may be empty)."""
+              reasons: List[str] = []
+              if finding.dev_only:
+                  reasons.append("dev-only")
+              if finding.severity is None:
+                  reasons.append("unscored")
+              elif finding.severity < floor:
+                  reasons.append("below-floor")
+              if not finding.fixed_versions:
+                  reasons.append("no-fix-available")
+              return tuple(reasons)
+
+
+          def classify(findings: Iterable[Finding], floor: float) -> Tuple[List[Finding], List[Finding]]:
+              """Split findings into ``(blocking, demoted)``, annotating demotion reasons."""
+              blocking: List[Finding] = []
+              demoted: List[Finding] = []
+              for finding in findings:
+                  reasons = demotion_reasons(finding, floor)
+                  annotated = replace(finding, reasons=reasons)
+                  if reasons:
+                      demoted.append(annotated)
+                  else:
+                      blocking.append(annotated)
+              return blocking, demoted
+
+
+          def format_finding(finding: Finding) -> str:
+              """Render one finding as a single reviewable line."""
+              advisories = ", ".join(finding.ids) or "<no advisory id>"
+              severity = "-" if finding.severity is None else format(finding.severity, "g")
+              scope = "+".join(finding.dependency_groups) or "prod"
+              fix = "fixed in " + ", ".join(finding.fixed_versions) if finding.fixed_versions else "no published fix"
+              return (
+                  f"{finding.package} {finding.version} ({finding.ecosystem}) [{scope}] "
+                  f"severity {severity} | {advisories} | {fix} | {finding.source}"
+              )
+
+
+          def _rows(findings: Sequence[Finding], *, with_reasons: bool) -> List[str]:
+              """Render a section body, or an explicit ``none`` when the section is empty."""
+              if not findings:
+                  return ["  none"]
+              rows: List[str] = []
+              for finding in findings:
+                  prefix = ""
+                  if with_reasons:
+                      prefix = "[" + "+".join(finding.reasons) + "] "
+                  rows.append("  - " + prefix + format_finding(finding))
+              return rows
+
+
+          def render_report(blocking: Sequence[Finding], demoted: Sequence[Finding], floor: float) -> str:
+              """Render both tiers. A T2 finding is demoted, never hidden."""
+              lines = [
+                  "== gate-deps severity floor (T0) ==",
+                  f"   BLOCK when: NOT dev-only AND CVSS >= {format(floor, 'g')} AND a fixed version exists.",
+                  "   Everything else is T2 inventory: reported below, never blocking.",
+                  "",
+                  f"BLOCKING ({len(blocking)}):",
+              ]
+              lines.extend(_rows(blocking, with_reasons=False))
+              lines.append("")
+              lines.append(f"T2 INVENTORY ({len(demoted)}):")
+              lines.extend(_rows(demoted, with_reasons=True))
+              return "\n".join(lines)
+
+
+          def load_document(source: str, stdin: Optional[TextIO] = None) -> Any:
+              """Read the osv-scanner report from ``-`` (stdin) or a filesystem path."""
+              if source == "-":
+                  stream = sys.stdin if stdin is None else stdin
+                  raw = stream.read()
+              else:
+                  try:
+                      raw = Path(source).read_text(encoding="utf-8")
+                  except OSError as exc:
+                      raise ReportInputError(f"cannot read osv-scanner report '{source}': {exc}") from exc
+              try:
+                  return json.loads(raw)
+              except ValueError as exc:
+                  raise ReportInputError(f"osv-scanner report '{source}' is not valid JSON: {exc}") from exc
+
+
+          def _build_parser() -> argparse.ArgumentParser:
+              """Build the CLI parser."""
+              parser = argparse.ArgumentParser(
+                  description="Split an osv-scanner JSON report into blocking (T0) and inventory (T2) findings.",
+              )
+              parser.add_argument(
+                  "report",
+                  nargs="?",
+                  default="-",
+                  help="Path to an 'osv-scanner ... --format json' report, or '-' for stdin (default).",
+              )
+              parser.add_argument(
+                  "--min-severity",
+                  type=float,
+                  default=SEVERITY_FLOOR,
+                  help=f"CVSS floor at or above which a fixable production finding blocks (default {SEVERITY_FLOOR}).",
+              )
+              return parser
+
+
+          def main(argv: Optional[List[str]] = None) -> int:
+              """Classify a report, print both tiers, and return the gate exit code."""
+              args = _build_parser().parse_args(argv)
+              try:
+                  document = load_document(args.report)
+              except ReportInputError as exc:
+                  print(f"ERROR gate-deps severity floor: {exc}", file=sys.stderr)
+                  return EXIT_INPUT_ERROR
+              blocking, demoted = classify(iter_findings(document), args.min_severity)
+              print(render_report(blocking, demoted, args.min_severity))
+              if blocking:
+                  print(
+                      f"FAIL gate-deps: {len(blocking)} blocking finding(s) - "
+                      "production dependency, CVSS at or above the floor, and a fix is published. Bump them.",
+                      file=sys.stderr,
+                  )
+                  return EXIT_BLOCKED
+              print(f"PASS gate-deps: 0 blocking finding(s); {len(demoted)} demoted to T2 inventory (listed above).")
+              return EXIT_OK
+
+
+          if __name__ == "__main__":
+              raise SystemExit(main())
+          QZP_EMBED_osv_severity_gate
+          # Fail loudly HERE if a paste ever lands mis-indented, rather than
+          # deep inside a gate where it would read as a scanner failure.
+          for helper in jsts_coverage_assert osv_severity_gate; do
+            python3 -c "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))" \
+              "${RUNNER_TEMP}/qzp-lean-gate/${helper}.py"
+            echo "materialized ${helper}.py"
+          done
 
       # ── GATE 1 (ts/js) — SELF-CONTAINED lint + format (Oxlint + Biome) ───────
       # GAP 2 FIX — the lean charter's gate-1 for ts/js runs SELF-CONTAINED in THIS
@@ -548,11 +1305,23 @@ jobs:
       # vitest|jest --coverage test script. The silent-pass hole stays closed: a
       # nested project with test files but NO coverage runner FAILS; the only skip
       # is the documented "no test surface by design" (zero ts/js test files).
+      #
+      # round-7 FIX — ASSERT THE NUMBER. This lane used to run the caller's
+      # coverage script and pass on exit 0, passing NO threshold and checking NO
+      # number: enforcement was delegated entirely to the caller's vitest/karma
+      # config and the gate never verified one existed. Measured 2026-08-11,
+      # momentstudio's frontend printed `Statements : 49.57%` and the lane
+      # printed `PASS gate-tests-coverage jsts`. The run's output is now captured
+      # and the summary it produced is parsed and compared. A run that yields NO
+      # parseable summary FAILS — that property is unconditional and cannot be
+      # switched off by `jsts-coverage-min`, which only moves the numeric bar and
+      # is itself rejected outside (0, 100].
       - name: gate-tests-coverage jsts
         if: steps.detect.outputs.jsts == 'true'
         shell: bash
         env:
           JSTSTESTS: ${{ steps.detect.outputs.jststests }}
+          JSTS_COVERAGE_MIN: ${{ inputs.jsts-coverage-min }}
         run: |
           set -euo pipefail
           # has_cov_lane: does <dir>/package.json define a runnable coverage lane?
@@ -573,10 +1342,21 @@ jobs:
             echo ""; return 0
           }
           run_cov_in_dir() { # $1 dir, $2 lane-kind
+            local slug log
+            slug="$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '_')"
+            log="${RUNNER_TEMP}/qzp-lean-gate/jsts-coverage-${slug}.log"
             echo "::group::coverage in $1 ($2)"
+            # `tee` keeps the run visible in the job log while capturing the
+            # printed coverage summary, which is the last-resort evidence when a
+            # project ships no machine-readable reporter. pipefail is already on,
+            # so a failing coverage script still reds the lane through the pipe.
             ( cd "$1" && { npm ci || npm install; } \
-              && if [ "$2" = "script" ]; then npm run test:coverage; else npm test; fi )
+              && if [ "$2" = "script" ]; then npm run test:coverage; else npm test; fi ) 2>&1 | tee "$log"
             echo "::endgroup::"
+            # THE number check. Exit 0 from the caller's script is not evidence
+            # of coverage; a parsed figure at or above the bar is.
+            python3 "${RUNNER_TEMP}/qzp-lean-gate/jsts_coverage_assert.py" \
+              --project-dir "$1" --log "$log" --min-percent "$JSTS_COVERAGE_MIN"
           }
           # Build the candidate project dir list: root if it has package.json,
           # otherwise every nested package.json dir (excluding vendored trees).
@@ -599,7 +1379,7 @@ jobs:
             done
           fi
           if [ "$ran_any" = "true" ]; then
-            echo "PASS gate-tests-coverage jsts: ran coverage in ${#proj_dirs[@]} project dir(s)."
+            echo "PASS gate-tests-coverage jsts: measured coverage in ${#proj_dirs[@]} project dir(s) and every measured figure met the ${JSTS_COVERAGE_MIN}% bar."
           elif [ "$JSTSTESTS" != "true" ]; then
             echo "ts/js source present with NO test files and no coverage script - no test surface by design; coverage lane skipped."
             exit 0
@@ -607,6 +1387,95 @@ jobs:
             echo "FAIL gate-tests-coverage jsts: ts/js present (with test files) but no coverage script in any project dir (root or nested) - the 100% gate cannot pass unmeasured. Add a 'test:coverage' npm script (or a vitest/jest '--coverage' test script) in the project package.json." >&2
             exit 1
           fi
+
+      # ── GATE 3 (go / c++) — tests + coverage via the CALLER's own gate ────
+      # ROUND-7 REGRESSION FIX. round-6 removed the caller pre-commit run and the
+      # per-language toolchains, which together were the ONLY path by which a
+      # compiled language reached gate 3. Both compiled languages then fell
+      # through to the narrow "no test surface by design" skip and the step
+      # reported SUCCESS. Measured on the live fleet:
+      #   * DevExtreme-Filter-Go-Language — 236,928 bytes of Go, 30+ root-level
+      #     *_test.go files, and a .pre-commit-config.yaml whose gate-3 hook
+      #     `go-test-cover-100` runs exactly `bash scripts/coverage-gate.sh`.
+      #     Its own config header still names reusable-quality.yml as the
+      #     entrypoint for that hook. Coverage: never measured, always green.
+      #   * Airline-Reservations-System — 166,743 bytes of C/C++ across 32
+      #     files (32.6% of source bytes) with 11 *_test.cpp files under
+      #     tests/ and no lane of any kind.
+      #
+      # WHY THE CALLER'S SCRIPT AND NOT A DIRECT LANE: the Go coverage gate
+      # already EXISTS in the caller repo — the pre-commit hook is a thin
+      # wrapper around `bash scripts/coverage-gate.sh`. Running that script
+      # directly is strictly more robust than restoring `pre-commit run
+      # --all-files`: it needs no pre-commit install, no caller hook
+      # environment, and it CANNOT drag in the bespoke frontend-eslint /
+      # dotnet-format hooks that round-6 removed for good reason. For C++ there
+      # is no safely auto-configurable instrumented build (the workflow cannot
+      # know the build system, the flags, or how to add --coverage), so a blind
+      # clang-tidy+gcovr lane would be a gate the owner could not drive to
+      # green. Deliberately NOT added here: golangci-lint and go vet. Those are
+      # gate-1/gate-2 concerns, they are autofixer-class red, and this commit is
+      # scoped to closing the measured coverage hole.
+      #
+      # The skip stays reachable ONLY for its documented narrow case (source
+      # present, ZERO test files). With test files present this lane can no
+      # longer skip — proven behaviourally, not by text assertion, in
+      # tests/test_lean_gate_compiled_coverage_lane.py, which extracts this very
+      # script and executes it across the whole truth table.
+      - name: gate-tests-coverage compiled (go / c++)
+        if: steps.detect.outputs.go == 'true' || steps.detect.outputs.cpp == 'true'
+        shell: bash
+        env:
+          GO_PRESENT: ${{ steps.detect.outputs.go }}
+          GO_TESTS: ${{ steps.detect.outputs.gotests }}
+          GO_MOD: ${{ steps.detect.outputs.gomod }}
+          CPP_PRESENT: ${{ steps.detect.outputs.cpp }}
+          CPP_TESTS: ${{ steps.detect.outputs.cpptests }}
+          COVERAGE_GATE_SCRIPT: ${{ inputs.coverage-gate-script }}
+        run: |
+          set -euo pipefail
+          # Which compiled languages have a DEMONSTRABLE test surface. Built with
+          # explicit `if` blocks, not `[ ... ] && ...` chains: under `set -e` a
+          # false test at the end of a chain aborts the whole step.
+          needs=""
+          if [ "$GO_PRESENT" = "true" ] && [ "$GO_TESTS" = "true" ]; then
+            needs="go"
+          fi
+          if [ "$CPP_PRESENT" = "true" ] && [ "$CPP_TESTS" = "true" ]; then
+            needs="${needs:+$needs+}c++"
+          fi
+
+          if [ -z "$needs" ]; then
+            echo "Compiled source present (go=$GO_PRESENT c++=$CPP_PRESENT) with ZERO test files - no test surface by design; coverage lane skipped."
+            exit 0
+          fi
+          echo "Compiled test surface DETECTED ($needs). This lane CANNOT skip: the 100% gate cannot pass unmeasured."
+
+          # Go needs a toolchain, and the toolchain step keys off a root go.mod.
+          # Go tests with no go.mod is a real hole, not a design decision.
+          case "$needs" in
+            *go*)
+              if [ "$GO_MOD" != "true" ]; then
+                echo "FAIL gate-tests-coverage ($needs): *_test.go files exist but there is no root go.mod, so no Go toolchain was set up and coverage cannot be measured. Add a root go.mod (or move the module to the repo root)." >&2
+                exit 1
+              fi
+              go version
+              ;;
+          esac
+
+          # ONE invocation even for a mixed go+c++ repo: the caller's script is
+          # the repo's whole compiled-language coverage gate, not a per-language
+          # one, so running it twice would only burn runner minutes.
+          if [ ! -f "$COVERAGE_GATE_SCRIPT" ]; then
+            echo "FAIL gate-tests-coverage ($needs): this repo has compiled-language test files but no coverage gate at '$COVERAGE_GATE_SCRIPT', so the STRICT 100% gate cannot pass unmeasured." >&2
+            echo "FAIL gate-tests-coverage ($needs): remediation - add an executable 'scripts/coverage-gate.sh' that runs the tests, measures coverage and exits non-zero below the bar (for Go: 'go test -covermode=atomic -coverprofile=... ./...' then 'go tool cover -func'), or point the 'coverage-gate-script' workflow input at the script you already have." >&2
+            exit 1
+          fi
+
+          echo "::group::bash $COVERAGE_GATE_SCRIPT ($needs)"
+          bash "$COVERAGE_GATE_SCRIPT"
+          echo "::endgroup::"
+          echo "PASS gate-tests-coverage ($needs): the caller's own coverage gate '$COVERAGE_GATE_SCRIPT' measured the tests and passed."
 
       # ── GATE 4 — SAST (opengrep, curated in-repo ruleset, clean-zero) ─────
       - name: gate-sast opengrep
@@ -629,15 +1498,44 @@ jobs:
             --exclude .venv --exclude node_modules --exclude dist --exclude out --exclude build \
             "${opengrep_paths[@]}"
 
-      # ── GATE 5 (verify) — secrets, gitleaks over working tree (0 findings) ─
-      # round-6 FIX — gitleaks is now ALWAYS self-contained: it runs whenever the
-      # caller ships a .gitleaks.toml allowlist, regardless of any pre-commit config
-      # (the caller pre-commit is no longer executed). Honors the caller's
-      # .gitleaks.toml allowlist. Findings still FAIL the gate. Pin: gitleaks
-      # 8.30.1 (mirrors Reframe), installed above.
+      # ── GATE 5 — secrets, gitleaks (0 findings) ──────────────────────────
+      # round-6 made gitleaks self-contained (no caller pre-commit) but kept its
+      # trigger as "a .gitleaks.toml exists".
+      #
+      # round-7 FIX — THAT TRIGGER WAS INVERTED. `.gitleaks.toml` is an
+      # ALLOWLIST, so the presence of "things we have decided to ignore" was the
+      # opt-in signal for secret scanning: a repo that had never needed an
+      # allowlist — a clean repo, or a brand-new adopter — got NO secret
+      # scanning at all. Secret scanning is T0 absolute-zero. It now runs
+      # ALWAYS, and the allowlist is an optional input to the scan rather than a
+      # guard on it.
+      #
+      # Blast radius, measured live 2026-08-11 against the contents API (with
+      # quality-zero-platform's own 404 as the detector control): all 14
+      # governed repos shipping a `quality.yml` that calls this workflow ALREADY
+      # have a `.gitleaks.toml`, so this changes nothing for today's callers. It
+      # closes the hole for the next one. Green stays reachable by an
+      # owner-controlled action: fix the secret, or add an allowlist entry.
+      #
+      # Pin: gitleaks 8.30.1 (mirrors Reframe), installed above. Note the
+      # checkout above is shallow (fetch-depth 1), so `gitleaks detect` scans
+      # effectively the checked-out tree rather than the whole history.
       - name: gate-secrets gitleaks (self-contained)
-        if: steps.detect.outputs.gitleaks == 'true'
-        run: gitleaks detect --no-banner --redact --config .gitleaks.toml
+        shell: bash
+        env:
+          GITLEAKS_ALLOWLIST: ${{ steps.detect.outputs.gitleaksallowlist }}
+        run: |
+          set -euo pipefail
+          # --redact is non-negotiable: a finding must never echo the secret
+          # itself into a job log that may be public.
+          args=(detect --no-banner --redact)
+          if [ "$GITLEAKS_ALLOWLIST" = "true" ]; then
+            echo "Honoring the caller's .gitleaks.toml allowlist."
+            args+=(--config .gitleaks.toml)
+          else
+            echo "No .gitleaks.toml in this repo - scanning with the pinned gitleaks default ruleset. To triage a false positive, add a .gitleaks.toml allowlist."
+          fi
+          gitleaks "${args[@]}"
 
       # ── GATE 6 — deps (osv-scanner, 0 actionable CVEs) ───────────────────
       # osv-scanner exits 128 ("no package sources found") on a zero-dependency
@@ -648,10 +1546,39 @@ jobs:
       # resolvable deps, or only files osv treats as non-lockfiles), so the scanner
       # still exits 128 (observed fleet red: star-wars, a zero-dependency repo).
       # The authoritative "nothing to scan" signal is osv-scanner's OWN exit 128.
-      # We therefore: (1) keep the cheap pre-check skip, AND (2) run the scanner
-      # without aborting the step on its exit, then map exit 128 ("no package
-      # sources found") to PASS. Any OTHER non-zero exit (e.g. 1 = vulnerabilities
-      # found) still fails the gate. "Nothing to scan" is not a failure.
+      #
+      # Round-4: osv-scanner's exit codes are NOT a 0-vs-non-zero split. Verbatim
+      # from cmd/osv-scanner/internal/cmd/run.go at the pinned tag v2.3.8:
+      #     130 = HasErroredBecauseInvalidConfig()   (checked FIRST, takes priority)
+      #       1 = ErrVulnerabilitiesFound            <- the ONLY vulnerability code
+      #     128 = ErrNoPackagesFound                 <- nothing to scan
+      #     129 = ErrAPIFailed                       <- OSV.dev API unreachable
+      #     127 = HasErrored()                       <- generic "an error was logged"
+      #       0 = success, no vulnerabilities
+      # Round-3 mapped 128 -> PASS but funnelled EVERY other non-zero code into one
+      # "FAIL gate-deps ... (vulnerabilities found or scanner error)" branch, so a
+      # third-party outage was indistinguishable from a security regression.
+      # Observed fleet red: momentstudio run 30144541486 (both attempts) printed
+      # "FAIL gate-deps: osv-scanner exited 127" because the deps.dev gRPC resolver
+      # was down for its Python manifests ("rpc error: code = Unavailable desc =
+      # service unavailable"), while the scanner's own report in the same log said
+      # "Total 0 packages affected by 0 known vulnerabilities".
+      #
+      # Measured with the pinned 2.3.8 binary: a tree holding BOTH a vulnerable
+      # lockfile AND an unextractable one exits 1, not 127 — the switch returns on
+      # ErrVulnerabilitiesFound before the HasErrored() check at run.go:113 is ever
+      # reached. So exit 127 provably means "no vulnerability was detected in
+      # whatever WAS scanned"; it cannot mask a finding the scanner actually made.
+      # What it DOES leave unknown is the manifests that failed to resolve, so the
+      # scan-error class still BLOCKS: an incomplete scan is not evidence of a
+      # clean tree, and auto-passing it would fail open exactly where this gate
+      # exists to fail closed. It is reported with an unmistakably different
+      # message and its own exit code (75 = EX_TEMPFAIL, "temporary failure, retry
+      # later") so it is never read — or dashboarded — as a CVE. Short transient
+      # resolver blips are absorbed first by a bounded retry (3 attempts, 20s then
+      # 40s backoff); 130 is deterministic so it is not retried. For a prolonged
+      # upstream outage the escape hatch stays the audited quality-zero:break-glass
+      # label path, NOT a silent pass here.
       - name: gate-deps osv-scanner
         if: steps.detect.outputs.osv == 'true'
         shell: bash
@@ -663,15 +1590,81 @@ jobs:
             echo "No dependency manifests or lockfiles present - nothing for osv-scanner to scan; deps gate passes."
             exit 0
           fi
+
+          # "The scan itself did not complete" — none of these is a vuln finding.
+          is_scan_error() { case "$1" in 127|129|130) return 0 ;; *) return 1 ;; esac; }
+          # Of those, the ones a transient upstream outage produces. 130 (invalid
+          # config) is deterministic, so retrying it only burns runner minutes.
+          is_retryable() { case "$1" in 127|129) return 0 ;; *) return 1 ;; esac; }
+
+          attempt=1
+          max_attempts=3
           rc=0
-          osv-scanner scan source --config=osv-scanner.toml --recursive . || rc=$?
+          while : ; do
+            rc=0
+            osv-scanner scan source --config=osv-scanner.toml --recursive . || rc=$?
+            if ! is_retryable "$rc" || [ "$attempt" -ge "$max_attempts" ]; then
+              break
+            fi
+            backoff=$(( attempt * 20 ))
+            echo "RETRY gate-deps: osv-scanner exited $rc without completing the scan (attempt ${attempt}/${max_attempts}) - this is NOT a vulnerability finding; retrying in ${backoff}s." >&2
+            sleep "$backoff"
+            attempt=$(( attempt + 1 ))
+          done
+
           if [ "$rc" -eq 0 ]; then
             echo "PASS gate-deps: osv-scanner found 0 actionable CVEs."
           elif [ "$rc" -eq 128 ]; then
             echo "osv-scanner exited 128 (no package sources found) - nothing to scan; deps gate passes."
+          elif [ "$rc" -eq 1 ]; then
+            # T0 SEVERITY FLOOR. Exit 1 means "at least one advisory matched" -
+            # it says NOTHING about severity, dev/prod scope, or whether a fix
+            # exists. Treating it as a blanket red is what blocked 22 of 34 open
+            # fleet PRs on 2026-08-11, including DevExtreme PR #40 - itself a
+            # security bump - stuck for 17 days behind an UNSCORED Go stdlib
+            # advisory (max_severity "") that no change in that PR could clear.
+            # So: re-read the SAME scan as JSON and let the classifier decide.
+            # BLOCK = not dev-only AND CVSS >= 7.0 AND a fixed version exists;
+            # everything else is printed as T2 inventory and does not block.
+            # Note the re-scan keeps --config=osv-scanner.toml, so the caller's
+            # existing hand-written ignores still apply first, unchanged.
+            json_report="${RUNNER_TEMP}/qzp-lean-gate/osv-report.json"
+            jrc=0
+            osv-scanner scan source --config=osv-scanner.toml --recursive --format json . \
+              > "$json_report" || jrc=$?
+            # The JSON pass must reach the same terminal state as the pass above
+            # (0 = clean, 1 = findings). Anything else means we could not
+            # classify, which is a SCAN error, not a clean tree - fail closed
+            # with the same exit-75 semantics used below.
+            if [ "$jrc" -ne 0 ] && [ "$jrc" -ne 1 ]; then
+              echo "ERROR gate-deps: the JSON re-scan needed to classify these findings exited $jrc - this is NOT a vulnerability verdict. The tree was not fully classified, so the gate blocks rather than passing silently." >&2
+              exit 75
+            fi
+            grc=0
+            python3 "${RUNNER_TEMP}/qzp-lean-gate/osv_severity_gate.py" "$json_report" || grc=$?
+            if [ "$grc" -eq 0 ]; then
+              echo "PASS gate-deps: 0 findings clear the T0 severity floor. Everything osv-scanner reported is listed above as T2 inventory (dev-only, unscored, below CVSS 7.0, or no published fix) - visible, tracked, and deliberately non-blocking."
+            elif [ "$grc" -eq 1 ]; then
+              echo "FAIL gate-deps: at least one PRODUCTION dependency has a CVSS >= 7.0 advisory WITH a published fix. Every blocking row above names the version to bump to." >&2
+              exit 1
+            else
+              echo "ERROR gate-deps: the severity classifier exited $grc (expected 0 or 1) - the findings could not be classified, so this is NOT a vulnerability verdict and the gate blocks rather than passing silently." >&2
+              exit 75
+            fi
+          elif is_scan_error "$rc"; then
+            why='an unexpected scanner failure'
+            case "$rc" in
+              127) why='the scanner logged an error - commonly a deps.dev / registry resolver outage ("rpc error: code = Unavailable desc = service unavailable")' ;;
+              129) why='the OSV.dev API was unreachable (ErrAPIFailed)' ;;
+              130) why='the osv-scanner config file was rejected (invalid config)' ;;
+            esac
+            echo "ERROR gate-deps: osv-scanner could not complete the scan (exit $rc) - this is NOT a vulnerability finding." >&2
+            echo "ERROR gate-deps: exit $rc means $why." >&2
+            echo "ERROR gate-deps: attempts made ${attempt}/${max_attempts}. The dependency tree was NOT fully scanned, so this gate cannot certify it clean; it blocks rather than passing silently. Re-run the job once upstream recovers, or use the quality-zero:break-glass label for a prolonged outage." >&2
+            exit 75
           else
-            echo "FAIL gate-deps: osv-scanner exited $rc (vulnerabilities found or scanner error)." >&2
-            exit "$rc"
+            echo "ERROR gate-deps: osv-scanner exited $rc, which is not a documented exit code for the pinned 2.3.8 (0/1/127/128/129/130) - treating it as a scan failure, NOT a vulnerability finding." >&2
+            exit 75
           fi
 
       # ── Charter ↔ active-gate consistency (fails if gate set != 6-charter) ─

@@ -14,6 +14,8 @@ from argparse import Namespace
 from pathlib import Path
 from unittest.mock import patch
 
+from tests.workspace_isolation import isolated_cwd
+
 from scripts.quality import (
     build_admin_dashboard,
     build_quality_rollup,
@@ -238,6 +240,9 @@ class CoverageBackfillTests(unittest.TestCase):
                     ],
                 ),
                 patch.dict("os.environ", {}, clear=True),
+                # build_quality_rollup defaults --out-json/--out-md to
+                # quality-rollup/summary.* relative to cwd; keep that out of the repo.
+                isolated_cwd(),
                 self.assertRaises(SystemExit) as result,
             ):
                 runpy.run_path(str(script_path), run_name="__main__")
@@ -279,6 +284,9 @@ class CoverageBackfillTests(unittest.TestCase):
             patch.object(sys, "argv", [str(script_path), "--repo", "owner/repo"]),
             patch.object(sys, "path", trimmed_sys_path[:]),
             patch.dict("os.environ", {}, clear=True),
+            # check_dependabot_alerts defaults --out-json/--out-md to
+            # deps-zero/deps.* relative to cwd; keep that out of the repo.
+            isolated_cwd(),
             self.assertRaises(SystemExit) as result,
         ):
             runpy.run_path(str(script_path), run_name="__main__")

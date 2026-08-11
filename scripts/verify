@@ -15,6 +15,18 @@ else
   exit 1
 fi
 
+# Working-tree churn guard. Lane writers resolve their default --out-json/--out-md
+# against the cwd, so a test that drives one without isolating the cwd writes real
+# reports into the repo. That is how eight generated files reached git in ec6e80a.
+# We compare the porcelain status BEFORE and AFTER, so pre-existing local edits are
+# untouched and only files this run created/changed can fail the gate.
+TREE_GUARD=0
+TREE_BEFORE=""
+if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  TREE_GUARD=1
+  TREE_BEFORE="$(git status --porcelain --untracked-files=all)"
+fi
+
 "${PYTHON_CMD[@]}" -m coverage run -m unittest discover -s tests -p 'test_*.py'
 "${PYTHON_CMD[@]}" -m coverage xml -o coverage.xml
 "${PYTHON_CMD[@]}" -m coverage report --fail-under=100 --show-missing
@@ -23,3 +35,13 @@ if command -v node >/dev/null 2>&1; then
 fi
 "${PYTHON_CMD[@]}" scripts/quality/validate_control_plane.py --write-generated generated/rulesets
 "${PYTHON_CMD[@]}" scripts/quality/generate_ruleset_payload.py --output-dir build/rulesets >/dev/null
+
+if [ "${TREE_GUARD}" -eq 1 ]; then
+  TREE_AFTER="$(git status --porcelain --untracked-files=all)"
+  if [ "${TREE_BEFORE}" != "${TREE_AFTER}" ]; then
+    echo "scripts/verify changed the working tree." >&2
+    echo "Isolate the writer (tests/workspace_isolation.py isolated_cwd) or ignore the path:" >&2
+    diff <(printf '%s\n' "${TREE_BEFORE}") <(printf '%s\n' "${TREE_AFTER}") >&2 || true
+    exit 1
+  fi
+fi

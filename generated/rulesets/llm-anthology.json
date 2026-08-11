@@ -1,0 +1,79 @@
+{
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "exclude": [],
+      "include": [
+        "refs/heads/main"
+      ]
+    }
+  },
+  "enforcement": "active",
+  "name": "quality-zero-platform / llm-anthology",
+  "profile_id": "llm-anthology",
+  "repo_slug": "Prekzursil/llm-anthology",
+  "rules": [
+    {
+      "parameters": {
+        "dismiss_stale_reviews_on_push": false,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_approving_review_count": 0,
+        "required_review_thread_resolution": false
+      },
+      "type": "pull_request"
+    },
+    {
+      "parameters": {
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          {
+            "context": "tests (ubuntu-latest py3.9)"
+          },
+          {
+            "context": "tests (ubuntu-latest py3.13)"
+          },
+          {
+            "context": "tests (windows-latest py3.13)"
+          },
+          {
+            "context": "tests (macos-latest py3.13)"
+          },
+          {
+            "context": "js tests (node 20)"
+          },
+          {
+            "context": "js tests (node 22)"
+          },
+          {
+            "context": "packaged-artifact smoke test"
+          },
+          {
+            "context": "packaged npm artifact smoke test"
+          },
+          {
+            "context": "analyze (python)"
+          },
+          {
+            "context": "analyze (javascript-typescript)"
+          },
+          {
+            "context": "cockpit (ubuntu-latest)"
+          },
+          {
+            "context": "cockpit (windows-latest)"
+          }
+        ],
+        "strict_required_status_checks_policy": true
+      },
+      "type": "required_status_checks"
+    },
+    {
+      "type": "non_fast_forward"
+    },
+    {
+      "type": "deletion"
+    }
+  ],
+  "target": "branch"
+}

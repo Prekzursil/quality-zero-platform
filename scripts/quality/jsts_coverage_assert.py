@@ -23,7 +23,7 @@ switch off the requirement that a real number was measured, and it is rejected
 outside ``(0, 100]`` so a "0% bar" silent pass is not expressible.
 
 Branch coverage is compared too (the charter is 100% line AND branch), except
-where the report says the project has zero conditionals — that is "not
+where the report says the project has zero conditionals - that is "not
 applicable", not 0%.
 
 XML is parsed with a regex rather than ``xml.etree``, mirroring

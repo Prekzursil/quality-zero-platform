@@ -575,6 +575,14 @@ class Gate4SastScanSetTests(unittest.TestCase):
     * The engine drops the built-in ignore template as soon as ANY
       ``.semgrepignore`` exists in the scanned root -- with one present, the
       same run scanned 4 files and reported 2 findings instead of 1.
+    * The dropped set, enumerated with one identical vulnerable file per
+      candidate path: ``*_test.go`` AT ANY DEPTH, plus the ``test/`` and
+      ``tests/`` directories. Python/TS test FILENAMES (``test_app.py``,
+      ``app_test.py``, ``conftest.py``, ``app.test.ts``, ``app.spec.ts``,
+      ``__tests__/``) are NOT excluded -- only the two directories are. So a Go
+      repo following the language's own convention loses its ENTIRE suite
+      regardless of layout, which is what happened to
+      DevExtreme-Filter-Go-Language.
 
     Blast radius of shipping the file, measured against real clones with each
     caller's own ``opengrep-paths``: +49 newly-visible files in

@@ -4,10 +4,10 @@
 # ── WHY THIS FILE IS MANDATORY, not optional ────────────────────────────────
 #
 # If NO `.semgrepignore` exists in the scanned root, the engine falls back to a
-# BUILT-IN ignore template that excludes `test/` and `tests/`. Nobody in this
-# fleet chose that. Measured 2026-08-11 on the pinned CI engine (opengrep
-# v1.22.0 CLI on Linux — the exact build gate 4 installs), with a controlled
-# detector and one variable changed at a time:
+# BUILT-IN ignore template that drops your test code. Nobody in this fleet chose
+# that. Measured 2026-08-11 on the pinned CI engine (opengrep v1.22.0 CLI on
+# Linux — the exact build gate 4 installs), with a controlled detector and one
+# variable changed at a time:
 #
 #   file                       content                                result
 #   ─────────────────────────  ─────────────────────────────────────  ────────
@@ -17,9 +17,32 @@
 # `paths.scanned` listed 3 of 4 files and `paths.skipped` reported `none`, so
 # NOTHING in the gate output tells you a test tree was dropped. Pointing the
 # scanner directly at `tests/` returns `paths.scanned: []` — an explicit path
-# argument does NOT override it. The engine drops the built-in template as soon
-# as ANY `.semgrepignore` exists, so merely shipping this file restores the
-# test tree; the entries below are then a DELIBERATE choice you can review.
+# argument does NOT override it.
+#
+# EXACTLY WHAT THE BUILT-IN TEMPLATE DROPS, enumerated by scanning one identical
+# vulnerable file per candidate path with and without a `.semgrepignore`:
+#
+#   DROPPED                       KEPT (for contrast — the set is narrower
+#   ────────────────────────────  than "anything that looks like a test")
+#   engine_test.go                test_app.py
+#   pkg/engine_test.go            app_test.py
+#   test/helper.go                conftest.py
+#   tests/helper.go               spec/thing.py
+#   tests/test_app.py             src/app.test.ts
+#                                 src/app.spec.ts
+#                                 __tests__/app.ts
+#                                 e2e/app.ts
+#                                 testdata/sample.go
+#
+# So the rule is: `*_test.go` AT ANY DEPTH, plus the `test/` and `tests/`
+# directories. Python and TypeScript test FILENAMES are not excluded — only the
+# two directories are. That asymmetry matters: a Go repo following the language's
+# own `foo_test.go` convention has its ENTIRE test suite dropped no matter where
+# the files sit, which is why DevExtreme-Filter-Go-Language lost 49 files.
+#
+# The engine drops the built-in template as soon as ANY `.semgrepignore` exists,
+# so merely shipping this file restores the test code; the entries below are then
+# a DELIBERATE choice you can review.
 #
 # Blast radius when adopted, measured against real clones with each caller's own
 # `opengrep-paths`: +49 newly-visible files in DevExtreme-Filter-Go-Language

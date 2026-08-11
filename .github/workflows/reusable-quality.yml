@@ -1496,10 +1496,10 @@ jobs:
           # round-8 FIX — THE SCANNED FILE SET WAS INHERITED, NOT CHOSEN.
           #
           # With NO `.semgrepignore` in the scanned root the engine falls back
-          # to a BUILT-IN ignore template that excludes `test/` and `tests/`.
-          # Nobody in this fleet picked that. Measured 2026-08-11 against the
-          # PINNED engine (opengrep v1.22.0 CLI on Linux, exactly the build
-          # installed above), controlled detector, one variable at a time:
+          # to a BUILT-IN ignore template that drops test code. Nobody in this
+          # fleet picked that. Measured 2026-08-11 against the PINNED engine
+          # (opengrep v1.22.0 CLI on Linux, exactly the build installed above),
+          # controlled detector, one variable at a time:
           #
           #   src/inline.go    `db.Query(fmt.Sprintf(...))`      -> FIRES
           #   tests/inline.go  byte-identical to the line above  -> SILENT
@@ -1508,6 +1508,14 @@ jobs:
           # this gate's output revealed it. Pointing the scanner directly at
           # `tests/` returns `paths.scanned: []`, so an explicit path argument
           # does NOT override it either.
+          #
+          # The dropped set, enumerated one identical vulnerable file per
+          # candidate path: `*_test.go` AT ANY DEPTH, plus the `test/` and
+          # `tests/` directories. Python/TS test FILENAMES (`test_app.py`,
+          # `app.test.ts`, `app.spec.ts`, `__tests__/`) are NOT excluded -- only
+          # the two directories are. That asymmetry is why a Go repo following
+          # the language's own `foo_test.go` convention loses its ENTIRE suite
+          # regardless of layout: DevExtreme-Filter-Go-Language lost 49 files.
           #
           # DO NOT "fix" this with `--semgrepignore-filename`: opengrep v1.22.0
           # DOCUMENTS that option in `opengrep scan --help` (line 405) but its
@@ -1525,7 +1533,7 @@ jobs:
           # +49 newly-visible files in DevExtreme-Filter-Go-Language (its whole
           # `_test.go` suite) and ZERO new findings in 10 of 11 public repos.
           if [ ! -f .semgrepignore ]; then
-            echo "::warning title=gate-sast scan set is inherited::No .semgrepignore in the repo root, so opengrep falls back to its built-in template and SILENTLY skips test/ and tests/ (paths.skipped still reports 'none'). Copy docs/lean-gate/semgrepignore.template from quality-zero-platform to .semgrepignore to choose the scanned set deliberately."
+            echo "::warning title=gate-sast scan set is inherited::No .semgrepignore in the repo root, so opengrep falls back to its built-in template and SILENTLY skips every *_test.go at any depth plus the test/ and tests/ directories, while paths.skipped still reports 'none'. Copy docs/lean-gate/semgrepignore.template from quality-zero-platform to .semgrepignore to choose the scanned set deliberately."
           fi
           read -ra opengrep_paths <<< "$OPENGREP_PATHS"
           opengrep scan --config .quality/opengrep --error \

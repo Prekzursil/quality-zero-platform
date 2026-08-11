@@ -17,6 +17,7 @@ from tests._run_coverage_gate_helpers import (
     assert_run_shell_invocation,
     make_coverage_assert_fixture,
 )
+from tests.workspace_isolation import isolated_cwd
 
 from scripts.quality import run_coverage_gate
 
@@ -307,6 +308,9 @@ class RunCoverageGateExtraTests(unittest.TestCase):
                         "push",
                     ],
                 ),
+                # evidence_only still writes coverage-100/coverage.* relative to
+                # cwd; keep that out of the repo.
+                isolated_cwd(),
                 self.assertRaises(SystemExit) as result,
             ):
                 runpy.run_path(str(script_path), run_name="__main__")

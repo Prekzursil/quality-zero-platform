@@ -14,6 +14,7 @@ source = [
   # 100%-covered here — the workflow copy is byte-identical by contract test.
   "scripts.quality.osv_severity_gate",
   "scripts.quality.jsts_coverage_assert",
+  "scripts.quality.complexity_gate",
 ]
 branch = true
 omit = [

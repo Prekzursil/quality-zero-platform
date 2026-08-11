@@ -708,7 +708,7 @@ class Gate4SastScanSetTests(unittest.TestCase):
 
 
 class CuratedRulesetDataflowTests(unittest.TestCase):
-    """The curated rulesets must cover DATAFLOW, not only one inline syntax.
+    """The syntax-only limitation of the curated rules must stay DOCUMENTED.
 
     Measured on the pinned engine with DevExtreme's real 4-rule
     ``go-security.yml``: ``db.Query(fmt.Sprintf(...))`` fires
@@ -718,21 +718,51 @@ class CuratedRulesetDataflowTests(unittest.TestCase):
     (``paths.scanned`` contains it), so this is a rule-precision gap, not a
     targeting artifact, which makes a clean zero much weaker evidence than it
     looks.
+
+    This class deliberately does NOT assert that a ``mode: taint`` rule exists
+    in the Python/JS rulesets. An earlier revision did, and the rule that
+    satisfied it -- source "any f-string / %-format / .format()", sink
+    "cursor.execute" -- passed a 6-bad/5-good corpus and scored 0 findings HERE
+    (this repo has no database code) while producing 58 FALSE POSITIVES on the
+    two repos that do: 32 SQLAlchemy ORM binds in momentstudio and 26
+    constant-identifier interpolations in Reframe. Both of those repos gate on
+    ``quality / quality`` as a REQUIRED check, so the assertion would have
+    driven a fleet change that reddens two gates on non-defects.
+
+    The lesson is the one that generalises: a green corpus plus a green
+    control-plane repo is NOT evidence a rule is safe to ship to callers whose
+    code shapes the corpus never contained. The registry entry carries the
+    settling experiment (re-scan momentstudio ``backend/`` and Reframe
+    ``sidecar/`` and require 0 findings BEFORE proposing the rule again).
     """
 
     RULESET_DIR = ROOT / ".quality" / "opengrep"
+    REGISTRY_ENTRY = ROOT / "known-issues" / "QZ-SAST-001.yml"
 
-    def test_injection_rulesets_carry_a_taint_mode_rule(self) -> None:
-        """Every curated ruleset with an injection sink needs a dataflow companion."""
+    def test_syntax_only_limitation_is_recorded_in_the_known_issues_registry(self) -> None:
+        """The gap must be findable, so nobody cites a syntax-only zero as proof."""
+        self.assertTrue(
+            self.REGISTRY_ENTRY.is_file(),
+            "known-issues/QZ-SAST-001.yml must record that the curated rules match syntax"
+            " only, so a clean gate-4 is not mistaken for absence of injection",
+        )
+        text = self.REGISTRY_ENTRY.read_text(encoding="utf-8")
+        for expected in ("mode: taint", "false positive", "momentstudio", "Reframe"):
+            self.assertIn(expected, text, "QZ-SAST-001 must keep the measured evidence")
+
+    def test_python_and_js_rulesets_stay_free_of_the_overbroad_taint_rule(self) -> None:
+        """Guard the retreat: re-adding the naive rule reddens two required gates."""
         for name in ("python-security.yaml", "javascript-security.yaml"):
-            path = self.RULESET_DIR / name
-            text = path.read_text(encoding="utf-8")
-            self.assertIn(
-                "mode: taint",
+            text = (self.RULESET_DIR / name).read_text(encoding="utf-8")
+            if "mode: taint" not in text:
+                continue
+            # A taint rule here is allowed ONLY once its source is scoped to real
+            # request input rather than any string formatting.
+            self.assertNotIn(
+                'pattern: f"...{$X}..."',
                 text,
-                f"{name}: a syntax-only ruleset misses the same vulnerability written through a"
-                " local variable; add a mode: taint rule with explicit"
-                " pattern-sources/pattern-sinks",
+                f"{name}: an 'any f-string' taint source measured 58 false positives across"
+                " momentstudio (SQLAlchemy ORM binds) and Reframe (constant identifier"
+                " interpolation). Scope the source to request input and re-prove against"
+                " those two trees first -- see known-issues/QZ-SAST-001.yml.",
             )
-            self.assertIn("pattern-sources:", text, name)
-            self.assertIn("pattern-sinks:", text, name)

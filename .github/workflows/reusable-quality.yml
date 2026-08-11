@@ -126,8 +126,10 @@
 #     and a pre-commit hook `go-test-cover-100` = `bash scripts/coverage-gate.sh`
 #     whose own config header still names THIS workflow as its CI entrypoint.
 #     Coverage was never measured and the gate was green anyway.
-#   * Airline-Reservations-System — 190,349 bytes of C++, ten *_test.cpp files
-#     under tests/, no lane at all.
+#   * Airline-Reservations-System — 166,743 bytes of C/C++ across 32 files
+#     (.cpp/.cc/.hpp/.h; 32.6% of source bytes, 9.0% of all blob bytes)
+#     and 11 *_test.cpp files under tests/, with no lane at all. Second-
+#     largest language there after Python (239,129 B), none of it measured.
 # So round-7 restores setup-go (gate 3 ONLY, pinned by the caller's own go.mod)
 # and adds `gate-tests-coverage compiled (go / c++)`, which runs the CALLER's own
 # coverage gate — by default `scripts/coverage-gate.sh`, the exact command
@@ -1397,8 +1399,9 @@ jobs:
       #     `go-test-cover-100` runs exactly `bash scripts/coverage-gate.sh`.
       #     Its own config header still names reusable-quality.yml as the
       #     entrypoint for that hook. Coverage: never measured, always green.
-      #   * Airline-Reservations-System — 190,349 bytes of C++ with ten
-      #     *_test.cpp files under tests/ and no lane of any kind.
+      #   * Airline-Reservations-System — 166,743 bytes of C/C++ across 32
+      #     files (32.6% of source bytes) with 11 *_test.cpp files under
+      #     tests/ and no lane of any kind.
       #
       # WHY THE CALLER'S SCRIPT AND NOT A DIRECT LANE: the Go coverage gate
       # already EXISTS in the caller repo — the pre-commit hook is a thin

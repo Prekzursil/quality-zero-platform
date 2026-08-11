@@ -28,7 +28,8 @@
 #                    ASSERTED by this workflow for py/jsts, and measured for
 #                    go/c++ via the caller's own coverage gate
 #   4. SAST:         Opengrep (Semgrep CE acceptable), pinned in-repo ruleset
-#   5. Secrets:      gitleaks (pinned + allowlist) — SELF-CONTAINED (always)
+#   5. Secrets:      gitleaks (pinned) — SELF-CONTAINED, ALWAYS runs; a caller
+#                    .gitleaks.toml is an optional allowlist, NOT the trigger
 #   6. Deps:         osv-scanner + Dependabot (no Renovate), T0 severity floor
 #
 # ── gate-6 T0 SEVERITY FLOOR (2026-08-11) ───────────────────────────────────
@@ -72,8 +73,12 @@
 # Auto-detection: the single `quality` job inspects the CALLER's checked-out
 # tree and runs ONLY the lanes whose language is present. A repo with no Python
 # skips the Python lanes, a repo with no JS/TS skips tsc, etc. The lint lanes run
-# whenever their language is present; gitleaks/opengrep/osv run when their config
-# is present (gitleaks runs whenever a .gitleaks.toml allowlist is shipped).
+# whenever their language is present; opengrep/osv run when their config is
+# present. GITLEAKS IS THE EXCEPTION AND ALWAYS RUNS (round-7): its trigger used
+# to be "a .gitleaks.toml exists", but that file is an ALLOWLIST, so the presence
+# of things we decided to IGNORE was the opt-in signal for secret scanning and a
+# clean repo got none at all. Secret scanning is T0 absolute-zero; the allowlist
+# is now an optional input to the scan rather than a guard on it.
 #
 # No silent-pass: the coverage lane (gate 3) NEVER passes a language green
 # without measuring it. If a language has source AND test files but no coverage
@@ -281,7 +286,11 @@ jobs:
             echo "jsts=$(has '*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs' '*.cjs')"
             echo "pyrightcfg=$(any "$py_pyright_cfg")"
             echo "opengrep=$([ -d .quality/opengrep ] && echo true || echo false)"
-            echo "gitleaks=$(file_exists .gitleaks.toml)"
+            # NOT a guard on gate 5 (round-7): .gitleaks.toml is an ALLOWLIST,
+            # so gating the SCAN on it made "things we decided to ignore" the
+            # opt-in signal for secret scanning. This output now only tells the
+            # gate whether to pass --config; the scan itself always runs.
+            echo "gitleaksallowlist=$(file_exists .gitleaks.toml)"
             echo "osv=$(file_exists osv-scanner.toml)"
             echo "charter=$([ -f .quality/charter.yml ] && echo true || echo false)"
             echo "pymanifest=$(any "$py_manifest")"
@@ -388,8 +397,10 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh | bash -s -- -v v1.22.0
           echo "$HOME/.opengrep/cli/latest" >> "$GITHUB_PATH"
 
+      # Unconditional: gate 5 is T0 absolute-zero and always runs, so the binary
+      # is always needed. It is NOT gated on the .gitleaks.toml allowlist —
+      # that inversion is the bug this restores.
       - name: Install gitleaks
-        if: steps.detect.outputs.gitleaks == 'true'
         run: |
           curl -sSL -o /tmp/gitleaks.tar.gz \
             https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
@@ -1484,15 +1495,44 @@ jobs:
             --exclude .venv --exclude node_modules --exclude dist --exclude out --exclude build \
             "${opengrep_paths[@]}"
 
-      # ── GATE 5 (verify) — secrets, gitleaks over working tree (0 findings) ─
-      # round-6 FIX — gitleaks is now ALWAYS self-contained: it runs whenever the
-      # caller ships a .gitleaks.toml allowlist, regardless of any pre-commit config
-      # (the caller pre-commit is no longer executed). Honors the caller's
-      # .gitleaks.toml allowlist. Findings still FAIL the gate. Pin: gitleaks
-      # 8.30.1 (mirrors Reframe), installed above.
+      # ── GATE 5 — secrets, gitleaks (0 findings) ──────────────────────────
+      # round-6 made gitleaks self-contained (no caller pre-commit) but kept its
+      # trigger as "a .gitleaks.toml exists".
+      #
+      # round-7 FIX — THAT TRIGGER WAS INVERTED. `.gitleaks.toml` is an
+      # ALLOWLIST, so the presence of "things we have decided to ignore" was the
+      # opt-in signal for secret scanning: a repo that had never needed an
+      # allowlist — a clean repo, or a brand-new adopter — got NO secret
+      # scanning at all. Secret scanning is T0 absolute-zero. It now runs
+      # ALWAYS, and the allowlist is an optional input to the scan rather than a
+      # guard on it.
+      #
+      # Blast radius, measured live 2026-08-11 against the contents API (with
+      # quality-zero-platform's own 404 as the detector control): all 14
+      # governed repos shipping a `quality.yml` that calls this workflow ALREADY
+      # have a `.gitleaks.toml`, so this changes nothing for today's callers. It
+      # closes the hole for the next one. Green stays reachable by an
+      # owner-controlled action: fix the secret, or add an allowlist entry.
+      #
+      # Pin: gitleaks 8.30.1 (mirrors Reframe), installed above. Note the
+      # checkout above is shallow (fetch-depth 1), so `gitleaks detect` scans
+      # effectively the checked-out tree rather than the whole history.
       - name: gate-secrets gitleaks (self-contained)
-        if: steps.detect.outputs.gitleaks == 'true'
-        run: gitleaks detect --no-banner --redact --config .gitleaks.toml
+        shell: bash
+        env:
+          GITLEAKS_ALLOWLIST: ${{ steps.detect.outputs.gitleaksallowlist }}
+        run: |
+          set -euo pipefail
+          # --redact is non-negotiable: a finding must never echo the secret
+          # itself into a job log that may be public.
+          args=(detect --no-banner --redact)
+          if [ "$GITLEAKS_ALLOWLIST" = "true" ]; then
+            echo "Honoring the caller's .gitleaks.toml allowlist."
+            args+=(--config .gitleaks.toml)
+          else
+            echo "No .gitleaks.toml in this repo - scanning with the pinned gitleaks default ruleset. To triage a false positive, add a .gitleaks.toml allowlist."
+          fi
+          gitleaks "${args[@]}"
 
       # ── GATE 6 — deps (osv-scanner, 0 actionable CVEs) ───────────────────
       # osv-scanner exits 128 ("no package sources found") on a zero-dependency

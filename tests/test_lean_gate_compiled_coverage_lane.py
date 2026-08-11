@@ -20,49 +20,23 @@ lane handles.**
 
 from __future__ import absolute_import
 
-import os
 import shutil
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict
 
 import yaml
+from tests.lean_gate_support import WORKFLOW, find_bash, run_step_script, step_named, workflow_steps
 
-ROOT = Path(__file__).resolve().parents[1]
-WORKFLOW = ROOT / ".github" / "workflows" / "reusable-quality.yml"
 LANE_STEP_NAME = "gate-tests-coverage compiled (go / c++)"
 SKIP_PHRASE = "no test surface by design"
-
-_BASH_CANDIDATES = (
-    "/bin/bash",
-    "/usr/bin/bash",
-    r"C:\Program Files\Git\bin\bash.exe",
-    r"C:\Program Files (x86)\Git\bin\bash.exe",
-)
-
-
-def find_bash() -> Optional[str]:
-    """Locate a real bash. ``shutil.which`` is LAST: on Windows it finds WSL."""
-    for candidate in _BASH_CANDIDATES:
-        if Path(candidate).exists():
-            return candidate
-    return shutil.which("bash")
-
-
-def workflow_steps() -> List[Dict[str, object]]:
-    """Return the parsed steps of the reusable quality job."""
-    document = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
-    return document["jobs"]["quality"]["steps"]
 
 
 def lane_step() -> Dict[str, object]:
     """Return the compiled-language coverage lane step."""
-    for step in workflow_steps():
-        if step.get("name") == LANE_STEP_NAME:
-            return step
-    raise AssertionError("step '" + LANE_STEP_NAME + "' is missing from " + WORKFLOW.name)
+    return step_named(LANE_STEP_NAME)
 
 
 class LaneWiringTests(unittest.TestCase):
@@ -135,8 +109,7 @@ class LaneBehaviourTests(unittest.TestCase):
             self.skipTest("no real bash found; cannot execute the lane script")
         self.workdir = Path(tempfile.mkdtemp(prefix="qzp-lane-"))
         self.addCleanup(shutil.rmtree, self.workdir, True)
-        self.script = self.workdir / "lane.sh"
-        self.script.write_text(str(lane_step()["run"]), encoding="utf-8", newline="\n")
+        self.lane_script = str(lane_step()["run"])
         self.counter = self.workdir / "gate-runs.txt"
 
     def _write_coverage_gate(self, exit_code: int) -> str:
@@ -163,25 +136,20 @@ class LaneBehaviourTests(unittest.TestCase):
         gate_script: str = "scripts/coverage-gate.sh",
     ) -> subprocess.CompletedProcess:
         """Run the lane script with an explicit detect-output environment."""
-        env = dict(os.environ)
-        env.update(
-            {
+        assert self.bash is not None
+        return run_step_script(
+            self.lane_script,
+            workdir=self.workdir,
+            bash=self.bash,
+            filename="lane.sh",
+            env_overrides={
                 "GO_PRESENT": go,
                 "GO_TESTS": gotests,
                 "GO_MOD": gomod,
                 "CPP_PRESENT": cpp,
                 "CPP_TESTS": cpptests,
                 "COVERAGE_GATE_SCRIPT": gate_script,
-            }
-        )
-        assert self.bash is not None
-        return subprocess.run(
-            [self.bash, "lane.sh"],
-            cwd=str(self.workdir),
-            env=env,
-            capture_output=True,
-            text=True,
-            check=False,
+            },
         )
 
     def _gate_run_count(self) -> int:

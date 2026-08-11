@@ -58,9 +58,15 @@ gates:
     note: "small pinned in-repo ruleset (.quality/opengrep)"
   - id: 5
     name: secrets
-    workflow_step: "gate-secrets"        # round-6: self-contained gitleaks (always; no longer via caller pre-commit)
+    workflow_step: "gate-secrets"        # round-6: self-contained gitleaks (no longer via caller pre-commit)
     tools: [gitleaks]
-    note: "gitleaks 8.30.1 (mirrors Reframe) + caller .gitleaks.toml allowlist; self-contained"
+    # round-7: the trigger was INVERTED. gate 5 used to run only when a
+    # .gitleaks.toml existed — but that file is an ALLOWLIST, so the presence of
+    # "things we decided to ignore" was the opt-in signal for secret scanning
+    # and a clean repo got none. Secret scanning is T0 absolute-zero: it runs
+    # ALWAYS, and a caller .gitleaks.toml is an optional allowlist input.
+    always_on: true
+    note: "gitleaks 8.30.1 (mirrors Reframe), always-on; caller .gitleaks.toml is an optional allowlist"
   - id: 6
     name: deps
     workflow_step: "gate-deps"

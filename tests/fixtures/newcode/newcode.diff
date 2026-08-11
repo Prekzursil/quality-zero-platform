@@ -1,0 +1,113 @@
+diff --git a/src/legacy_knot.py b/src/legacy_knot.py
+index 56fafd9..22b6c41 100644
+--- a/src/legacy_knot.py
++++ b/src/legacy_knot.py
+@@ -47,0 +48,5 @@ def tiny(value):
++
++
++def also_ok(value):
++    """Clean addition to a legacy file."""
++    return value - 1
+diff --git a/src/new_knot.go b/src/new_knot.go
+new file mode 100644
+index 0000000..3d14211
+--- /dev/null
++++ b/src/new_knot.go
+@@ -0,0 +1,59 @@
++package src
++
++// Simple is comfortably under any sane CCN threshold.
++func Simple(value int) int {
++	if value > 0 {
++		return value
++	}
++	return -value
++}
++
++// Knot is deliberately over the threshold, in Go, to prove the lane is
++// language-agnostic and not Python-only.
++func Knot(value int, mode string, a bool, b bool, c bool) int {
++	total := 0
++	if value > 1 {
++		total++
++	}
++	if value > 2 {
++		total += 2
++	}
++	if value > 3 {
++		total += 3
++	}
++	if value > 4 {
++		total += 4
++	}
++	if value > 5 {
++		total += 5
++	}
++	switch mode {
++	case "a":
++		total += 6
++	case "b":
++		total += 7
++	case "c":
++		total += 8
++	case "d":
++		total += 9
++	default:
++		total += 10
++	}
++	if a && b {
++		total += 11
++	}
++	if b || c {
++		total += 12
++	}
++	if a && c {
++		total += 13
++	}
++	for i := 0; i < value; i++ {
++		if i%2 == 0 {
++			total += i
++		} else {
++			total -= i
++		}
++	}
++	return total
++}
+diff --git a/src/new_settings.py b/src/new_settings.py
+new file mode 100644
+index 0000000..9c796c7
+--- /dev/null
++++ b/src/new_settings.py
+@@ -0,0 +1,32 @@
++"""A verbatim copy-paste of load_settings, renamed. Deliberate duplication."""
++
++import json
++
++
++def read_config(path, defaults):
++    """Read a JSON settings file and merge it over the supplied defaults."""
++    merged = dict(defaults)
++    try:
++        with open(path, "r", encoding="utf-8") as handle:
++            payload = json.load(handle)
++    except OSError:
++        return merged
++    except ValueError:
++        return merged
++    if not isinstance(payload, dict):
++        return merged
++    for key, value in payload.items():
++        if key not in defaults:
++            continue
++        if value is None:
++            continue
++        merged[key] = value
++    normalised = {}
++    for key in sorted(merged):
++        normalised[str(key)] = merged[key]
++    return normalised
++
++
++def unique_helper(items):
++    """Not duplicated anywhere - the clean control."""
++    return sorted(set(items))

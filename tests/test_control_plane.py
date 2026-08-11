@@ -33,9 +33,10 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
     def test_inventory_expands_to_the_enrolled_repo_set(self) -> None:
         """Inventory should continue to expose the full enrolled repo set.
 
-        Was 18 until Prekzursil/codex-session-manager was retired: the repo is
-        archived on GitHub, so it could never merge a governance PR again, while
-        still costing a scan, a rendered ruleset and a row in every fleet count.
+        Went 18 -> 17 when Prekzursil/codex-session-manager was retired (archived on
+        GitHub, so it could never merge a governance PR again while still costing a
+        scan, a rendered ruleset and a row in every fleet count), then 17 -> 18 when
+        Prekzursil/llm-anthology was enrolled as an observe member.
 
         The bare count is kept so an accidental deletion is still caught, but it is
         paired with the inventory-to-profile invariant. A count alone cannot tell a
@@ -43,7 +44,7 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
         until the assertion means nothing.
         """
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
-        self.assertEqual(len(inventory["repos"]), 17)
+        self.assertEqual(len(inventory["repos"]), 18)
 
         # Every enrolled repo must have a profile, and every profile must be
         # enrolled. This is the failure a stale membership row actually produces.

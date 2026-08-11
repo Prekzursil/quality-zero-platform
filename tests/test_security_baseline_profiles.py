@@ -21,6 +21,34 @@ from scripts.quality.render_repo_baseline import (
 class SecurityBaselineProfileTests(unittest.TestCase):
     """Protect the managed CodeQL, Dependabot, SECURITY, and QLTY baseline contract."""
 
+    @staticmethod
+    def _enforces_codeql(contexts) -> bool:
+        """Is CodeQL a REQUIRED context, under either of GitHub's two setups?
+
+        There are two supported ways to run CodeQL, and they emit different check
+        names:
+
+          * ADVANCED setup -- a `codeql.yml` workflow in the repo -- emits
+            ``codeql / CodeQL``.
+          * DEFAULT setup -- GitHub-managed, configured in the Security tab -- emits
+            one ``analyze (<language>)`` per analysed language and NEVER emits the
+            workflow-style name.
+
+        This assertion previously accepted only the advanced spelling, which silently
+        wedges any repo migrated to default setup: the required context can never be
+        reported, so no PR can ever merge. That is not hypothetical -- Prekzursil/WebCoder
+        requires ``codeql / CodeQL`` while emitting only ``Analyze (...)``, and has been
+        unmergeable since its CodeQL moved to default setup.
+
+        This is a recognition fix, not a relaxation: a repo that requires NEITHER form
+        still fails. Match is case-insensitive because the ruleset context and the
+        emitted check-run name differ in capitalisation (``analyze`` vs ``Analyze``).
+        """
+        lowered = {str(c).lower() for c in contexts}
+        if "codeql / codeql" in lowered:
+            return True
+        return any(c.startswith("analyze (") for c in lowered)
+
     def test_all_governed_repos_declare_codeql_and_dependabot(self) -> None:
         """Every enrolled repo should expose the managed security-baseline metadata."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
@@ -30,15 +58,19 @@ class SecurityBaselineProfileTests(unittest.TestCase):
             self.assertTrue(profile["codeql"]["enabled"], entry["slug"])
             self.assertTrue(profile["codeql"]["languages"], entry["slug"])
             self.assertTrue(profile["dependabot"]["enabled"], entry["slug"])
-            self.assertIn(
-                "codeql / CodeQL",
-                active_required_contexts(profile, event_name="push"),
+            for event in ("push", "ruleset"):
+                contexts = active_required_contexts(profile, event_name=event)
+                self.assertTrue(
+                    self._enforces_codeql(contexts),
+                    f"{entry['slug']} ({event}): no CodeQL context is required under "
+                    f"either setup (advanced 'codeql / CodeQL' or default "
+                    f"'analyze (<lang>)'); got {sorted(contexts)}",
+                )
+            self.assertTrue(
+                self._enforces_codeql(profile["required_contexts"]["target"]),
+                f"{entry['slug']} (target): no CodeQL context is required under either "
+                f"setup; got {sorted(profile['required_contexts']['target'])}",
             )
-            self.assertIn(
-                "codeql / CodeQL",
-                active_required_contexts(profile, event_name="ruleset"),
-            )
-            self.assertIn("codeql / CodeQL", profile["required_contexts"]["target"])
 
     def test_render_dependabot_config_includes_github_actions_and_repo_updates(self) -> None:
         """Dependabot rendering should include repo ecosystems plus github-actions."""

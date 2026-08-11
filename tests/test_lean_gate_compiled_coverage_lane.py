@@ -8,8 +8,9 @@ Measured consequence: ``DevExtreme-Filter-Go-Language`` is 236,928 bytes of Go
 ``.pre-commit-config.yaml`` whose ``go-test-cover-100`` hook runs
 ``bash scripts/coverage-gate.sh`` -- and both coverage lanes early-``exit 0``
 printing "no test surface by design" while the step reports success.
-``Airline-Reservations-System`` is 190,349 bytes of C++ with ten ``*_test.cpp``
-files under ``tests/`` and had no lane at all.
+``Airline-Reservations-System`` is 166,743 bytes of C/C++ across 32 files
+(32.6% of its source bytes) with 11 ``*_test.cpp`` files under ``tests/``
+and had no lane at all.
 
 These tests do NOT assert on YAML text. They EXTRACT the lane's shell script from
 the workflow and EXECUTE it under bash across the whole truth table, because the
@@ -182,7 +183,7 @@ class LaneBehaviourTests(unittest.TestCase):
         self.assertIn("FAIL gate-tests-coverage", result.stdout + result.stderr)
 
     def test_cpp_tests_present_makes_the_skip_unreachable(self) -> None:
-        """Airline has ten *_test.cpp files and had no lane at all."""
+        """Airline has 11 *_test.cpp files and had no lane at all."""
         result = self._run(cpp="true", cpptests="true")
         self.assertNotIn(SKIP_PHRASE, result.stdout)
         self.assertNotEqual(result.returncode, 0)

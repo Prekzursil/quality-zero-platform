@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Dict
 from unittest.mock import patch
 
+from tests.workspace_isolation import isolated_cwd
+
 ENVIRON_KEY = "os.environ"
 
 # Known-safe bootstrap lines used to invoke a script as __main__.
@@ -61,13 +63,21 @@ def run_script_entrypoint_failure(script_relative_path: str) -> int:
 
 
 def assert_in_process_entrypoint_failure(test_case, script_relative_path: str) -> None:
-    """Run one script in-process as ``__main__`` and assert a failing exit code."""
+    """Run one script in-process as ``__main__`` and assert a failing exit code.
+
+    The script runs inside a throwaway cwd: these entrypoints resolve their
+    ``--out-json``/``--out-md`` defaults against ``Path.cwd()``, so running them
+    from the repository root writes real lane reports into the working tree.
+    ``run_script_entrypoint_failure`` already isolates its subprocess with
+    ``cwd=Path(tmp)``; this is the in-process equivalent.
+    """
     script_path = Path(script_relative_path).resolve()
     repo_root = str(script_path.parents[2])
     original_path = list(sys.path)
     try:
         sys.path[:] = [entry for entry in sys.path if entry != repo_root]
         with (
+            isolated_cwd(),
             patch.object(sys, "argv", [script_path.name]),
             patch.dict(ENVIRON_KEY, {}, clear=True),
             test_case.assertRaises(SystemExit) as exit_info,

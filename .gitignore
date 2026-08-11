@@ -22,6 +22,23 @@ venv/
 generated/tmp/
 .qlty/*
 !.qlty/qlty.toml
-qlty-zero/
-quality-zero-gate/
 .worktrees/
+
+# Strict-zero lane reports. Every writer defaults --out-json/--out-md to a
+# cwd-relative path, so running a lane CLI (or `bash scripts/verify`, whose
+# suite drives those CLIs) drops them into whatever directory you were in.
+# CI publishes the real ones as workflow artifacts and the readers -- rollup
+# `--artifacts-dir` and the coverage-gate baseline ZIP -- take them from there,
+# never from a committed copy. Keeping them out of git also stops a local run
+# from staging timestamp-only noise into an unrelated PR.
+# NOTE: quality-rollup/ is ignored as a whole. If a curated (non-generated) file
+# ever needs to live there -- e.g. quality-rollup/coverage-trend.json, which
+# publish-admin-dashboard.yml and scheduled-alerts.yml read but nothing in this
+# repo writes -- add an explicit "!quality-rollup/<file>" negation below.
+coverage-100/
+deepsource-visible-zero/
+deps-zero/
+qlty-zero/
+quality-rollup/
+quality-zero-gate/
+run.json

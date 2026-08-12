@@ -60,6 +60,7 @@ Beyond the original strict-zero gate flow, v2 adds:
 - **Bumps recipe pipeline** — fleet-wide bumps (Node 20→24, Python minor versions, etc.) flow through staged dispatch with rollback, see [`reusable-bumps.yml`](.github/workflows/reusable-bumps.yml).
 - **Admin dashboard** at `https://prekzursil.github.io/quality-zero-platform/` — repo heatmap, coverage trend, drift status, bypass audit feed.
 - **Alerts subsystem** — every operationally relevant condition (drift, secret-missing, fleet-bump-fail, etc.) dispatches a labelled GitHub issue via [`alerts.py`](scripts/quality/alerts.py); cron sweep in [`scheduled-alerts.yml`](.github/workflows/scheduled-alerts.yml).
+- **Standing dependency-CVE surface** — a dependency advisory is *time-varying*, so a PR-diff gate cannot fire for one published against unchanged code. [`scheduled-cve-scan.yml`](.github/workflows/scheduled-cve-scan.yml) sweeps the whole roster daily with the same pinned `osv-scanner` gate 6 uses and maintains one auto-updated `alert:cve-watch` issue per repo, split into **T0** (would block a PR today) and **T2** (inventory only). Observability, never a required check — see [`scheduled_cve_scan.py`](scripts/quality/scheduled_cve_scan.py) and the [runbook](docs/OPERATOR-RUNBOOK.md).
 
 ## Admin Dashboard
 

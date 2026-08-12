@@ -15,6 +15,7 @@ source = [
   "scripts.quality.osv_severity_gate",
   "scripts.quality.jsts_coverage_assert",
   "scripts.quality.complexity_gate",
+  "scripts.quality.duplication_gate",
 ]
 branch = true
 omit = [

@@ -69,11 +69,6 @@ _NAME_INDEX = 7
 _START_INDEX = 9
 _END_INDEX = 10
 
-_HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
-
-#: file -> the line ranges this change added or modified, 1-based and inclusive.
-AddedRanges = Dict[str, List[Tuple[int, int]]]
-
 
 class ThresholdError(ValueError):
     """The ``--max-ccn`` argument cannot be read as a usable bar."""
@@ -107,11 +102,36 @@ class Verdict:
     scoped: bool
 
 
+# jscpd:ignore-start
+# ─── SHARED NEW-CODE SCOPING ────────────────────────────────────────────────
+# This block is BYTE-IDENTICAL in complexity_gate.py and duplication_gate.py,
+# and tests/test_newcode_scope_parity.py fails if the two ever diverge.
+#
+# Why it is duplicated rather than imported: both modules are embedded verbatim
+# into .github/workflows/reusable-quality.yml and run as standalone scripts in a
+# CALLER's checkout, which has no `scripts/` tree. Neither can import the other,
+# and neither can import a third shared module. Duplication is only safe when
+# drift is impossible - the same argument test_lean_gate_embedded_helpers.py
+# already makes for the embedded workflow copies.
+#
+# The jscpd markers suppress gate 8 on this one block. They are INLINE and
+# therefore visible in review, deliberately not a .jscpd.json exclusion: a
+# config-file suppression is invisible in a diff, and a suppressed finding has
+# to stay countable (see the qlty `[[triage]]` trap - suppress-at-generation
+# makes a dirty dashboard pixel-identical to a clean one).
+
+#: file -> the line ranges this change added or modified, 1-based and inclusive.
+AddedRanges = Dict[str, List[Tuple[int, int]]]
+
+_HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
+
+
 def normalize_path(raw: str, root: Optional[str] = None) -> str:
     """Collapse any recorded path convention to one repo-relative POSIX form.
 
-    lizard records ``.\\src\\x.py`` on Windows and ``./src/x.py`` on Linux, and
-    can emit absolute paths depending on how it is invoked. The diff always
+    The reporting tools disagree with each other and with git. lizard records
+    ``.\\src\\x.py`` on Windows and ``./src/x.py`` on Linux; jscpd records
+    ``src\\x.py``, or an absolute path under ``--absolute``. The diff always
     speaks repo-relative POSIX, so every path must be reduced to that or the
     per-file lookup silently misses and the gate fails OPEN.
     """
@@ -123,40 +143,6 @@ def normalize_path(raw: str, root: Optional[str] = None) -> str:
     while text.startswith("./"):
         text = text[2:]
     return text
-
-
-def parse_lizard_csv(text: str, root: Optional[str] = None) -> LizardReport:
-    """Parse ``lizard --csv`` output.
-
-    Unreadable rows are COUNTED rather than dropped: a partially-parsed report
-    that reads as clean is the exact shape of a silent pass, so the count is
-    surfaced in the rendered output.
-    """
-    functions: List[FunctionMetric] = []
-    skipped = 0
-    for row in csv.reader(text.splitlines()):
-        if not row:
-            continue
-        if len(row) < LIZARD_COLUMNS:
-            skipped += 1
-            continue
-        try:
-            ccn = int(row[_CCN_INDEX])
-            start = int(row[_START_INDEX])
-            end = int(row[_END_INDEX])
-        except ValueError:
-            skipped += 1
-            continue
-        functions.append(
-            FunctionMetric(
-                path=normalize_path(row[_FILE_INDEX], root),
-                name=row[_NAME_INDEX],
-                ccn=ccn,
-                start=start,
-                end=end,
-            )
-        )
-    return LizardReport(functions=functions, skipped_rows=skipped)
 
 
 def _header_target(line: str) -> Optional[str]:
@@ -206,9 +192,73 @@ def parse_added_ranges(diff_text: str) -> AddedRanges:
     return ranges
 
 
-def touches(function: FunctionMetric, added_ranges: AddedRanges) -> bool:
-    """Return whether the change added or modified a line inside this function."""
-    return any(function.start <= high and low <= function.end for low, high in added_ranges.get(function.path, ()))
+def spans_overlap(path: str, start: int, end: int, added_ranges: AddedRanges) -> bool:
+    """Return whether the change added or modified a line inside ``[start, end]``.
+
+    This is what makes the scope LINE-level rather than file-level. Touching one
+    line of a legacy module must not summon every pre-existing finding in it.
+    """
+    return any(start <= high and low <= end for low, high in added_ranges.get(path, ()))
+
+
+class ScopeInputError(ValueError):
+    """The unified diff that defines new code cannot be read."""
+
+
+def load_added_ranges(diff_path: Optional[str]) -> AddedRanges:
+    """Read the added ranges of ``diff_path``, or an empty scope when none was given.
+
+    No diff means no base to diff against (a push to the default branch, a merge
+    group), which is a legitimate unscoped run. But a caller that PROMISED a diff
+    and cannot supply a readable one is an ERROR, never "no scope": silently
+    degrading to unscoped would turn a broken invocation into a permanent pass.
+    """
+    if diff_path is None:
+        return {}
+    try:
+        return parse_added_ranges(Path(diff_path).read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise ScopeInputError(
+            f"cannot read the diff {diff_path!r} ({exc}). The caller promised a new-code scope, "
+            "so an unreadable diff is an error, not 'no scope'."
+        ) from None
+
+
+# jscpd:ignore-end
+
+
+def parse_lizard_csv(text: str, root: Optional[str] = None) -> LizardReport:
+    """Parse ``lizard --csv`` output.
+
+    Unreadable rows are COUNTED rather than dropped: a partially-parsed report
+    that reads as clean is the exact shape of a silent pass, so the count is
+    surfaced in the rendered output.
+    """
+    functions: List[FunctionMetric] = []
+    skipped = 0
+    for row in csv.reader(text.splitlines()):
+        if not row:
+            continue
+        if len(row) < LIZARD_COLUMNS:
+            skipped += 1
+            continue
+        try:
+            ccn = int(row[_CCN_INDEX])
+            start = int(row[_START_INDEX])
+            end = int(row[_END_INDEX])
+        except ValueError:
+            skipped += 1
+            continue
+        functions.append(
+            FunctionMetric(
+                path=normalize_path(row[_FILE_INDEX], root),
+                name=row[_NAME_INDEX],
+                ccn=ccn,
+                start=start,
+                end=end,
+            )
+        )
+    return LizardReport(functions=functions, skipped_rows=skipped)
 
 
 def classify(
@@ -223,7 +273,7 @@ def classify(
     for function in functions:
         if function.ccn <= max_ccn:
             continue
-        if scoped and touches(function, added_ranges):
+        if scoped and spans_overlap(function.path, function.start, function.end, added_ranges):
             blocking.append(function)
         else:
             inventory.append(function)
@@ -311,19 +361,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             file=sys.stderr,
         )
         return EXIT_CONFIG_ERROR
-    added_ranges: AddedRanges = {}
-    scoped = args.diff is not None
-    if scoped:
-        try:
-            diff_text = Path(args.diff).read_text(encoding="utf-8")
-        except OSError as exc:
-            print(
-                f"ERROR gate-complexity: cannot read the diff {args.diff!r} ({exc}). "
-                "The caller promised a new-code scope, so an unreadable diff is an error, not 'no scope'.",
-                file=sys.stderr,
-            )
-            return EXIT_CONFIG_ERROR
-        added_ranges = parse_added_ranges(diff_text)
+    try:
+        added_ranges = load_added_ranges(args.diff)
+    except ScopeInputError as exc:
+        print(f"ERROR gate-complexity: {exc}", file=sys.stderr)
+        return EXIT_CONFIG_ERROR
     report = parse_lizard_csv(csv_text, args.root)
     verdict = classify(report.functions, added_ranges, max_ccn, scoped)
     print(render_report(report, verdict, max_ccn))

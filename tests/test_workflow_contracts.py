@@ -557,3 +557,212 @@ class WorkflowContractTests(unittest.TestCase):
             text,
             "Workflow must emit an actionable error when DEEPSOURCE_DSN is missing",
         )
+
+
+class Gate4SastScanSetTests(unittest.TestCase):
+    """Gate 4 must scan a DELIBERATE file set, not one inherited from a vendor default.
+
+    Measured 2026-08-11 on the pinned CI engine (opengrep v1.22.0 CLI, Linux --
+    the exact build ``reusable-quality.yml`` installs) with a controlled
+    detector, one variable changed at a time:
+
+    * A byte-identical vulnerable Go file FIRES under ``src/`` and is INVISIBLE
+      under ``tests/``. ``paths.scanned`` listed 3 of 4 files and
+      ``paths.skipped`` reported ``none`` -- nothing in the output says the test
+      tree was dropped.
+    * Pointing the scanner *directly* at ``tests/`` returns
+      ``paths.scanned: []``, so an explicit path argument does NOT override it.
+    * The engine drops the built-in ignore template as soon as ANY
+      ``.semgrepignore`` exists in the scanned root -- with one present, the
+      same run scanned 4 files and reported 2 findings instead of 1.
+    * The dropped set, enumerated with one identical vulnerable file per
+      candidate path: ``*_test.go`` AT ANY DEPTH, plus the ``test/`` and
+      ``tests/`` directories. Python/TS test FILENAMES (``test_app.py``,
+      ``app_test.py``, ``conftest.py``, ``app.test.ts``, ``app.spec.ts``,
+      ``__tests__/``) are NOT excluded -- only the two directories are. So a Go
+      repo following the language's own convention loses its ENTIRE suite
+      regardless of layout, which is what happened to
+      DevExtreme-Filter-Go-Language.
+
+    Blast radius of shipping the file, measured against real clones with each
+    caller's own ``opengrep-paths``: +49 newly-visible files in
+    DevExtreme-Filter-Go-Language (its whole ``_test.go`` suite), +176 here,
+    and ZERO new findings in 10 of 11 repos.
+    """
+
+    IGNORE_TEMPLATE = ROOT / "docs" / "lean-gate" / "semgrepignore.template"
+    ROOT_IGNORE = ROOT / ".semgrepignore"
+
+    def _ignore_entries(self, path: Path) -> list:
+        """Return the non-comment, non-blank lines of a semgrepignore file."""
+        lines = path.read_text(encoding="utf-8").splitlines()
+        return [s for s in (raw.strip() for raw in lines) if s and not s.startswith("#")]
+
+    def test_lean_gate_ships_a_semgrepignore_template(self) -> None:
+        """Callers need a copyable template, like biome/pre-commit already have."""
+        self.assertTrue(
+            self.IGNORE_TEMPLATE.is_file(),
+            "docs/lean-gate/semgrepignore.template must exist so a caller can adopt an"
+            " explicit gate-4 scan set instead of inheriting the engine default",
+        )
+
+    def test_platform_itself_ships_an_explicit_semgrepignore(self) -> None:
+        """The control plane must not inherit the very default it warns callers about."""
+        self.assertTrue(self.ROOT_IGNORE.is_file(), ".semgrepignore must exist at the repo root")
+
+    def test_scan_set_does_not_exclude_first_party_test_code(self) -> None:
+        """Excluding tests/ is the defect being fixed; re-adding it would restore it."""
+        for path in (self.IGNORE_TEMPLATE, self.ROOT_IGNORE):
+            for entry in self._ignore_entries(path):
+                stripped = entry.rstrip("/").lstrip("*/")
+                self.assertNotIn(
+                    stripped,
+                    {"test", "tests", "spec", "specs", "__tests__"},
+                    f"{path.name}: '{entry}' re-excludes first-party test code, which is exactly the"
+                    " silent hole this file exists to close",
+                )
+
+    def test_vendor_exclusions_are_root_anchored(self) -> None:
+        """``**/vendor/`` alone does NOT match a root-level vendor/ on opengrep v1.22.0.
+
+        Measured with a positive control (3 vulnerable files: ``src/a.go``,
+        ``vendor/pkg/b.go``, ``app/vendor/pkg/c.go``):
+
+        =====================  ==============================================
+        semgrepignore entry    rule fired on
+        =====================  ==============================================
+        (none)                 all three
+        ``**/vendor/``         ``src/a.go`` AND ``vendor/pkg/b.go``  <-- leak
+        ``vendor/``            ``src/a.go`` only
+        =====================  ==============================================
+
+        So a bare ``**/`` prefix silently fails open for the root-level tree,
+        with no warning on stderr. Any vendor exclusion must carry the
+        root-anchored form too.
+        """
+        for path in (self.IGNORE_TEMPLATE, self.ROOT_IGNORE):
+            entries = self._ignore_entries(path)
+            for entry in entries:
+                if entry.startswith("**/") and entry.rstrip("/").endswith("vendor"):
+                    root_anchored = entry[len("**/") :]
+                    self.assertIn(
+                        root_anchored,
+                        entries,
+                        f"{path.name}: '{entry}' does not match a ROOT-level '{root_anchored}' on opengrep v1.22.0;"
+                        " add the root-anchored form alongside it",
+                    )
+
+    def test_gate4_surfaces_an_inherited_scan_set_instead_of_staying_silent(self) -> None:
+        """A caller with no .semgrepignore must be TOLD, not silently under-scanned."""
+        text = (ROOT / ".github" / "workflows" / "reusable-quality.yml").read_text(encoding="utf-8")
+        start = text.find("- name: gate-sast opengrep")
+        self.assertNotEqual(start, -1, "gate-sast opengrep step is missing")
+        block = text[start : text.find("- name:", start + 1)]
+        self.assertIn(
+            ".semgrepignore",
+            block,
+            "gate-4 must reference .semgrepignore so an inherited scan set is visible",
+        )
+        # ``::warning title=...::`` is the annotated form; match the prefix so
+        # either shape counts, but require it to be a WARNING and not an error.
+        self.assertIn(
+            "::warning",
+            block,
+            "gate-4 must WARN when the caller ships no explicit scan set",
+        )
+        self.assertNotIn(
+            "::error",
+            block,
+            "gate-4 must NOT block on a missing .semgrepignore: the charter is"
+            " additive-only and every one of today's 10 affected callers would go"
+            " red at once. Warn, ship the template, then require it later.",
+        )
+        self.assertNotIn(
+            "exit 1",
+            block,
+            "gate-4 must not hard-fail on a missing .semgrepignore",
+        )
+        # USE-vs-MENTION: the step body deliberately DOCUMENTS why this flag must
+        # not be used, so a plain substring check over the whole block flags its
+        # own explanation. Discriminate by stripping shell comments first and
+        # asserting only against what actually executes.
+        executed = "\n".join(line for line in block.splitlines() if not line.lstrip().startswith("#"))
+        self.assertNotIn(
+            "--semgrepignore-filename",
+            executed,
+            "opengrep v1.22.0 DOCUMENTS --semgrepignore-filename in `scan --help` (line 405)"
+            " but its parser REJECTS it (exit 2, 'No such option'), verified against a"
+            " known-fake flag as a control; passing it would break gate-4 on every caller",
+        )
+        self.assertNotIn(
+            "--x-ignore-semgrepignore-files",
+            executed,
+            "--x-ignore-semgrepignore-files does restore the test tree, but it discards ANY"
+            " .semgrepignore the caller wrote, silently undoing their deliberate exclusions"
+            " (agent-skills-toolchain's reasoned file is the live counter-example)",
+        )
+        # Guard the discriminator itself: the mention MUST still be present in
+        # the comments, or this test would pass vacuously on a block that simply
+        # dropped the explanation.
+        self.assertIn("--semgrepignore-filename", block, "the rationale comment must stay")
+
+
+class CuratedRulesetDataflowTests(unittest.TestCase):
+    """The syntax-only limitation of the curated rules must stay DOCUMENTED.
+
+    Measured on the pinned engine with DevExtreme's real 4-rule
+    ``go-security.yml``: ``db.Query(fmt.Sprintf(...))`` fires
+    ``go-sql-string-concat``, while the identical vulnerability written as two
+    statements -- ``q := fmt.Sprintf(...)`` then ``db.Query(q)``, arguably the
+    more idiomatic Go -- escapes all four rules. The file WAS scanned
+    (``paths.scanned`` contains it), so this is a rule-precision gap, not a
+    targeting artifact, which makes a clean zero much weaker evidence than it
+    looks.
+
+    This class deliberately does NOT assert that a ``mode: taint`` rule exists
+    in the Python/JS rulesets. An earlier revision did, and the rule that
+    satisfied it -- source "any f-string / %-format / .format()", sink
+    "cursor.execute" -- passed a 6-bad/5-good corpus and scored 0 findings HERE
+    (this repo has no database code) while producing 58 FALSE POSITIVES on the
+    two repos that do: 32 SQLAlchemy ORM binds in momentstudio and 26
+    constant-identifier interpolations in Reframe. Both of those repos gate on
+    ``quality / quality`` as a REQUIRED check, so the assertion would have
+    driven a fleet change that reddens two gates on non-defects.
+
+    The lesson is the one that generalises: a green corpus plus a green
+    control-plane repo is NOT evidence a rule is safe to ship to callers whose
+    code shapes the corpus never contained. The registry entry carries the
+    settling experiment (re-scan momentstudio ``backend/`` and Reframe
+    ``sidecar/`` and require 0 findings BEFORE proposing the rule again).
+    """
+
+    RULESET_DIR = ROOT / ".quality" / "opengrep"
+    REGISTRY_ENTRY = ROOT / "known-issues" / "QZ-SAST-001.yml"
+
+    def test_syntax_only_limitation_is_recorded_in_the_known_issues_registry(self) -> None:
+        """The gap must be findable, so nobody cites a syntax-only zero as proof."""
+        self.assertTrue(
+            self.REGISTRY_ENTRY.is_file(),
+            "known-issues/QZ-SAST-001.yml must record that the curated rules match syntax"
+            " only, so a clean gate-4 is not mistaken for absence of injection",
+        )
+        text = self.REGISTRY_ENTRY.read_text(encoding="utf-8")
+        for expected in ("mode: taint", "false positive", "momentstudio", "Reframe"):
+            self.assertIn(expected, text, "QZ-SAST-001 must keep the measured evidence")
+
+    def test_python_and_js_rulesets_stay_free_of_the_overbroad_taint_rule(self) -> None:
+        """Guard the retreat: re-adding the naive rule reddens two required gates."""
+        for name in ("python-security.yaml", "javascript-security.yaml"):
+            text = (self.RULESET_DIR / name).read_text(encoding="utf-8")
+            if "mode: taint" not in text:
+                continue
+            # A taint rule here is allowed ONLY once its source is scoped to real
+            # request input rather than any string formatting.
+            self.assertNotIn(
+                'pattern: f"...{$X}..."',
+                text,
+                f"{name}: an 'any f-string' taint source measured 58 false positives across"
+                " momentstudio (SQLAlchemy ORM binds) and Reframe (constant identifier"
+                " interpolation). Scope the source to request input and re-prove against"
+                " those two trees first -- see known-issues/QZ-SAST-001.yml.",
+            )

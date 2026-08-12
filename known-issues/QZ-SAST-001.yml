@@ -1,0 +1,117 @@
+id: QZ-SAST-001
+title: Gate-4 curated rules match SQL-injection SYNTAX only; the naive taint fix false-positives on Python
+description: >-
+  TWO SEPARATE FACTS. The defect is real; the obvious fix is not safe yet, and
+  both halves were measured on the PINNED CI engine (opengrep v1.22.0 CLI on
+  Linux, the exact build reusable-quality.yml installs).
+
+  (1) THE DEFECT. Every curated rule in .quality/opengrep matches SYNTAX, so the
+  same vulnerability split across two statements escapes it. With DevExtreme's
+  real 4-rule go-security.yml:
+
+      src/inline.go   db.Query(fmt.Sprintf(...))            FIRES
+      src/viavar.go   q := fmt.Sprintf(...); db.Query(q)    SILENT
+
+  The second file WAS scanned (paths.scanned contains it), so this is a
+  rule-precision gap and not a targeting artifact -- and the two-statement form
+  is arguably the MORE idiomatic Go. Consequence: a clean zero from a
+  syntax-only ruleset is much weaker evidence than it looks. Do not cite gate-4
+  green as evidence that no injection of this shape exists.
+
+  (2) WHY THE NAIVE FIX IS NOT SHIPPED FOR PYTHON/JS. A `mode: taint` rule with
+  source "any f-string / %-format / .format()" and sink "cursor.execute" passes
+  a 6-bad/5-good corpus and produces 0 findings on this repo -- and then
+  produces 58 FALSE POSITIVES on the two repos that actually have database
+  code. Two distinct FP classes, both confirmed by reading the code:
+
+    * SQLAlchemy ORM constructs (momentstudio, 32 findings). Every one is
+      `Column.ilike(f"%{q}%")` or similar reaching `session.execute()`. The
+      f-string is a LIKE PATTERN VALUE that SQLAlchemy binds as a parameter, and
+      `session.execute()` takes an Executable, not SQL text. Not injection.
+    * Constant identifier interpolation (Reframe, 26 findings). Raw sqlite3
+      f-strings interpolating MODULE-LEVEL CONSTANTS -- `_MANAGED_TABLE`,
+      `_ENTITY_COLUMNS`, `SCHEMA_USER_VERSION`. SQL cannot bind an identifier,
+      so this is the only way to parameterize a table or column name; the VALUES
+      are still bound with `?`. One site already carries
+      `# noqa: S608 - fixed table name`, i.e. ruff flagged the class and the
+      author already triaged it. Not injection.
+
+  Both repos' `quality / quality` is a REQUIRED check, so shipping that rule
+  would have turned two required gates red on 58 non-defects -- a gate the owner
+  cannot drive to green, which the lean-gate charter forbids.
+
+  The Go rule shipped, and on the evidence available it is clean -- but the
+  claim is deliberately narrower than "it does not share the problem", which is
+  what an earlier draft of this record said. What was measured: its semantics
+  match the existing inline rule exactly (any non-constant fmt.Sprint* reaching a
+  database/sql sink), and it returned 0 findings on the real DevExtreme tree,
+  confirmed independently by GitHub's own runner reporting "Ran 5 rules on 109
+  files: 0 findings". It shipped in DevExtreme-Filter-Go-Language#42.
+
+  What was NOT measured, and why it matters here specifically: DevExtreme is the
+  only Go repo in the fleet, so that is a zero from ONE tree. This record rejects
+  the Python/JS rules partly BECAUSE their zero on quality-zero-platform was
+  uninformative -- QZP has no database code, so nothing was exercised. The same
+  reasoning applies to a single Go tree: a zero is evidence that this rule does not
+  fire on THIS codebase's idioms, not evidence that it is false-positive-free. The
+  Python/JS rules also passed a purpose-built 6-bad/5-good corpus before producing
+  58 false positives on real code, so a passing corpus is not the reassurance it
+  looks like either.
+
+  The distinction that does hold: the Go rule was measured against a tree that
+  genuinely contains database/sql calls, whereas the Python/JS zero came from a tree
+  with no database code at all. That is a real difference in evidence quality, and it
+  is the reason one shipped and the others were withdrawn -- not a claim of immunity.
+
+  TO CLOSE THIS: the Python/JS source must be scoped to actual REQUEST input
+  (FastAPI/Flask/Starlette parameters, request bodies, query params) rather than
+  "any string formatting", and/or the ORM builders must be declared sanitizers.
+  That needs a per-framework source list, which is a design task rather than a
+  one-line rule. The settling experiment is fixed and cheap: re-run the
+  candidate rule against momentstudio backend/ and Reframe sidecar/ and require
+  0 findings BEFORE proposing it, since both trees are known to contain the two
+  FP idioms.
+
+affects:
+  - opengrep
+
+feeds_qrv2: true
+
+fix_snippet: |
+  # Go (SHIPPED, proved clean): add a dataflow companion beside the syntactic rule.
+  #   .quality/opengrep/go-security.yml
+  - id: go-sql-format-taint
+    languages: [go]
+    severity: WARNING
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: fmt.Sprintf(...)
+              - pattern: fmt.Sprint(...)
+              - pattern: fmt.Sprintln(...)
+          - pattern-not: fmt.Sprintf("...")
+          - pattern-not: fmt.Sprint("...")
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $DB.Query($Q, ...)
+              - pattern: $DB.QueryContext($CTX, $Q, ...)
+              - pattern: $DB.Exec($Q, ...)
+              - pattern: $DB.ExecContext($CTX, $Q, ...)
+          - focus-metavariable: $Q
+  #
+  # Python/JS: DO NOT copy the shape above. Scope the source to request input
+  # first, then prove 0 findings against momentstudio backend/ and Reframe
+  # sidecar/ -- an "any f-string" source measured 58 false positives there.
+
+verified_at: "2026-08-11"
+verified_by: >-
+  Measured on opengrep v1.22.0 (pinned CI engine) with a controlled detector:
+  6-bad/5-good both-states corpus; real-tree scans of DevExtreme (109 files,
+  0 findings, corroborated by the live CI log), momentstudio backend+frontend
+  (32 findings, all read and classified false positive) and Reframe app+sidecar
+  (26 findings, all read and classified false positive).
+
+references:
+  - https://github.com/Prekzursil/DevExtreme-Filter-Go-Language/pull/42

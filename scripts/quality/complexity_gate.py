@@ -367,6 +367,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(f"ERROR gate-complexity: {exc}", file=sys.stderr)
         return EXIT_CONFIG_ERROR
     report = parse_lizard_csv(csv_text, args.root)
+    # Whether this run is scoped to new code at all. A missing --diff is a legitimate
+    # unscoped run (a push to the default branch, a merge group): there is no base to
+    # diff against, so the gate emits the T2 inventory and blocks nothing. It is NOT the
+    # same as a supplied-but-empty diff, which is scoped and simply added no lines --
+    # load_added_ranges already raises rather than degrading a broken --diff to "no
+    # scope", because that would turn a misinvocation into a permanent pass.
+    scoped = args.diff is not None
     verdict = classify(report.functions, added_ranges, max_ccn, scoped)
     print(render_report(report, verdict, max_ccn))
     if verdict.blocking:

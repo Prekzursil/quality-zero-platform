@@ -194,6 +194,29 @@ def spans_overlap(path: str, start: int, end: int, added_ranges: AddedRanges) ->
     return any(start <= high and low <= end for low, high in added_ranges.get(path, ()))
 
 
+class ScopeInputError(ValueError):
+    """The unified diff that defines new code cannot be read."""
+
+
+def load_added_ranges(diff_path: Optional[str]) -> AddedRanges:
+    """Read the added ranges of ``diff_path``, or an empty scope when none was given.
+
+    No diff means no base to diff against (a push to the default branch, a merge
+    group), which is a legitimate unscoped run. But a caller that PROMISED a diff
+    and cannot supply a readable one is an ERROR, never "no scope": silently
+    degrading to unscoped would turn a broken invocation into a permanent pass.
+    """
+    if diff_path is None:
+        return {}
+    try:
+        return parse_added_ranges(Path(diff_path).read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise ScopeInputError(
+            f"cannot read the diff {diff_path!r} ({exc}). The caller promised a new-code scope, "
+            "so an unreadable diff is an error, not 'no scope'."
+        ) from None
+
+
 # jscpd:ignore-end
 
 
@@ -372,19 +395,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             file=sys.stderr,
         )
         return EXIT_CONFIG_ERROR
-    added_ranges: AddedRanges = {}
+    # Use the SHARED load_added_ranges rather than reading the diff here. This block
+    # previously hand-rolled the same logic -- same semantics, same error text -- which
+    # is precisely the drift test_newcode_scope_parity.py exists to prevent, except it
+    # sat just below the jscpd:ignore marker and so was invisible to that guard. Two
+    # gates that reimplement "what counts as new code" can diverge silently; one shared
+    # function cannot.
     scoped = args.diff is not None
-    if scoped:
-        try:
-            diff_text = Path(args.diff).read_text(encoding="utf-8")
-        except OSError as exc:
-            print(
-                f"ERROR gate-duplication: cannot read the diff {args.diff!r} ({exc}). "
-                "The caller promised a new-code scope, so an unreadable diff is an error, not 'no scope'.",
-                file=sys.stderr,
-            )
-            return EXIT_CONFIG_ERROR
-        added_ranges = parse_added_ranges(diff_text)
+    try:
+        added_ranges: AddedRanges = load_added_ranges(args.diff)
+    except ScopeInputError as exc:
+        print(f"ERROR gate-duplication: {exc}", file=sys.stderr)
+        return EXIT_CONFIG_ERROR
     try:
         report = parse_jscpd_json(report_text, args.root)
     except ReportError as exc:

@@ -79,7 +79,7 @@ repos:
     profile: tracelines
     rollout: observe
     default_branch: main
-    notes: Lean member (public repo). Ruleset models the repo's own ci.yml checks (mypy + 6-leg test matrix) plus the platform CodeQL baseline context; matrix-derived context names are brittle across Python-version changes; coverage measured but informational; CodeQL runs today via GitHub default setup, which does not emit the managed workflow context.
+    notes: 'Lean member (public repo). Ruleset models the repo''s own ci.yml checks (mypy + 6-leg test matrix, both emitted on push AND pull_request) plus the CodeQL baseline. PHANTOM CONTEXT REMOVED 2026-08-11: the profile required `codeql / CodeQL`, the ADVANCED-setup spelling, but this repo has no codeql.yml and runs CodeQL via GitHub DEFAULT setup, which never emits that name (main@99257f05 emits Analyze (actions|javascript-typescript|python) and zero `codeql / CodeQL`) - it now requires the aggregate `CodeQL` context instead, the spelling DevExtreme and env-inspector already deploy and the only one reliably present on a pull_request event (16/16 WebCoder PR heads vs 1/16 for Analyze (<lang>)). build/deploy/publish-*/canary are deliberately NOT required: they come from pages.yml, release.yml and nightly-canary.yml and never fire on a PR. codeql.languages gained javascript-typescript to match what default setup actually scans. Matrix-derived `test <py> / <os>` names stay brittle across Python-version/OS changes - re-measure after any ci.yml matrix edit. Coverage measured but informational. No branch protection and no ruleset on main today (observe): GET /branches/main/protection -> 404, GET /rulesets -> [].'
   - slug: Prekzursil/llm-anthology
     profile: llm-anthology
     rollout: observe

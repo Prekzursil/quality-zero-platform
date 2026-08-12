@@ -17,6 +17,36 @@ from scripts.quality.render_repo_baseline import (
     render_security_policy,
 )
 
+#: Governed repos MEASURED to run CodeQL via GitHub **default setup** rather than a
+#: managed ``codeql.yml`` wrapper, and therefore physically unable to report the
+#: advanced-setup ``codeql / CodeQL`` context. Membership is a measurement, not a
+#: preference: probe ``GET /repos/{slug}/actions/workflows`` for
+#: ``.github/workflows/codeql.yml`` (absent, or ``disabled_manually``) together with
+#: ``dynamic/github-code-scanning/codeql`` (``active``), then corroborate against the
+#: check-run names actually emitted on ``main``.
+#:
+#: Measured 2026-08-11 across all 18 inventory members. SIX are on default setup:
+#:
+#:   * ``Prekzursil/tracelines``            -- codeql.yml ABSENT            (registered)
+#:   * ``Prekzursil/WebCoder``              -- codeql.yml disabled_manually (PENDING)
+#:   * ``Prekzursil/Reframe``               -- codeql.yml ABSENT            (PENDING)
+#:   * ``Prekzursil/env-inspector``         -- codeql.yml disabled_manually (PENDING)
+#:   * ``Prekzursil/PrimariRo``             -- codeql.yml ABSENT            (PENDING)
+#:   * ``Prekzursil/agent-skills-toolchain``-- codeql.yml ABSENT            (PENDING)
+#:
+#: The five PENDING entries are deliberately NOT registered yet. WebCoder,
+#: env-inspector and Reframe inherit ``codeql / CodeQL`` from the shared
+#: ``profiles/stacks/quality-zero-phase1-common.yml`` stack, so de-listing it is a
+#: cohort-wide change that the ADDITIVE-ONLY lean-gate charter defers to a
+#: coordinated fleet runbook. Add a slug here in the same commit that fixes its
+#: profile -- the gate then makes the phantom impossible to reintroduce.
+CODEQL_DEFAULT_SETUP_REPOS = frozenset({"Prekzursil/tracelines"})
+
+#: The ADVANCED-setup spelling, lowercased for comparison. GitHub default setup
+#: never emits it, so requiring it in a default-setup repo is an unreportable
+#: context that strands the branch permanently red.
+ADVANCED_ONLY_CODEQL_CONTEXT = "codeql / codeql"
+
 
 class SecurityBaselineProfileTests(unittest.TestCase):
     """Protect the managed CodeQL, Dependabot, SECURITY, and QLTY baseline contract."""
@@ -31,21 +61,33 @@ class SecurityBaselineProfileTests(unittest.TestCase):
           * ADVANCED setup -- a `codeql.yml` workflow in the repo -- emits
             ``codeql / CodeQL``.
           * DEFAULT setup -- GitHub-managed, configured in the Security tab -- emits
-            one ``analyze (<language>)`` per analysed language and NEVER emits the
-            workflow-style name.
+            an aggregate ``CodeQL`` check from the GitHub Advanced Security app
+            (app 57789) plus, on some events only, one ``analyze (<language>)`` per
+            analysed language. It NEVER emits the workflow-style name.
 
         This assertion previously accepted only the advanced spelling, which silently
         wedges any repo migrated to default setup: the required context can never be
         reported, so no PR can ever merge. That is not hypothetical -- Prekzursil/WebCoder
-        requires ``codeql / CodeQL`` while emitting only ``Analyze (...)``, and has been
-        unmergeable since its CodeQL moved to default setup.
+        required ``codeql / CodeQL`` while emitting only ``CodeQL`` / ``Analyze (...)``,
+        and was unmergeable from the day its CodeQL moved to default setup until the
+        classic protection was corrected on 2026-08-11.
 
-        This is a recognition fix, not a relaxation: a repo that requires NEITHER form
-        still fails. Match is case-insensitive because the ruleset context and the
+        The bare aggregate ``CodeQL`` is accepted because it is the spelling the fleet
+        actually deploys for default-setup repos -- measured 2026-08-11,
+        DevExtreme-Filter-Go-Language's classic protection requires ``CodeQL``@57789 and
+        env-inspector's active ruleset requires ``CodeQL`` with no app pin. It is also
+        the only default-setup spelling that is reliably present on a pull_request
+        event: across WebCoder's 16 open PR heads, ``CodeQL`` appeared 16/16 while
+        ``Analyze (<lang>)`` appeared 1/16.
+
+        This is a recognition fix, not a relaxation: a repo that requires NONE of the
+        three forms still fails, and :func:`test_default_setup_repos_never_require_the_advanced_codeql_context`
+        additionally forbids the advanced spelling wherever it is known to be
+        unreportable. Match is case-insensitive because the ruleset context and the
         emitted check-run name differ in capitalisation (``analyze`` vs ``Analyze``).
         """
         lowered = {str(c).lower() for c in contexts}
-        if "codeql / codeql" in lowered:
+        if ADVANCED_ONLY_CODEQL_CONTEXT in lowered or "codeql" in lowered:
             return True
         return any(c.startswith("analyze (") for c in lowered)
 
@@ -71,6 +113,48 @@ class SecurityBaselineProfileTests(unittest.TestCase):
                 f"{entry['slug']} (target): no CodeQL context is required under either "
                 f"setup; got {sorted(profile['required_contexts']['target'])}",
             )
+
+    def test_default_setup_repos_never_require_the_advanced_codeql_context(self) -> None:
+        """A default-setup repo must not require a context its CodeQL cannot emit.
+
+        ``test_all_governed_repos_declare_codeql_and_dependabot`` only asks whether
+        *some* CodeQL context is required. It accepts ``codeql / CodeQL`` from any
+        repo, including repos whose ``codeql.yml`` is absent or disabled -- which is
+        exactly how a phantom context survives review. Measured 2026-08-11 on
+        Prekzursil/WebCoder: ``codeql / CodeQL`` appeared on **0 of 16** open PR heads
+        while ``CodeQL`` appeared on **16 of 16**, and the unreportable context alone
+        held every one of those PRs at ``mergeStateStatus: BLOCKED`` -- including the
+        PR that clears the repo's critical websocket-driver advisory.
+
+        So for every repo in :data:`CODEQL_DEFAULT_SETUP_REPOS` this asserts both
+        halves: the advanced-only spelling is absent, AND a default-setup spelling is
+        present, so the check is a substitution rather than a deletion.
+        """
+        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
+        registered = {entry["slug"] for entry in inventory["repos"]}
+        self.assertLessEqual(
+            CODEQL_DEFAULT_SETUP_REPOS,
+            registered,
+            "CODEQL_DEFAULT_SETUP_REPOS names a slug that is not in the inventory",
+        )
+
+        for slug in sorted(CODEQL_DEFAULT_SETUP_REPOS):
+            profile = load_repo_profile(inventory, slug)
+            for event in ("push", "ruleset"):
+                contexts = active_required_contexts(profile, event_name=event)
+                lowered = {str(context).lower() for context in contexts}
+                self.assertNotIn(
+                    ADVANCED_ONLY_CODEQL_CONTEXT,
+                    lowered,
+                    f"{slug} ({event}) runs CodeQL via GitHub default setup, which never "
+                    f"emits 'codeql / CodeQL'; requiring it strands main permanently red. "
+                    f"Require the aggregate 'CodeQL' context instead; got {sorted(contexts)}",
+                )
+                self.assertTrue(
+                    self._enforces_codeql(contexts),
+                    f"{slug} ({event}): the advanced context was removed without putting a "
+                    f"default-setup CodeQL context in its place; got {sorted(contexts)}",
+                )
 
     def test_render_dependabot_config_includes_github_actions_and_repo_updates(self) -> None:
         """Dependabot rendering should include repo ecosystems plus github-actions."""

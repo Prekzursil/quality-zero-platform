@@ -11,17 +11,59 @@ issue_policy:
   mode: zero
   pr_behavior: absolute
   main_behavior: absolute
-# Lean member: the ruleset requires ONLY the repo's own CI checks
-# (.github/workflows/ci.yml on push main + all PRs) plus the
-# platform-mandated `codeql / CodeQL` security-baseline context (enrollment
-# invariant, same lean-gate shape as the QZP self-profile). No
-# shared-scanner-matrix / Sonar / Codacy / qlty / Codecov contexts — this
-# repo does not produce those artifacts. CAVEAT: the matrix-derived
-# `test <py> / <os>` context names are brittle — adding or dropping a
-# Python version renames them. CodeQL runs TODAY via GitHub DEFAULT setup
-# (GitHub-managed; it does NOT emit the `codeql / CodeQL` workflow
-# context) — the context goes live when the fleet CodeQL sweep seeds the
-# managed codeql.yml wrapper (rulesets are not auto-synced).
+# Lean member (public repo, rollout: observe). NOTHING is enforced on main today
+# and this ruleset is the DESIGN of record, not a deployed artifact -- measured
+# 2026-08-11: `GET /repos/Prekzursil/tracelines/branches/main/protection` returns
+# HTTP 404 "Branch not protected" and `GET .../rulesets` returns `[]`.
+#
+# The required set models the repo's OWN `.github/workflows/ci.yml`, which
+# triggers on `push: branches [main]` AND `pull_request`, and has exactly two
+# jobs: `types` (name: mypy) and a 6-leg `test ${{ matrix.python }} / ${{
+# matrix.os }}` matrix (3.10-3.13 on ubuntu, plus 3.12 on windows and macos).
+# Plus the CodeQL security baseline. No shared-scanner-matrix / Sonar / Codacy /
+# qlty / Codecov / Sentry contexts: this repo produces none of those artifacts
+# (same lean-gate shape as llm-anthology / the QZP self-profile).
+#
+# DELIBERATELY EXCLUDED: `build`, `deploy`, `github-release`, `publish-*` and
+# `canary` all appear as check-runs on main@99257f05 but come from pages.yml
+# (push-to-main + workflow_dispatch), release.yml (tag push) and
+# nightly-canary.yml (schedule). None of them fires on a `pull_request` event,
+# so requiring any of them would be unreportable on every PR. Emitted-on-main is
+# NOT the same set as emitted-on-a-PR, and only the latter can be required.
+#
+# CodeQL -- PHANTOM CONTEXT REMOVED (2026-08-11). This profile previously
+# required `codeql / CodeQL`, the ADVANCED-setup workflow context. tracelines has
+# NO `.github/workflows/codeql.yml` at all; CodeQL runs via GitHub DEFAULT setup
+# (`dynamic/github-code-scanning/codeql` = active), which never emits that name.
+# Measured on main@99257f05, the CodeQL-related check-runs are `Analyze
+# (actions)`, `Analyze (javascript-typescript)` and `Analyze (python)`, and
+# `codeql / CodeQL` appears zero times. A required context that cannot be
+# reported strands the branch permanently red the moment the ruleset is applied
+# ("required is a SUBSET of enabled" -- the lean-gate charter invariant). This is
+# not hypothetical: the identical defect was live on WebCoder's CLASSIC branch
+# protection and held all 16 of its open PRs at BLOCKED, including the one that
+# clears its critical websocket-driver advisory. Removing it there flipped that
+# PR to CLEAN with no other change.
+#
+# The replacement is the AGGREGATE `CodeQL` context (GitHub Advanced Security,
+# app 57789) and NOT the per-language `Analyze (<lang>)` names. Measured across
+# WebCoder's 16 open PR heads: `CodeQL` present 16/16, `Analyze (<lang>)` present
+# 1/16 -- the per-language runs are not reliably emitted on a pull_request event,
+# so requiring them would wedge 15 of 16 PRs. The fleet's already-deployed
+# default-setup repos agree: DevExtreme-Filter-Go-Language's classic protection
+# requires `CodeQL`@57789 (PR #40 merged under it on 2026-08-11) and
+# env-inspector's ACTIVE ruleset requires `CodeQL` with no app pin.
+# UNVERIFIED for tracelines specifically: this repo has never had a pull request
+# (`gh pr list --state all` returns `[]`), so the aggregate `CodeQL` context has
+# not been observed on a tracelines PR head. Settling experiment: open one
+# throwaway PR against main and list its head check-runs before flipping
+# `rollout` off `observe`.
+#
+# CAVEAT (unchanged, and the reason this profile is re-measured rather than
+# assumed): the matrix-derived `test <py> / <os>` context names are BRITTLE --
+# adding or dropping a Python version or an OS renames them, and a renamed
+# required context is an unreportable one, i.e. the same defect class as the
+# phantom above. Re-measure the emitted names after any change to ci.yml.
 enabled_scanners:
   coverage: false
   codecov: false
@@ -51,7 +93,7 @@ required_contexts:
   - test 3.13 / ubuntu-latest
   - test 3.12 / windows-latest
   - test 3.12 / macos-latest
-  - codeql / CodeQL
+  - CodeQL
   pull_request_only: []
   target:
   - mypy
@@ -61,10 +103,16 @@ required_contexts:
   - test 3.13 / ubuntu-latest
   - test 3.12 / windows-latest
   - test 3.12 / macos-latest
-  - codeql / CodeQL
+  - CodeQL
 codeql:
+  # `javascript-typescript` added 2026-08-11: the repo's live DEFAULT setup
+  # analyses actions + javascript-typescript + python (measured on
+  # main@99257f05), and the repo does ship JS/TS under `web/` and `npm/`. The
+  # declared language set now matches what is actually scanned, so seeding a
+  # managed wrapper later would not silently drop a language.
   languages:
   - actions
+  - javascript-typescript
   - python
 dependabot:
   updates: []

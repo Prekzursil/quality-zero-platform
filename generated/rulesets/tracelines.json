@@ -49,7 +49,7 @@
             "context": "test 3.12 / macos-latest"
           },
           {
-            "context": "codeql / CodeQL"
+            "context": "CodeQL"
           }
         ],
         "strict_required_status_checks_policy": true

@@ -40,11 +40,28 @@ description: >-
   would have turned two required gates red on 58 non-defects -- a gate the owner
   cannot drive to green, which the lean-gate charter forbids.
 
-  The Go rule does NOT share the problem: its semantics match the existing
-  inline rule exactly (any non-constant fmt.Sprint* reaching a database/sql
-  sink), and it measured 0 findings on the real DevExtreme tree, confirmed
-  independently by GitHub's own runner reporting "Ran 5 rules on 109 files:
-  0 findings". It shipped in DevExtreme-Filter-Go-Language#42.
+  The Go rule shipped, and on the evidence available it is clean -- but the
+  claim is deliberately narrower than "it does not share the problem", which is
+  what an earlier draft of this record said. What was measured: its semantics
+  match the existing inline rule exactly (any non-constant fmt.Sprint* reaching a
+  database/sql sink), and it returned 0 findings on the real DevExtreme tree,
+  confirmed independently by GitHub's own runner reporting "Ran 5 rules on 109
+  files: 0 findings". It shipped in DevExtreme-Filter-Go-Language#42.
+
+  What was NOT measured, and why it matters here specifically: DevExtreme is the
+  only Go repo in the fleet, so that is a zero from ONE tree. This record rejects
+  the Python/JS rules partly BECAUSE their zero on quality-zero-platform was
+  uninformative -- QZP has no database code, so nothing was exercised. The same
+  reasoning applies to a single Go tree: a zero is evidence that this rule does not
+  fire on THIS codebase's idioms, not evidence that it is false-positive-free. The
+  Python/JS rules also passed a purpose-built 6-bad/5-good corpus before producing
+  58 false positives on real code, so a passing corpus is not the reassurance it
+  looks like either.
+
+  The distinction that does hold: the Go rule was measured against a tree that
+  genuinely contains database/sql calls, whereas the Python/JS zero came from a tree
+  with no database code at all. That is a real difference in evidence quality, and it
+  is the reason one shipped and the others were withdrawn -- not a claim of immunity.
 
   TO CLOSE THIS: the Python/JS source must be scoped to actual REQUEST input
   (FastAPI/Flask/Starlette parameters, request bodies, query params) rather than

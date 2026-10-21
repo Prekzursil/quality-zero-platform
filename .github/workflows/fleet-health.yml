@@ -1,0 +1,232 @@
+name: Fleet Health
+
+# The weekly fleet-wide governance sweep: pin drift + ruleset drift +
+# phantom-context validation across inventory/repos.yml, with ONE tracking
+# issue updated in place (never an issue-per-run — that is a notification
+# spammer that gets muted inside a week; see scheduled-cve-scan.yml for the
+# doctrine this mirrors).
+#
+# What it checks:
+#   * PIN DRIFT   — every pin in .quality/tool-pins.yml (the single pin
+#     source) must match the literal the reusable-quality.yml lanes actually
+#     run. Biome is READ from the pin file at runtime, so its workflow
+#     presence is the offline FALLBACK literal in the gate-lint-format-jsts
+#     case-statement — that fallback is what must stay in sync.
+#   * RULESET DRIFT — regenerating generated/rulesets from the profiles +
+#     inventory must reproduce the committed artifacts byte-for-byte (the
+#     same determinism scripts/verify enforces on every PR).
+#   * PHANTOM CONTEXTS — scripts/quality/validate_required_contexts.py:
+#     every profile's required_contexts must be emitted on the repo's
+#     default branch. PR-only contexts (the aggregate CodeQL) are reported
+#     as needing a PR-head measurement, not as offenders.
+#
+# TOKEN SCOPE: the default GITHUB_TOKEN reads public fleet repos but not the
+# private members (pbinfo-get-unsolved, PrimariRo, agent-skills-toolchain);
+# those measure-fail and are listed in the issue as ERROR rows — never as
+# clean. The optional, already-conventional CODEX_FLEET_READ_PAT
+# (Contents: Read across the fleet) closes that gap. This workflow neither
+# creates nor rotates any credential.
+#
+# HONESTY CONTRACT: findings NEVER fail this job — the issue IS the output.
+# The job goes red only when the sweep itself could not complete (roster
+# unreadable, or the tracking issue could not be written), so a green run
+# always means "everything was measured", never "everything was clean".
+
+permissions: {}
+
+# checkov:skip=CKV_GHA_7:dry_run is a control-plane flag (gates gh writes), not a build-output mutator
+on:
+  schedule:
+    # Weekly, Mondays 04:23 UTC. Odd minute keeps it off the top-of-hour
+    # spike when every scheduled workflow in the fleet fires at once.
+    - cron: "23 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        type: boolean
+        required: false
+        default: true
+        description: "When true, compute every finding but make no gh write call."
+      only:
+        type: string
+        required: false
+        default: ""
+        description: "Validate only this repo (owner/name). Blank = the whole fleet."
+
+concurrency:
+  group: fleet-health
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install platform dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      # ── Check 1: pin drift (tool-pins.yml vs reusable-quality.yml) ────────
+      - name: Pin drift check
+        id: pin_drift
+        shell: bash
+        run: |
+          set -euo pipefail
+          pins_file=.quality/tool-pins.yml
+          workflow=.github/workflows/reusable-quality.yml
+          offenders=""
+          check_pin() { # $1 = pin name, $2 = grep -F pattern that MUST appear in the workflow
+            value="$(sed -n "s/^  $1: \"\\(.*\\)\"\$/\\1/p" "$pins_file" | head -1)"
+            if [ -z "$value" ]; then
+              offenders="${offenders}- pin '$1' missing from $pins_file\n"
+              return
+            fi
+            if ! grep -qF "$2" "$workflow"; then
+              offenders="${offenders}- $1: pin file says '$value' but reusable-quality.yml lacks '$2'\n"
+            fi
+          }
+          check_pin ruff          "ruff==$(sed -n 's/^  ruff: \"\(.*\)\"$/\1/p' "$pins_file" | head -1)"
+          check_pin basedpyright  "basedpyright==$(sed -n 's/^  basedpyright: \"\(.*\)\"$/\1/p' "$pins_file" | head -1)"
+          check_pin oxlint        "oxlint@$(sed -n 's/^  oxlint: \"\(.*\)\"$/\1/p' "$pins_file" | head -1)"
+          check_pin biome         "biome_pin=\"$(sed -n 's/^  biome: \"\(.*\)\"$/\1/p' "$pins_file" | head -1)\""
+          check_pin opengrep      "opengrep/main/install.sh | bash -s -- -v $(sed -n 's/^  opengrep: \"\(.*\)\"$/\1/p' "$pins_file" | head -1)"
+          check_pin gitleaks      "gitleaks/releases/download/v$(sed -n 's/^  gitleaks: \"\(.*\)\"$/\1/p' "$pins_file" | head -1)/gitleaks_"
+          check_pin osv-scanner   "osv-scanner/releases/download/$(sed -n 's/^  osv-scanner: \"\(.*\)\"$/\1/p' "$pins_file" | head -1)/osv-scanner_linux_amd64"
+          if [ -n "$offenders" ]; then
+            printf 'offenders<<__QZT_EOF__\n' >> "$GITHUB_OUTPUT"
+            printf '%b' "$offenders" >> "$GITHUB_OUTPUT"
+            printf '__QZT_EOF__\n' >> "$GITHUB_OUTPUT"
+            echo "PIN DRIFT FOUND:"
+            printf '%b' "$offenders"
+          else
+            echo "pin drift: none (all 7 pins match reusable-quality.yml)"
+          fi
+
+      # ── Check 2: ruleset drift (regenerate + compare) ─────────────────────
+      - name: Ruleset drift check
+        id: ruleset_drift
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/quality/generate_ruleset_payload.py \
+            --inventory inventory/repos.yml --output-dir generated/rulesets >/dev/null
+          if ! git diff --quiet -- generated/rulesets; then
+            git diff --stat -- generated/rulesets | sed 's/^/  /'
+            echo "offenders=$(git diff --name-only -- generated/rulesets | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
+            echo "RULESET DRIFT FOUND (see list in the step output)."
+          else
+            echo "offenders=" >> "$GITHUB_OUTPUT"
+            echo "ruleset drift: none (regeneration is byte-identical)"
+          fi
+
+      # ── Check 3: phantom contexts across the inventory ────────────────────
+      - name: Phantom-context validation
+        id: phantom
+        shell: bash
+        env:
+          # Issues live on this repo, so github.token covers the write half.
+          # The read half (check-runs on other fleet repos) prefers the
+          # optional fleet-scoped read PAT; without it, private members are
+          # reported as ERROR rows rather than as clean.
+          GH_TOKEN: ${{ secrets.CODEX_FLEET_READ_PAT || github.token }}
+          QZ_ONLY: ${{ inputs.only }}
+        run: |
+          set -euo pipefail
+          args=(--inventory inventory/repos.yml --out-json build/fleet-health-contexts.json)
+          if [ -n "${QZ_ONLY:-}" ]; then
+            args+=(--repo "$QZ_ONLY")
+          fi
+          rc=0
+          python scripts/quality/validate_required_contexts.py "${args[@]}" || rc=$?
+          if [ "$rc" -eq 2 ]; then
+            echo "ERROR fleet-health: the roster could not be read, so NOTHING was validated. This is not a clean-fleet result." >&2
+            exit 2
+          fi
+          echo "validator exit: $rc (0 = clean, 1 = findings; findings never fail this job)"
+          echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
+          # Render the offender section for the tracking issue body here,
+          # where the JSON lives — no heredoc-in-command-substitution nesting.
+          section="$(python -c '
+          import json, sys
+          payload = json.load(open("build/fleet-health-contexts.json", encoding="utf-8"))
+          lines = []
+          for repo in payload.get("repos", []):
+              if repo["status"] == "clean":
+                  continue
+              if repo["phantom_contexts"]:
+                  names = ", ".join("`" + c + "`" for c in repo["phantom_contexts"])
+                  lines.append("- **" + repo["slug"] + "** PHANTOM: required but not emitted on "
+                               + repo["branch"] + ": " + names)
+              if repo["pr_only_unverified_on_main"]:
+                  names = ", ".join("`" + c + "`" for c in repo["pr_only_unverified_on_main"])
+                  lines.append("- " + repo["slug"] + " pr-only (verify on a PR head): " + names)
+              if repo["error"]:
+                  lines.append("- " + repo["slug"] + " ERROR: " + repo["error"])
+          print("\n".join(lines) if lines else "- none")
+          ')"
+          {
+            echo "section<<__QZT_EOF__"
+            printf '%s\n' "$section"
+            echo "__QZT_EOF__"
+          } >> "$GITHUB_OUTPUT"
+
+      # ── Reconcile the ONE tracking issue ─────────────────────────────────
+      - name: Open or update the fleet-health tracking issue
+        id: issue
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          QZ_DRY_RUN: ${{ inputs.dry_run || 'false' }}
+          QZ_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PIN_OFFENDERS: ${{ steps.pin_drift.outputs.offenders }}
+          RULESET_OFFENDERS: ${{ steps.ruleset_drift.outputs.offenders }}
+          PHANTOM_SECTION: ${{ steps.phantom.outputs.section }}
+        run: |
+          set -euo pipefail
+          label="fleet-health"
+          title="[fleet-health] weekly governance sweep findings"
+          found=0
+          body="Fleet health sweep findings. Offenders listed below; each section names its own remediation. (Run: ${QZ_RUN_URL})"
+          if [ -n "${PIN_OFFENDERS:-}" ]; then
+            found=1
+            body="$body"$'\n\n## Pin drift\n\n'"$PIN_OFFENDERS"
+          fi
+          if [ -n "${RULESET_OFFENDERS:-}" ]; then
+            found=1
+            body="$body"$'\n\n## Ruleset drift\n\nRegenerating generated/rulesets changed:'
+            for f in $RULESET_OFFENDERS; do
+              body="$body"$'\n- `'"$f"'`'
+            done
+          fi
+          if [ -n "${PHANTOM_SECTION:-}" ] && [ "$PHANTOM_SECTION" != "- none" ]; then
+            found=1
+            body="$body"$'\n\n## Phantom / unverifiable required contexts\n\n'"$PHANTOM_SECTION"
+          fi
+          if [ "$found" -eq 0 ]; then
+            body="**Fleet health: CLEAN** — no pin drift, no ruleset drift, no phantom contexts. (Run: ${QZ_RUN_URL})"
+          fi
+          body_file="$(mktemp)"
+          printf '%s\n' "$body" > "$body_file"
+          if [ "${QZ_DRY_RUN:-false}" = "true" ]; then
+            echo "dry-run: would upsert issue '$title' with body:"
+            cat "$body_file"
+            exit 0
+          fi
+          gh label create "$label" --color 0e8a16 --description "weekly fleet governance sweep" 2>/dev/null || true
+          existing="$(gh issue list --label "$label" --state open --search "$title" --json number,title --limit 100 --jq ".[] | select(.title == \"$title\") | .number")"
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --body-file "$body_file"
+            echo "updated issue #$existing"
+          else
+            gh issue create --title "$title" --label "$label" --body-file "$body_file"
+          fi

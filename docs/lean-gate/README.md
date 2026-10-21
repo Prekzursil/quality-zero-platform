@@ -24,6 +24,68 @@ green/red model.
 | `biome.template.json` | The bundled minimal Biome formatter config (the same style as Reframe's `biome.json`). A JS/TS caller may copy it to `biome.json`; if absent, the reusable workflow falls back to this config in-process for the gate-1 format check. |
 | `../../.quality/charter.yml` | The single source of truth for the closed 6-gate set + the banned (deleted) gates. |
 | `../../.quality/charter_check.sh` | Pure-bash check that FAILS CI if the active gate set drifts from the charter. |
+| `../../.quality/tool-pins.yml` | **The single source for tool pins** (ruff, basedpyright, oxlint, biome, opengrep, gitleaks, osv-scanner). CI reads the biome pin from this file at runtime; every other literal in the workflow must be kept in sync with it. |
+| `../../scripts/quality/preflight.sh` | **Local preflight** — reproduces every lane below, with the SAME pinned versions, in a consumer repo before pushing. |
+
+## Local preflight (reproduce every lane before you push)
+
+`scripts/quality/preflight.sh` in this repo re-runs the SAME lanes the
+reusable workflow runs, with the SAME pinned tool versions (read from
+`.quality/tool-pins.yml`), against a consumer checkout:
+
+```bash
+# from the CONSUMER repo root, pointing at any QZP checkout:
+bash /path/to/quality-zero-platform/scripts/quality/preflight.sh
+# or, from inside a QZP checkout:
+bash scripts/quality/preflight.sh --repo-dir /path/to/consumer
+```
+
+It mirrors CI one-for-one: same detection guards, same commands, same pinned
+versions. Missing pinned binaries (gitleaks / osv-scanner / opengrep) are
+downloaded once into `~/.cache/qzp-preflight` at the pinned version; set
+`QZP_PREFLIGHT_NO_INSTALL=1` to forbid downloads (the lane then SKIPs loudly —
+never silently passes). Exit code 0 = every lane that CI would run is green
+locally; a FAIL names the lane and the fix.
+
+### The single pin source
+
+Every tool version lives in **`.quality/tool-pins.yml`**. The workflow reads
+the **biome** pin from that file at runtime (offline fallback = the literal in
+the workflow); the other tools still carry literals in the workflow and MUST
+be kept in sync with the file when bumping. Consumers should never pin these
+tools to different versions locally — a finding that only reproduces on a
+different tool version is not the gate's finding.
+
+### The two costliest rules (learn them once, save a red run each)
+
+1. **Coverage is STRICT 100% line AND branch.** Line-only 100% is not enough:
+   once branch coverage is counted (`--cov-branch`), a line-only-clean repo
+   typically sits at ~99.x and still FAILs. The gate always measures both.
+2. **The format check covers CONFIG FILES TOO, including `biome.json` itself.**
+   A hand-edited, unformatted `biome.json` fails gate 1 exactly like source.
+   Self-format before pushing: `npx --yes @biomejs/biome@<pin> format --write .`
+
+## Phantom-context validator (required_contexts vs reality)
+
+`scripts/quality/validate_required_contexts.py` compares each profile's
+`required_contexts` against the check-runs actually emitted on the repo's
+default branch (`gh api repos/<slug>/commits/main/check-runs`) and reports any
+required context that is **not emitted** — a phantom context that would keep a
+branch permanently red. PR-only contexts (the aggregate `CodeQL` check-run,
+which reports on `pull_request` but not reliably on `push`) are marked as
+needing a PR-head measurement instead of failing:
+
+```bash
+# whole fleet:
+python scripts/quality/validate_required_contexts.py --inventory inventory/repos.yml
+# one repo:
+python scripts/quality/validate_required_contexts.py --repo Prekzursil/fractal-darkroom
+```
+
+Requires `gh` on PATH with `GH_TOKEN`/`GITHUB_TOKEN` set. Exit 0 = no phantom
+contexts; exit 1 = at least one required context is not emitted on main. The
+weekly `fleet-health` scheduled workflow runs this same validator across the
+inventory and files/updates ONE tracking issue.
 
 ## The closed 6-gate charter
 
@@ -134,7 +196,8 @@ hard-fail *before* a gate can run:
     honoring a caller `[tool.ruff]` / `ruff.toml` when present (else ruff
     defaults). Pinned **ruff 0.15.17** (mirrors Reframe).
   - `gate-lint-format-jsts` — the workflow's OWN pinned **oxlint 1.69.0** (linter)
-    + **biome 2.5.0** (formatter-only) over the caller's ts/js (already
+    + **biome** (formatter-only; pin read at runtime from `.quality/tool-pins.yml`,
+      currently 2.5.15) over the caller's ts/js (already
     self-contained pre-round-6; unchanged).
   - `gate-secrets` — **gitleaks 8.30.1** (mirrors Reframe) over the working tree
     whenever a `.gitleaks.toml` allowlist is present.

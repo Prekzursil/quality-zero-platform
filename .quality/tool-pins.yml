@@ -1,0 +1,35 @@
+# Single source of truth for the lean 6-gate tool pins.
+#
+# These are the EXACT versions the reusable-quality.yml lanes run in CI, and
+# the versions scripts/quality/preflight.sh reproduces locally in a consumer
+# repo. Before this file existed each pin lived only as a literal inside
+# .github/workflows/reusable-quality.yml (some of them in three places).
+#
+# When bumping a pin:
+#   1. edit THIS file;
+#   2. for biome, CI reads this file at runtime — also update the offline
+#      fallback literal in reusable-quality.yml gate-lint-format-jsts (and the
+#      group echo); for every other tool the workflow still carries literals —
+#      keep each of them in sync with this file;
+#   3. update docs/lean-gate/pre-commit-config.template.yaml to match;
+#   4. re-run scripts/quality/preflight.sh on a consumer repo to confirm
+#      local/CI parity before merging the bump.
+#
+# Consumers: do NOT pin tools to different versions locally. A finding that
+# only reproduces on a different tool version is not the gate's finding.
+version: 1
+pins:
+  # gate 1 (py): ruff check + ruff format --check
+  ruff: "0.15.17"
+  # gate 2 (py): basedpyright (standard typeCheckingMode unless caller config)
+  basedpyright: "1.39.8"
+  # gate 1 (jsts): oxlint --deny-warnings
+  oxlint: "1.69.0"
+  # gate 1 (jsts): biome ci --formatter-enabled (formatter-only)
+  biome: "2.5.15"
+  # gate 4: opengrep scan --config .quality/opengrep
+  opengrep: "v1.22.0"
+  # gate 5: gitleaks detect --redact
+  gitleaks: "8.30.1"
+  # gate 6: osv-scanner scan source
+  osv-scanner: "v2.3.8"

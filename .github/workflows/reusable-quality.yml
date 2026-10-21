@@ -1070,7 +1070,10 @@ jobs:
       # same style as Reframe's: 2-space, single quotes, trailingCommas all,
       # semicolons always, lineWidth 100, lf) via --config-path so formatting is
       # deterministic across callers. Oxlint linting is unchanged. Pins: oxlint
-      # 1.69.0 (mirrors Reframe), biome 2.5.0 (mirrors Reframe). Keep in sync with
+      # 1.69.0 (mirrors Reframe); biome is READ AT RUNTIME from the platform's
+      # single pin source (.quality/tool-pins.yml on main) with the literal
+      # below kept as the offline fallback — bump the pin THERE first, then the
+      # fallback here. Keep in sync with
       # docs/lean-gate/pre-commit-config.template.yaml + docs/lean-gate/biome.template.json.
       - name: gate-lint-format-jsts (self-contained oxlint + biome)
         if: steps.detect.outputs.jsts == 'true'
@@ -1096,7 +1099,21 @@ jobs:
             --ignore-pattern '**/*.min.js' \
             .
           echo "::endgroup::"
-          echo "::group::biome@2.5.15 (format --check, formatter-only)"
+          # round-9: the biome pin is READ from the platform's single pin source
+          # (.quality/tool-pins.yml@main) so a bump there takes effect here
+          # without editing this workflow. The caller checkout does not contain
+          # the platform repo, so the file is fetched over HTTPS from raw.githubusercontent
+          # (the platform repo is public). On ANY fetch/parse failure the literal
+          # below — the last committed pin — is used, so an outage can only pin
+          # biome to a KNOWN version, never to garbage or an empty string.
+          biome_pin="$(curl -fsSL --max-time 15 \
+            https://raw.githubusercontent.com/Prekzursil/quality-zero-platform/main/.quality/tool-pins.yml \
+            2>/dev/null | sed -n 's/^  biome: "\(.*\)"$/\1/p' | head -1 || true)"
+          case "$biome_pin" in
+            ''|*[!0-9.]*) biome_pin="2.5.15" ;;
+          esac
+          echo "biome pin: $biome_pin (source: .quality/tool-pins.yml)"
+          echo "::group::biome@${biome_pin} (format --check, formatter-only)"
           # Honor a caller-shipped biome config if present (biome auto-discovers
           # biome.json/biome.jsonc from cwd); otherwise use the template's bundled
           # minimal config so formatting is deterministic across callers.
@@ -1118,10 +1135,11 @@ jobs:
           fi
           # `biome ci` is the non-mutating check command; restrict it to the
           # formatter (linting is Oxlint's job, assist disabled).
-          npx --yes @biomejs/biome@2.5.15 ci \
+          npx --yes "@biomejs/biome@${biome_pin}" ci \
             --formatter-enabled=true --linter-enabled=false --assist-enabled=false \
             "${biome_cfg_args[@]}" . || {
-            echo "FAIL gate-lint-format-jsts: biome found unformatted ts/js (run 'biome format --write' / the biome pre-commit hook to fix)." >&2
+            echo "FAIL gate-lint-format-jsts: biome found unformatted ts/js (run 'npx --yes @biomejs/biome@${biome_pin} format --write' / the biome pre-commit hook to fix)." >&2
+            echo "FAIL gate-lint-format-jsts: NOTE the format check covers CONFIG FILES TOO, including biome.json itself - a hand-edited unformatted biome.json fails here exactly like source." >&2
             exit 1
           }
           echo "::endgroup::"
@@ -1245,6 +1263,7 @@ jobs:
           fi
           if [ "$PYCOVCFG" != "true" ] && [ "$PYTESTS" == "true" ]; then
             echo "FAIL gate-tests-coverage python: Python source + tests are present but no coverage config (pyproject.toml/setup.cfg/tox.ini/.coveragerc/pytest.ini) - the 100% gate cannot pass unmeasured. Add coverage config." >&2
+            echo "FAIL gate-tests-coverage python: the bar is 100% LINE **AND** BRANCH - line-only 100% typically sits at ~99.x once branches are counted and still FAILs; this lane always passes --cov-branch." >&2
             exit 1
           fi
           # GAP 1 FIX — install the CALLER's Python RUNTIME deps before running the

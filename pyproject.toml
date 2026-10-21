@@ -19,6 +19,12 @@ source = [
   # classifier above and is the only thing that surfaces the T2 tier at all, so
   # it is held to the same 100% line+branch bar.
   "scripts.quality.scheduled_cve_scan",
+  # Lane-7 tooling: the phantom-context validator (also executed weekly by
+  # .github/workflows/fleet-health.yml and documented in
+  # docs/lean-gate/README.md) plus the one-command onboarding that composes
+  # it. Same 100% line+branch bar.
+  "scripts.quality.validate_required_contexts",
+  "scripts.quality.onboard_repo",
 ]
 branch = true
 omit = [

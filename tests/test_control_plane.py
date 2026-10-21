@@ -44,7 +44,7 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
         until the assertion means nothing.
         """
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
-        self.assertEqual(len(inventory["repos"]), 18)
+        self.assertEqual(len(inventory["repos"]), 19)
 
         # Every enrolled repo must have a profile, and every profile must be
         # enrolled. This is the failure a stale membership row actually produces.

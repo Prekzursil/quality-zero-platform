@@ -1,0 +1,67 @@
+{
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "exclude": [],
+      "include": [
+        "refs/heads/main"
+      ]
+    }
+  },
+  "enforcement": "active",
+  "name": "quality-zero-platform / fractal-darkroom",
+  "profile_id": "fractal-darkroom",
+  "repo_slug": "Prekzursil/fractal-darkroom",
+  "rules": [
+    {
+      "parameters": {
+        "dismiss_stale_reviews_on_push": false,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_approving_review_count": 0,
+        "required_review_thread_resolution": false
+      },
+      "type": "pull_request"
+    },
+    {
+      "parameters": {
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          {
+            "context": "quality / quality"
+          },
+          {
+            "context": "test (ubuntu-latest, 3.11)"
+          },
+          {
+            "context": "test (ubuntu-latest, 3.12)"
+          },
+          {
+            "context": "test (ubuntu-latest, 3.13)"
+          },
+          {
+            "context": "test (windows-latest, 3.11)"
+          },
+          {
+            "context": "test (windows-latest, 3.12)"
+          },
+          {
+            "context": "test (windows-latest, 3.13)"
+          },
+          {
+            "context": "CodeQL"
+          }
+        ],
+        "strict_required_status_checks_policy": true
+      },
+      "type": "required_status_checks"
+    },
+    {
+      "type": "non_fast_forward"
+    },
+    {
+      "type": "deletion"
+    }
+  ],
+  "target": "branch"
+}

@@ -38,7 +38,6 @@ from __future__ import absolute_import
 import argparse
 import shutil
 import subprocess  # nosec B404 — gh CLI wrapper; all args are controlled
-import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Sequence, Tuple

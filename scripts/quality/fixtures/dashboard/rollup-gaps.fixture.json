@@ -1,0 +1,45 @@
+{
+  "generated_at": "2026-10-21T12:00:00+00:00",
+  "marker": "<!-- quality-zero-rollup -->",
+  "repos": [
+    {
+      "slug": "Prekzursil/example-full",
+      "visibility": "public",
+      "status": "ok",
+      "reason": "",
+      "open_count": 2,
+      "gaps": 1,
+      "truncated": false,
+      "prs": [
+        {
+          "number": 41,
+          "title": "Fix ratchet baseline drift",
+          "url": "https://github.com/Prekzursil/example-full/pull/41",
+          "rollup_comment": "yes"
+        },
+        {
+          "number": 42,
+          "title": "Add scanner overlay",
+          "url": "https://github.com/Prekzursil/example-full/pull/42",
+          "rollup_comment": "no"
+        }
+      ]
+    },
+    {
+      "slug": "Prekzursil/example-lean-observe",
+      "visibility": "public",
+      "status": "ok",
+      "reason": "",
+      "open_count": 0,
+      "gaps": 0,
+      "truncated": false,
+      "prs": []
+    },
+    {
+      "slug": "<private>",
+      "visibility": "private",
+      "status": "stale",
+      "reason": "private or unreadable with the build token"
+    }
+  ]
+}

@@ -152,6 +152,8 @@ class AdminDashboardTests(unittest.TestCase):
             (assets_dir / "index.html").write_text("<html></html>\n", encoding="utf-8")
             (assets_dir / "styles.css").write_text("body{}\n", encoding="utf-8")
             (assets_dir / "app.js").write_text("console.log('ok')\n", encoding="utf-8")
+            # Lane 8: the operator-panels module app.js imports at runtime.
+            (assets_dir / "panels.mjs").write_text("export const x = 1;\n", encoding="utf-8")
 
             output_dir = root / "site"
             build_admin_dashboard.write_dashboard(output_dir, payload, assets_dir=assets_dir)
@@ -159,4 +161,5 @@ class AdminDashboardTests(unittest.TestCase):
             self.assertTrue((output_dir / "index.html").is_file())
             self.assertTrue((output_dir / "styles.css").is_file())
             self.assertTrue((output_dir / "app.js").is_file())
+            self.assertTrue((output_dir / "panels.mjs").is_file())
             self.assertTrue((output_dir / "data" / "dashboard.json").is_file())

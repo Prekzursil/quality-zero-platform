@@ -37,6 +37,18 @@ jobs:
             --coverage-json quality-rollup/coverage-trend.json \
             --drift-jsonl audit/drift-sync.jsonl \
             --output-dir site
+      - name: Build operator panel data (ruleset drift / rollup gaps)
+        # Lane 8: persists site/data/ruleset-drift.json + rollup-gaps.json.
+        # The gate-status panel rides dashboard.json from the step above.
+        # Per-repo REST sources are 404-tolerant inside the script: private or
+        # stale members degrade to labeled rows and never fail this build.
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/quality/build_dashboard_extras.py \
+            --inventory inventory/repos.yml \
+            --committed-rulesets generated/rulesets \
+            --output-dir site/data
       - name: Stage self-contained admin sub-pages (e.g. codex-fleet-github)
         run: |
           # build_admin_dashboard.py copies only the three root dashboard assets

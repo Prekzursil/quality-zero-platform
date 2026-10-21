@@ -90,3 +90,8 @@ repos:
     rollout: observe
     default_branch: main
     notes: Lean member. The 7 gate-* quality.yml job contexts are already enforced by active repo ruleset 18297434 on main; the platform CodeQL baseline context is added on top; coverage is per-package 100 in repo CI, whole-repo aggregate deliberately not modeled.
+  - slug: Prekzursil/fractal-darkroom
+    profile: fractal-darkroom
+    rollout: observe
+    default_branch: main
+    notes: Lean member (public repo). Buddhabrot-family orbit-density renderer (renamed from brot-farm 2026-10-21). Enforces its own CI (ubuntu+windows x py3.11-3.13 matrix, pytest-cov 100% line+branch) plus the lean quality.yml caller. CodeQL via default setup (python) - aggregate CodeQL context, not Analyze (<lang>). Private vulnerability reporting enabled; SECURITY.md in-repo.

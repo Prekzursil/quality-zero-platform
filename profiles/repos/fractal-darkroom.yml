@@ -1,0 +1,68 @@
+slug: Prekzursil/fractal-darkroom
+version: 2
+stack: python-tooling
+mode:
+  phase: shadow
+scanners: {}
+overrides: []
+verify_command: python -m pytest --cov
+required_contexts_mode: replace
+issue_policy:
+  mode: ratchet
+  pr_behavior: introduced_only
+  main_behavior: absolute
+# Lean member (public repo, rollout: observe). Renamed from brot-farm on
+# 2026-10-21. The repo enforces its own quality floor in-repo (stronger than
+# the platform's): ci.yml runs an ubuntu+windows x py3.11-3.13 matrix with a
+# pytest-cov gate at STRICT 100% line+branch, and quality.yml is the lean
+# 6-gate caller (reusable-quality.yml@main) - green since adoption.
+#
+# Required set measured on main@HEAD 2026-10-21 via commits/main/check-runs:
+# the six matrix-derived `test (<os>, <py>)` names + `quality / quality`.
+# CodeQL runs via GitHub DEFAULT setup (dynamic), which emits `Analyze
+# (python)` / `Analyze (actions)` but the reliably-PR-present aggregate is
+# the `CodeQL` context (fleet convention: DevExtreme classic protection and
+# env-inspector's active ruleset both require it; per-language Analyze (<lang>)
+# names are not reliably reported on pull_request events).
+#
+# CAVEAT (brittle matrix names): adding/dropping an OS or Python version in
+# ci.yml RENAMES these contexts - re-measure emitted names after any ci.yml
+# matrix edit before flipping rollout off observe (tracelines precedent).
+# Pages deploys, CodeQL dynamic runs, and Dependency-Graph jobs fire on push
+# only and are deliberately NOT required (nothing that cannot report on a
+# pull_request may be required).
+required_contexts:
+  always:
+    - quality / quality
+    - test (ubuntu-latest, 3.11)
+    - test (ubuntu-latest, 3.12)
+    - test (ubuntu-latest, 3.13)
+    - test (windows-latest, 3.11)
+    - test (windows-latest, 3.12)
+    - test (windows-latest, 3.13)
+    - CodeQL
+  pull_request_only: []
+  target:
+    - quality / quality
+    - test (ubuntu-latest, 3.11)
+    - test (ubuntu-latest, 3.12)
+    - test (ubuntu-latest, 3.13)
+    - test (windows-latest, 3.11)
+    - test (windows-latest, 3.12)
+    - test (windows-latest, 3.13)
+    - CodeQL
+coverage:
+  command: |
+    python -m pytest --cov --cov-report=xml:coverage/coverage.xml
+  inputs:
+    - format: xml
+      name: fractal-darkroom
+      path: coverage/coverage.xml
+      flag: fractal-darkroom
+codeql:
+  languages:
+    - python
+dependabot:
+  updates:
+    - ecosystem: pip
+      directory: /

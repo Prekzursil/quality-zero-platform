@@ -1096,7 +1096,7 @@ jobs:
             --ignore-pattern '**/*.min.js' \
             .
           echo "::endgroup::"
-          echo "::group::biome@2.5.0 (format --check, formatter-only)"
+          echo "::group::biome@2.5.15 (format --check, formatter-only)"
           # Honor a caller-shipped biome config if present (biome auto-discovers
           # biome.json/biome.jsonc from cwd); otherwise use the template's bundled
           # minimal config so formatting is deterministic across callers.
@@ -1118,7 +1118,7 @@ jobs:
           fi
           # `biome ci` is the non-mutating check command; restrict it to the
           # formatter (linting is Oxlint's job, assist disabled).
-          npx --yes @biomejs/biome@2.5.0 ci \
+          npx --yes @biomejs/biome@2.5.15 ci \
             --formatter-enabled=true --linter-enabled=false --assist-enabled=false \
             "${biome_cfg_args[@]}" . || {
             echo "FAIL gate-lint-format-jsts: biome found unformatted ts/js (run 'biome format --write' / the biome pre-commit hook to fix)." >&2

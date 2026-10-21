@@ -36,6 +36,13 @@
 # into QZP_PREFLIGHT_CACHE (default ~/.cache/qzp-preflight) at the pinned
 # version. Set QZP_PREFLIGHT_NO_INSTALL=1 to skip downloads; the lane then
 # SKIPs (never silently passes — the skip is printed and listed in the summary).
+#
+# WINDOWS CONSUMERS: clone with core.autocrlf=false (or input). A default
+# autocrlf=true checkout rewrites LF files to CRLF, and the biome lane
+# (lineEnding: lf) then reports "File content differs from formatting output"
+# on files CI accepts — a checkout artifact, not a repo finding. Verified on
+# fractal-darkroom: same tree, autocrlf=true clone FAILs the biome lane while
+# CI (Linux) and an autocrlf=false clone both pass.
 set -euo pipefail
 
 usage() {

@@ -25,6 +25,12 @@ source = [
   # it. Same 100% line+branch bar.
   "scripts.quality.validate_required_contexts",
   "scripts.quality.onboard_repo",
+  # Lane-8 dashboard extras: ruleset-drift + rollup-gap payloads for the
+  # admin SPA (docs/DASHBOARD.md). The ruleset generator gained the shared
+  # ``generate_rulesets`` entrypoint the extras builder calls, so it joins
+  # the enforced scope too. Same 100% line+branch bar.
+  "scripts.quality.build_dashboard_extras",
+  "scripts.quality.generate_ruleset_payload",
 ]
 branch = true
 omit = [

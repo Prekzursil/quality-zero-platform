@@ -32,6 +32,10 @@ fi
 "${PYTHON_CMD[@]}" -m coverage report --fail-under=100 --show-missing
 if command -v node >/dev/null 2>&1; then
   node --test scripts/provider_ui/*.test.mjs
+  # Lane-8 dashboard fixture smoke: the admin SPA's panel renderers must
+  # render all three operator panels from the committed fixtures
+  # (scripts/quality/fixtures/dashboard/) — no live GitHub source needed.
+  node --test scripts/dashboard_ui/*.test.mjs
 fi
 "${PYTHON_CMD[@]}" scripts/quality/validate_control_plane.py --write-generated generated/rulesets
 "${PYTHON_CMD[@]}" scripts/quality/generate_ruleset_payload.py --output-dir build/rulesets >/dev/null

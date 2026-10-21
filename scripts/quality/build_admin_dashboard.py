@@ -9,7 +9,7 @@ import os
 import shutil
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Sequence, Set
+from typing import Any, Dict, List, Mapping, Sequence, Set, Tuple
 from urllib.error import HTTPError
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
@@ -18,11 +18,22 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
 from scripts.quality.admin_dashboard_pages import (
     redact_private_repos,
 )
+from scripts.quality.check_required_checks import (
+    _collect_contexts,
+    _evaluate_observed_context,
+    _resolve_observed_context,
+)
 from scripts.quality.common import utc_timestamp
 from scripts.quality.control_plane import load_inventory, load_repo_profile
+from scripts.quality.validate_required_contexts import PR_ONLY_CONTEXTS, collect_required
 from scripts.security_helpers import load_json_https
 
 GITHUB_API_BASE = "https://api.github.com"
+# Check-runs pagination cap: 5 pages × 100 runs. A re-run-heavy commit can
+# exceed one page (tracelines HEAD measured at 120 runs) but a 500-run walk
+# is far beyond any real required-context set — the cap stops a pathological
+# repo from stalling the hourly build.
+MAX_CHECK_RUN_PAGES = 5
 
 
 def parse_args() -> argparse.Namespace:
@@ -69,6 +80,13 @@ def build_dashboard_payload(
                 "default_branch_health": live_state.get("default_branch_health", "unknown"),
                 "open_pr_health": live_state.get("open_pr_health", "unknown"),
                 "ruleset_present": bool(live_state.get("ruleset_present", False)),
+                # Lane-8 gate panel: per-required-context verdicts measured on
+                # the default-branch HEAD (``_lane_gates``).
+                "gate_status": live_state.get("gate_status", "unknown"),
+                "gates": list(live_state.get("gates", [])),
+                "gate_head_sha": live_state.get("gate_head_sha", ""),
+                "gate_head_date": live_state.get("gate_head_date", ""),
+                "gate_note": live_state.get("gate_note", ""),
             }
         )
     # Redact private slugs BEFORE the payload reaches any rendering or
@@ -170,7 +188,10 @@ def write_dashboard(output_dir: Path, payload: Mapping[str, Any], *, assets_dir:
     data_dir.mkdir(parents=True, exist_ok=True)
     (data_dir / "dashboard.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     if assets_dir is not None:
-        for asset_name in ("index.html", "styles.css", "app.js"):
+        # ``panels.mjs`` (Lane 8 operator panels) is imported by ``app.js``
+        # at runtime — it must ride the static asset copy or the published
+        # SPA 404s the module import.
+        for asset_name in ("index.html", "styles.css", "app.js", "panels.mjs"):
             shutil.copy2(assets_dir / asset_name, output_dir / asset_name)
         return
     (output_dir / "index.html").write_text(render_dashboard_html(payload), encoding="utf-8")
@@ -213,6 +234,42 @@ def _github_payload_or_none(url: str, token: str) -> Any:
         raise
 
 
+def _github_fetch_degraded(url: str, token: str) -> Tuple[Any, Mapping[str, str] | None]:
+    """Fetch ``url``; ``(payload, headers)`` or ``(None, None)`` on 404/403.
+
+    Broader than ``_github_payload_or_none`` (the heatmap's 404-only
+    contract above, kept unchanged): the Lane-8 gate panel must also survive
+    403, because a token CAN read a private member's metadata while being
+    denied its check-runs feed (measured live 2026-10-21 against
+    Prekzursil/PrimariRo: head commit 200, check-runs 403), and an hourly
+    dashboard publish must degrade that ONE repo to a stale row instead of
+    failing the whole build. Any other ``HTTPError`` (5xx, ...) still
+    propagates. Headers ride along so callers can follow the Link header.
+    """
+    try:
+        payload, headers = load_json_https(
+            url,
+            allowed_hosts={"api.github.com"},
+            headers={
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {token}",
+                "X-GitHub-Api-Version": "2022-11-28",
+                "User-Agent": "quality-zero-platform",
+            },
+        )
+    except HTTPError as exc:
+        if exc.code in (403, 404):
+            return None, None
+        raise
+    return payload, headers
+
+
+def _github_payload_or_degraded(url: str, token: str) -> Any:
+    """Payload-only view of :func:`_github_fetch_degraded` (Lane 8)."""
+    payload, _headers = _github_fetch_degraded(url, token)
+    return payload
+
+
 def _select_runs(workflow_runs: Sequence[Mapping[str, Any]], *, filter_fn=None) -> List[Mapping[str, Any]]:
     """Handle select runs."""
     if filter_fn is None:
@@ -234,8 +291,136 @@ def _compute_health(workflow_runs: Sequence[Mapping[str, Any]], *, filter_fn=Non
     return "success" if conclusions and conclusions <= {"success"} else "partial"
 
 
-def _live_health(token: str, repo_slug: str, default_branch: str) -> Dict[str, Any]:
-    """Handle live health."""
+def _gate_status_from_context(context_name: str, contexts: Mapping[str, Dict[str, str]]) -> str:
+    """Resolve one required context to ``pass``/``fail``/``pending``/``missing``.
+
+    Mirrors ``build_quality_rollup._status_from_context`` (check-run and
+    legacy status semantics identical), with one dashboard-specific nuance:
+    a required context in ``PR_ONLY_CONTEXTS`` (the aggregate ``CodeQL``)
+    that is absent on the default branch reports ``pr_only`` instead of
+    ``missing`` — L7's phantom-context vocabulary, so observe-mode repos
+    using CodeQL default setup don't render as permanently red.
+    """
+    details = _resolve_observed_context(context_name, contexts)
+    if not details:
+        return "pr_only" if context_name in PR_ONLY_CONTEXTS else "missing"
+    if details.get("source") == "check_run" and details.get("state") != "completed":
+        return "pending"
+    if details.get("source") == "status" and details.get("conclusion") == "pending":
+        return "pending"
+    return "fail" if _evaluate_observed_context(context_name, details) else "pass"
+
+
+def _aggregate_gate_status(gates: Sequence[Mapping[str, Any]]) -> str:
+    """Reduce per-gate verdicts to one repo-level badge (fail > pending > missing > pass)."""
+    if not gates:
+        return "unknown"
+    verdicts = {str(gate.get("status")) for gate in gates}
+    for overall in ("fail", "pending", "missing", "pass"):
+        if overall in verdicts:
+            return overall
+    return "unknown"
+
+
+def _next_page_url(headers: Mapping[str, str]) -> str:
+    """Extract the ``rel="next"`` URL from a GitHub Link header ("" if none)."""
+    link = str(headers.get("link", "") or "")
+    for part in link.split(","):
+        piece = part.strip()
+        if piece.endswith('rel="next"') and "<" in piece and ">" in piece:
+            return piece[piece.index("<") + 1 : piece.index(">")]
+    return ""
+
+
+def _collect_all_check_runs(url: str, token: str) -> Tuple[List[Dict[str, Any]], bool]:
+    """Gather check-runs across Link-header pages; return ``(runs, partial)``.
+
+    A commit with re-run history can carry well over 100 check-runs (measured
+    live 2026-10-21: tracelines HEAD has 120, and the first ``per_page=100``
+    page holds only Analyze/canary re-runs — the required contexts sit on
+    page 2). ``partial`` is True when the walk ended on a denial (403/404) or
+    hit the page cap, so callers can flag the measurement as incomplete
+    instead of silently reporting truncated ``missing`` verdicts.
+    """
+    runs: List[Dict[str, Any]] = []
+    next_url: str | None = url
+    for _ in range(MAX_CHECK_RUN_PAGES):
+        if not next_url:
+            return runs, False
+        payload, headers = _github_fetch_degraded(next_url, token)
+        if payload is None:
+            return runs, True
+        if isinstance(payload, Mapping):
+            runs.extend(run for run in payload.get("check_runs", []) or [] if isinstance(run, Mapping))
+        next_url = _next_page_url(headers or {}) or None
+    return runs, True
+
+
+def _lane_gates(
+    token: str,
+    repo_slug: str,
+    default_branch: str,
+    profile: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """Measure the profile's required contexts on the default-branch HEAD.
+
+    Every fetch is 404/403-tolerant (the Lane-8 staleness contract): a
+    private repo, an empty branch, or a denied check feed degrades THIS
+    repo's row to ``gate_status: stale`` with a reason — the build never
+    fails because one fleet member could not be measured.
+    """
+    required, required_error = collect_required(profile)
+    base: Dict[str, Any] = {
+        "gate_status": "unknown",
+        "gates": [],
+        "gate_head_sha": "",
+        "gate_head_date": "",
+        "gate_note": required_error,
+    }
+    if required_error:
+        return base
+    head = _github_payload_or_degraded(f"{GITHUB_API_BASE}/repos/{repo_slug}/commits/{default_branch}", token)
+    if not isinstance(head, Mapping) or not str(head.get("sha") or "").strip():
+        base["gate_status"] = "stale"
+        base["gate_note"] = f"default-branch head unavailable for {default_branch}"
+        return base
+    sha = str(head["sha"])
+    commit_info = head.get("commit")
+    head_date = ""
+    if isinstance(commit_info, Mapping):
+        committer = commit_info.get("committer")
+        if isinstance(committer, Mapping):
+            head_date = str(committer.get("date") or "")
+    runs, partial = _collect_all_check_runs(
+        f"{GITHUB_API_BASE}/repos/{repo_slug}/commits/{sha}/check-runs?per_page=100", token
+    )
+    statuses = _github_payload_or_degraded(f"{GITHUB_API_BASE}/repos/{repo_slug}/commits/{sha}/status", token)
+    if not runs and statuses is None:
+        base["gate_status"] = "stale"
+        base["gate_note"] = "check-runs and status feeds unavailable (404/403)"
+        base["gate_head_sha"] = sha
+        base["gate_head_date"] = head_date
+        return base
+    contexts = _collect_contexts(
+        {"check_runs": runs},
+        statuses if isinstance(statuses, Mapping) else {},
+    )
+    gates = [{"context": name, "status": _gate_status_from_context(name, contexts)} for name in required]
+    return {
+        "gate_status": _aggregate_gate_status(gates),
+        "gates": gates,
+        "gate_head_sha": sha,
+        "gate_head_date": head_date,
+        "gate_note": "partial check-runs feed (page cap or mid-walk denial)" if partial else "",
+    }
+
+
+def _live_health(
+    token: str,
+    repo_slug: str,
+    default_branch: str,
+    profile: Mapping[str, Any] | None = None,
+) -> Dict[str, Any]:
     # Every per-repo fetch is 404-tolerant: a 404 means "this repo has no
     # such resource visible to the token" (private repo, no runs, no
     # rulesets) and must degrade that ONE row, never abort the whole
@@ -263,7 +448,7 @@ def _live_health(token: str, repo_slug: str, default_branch: str) -> Dict[str, A
         if isinstance(raw_visibility, str) and raw_visibility.strip():
             visibility = raw_visibility.strip().lower()
     workflow_runs = runs.get("workflow_runs", []) if isinstance(runs, dict) else []
-    return {
+    health: Dict[str, Any] = {
         "default_branch_health": _compute_health(workflow_runs),
         "open_pr_health": _compute_health(
             workflow_runs,
@@ -272,6 +457,9 @@ def _live_health(token: str, repo_slug: str, default_branch: str) -> Dict[str, A
         "ruleset_present": bool(rulesets),
         "visibility": visibility,
     }
+    if profile is not None:
+        health.update(_lane_gates(token, repo_slug, default_branch, profile))
+    return health
 
 
 def main() -> int:
@@ -285,7 +473,12 @@ def main() -> int:
     live = {}
     if token:
         for repo_entry in inventory["repos"]:
-            live[repo_entry["slug"]] = _live_health(token, repo_entry["slug"], repo_entry.get("default_branch", "main"))
+            live[repo_entry["slug"]] = _live_health(
+                token,
+                repo_entry["slug"],
+                repo_entry.get("default_branch", "main"),
+                profile=profiles.get(repo_entry["slug"]),
+            )
     payload = build_dashboard_payload(inventory=inventory, profiles=profiles, live=live)
     docs_admin = (
         Path(args.assets_dir).resolve() if args.assets_dir else Path(__file__).resolve().parents[2] / "docs" / "admin"

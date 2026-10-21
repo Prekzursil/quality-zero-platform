@@ -60,6 +60,15 @@ tbody tr:hover { background: #16203d; cursor: pointer; }
 .badge.pass { background: #14532d; color: #f0fdf4; }
 .badge.fail { background: #7f1d1d; color: #fef2f2; }
 .badge.pending, .badge.unknown { background: #334155; color: #f8fafc; }
+/* Lane 8 operator panels: pre-existing success/partial values (heatmap) plus
+   the gate/drift/rollup vocabularies. */
+.badge.success { background: #14532d; color: #f0fdf4; }
+.badge.partial { background: #7f1d1d; color: #fef2f2; }
+.badge.missing, .badge.no { background: #7f1d1d; color: #fef2f2; }
+.badge.stale { background: #78350f; color: #fffbeb; }
+.badge.pr_only { background: #1e3a5f; color: #dbeafe; }
+.badge.in_sync, .badge.yes, .badge.ok { background: #14532d; color: #f0fdf4; }
+.badge.drift { background: #7f1d1d; color: #fef2f2; }
 .detail-panel {
   background: #121a31;
   border: 1px solid #1f2a44;
@@ -79,3 +88,25 @@ tbody tr:hover { background: #16203d; cursor: pointer; }
   padding: 8px 12px;
 }
 .small { color: #cbd5e1; }
+.muted { color: #94a3b8; font-size: 13px; }
+/* Lane 8 operator panels */
+.panel {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 16px 20px;
+}
+.panel h2 { font-size: 18px; margin: 8px 0 12px; }
+.gates-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.gate-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #0e1528;
+  border: 1px solid #1f2a44;
+  border-radius: 8px;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+.gate-chip code { color: #cbd5e1; }
+.rollup-repo { margin-bottom: 18px; }
+.rollup-repo > p { margin: 0 0 8px; }

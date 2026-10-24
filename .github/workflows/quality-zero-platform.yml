@@ -105,8 +105,10 @@ jobs:
         with:
           persist-credentials: false
       # Every workflow here is QZP's own CI or a reusable workflow the fleet
-      # runs, so a defect in one is a defect in every caller. Both linters are
-      # pinned release assets, digest-verified before use.
+      # runs, and templates/repo/.github/workflows holds the thin callers that
+      # governed repos copy, so a defect in one is a defect in every caller.
+      # Both linters read both directories, and both are pinned release
+      # assets, digest-verified before use.
       #   actionlint: expression / needs / output / runner-label checks, plus
       #               shellcheck over every run: block (shellcheck ships on the
       #               runner image).
@@ -121,7 +123,9 @@ jobs:
             https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
           echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  /tmp/actionlint.tar.gz" | sha256sum -c -
           tar -xzf /tmp/actionlint.tar.gz -C /tmp actionlint
-          /tmp/actionlint -color
+          shopt -s nullglob
+          workflows=(.github/workflows/*.y*ml templates/repo/.github/workflows/*.y*ml)
+          /tmp/actionlint -color "${workflows[@]}"
       - name: gate-workflows zizmor
         # Runs even when actionlint failed, so one run shows every finding;
         # the job still fails if either linter does.
@@ -132,7 +136,7 @@ jobs:
             https://github.com/zizmorcore/zizmor/releases/download/v1.31.1/zizmor-x86_64-unknown-linux-gnu.tar.gz
           echo "d185f726bdaf92df78273217dfdd24ebcd6b0ef48cf3ce776ff5762b6e138c99  /tmp/zizmor.tar.gz" | sha256sum -c -
           tar -xzf /tmp/zizmor.tar.gz -C /tmp zizmor
-          /tmp/zizmor --offline --format plain .github/workflows
+          /tmp/zizmor --offline --format plain .github/workflows templates/repo/.github/workflows
 
   secrets:
     name: gate-secrets (gitleaks)

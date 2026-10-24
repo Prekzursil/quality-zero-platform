@@ -81,6 +81,19 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertEqual(notice["if"], "${{ env.CODECOV_UPLOADABLE != 'true' }}")
         self.assertIn("::notice title=Codecov upload skipped::", notice["run"])
 
+    def test_the_workflow_gate_lints_the_consumer_templates_too(self) -> None:
+        """Governed repos copy templates/repo/.github/workflows: a defect there must fail QZP's own gate."""
+        workflow = yaml.safe_load(
+            (ROOT / ".github" / "workflows" / "quality-zero-platform.yml").read_text(encoding="utf-8")
+        )
+        steps = {step.get("name", ""): step for step in workflow["jobs"]["workflows"]["steps"]}
+        actionlint = steps["gate-workflows actionlint"]["run"]
+        self.assertIn("templates/repo/.github/workflows/*.y*ml", actionlint)
+        self.assertIn('/tmp/actionlint -color "${workflows[@]}"', actionlint)
+        zizmor = steps["gate-workflows zizmor"]["run"]
+        self.assertIn("--format plain .github/workflows templates/repo/.github/workflows", zizmor)
+        self.assertTrue(sorted((ROOT / "templates" / "repo" / ".github" / "workflows").glob("*.yml")))
+
     def test_no_step_gates_on_its_own_env(self) -> None:
         """A step's own env does not exist yet when its `if:` is evaluated.
 

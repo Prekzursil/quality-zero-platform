@@ -28,25 +28,10 @@
         "do_not_enforce_on_create": false,
         "required_status_checks": [
           {
+            "context": "ci-green"
+          },
+          {
             "context": "quality / quality"
-          },
-          {
-            "context": "test (ubuntu-latest, 3.11)"
-          },
-          {
-            "context": "test (ubuntu-latest, 3.12)"
-          },
-          {
-            "context": "test (ubuntu-latest, 3.13)"
-          },
-          {
-            "context": "test (windows-latest, 3.11)"
-          },
-          {
-            "context": "test (windows-latest, 3.12)"
-          },
-          {
-            "context": "test (windows-latest, 3.13)"
           },
           {
             "context": "CodeQL"

@@ -57,7 +57,7 @@ import sys
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple, Union
 
 import yaml  # type: ignore[import-untyped]
 
@@ -802,7 +802,6 @@ def template_context(facts: RepoFacts, read: Reader, qzp_pin: str, deps_floor: s
         "fork_contributing_note": _fork_contributing_note(facts),
         "display_name": facts.name,
         "default_branch": facts.default_branch,
-        "default_branch_yaml": json.dumps(facts.default_branch),
         "reporting_channel": reporting,
         "security_controls": "\n".join(controls),
         "security_contact_url": contact_url,
@@ -826,7 +825,7 @@ def template_context(facts: RepoFacts, read: Reader, qzp_pin: str, deps_floor: s
         ),
         "qzp_pin": qzp_pin,
         "caller_with": caller_with({}, deps_floor),
-        "extra_triggers": "",
+        "caller_triggers": render_triggers((facts.default_branch,), (facts.default_branch,), False),
         "deps_floor": deps_floor,
     }
 
@@ -1173,14 +1172,14 @@ def bump_caller(text: str, qzp_pin: str) -> str:
     )
 
 
-def _yaml_scalar(value: str) -> str:
-    """Render one string input so that YAML reads it back as exactly the same string."""
-    if _PLAIN_SCALAR_RE.fullmatch(value) and yaml.safe_load(value) == value:
+def _yaml_scalar(value: object) -> str:
+    """Render one caller input (a string or a number) so YAML reads it back as the same value."""
+    if isinstance(value, str) and _PLAIN_SCALAR_RE.fullmatch(value) and yaml.safe_load(value) == value:
         return value
     return json.dumps(value)
 
 
-def caller_with(inputs: Dict[str, str], deps_floor: str) -> str:
+def caller_with(inputs: Dict[str, object], deps_floor: str) -> str:
     """Render the caller job's ``with:`` block: the carried-over inputs plus the gate-6 floor.
 
     ``any`` is always set when asked for; otherwise an existing floor is carried over as is,
@@ -1196,16 +1195,66 @@ def caller_with(inputs: Dict[str, str], deps_floor: str) -> str:
     return "    with:\n" + "".join(f"      {key}: {_yaml_scalar(value)}\n" for key, value in merged.items())
 
 
-def thin_caller(text: str) -> Optional[Tuple[Dict[str, str], bool]]:
-    """``(inputs, runs on workflow_dispatch)`` when a workflow is a thin lean-gate caller, else ``None``.
+def render_triggers(push: Sequence[str], pull_request: Sequence[str], dispatch: bool) -> str:
+    """The caller's ``on:`` block. An empty branch list means the event runs unfiltered."""
+
+    def event(name: str, branches: Sequence[str]) -> str:
+        if not branches:
+            return f"  {name}:\n"
+        return f"  {name}:\n    branches: [{', '.join(json.dumps(branch) for branch in branches)}]\n"
+
+    text = event("push", push) + event("pull_request", pull_request)
+    text += "  # a merge queue's synthetic commit must report the required check too\n"
+    text += "  merge_group:\n    types: [checks_requested]\n"
+    return text + ("  workflow_dispatch:\n" if dispatch else "")
+
+
+@dataclass(frozen=True)
+class ThinCaller:
+    """What regenerating a thin caller carries over: its inputs and its triggers."""
+
+    inputs: Dict[str, object]
+    push: Tuple[str, ...]  # () = unfiltered
+    pull_request: Tuple[str, ...]
+    dispatch: bool
+
+
+#: Triggers a thin caller may have; anything else (schedule, workflow_call, ...) is hand-written.
+_THIN_TRIGGERS = frozenset({"push", "pull_request", "merge_group", "workflow_dispatch"})
+
+
+def _trigger_branches(
+    triggers: Union[List[str], Dict[str, object]], event: str, default_branch: str
+) -> Optional[Tuple[str, ...]]:
+    """The branch filter of ``event``: ``()`` unfiltered, the default branch when the event is absent.
+
+    ``None`` when the event carries anything but a non-empty string ``branches`` list (paths,
+    tags, branches-ignore, types, ...): only a hand-written caller may do that.
+    """
+    if not isinstance(triggers, dict):
+        return () if event in triggers else (default_branch,)
+    if event not in triggers:
+        return (default_branch,)
+    spec = triggers[event]
+    if spec is None:
+        return ()
+    branches = spec.get("branches") if isinstance(spec, dict) and set(spec) == {"branches"} else None
+    if not (isinstance(branches, list) and branches and all(isinstance(b, str) for b in branches)):
+        return None
+    return tuple(branches)
+
+
+def thin_caller(text: str, default_branch: str = "main") -> Optional[ThinCaller]:
+    """What to carry over when a workflow is a thin lean-gate caller, else ``None``.
 
     Thin means the managed shape and nothing else: top-level name / on / permissions /
     concurrency / jobs, one ``quality`` job that only ``uses`` the reusable workflow (with
     optional ``with`` inputs, ``name: quality`` and job-level permissions), runs on
-    pull_request, and read-only contents permissions at both levels. Every input must be a
-    string (PyYAML's YAML 1.1 coerces ``on`` or a date, which GitHub reads as text), and a
-    ``workflow_dispatch`` may not declare inputs. The baseline owns such a caller and
-    regenerates it from the template, carrying its inputs over; anything more is
+    pull_request, and read-only contents permissions at both levels. Its triggers are
+    push / pull_request (at most a ``branches`` filter each, which is kept), merge_group and
+    an input-less workflow_dispatch. Every input is a string or a number (PyYAML's YAML 1.1
+    turns ``on`` or a date into something GitHub reads as text). The baseline owns such a
+    caller and regenerates it from the template, carrying all of that over; anything more is
     hand-written and only re-pinned.
     """
     try:
@@ -1221,28 +1270,36 @@ def thin_caller(text: str) -> Optional[Tuple[Dict[str, str], bool]]:
         list(jobs) != ["quality"]
         or set(job) - _THIN_CALLER_JOB_KEYS
         or not isinstance(inputs, dict)
-        or not all(isinstance(value, str) for value in inputs.values())
+        or not all(isinstance(v, (str, int, float)) and not isinstance(v, bool) for v in inputs.values())
         or document.get("permissions", READ_ONLY) != READ_ONLY
         or job.get("permissions", READ_ONLY) != READ_ONLY
     ):
         return None
     triggers = document.get("on", document.get(True))
-    if isinstance(triggers, dict) and triggers.get("workflow_dispatch"):
+    if isinstance(triggers, str):
+        triggers = [triggers]
+    if isinstance(triggers, list) and not all(isinstance(name, str) for name in triggers):
         return None
-    return dict(inputs), isinstance(triggers, (dict, list)) and "workflow_dispatch" in triggers
+    names = set(triggers)
+    if names - _THIN_TRIGGERS or (isinstance(triggers, dict) and triggers.get("workflow_dispatch")):
+        return None
+    push = _trigger_branches(triggers, "push", default_branch)
+    pull_request = _trigger_branches(triggers, "pull_request", default_branch)
+    if push is None or pull_request is None:
+        return None
+    return ThinCaller(dict(inputs), push, pull_request, "workflow_dispatch" in names)
 
 
 def _regenerate_caller(
-    workflow: str, text: str, refs: Set[str], thin: Tuple[Dict[str, str], bool], context: Dict[str, str]
+    workflow: str, text: str, refs: Set[str], thin: ThinCaller, context: Dict[str, str]
 ) -> FileAction:
-    """Regenerate a thin caller from the template, keeping its inputs and a manual trigger."""
-    inputs, dispatch = thin
+    """Regenerate a thin caller from the template, keeping its inputs and triggers."""
     rendered = render_template(
         "quality.yml",
         {
             **context,
-            "caller_with": caller_with(inputs, context["deps_floor"]),
-            "extra_triggers": "  workflow_dispatch:\n" if dispatch else "",
+            "caller_with": caller_with(thin.inputs, context["deps_floor"]),
+            "caller_triggers": render_triggers(thin.push, thin.pull_request, thin.dispatch),
         },
     )
     if rendered == text.replace("\r\n", "\n"):
@@ -1264,7 +1321,7 @@ def _plan_quality_caller(facts: RepoFacts, read: Reader, context: Dict[str, str]
         refs = caller_refs(text)
         if not refs:
             continue
-        thin = thin_caller(text)
+        thin = thin_caller(text, facts.default_branch)
         if thin is not None:
             actions.append(_regenerate_caller(workflow, text, refs, thin, context))
             continue

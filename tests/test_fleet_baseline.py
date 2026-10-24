@@ -388,7 +388,11 @@ class TemplateTests(unittest.TestCase):
                 self.assertIsInstance(yaml.safe_load(fb.render_template("ISSUE_TEMPLATE/" + form, context)), dict)
         caller = yaml.safe_load(fb.render_template("quality.yml", context))
         self.assertEqual(caller["jobs"]["quality"], {"uses": CALLER_PREFIX + PIN})
-        self.assertEqual(caller["concurrency"]["group"], "quality-${{ github.ref }}")
+        self.assertEqual(
+            caller["concurrency"]["group"],
+            "quality-${{ github.event_name == 'pull_request' && github.ref || github.sha }}",
+        )
+        self.assertEqual(caller[True]["push"], {"branches": ["main"]})
         self.assertEqual(caller[True]["merge_group"], {"types": ["checks_requested"]})
 
     def test_default_branch_is_a_quoted_yaml_scalar(self) -> None:
@@ -998,17 +1002,23 @@ class ThinCallerTests(unittest.TestCase):
         )
 
     def test_thin_caller_shapes(self) -> None:
-        self.assertEqual(fb.thin_caller(self.THIN), ({}, True))
-        listed = self.THIN.replace("on:\n  pull_request:\n  workflow_dispatch:\n", "on: [pull_request]\n")
-        self.assertEqual(fb.thin_caller(listed), ({}, False))
+        # push is absent here, so regeneration adds it on the default branch; pull_request is unfiltered
+        self.assertEqual(fb.thin_caller(self.THIN), fb.ThinCaller({}, ("main",), (), True))
+        self.assertEqual(fb.thin_caller(self.THIN, "trunk").push, ("trunk",))
+        listed = self.THIN.replace("on:\n  pull_request:\n  workflow_dispatch:\n", "on: [push, pull_request]\n")
+        self.assertEqual(fb.thin_caller(listed), fb.ThinCaller({}, (), (), False))
         scalar = self.THIN.replace("on:\n  pull_request:\n  workflow_dispatch:\n", "on: pull_request\n")
-        self.assertEqual(fb.thin_caller(scalar), ({}, False))
-        with_inputs = self.THIN + "    with:\n      opengrep-paths: src\n"
-        self.assertEqual(fb.thin_caller(with_inputs), ({"opengrep-paths": "src"}, True))
+        self.assertEqual(fb.thin_caller(scalar), fb.ThinCaller({}, ("main",), (), False))
+        filtered = self.THIN.replace(
+            "  pull_request:\n", "  push:\n    branches: [main, master]\n  pull_request:\n    branches: [main]\n"
+        )
+        self.assertEqual(fb.thin_caller(filtered), fb.ThinCaller({}, ("main", "master"), ("main",), True))
+        with_inputs = self.THIN + "    with:\n      opengrep-paths: src\n      jsts-coverage-min: 100\n"
+        self.assertEqual(fb.thin_caller(with_inputs).inputs, {"opengrep-paths": "src", "jsts-coverage-min": 100})
         job_scoped = self.THIN + "    permissions:\n      contents: read\n"
-        self.assertEqual(fb.thin_caller(job_scoped), ({}, True))
+        self.assertEqual(fb.thin_caller(job_scoped), fb.ThinCaller({}, ("main",), (), True))
         manual = self.THIN.replace("  workflow_dispatch:\n", "  workflow_dispatch: {}\n")
-        self.assertEqual(fb.thin_caller(manual), ({}, True))
+        self.assertTrue(fb.thin_caller(manual).dispatch)
         for broken in (
             "jobs: [unclosed\n",
             "- a list\n",
@@ -1019,14 +1029,32 @@ class ThinCallerTests(unittest.TestCase):
             self.THIN + "    with: nope\n",
             # YAML 1.1 reads `on` as a boolean; GitHub reads it as text, so the caller stays hand-written
             self.THIN + "    with:\n      opengrep-paths: on\n",
+            self.THIN + "    with:\n      flag: true\n",
             self.THIN.replace(
                 "  workflow_dispatch:\n", "  workflow_dispatch:\n    inputs:\n      x:\n        type: string\n"
             ),
             self.THIN + "permissions:\n  contents: write\n",
             self.THIN + "    permissions:\n      contents: write\n",
+            # a trigger the template does not render, or a filter other than branches, stays hand-written
+            self.THIN.replace("  workflow_dispatch:\n", "  schedule:\n    - cron: '0 3 * * 1'\n"),
+            listed.replace("[push, pull_request]", "[push, pull_request, schedule]"),
+            listed.replace("[push, pull_request]", "[pull_request, {push: 1}]"),
+            self.THIN.replace("  pull_request:\n", "  pull_request:\n    paths: ['src/**']\n"),
+            self.THIN.replace("  pull_request:\n", "  pull_request:\n    branches: []\n"),
+            self.THIN.replace("  pull_request:\n", "  pull_request:\n    branches: main\n"),
+            self.THIN.replace("  pull_request:\n", "  pull_request:\n    branches: [1]\n"),
+            self.THIN.replace("  pull_request:\n", "  pull_request:\n  push:\n    tags: ['v*']\n"),
         ):
             with self.subTest(broken=broken):
                 self.assertIsNone(fb.thin_caller(broken))
+
+    def test_render_triggers(self) -> None:
+        self.assertEqual(
+            fb.render_triggers(("main", "release/*"), (), True),
+            '  push:\n    branches: ["main", "release/*"]\n  pull_request:\n'
+            "  # a merge queue's synthetic commit must report the required check too\n"
+            "  merge_group:\n    types: [checks_requested]\n  workflow_dispatch:\n",
+        )
 
     def test_regeneration_carries_inputs_and_the_manual_trigger(self) -> None:
         context = fb.template_context(_facts([]), _reader({}), PIN)
@@ -1037,6 +1065,8 @@ class ThinCallerTests(unittest.TestCase):
         self.assertEqual(action.reason, f"thin caller regenerated from the fleet template (pin v1 -> {PIN})")
         caller = yaml.safe_load(action.content or "")
         self.assertIn("workflow_dispatch", caller[True])
+        self.assertIsNone(caller[True]["pull_request"])
+        self.assertEqual(caller[True]["push"], {"branches": ["main"]})
         self.assertEqual(caller["jobs"]["quality"]["with"], {"opengrep-paths": "src"})
         strict = fb.template_context(_facts([]), _reader({}), PIN, "any")
         zero = fb._plan_quality_caller(_facts(list(files)), _reader(files), strict, PIN)[0]

@@ -31,6 +31,8 @@ source = [
   # the enforced scope too. Same 100% line+branch bar.
   "scripts.quality.build_dashboard_extras",
   "scripts.quality.generate_ruleset_payload",
+  # The LIVE ruleset comparison (reusable-ruleset-sync.yml). Same bar.
+  "scripts.quality.ruleset_live_drift",
 ]
 branch = true
 omit = [

@@ -9,7 +9,7 @@ name: Scheduled Alerts
 # Fleet state sources:
 #   - LIVE (scripts/quality/fleet_state.py; a failed read fails the run):
 #     open break-glass follow-up issues -> bypass-stale;
-#     open drift-sync PRs across the fleet -> drift-stuck.
+#     open drift-sync PRs in inventory/repos.yml's repos -> drift-stuck.
 #   - files nothing produces yet (absent -> the summary says NOT evaluated):
 #     quality-rollup/coverage-trend.json -> coverage regression detectors;
 #     audit/bump-staging-results.jsonl -> fleet-bump wave outcome.
@@ -118,7 +118,7 @@ jobs:
           # LIVE sources: read now, never from a file nothing writes. A failed
           # read raises and fails the run - never a silent all-clear.
           bypass_issues = fleet_state.bypass_followups(PLATFORM)
-          drift_prs = fleet_state.drift_sync_prs(PLATFORM.split("/", 1)[0])
+          drift_prs = fleet_state.drift_sync_prs(fleet_state.fleet_slugs())
           drift_scope = fleet_state.drift_search_scope(os.environ)
 
           active = alert_dispatch.fetch_active_workflows(PLATFORM)

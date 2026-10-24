@@ -96,7 +96,7 @@ class ScheduledAlertsWorkflowTests(unittest.TestCase):
         """They used to read files nothing wrote, so they were never evaluated."""
         self.assertIn("from scripts.quality import alert_dispatch, alerts, fleet_state", self.text)
         self.assertIn("bypass_issues = fleet_state.bypass_followups(PLATFORM)", self.text)
-        self.assertIn('drift_prs = fleet_state.drift_sync_prs(PLATFORM.split("/", 1)[0])', self.text)
+        self.assertIn("drift_prs = fleet_state.drift_sync_prs(fleet_state.fleet_slugs())", self.text)
         self.assertNotIn("bypass-tracking.jsonl", self.text)
         self.assertNotIn('_safe_jsonl("audit/drift-sync.jsonl")', self.text)
         # The detectors still without a producer are named as NOT evaluated.

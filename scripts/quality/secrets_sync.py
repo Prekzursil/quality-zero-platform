@@ -161,7 +161,7 @@ def append_audit_jsonl(path: Path, records: Iterable[Dict[str, Any]]) -> None:
     dropped at this boundary, not merely relied upon by convention.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as fh:
+    with path.open("a", encoding="utf-8", newline="\n") as fh:
         for record in records:
             safe = _sanitise_audit_record(record)
             fh.write(

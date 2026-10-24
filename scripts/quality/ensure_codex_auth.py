@@ -25,7 +25,7 @@ def _write_payload(path: str, payload: Mapping[str, object]) -> None:
         return
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    target.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
 
 
 def _resolve_auth_payload(args: argparse.Namespace) -> Dict[str, str]:
@@ -42,7 +42,7 @@ def _resolve_auth_payload(args: argparse.Namespace) -> Dict[str, str]:
             parsed = json.loads(bootstrap_value)
         except json.JSONDecodeError as exc:
             raise SystemExit(f"{args.bootstrap_env_var} is not valid JSON: {exc}") from exc
-        auth_path.write_text(json.dumps(parsed, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        auth_path.write_text(json.dumps(parsed, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
         return {"auth_file": str(auth_path), "source": args.bootstrap_env_var}
 
     raise SystemExit(

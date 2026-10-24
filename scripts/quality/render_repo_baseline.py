@@ -216,7 +216,7 @@ def render_qlty_config() -> str:
 def _write_text(path: Path, text: str) -> None:
     """Write UTF-8 text with a trailing newline."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text.rstrip() + "\n", encoding="utf-8")
+    path.write_text(text.rstrip() + "\n", encoding="utf-8", newline="\n")
 
 
 def _remove_legacy_zero_workflows(repo_root: Path) -> None:

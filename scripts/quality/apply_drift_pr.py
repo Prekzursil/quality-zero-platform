@@ -59,7 +59,7 @@ def _apply_entries(entries: List[Mapping[str, Any]], cwd: Path) -> List[str]:
             continue
         target = cwd / rel
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(body, encoding="utf-8")
+        target.write_text(body, encoding="utf-8", newline="\n")
         applied.append(rel)
     return applied
 

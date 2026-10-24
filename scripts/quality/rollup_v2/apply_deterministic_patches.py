@@ -171,7 +171,7 @@ def main() -> int:
     # string variable rather than crossing through pathlib (which Sonar's
     # taint analyser appears to lose track of).
     os.makedirs(os.path.dirname(out_path_str) or ".", exist_ok=True)
-    with open(out_path_str, "w", encoding="utf-8") as fh:
+    with open(out_path_str, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(json.dumps(result, indent=2) + "\n")
 
     return 0

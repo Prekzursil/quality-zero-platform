@@ -124,7 +124,7 @@ def normalize_xml_report(
         normalized_text,
     )
     out_path = _output_path(out_dir, report_id=report_id, extension=".xml")
-    out_path.write_text(normalized_text, encoding="utf-8")
+    out_path.write_text(normalized_text, encoding="utf-8", newline="\n")
     return {
         "input": path.as_posix(),
         "normalized": out_path.as_posix(),
@@ -152,7 +152,7 @@ def normalize_lcov_report(
         lines.append(raw_line)
 
     out_path = _output_path(out_dir, report_id=report_id, extension=".info")
-    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")  # NOSONAR
+    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")  # NOSONAR
     return {
         "input": path.as_posix(),
         "normalized": out_path.as_posix(),

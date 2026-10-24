@@ -193,7 +193,7 @@ def _github_output_lines(profile: Dict[str, Any], event_name: str) -> List[str]:
 def _write_github_output(path: Path, profile: Dict[str, Any], event_name: str) -> None:
     """Handle write github output."""
     payload_lines = _github_output_lines(profile, event_name)
-    with path.open("a", encoding="utf-8") as handle:
+    with path.open("a", encoding="utf-8", newline="\n") as handle:
         for line in payload_lines:
             handle.write(line + "\n")
 
@@ -214,6 +214,7 @@ def main() -> int:
         output_path.write_text(
             json.dumps(export_payload, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
+            newline="\n",
         )
     else:
         print(json.dumps(export_payload, indent=2, sort_keys=True))

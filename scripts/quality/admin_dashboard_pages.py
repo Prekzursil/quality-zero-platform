@@ -234,6 +234,7 @@ if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
     _coverage_path.write_text(
         render_coverage_trend_page(rows=_cov_rows),
         encoding="utf-8",
+        newline="\n",
     )
 
     _drift_rows = redact_private_repos(load_drift_entries(Path(_args.drift_jsonl)) if _args.drift_jsonl else [])
@@ -242,6 +243,7 @@ if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
     _drift_path.write_text(
         render_drift_page(entries=_drift_rows),
         encoding="utf-8",
+        newline="\n",
     )
 
     _audit_rows = load_audit_jsonl(Path(_args.audit_jsonl)) if _args.audit_jsonl else []
@@ -250,5 +252,6 @@ if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
     _audit_path.write_text(
         render_audit_page(entries=_audit_rows),
         encoding="utf-8",
+        newline="\n",
     )
     print(f"Wrote coverage.html, drift.html, audit.html to {_out}")

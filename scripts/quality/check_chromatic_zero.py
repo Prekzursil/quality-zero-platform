@@ -60,7 +60,7 @@ def main(argv: List[str] | None = None) -> int:
     if args.out_json:
         out_json = Path(args.out_json)
         out_json.parent.mkdir(parents=True, exist_ok=True)
-        out_json.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        out_json.write_text(json.dumps(summary, indent=2), encoding="utf-8", newline="\n")
 
     if args.out_md:
         status = "PASS" if passed else "FAIL"
@@ -73,7 +73,7 @@ def main(argv: List[str] | None = None) -> int:
         )
         out_md = Path(args.out_md)
         out_md.parent.mkdir(parents=True, exist_ok=True)
-        out_md.write_text(md, encoding="utf-8")
+        out_md.write_text(md, encoding="utf-8", newline="\n")
 
     if not passed:
         print(f"Chromatic zero gate FAILED: {errored} errored, changes detected.", file=sys.stderr)

@@ -38,13 +38,13 @@ def _write_summary_files(
     if out_json:
         path = Path(out_json)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        path.write_text(json.dumps(summary, indent=2), encoding="utf-8", newline="\n")
     if out_md:
         status = "PASS" if count == 0 else "FAIL"
         md = f"# {provider} Zero\n\n**Status:** {status}\n**Findings:** {count}\n"
         path = Path(out_md)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(md, encoding="utf-8")
+        path.write_text(md, encoding="utf-8", newline="\n")
 
 
 def run_zero_gate(*, provider: str, argv: List[str] | None = None) -> int:

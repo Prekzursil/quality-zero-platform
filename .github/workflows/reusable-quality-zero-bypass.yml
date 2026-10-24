@@ -182,16 +182,25 @@ jobs:
         working-directory: audit-store
         run: |
           set -euo pipefail
+          rel="${QZ_AUDIT_PATH#audit-store/}"
+          # The evaluate step appended exactly one JSONL record.
+          record="$(tail -n 1 "$rel")"
+          branch="$(git rev-parse --abbrev-ref HEAD)"
           git config user.email "platform-bot@quality-zero.local"
           git config user.name "quality-zero-platform bypass"
-          git add "${QZ_AUDIT_PATH#audit-store/}"
-          git commit -m "chore(audit): record $QZ_LABEL for $QZ_PR_SLUG#$QZ_PR_NUMBER"
-          # Two bypasses can race for the same branch: rebase and retry.
           for _ in 1 2 3; do
-            if git push; then
+            git add "$rel"
+            git commit -m "chore(audit): record $QZ_LABEL for $QZ_PR_SLUG#$QZ_PR_NUMBER"
+            if git push origin "HEAD:$branch"; then
               exit 0
             fi
-            git pull --rebase
+            # Another bypass appended first. Both edits touch the same file
+            # end, so a rebase would conflict: start again from their tip and
+            # re-append this run's record.
+            git fetch origin "$branch"
+            git reset --hard "origin/$branch"
+            mkdir -p "$(dirname "$rel")"
+            printf '%s\n' "$record" >> "$rel"
           done
           echo "::error::Could not push the audit record after 3 attempts."
           exit 1

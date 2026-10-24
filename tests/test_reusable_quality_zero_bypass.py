@@ -108,8 +108,12 @@ class ReusableBypassWorkflowTests(unittest.TestCase):
         self.assertEqual(store["with"]["token"], "${{ secrets.BYPASS_AUDIT_PAT }}")
         (commit,) = [s for s in steps if s.get("name") == "Commit audit log"]
         self.assertEqual(commit["working-directory"], "audit-store")
-        self.assertIn('git add "${QZ_AUDIT_PATH#audit-store/}"', commit["run"])
-        self.assertIn("git pull --rebase", commit["run"])
+        self.assertIn('rel="${QZ_AUDIT_PATH#audit-store/}"', commit["run"])
+        self.assertIn('git push origin "HEAD:$branch"', commit["run"])
+        # A lost race re-appends this run's record on the winner's tip, never a conflicting rebase.
+        self.assertNotIn("git pull --rebase", commit["run"])
+        self.assertIn('git reset --hard "origin/$branch"', commit["run"])
+        self.assertIn('printf \'%s\\n\' "$record" >> "$rel"', commit["run"])
         self.assertIn('audit_dir = Path("audit-store") / audit_dir', self.text)
         self.assertIn("QZ_PLATFORM_REPO: ${{ job.workflow_repository }}", self.text)
 

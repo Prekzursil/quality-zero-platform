@@ -9,6 +9,9 @@ on:
     branches: [${default_branch}]
   pull_request:
     branches: [${default_branch}]
+  # a merge queue's synthetic commit must report the required check too
+  merge_group:
+    types: [checks_requested]
 
 permissions:
   contents: read

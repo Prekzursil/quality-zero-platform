@@ -85,6 +85,7 @@ class EcosystemTests(unittest.TestCase):
             "web/package.json": "npm",
             "go.mod": "gomod",
             "pom.xml": "maven",
+            "charts/app/Chart.yaml": "helm",
         }
         for path, ecosystem in cases.items():
             with self.subTest(path=path):
@@ -186,7 +187,10 @@ class UncoveredRailsTests(unittest.TestCase):
                 "version": 2,
                 "updates": [
                     "not-a-mapping",
-                    {"package-ecosystem": "npm", "directories": ["/", "/web/*", None]},
+                    {"package-ecosystem": "npm", "directories": ["/", "/web/*"]},
+                    {"package-ecosystem": "pip", "directories": "/"},
+                    {"package-ecosystem": "pip", "directories": ["/", None]},
+                    {"package-ecosystem": "pip", "directory": ["/"]},
                     {"package-ecosystem": "pip", "directory": "/"},
                 ],
             }
@@ -293,6 +297,7 @@ class TemplateTests(unittest.TestCase):
             f"Prekzursil/quality-zero-platform/.github/workflows/reusable-quality.yml@{PIN}",
         )
         self.assertEqual(caller["concurrency"]["group"], "quality-${{ github.ref }}")
+        self.assertEqual(caller[True]["merge_group"], {"types": ["checks_requested"]})
 
     def test_private_context(self) -> None:
         context = fb.template_context(_facts(["a.py"], private=True), _reader({}), PIN)
@@ -428,6 +433,26 @@ class PlanTests(unittest.TestCase):
         self.assertEqual([(a.path, a.action) for a in kept], [(".github/workflows/q.yaml", "keep")])
         in_repo = fb._plan_quality_caller(_facts([fb.QUALITY_CALLER]), _reader({}), context, PIN)
         self.assertEqual([(a.path, a.action) for a in in_repo], [(fb.QUALITY_CALLER, "gap")])
+
+    def test_managed_dependabot_is_regenerated(self) -> None:
+        managed = fb.render_dependabot({"github-actions": ["/"]})
+        files = {".github/dependabot.yml": managed.replace("\n", "\r\n")}
+        current = fb._plan_dependabot(_facts(list(files) + [".github/workflows/ci.yml"]), _reader(files))
+        self.assertEqual(current.action, "keep")
+        grown = fb._plan_dependabot(_facts(list(files) + [".github/workflows/ci.yml", "go.mod"]), _reader(files))
+        self.assertEqual(grown.action, "replace")
+        self.assertIn("gomod", grown.content or "")
+
+    def test_outside_languages_need_their_own_ci(self) -> None:
+        bare = fb.plan_baseline(_facts(["src/Main.java", "src/App.kt"]), _reader({}), PIN)
+        gap = _by_path(bare)[".github/workflows/"]
+        self.assertEqual(gap.action, "gap")
+        self.assertIn("Java, Kotlin source has no CI lane", gap.reason)
+        caller_only = fb._plan_outside_languages(_facts(["Main.java", fb.QUALITY_CALLER, "notes/ci.yml"]))
+        self.assertEqual([a.action for a in caller_only], ["gap"])
+        own_ci = fb._plan_outside_languages(_facts(["Main.java", ".github/workflows/gradle.yaml"]))
+        self.assertEqual(own_ci, [])
+        self.assertEqual(fb._plan_outside_languages(_facts(["app.py"])), [])
 
     def test_dependabot_variants(self) -> None:
         self.assertEqual(fb._plan_dependabot(_facts(["README.md"]), _reader({})).action, "keep")

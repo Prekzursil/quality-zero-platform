@@ -105,6 +105,7 @@ _SIMPLE_MANIFESTS = {
     "pubspec.yaml": "pub",
     "mix.exs": "mix",
     "pom.xml": "maven",
+    "Chart.yaml": "helm",
 }
 #: Ecosystems whose root manifest already covers nested modules (multi-project builds).
 _TOPMOST_ONLY = frozenset({"gradle", "maven", "nuget"})
@@ -334,7 +335,9 @@ def uncovered_rails(rails: Dict[str, List[str]], config_text: str) -> List[Tuple
     """Return ``(ecosystem, directory)`` rails an existing dependabot.yml does not update.
 
     An unparseable or non-mapping config covers nothing. ``directories`` globs are
-    honored (``fnmatch`` semantics, slightly more permissive than Dependabot's).
+    honored (``fnmatch`` semantics, slightly more permissive than Dependabot's). An
+    entry GitHub would reject — ``directories`` that is not a list of strings, or a
+    ``directory`` that is not a string — covers nothing either.
     """
     try:
         document = yaml.safe_load(config_text)
@@ -345,9 +348,11 @@ def uncovered_rails(rails: Dict[str, List[str]], config_text: str) -> List[Tuple
     for update in updates if isinstance(updates, list) else []:
         if not isinstance(update, dict):
             continue
-        directories = update.get("directories") or [update.get("directory")]
+        directories = update.get("directories", [update.get("directory")])
+        if not isinstance(directories, list) or not all(isinstance(item, str) for item in directories):
+            continue
         covered.setdefault(str(update.get("package-ecosystem", "")), []).extend(
-            _normalize_dir(str(item)) for item in directories if item
+            _normalize_dir(item) for item in directories if item
         )
     missing: List[Tuple[str, str]] = []
     for ecosystem, directories in rails.items():
@@ -653,11 +658,39 @@ def _plan_dependabot(facts: RepoFacts, read: Callable[[str], Optional[str]], pla
         if not rails:
             return FileAction(DEPENDABOT_LOCATIONS[0], "keep", "no manifests or workflows to update")
         return FileAction(DEPENDABOT_LOCATIONS[0], "create", "missing", render_dependabot(rails))
-    missing = uncovered_rails(rails, read(existing) or "")
+    text = read(existing) or ""
+    if text.replace("\r\n", "\n").startswith(_DEPENDABOT_HEADER):
+        rendered = render_dependabot(rails)
+        if text.replace("\r\n", "\n") == rendered:
+            return FileAction(existing, "keep", "managed config is current")
+        return FileAction(existing, "replace", "managed config regenerated for the current manifests", rendered)
+    missing = uncovered_rails(rails, text)
     if not missing:
         return FileAction(existing, "keep", "every manifest tree has a rail")
     listed = ", ".join(f"{ecosystem} {directory}" for ecosystem, directory in missing)
     return FileAction(existing, "gap", f"manifest trees without a Dependabot rail: {listed}")
+
+
+def _plan_outside_languages(facts: RepoFacts) -> List[FileAction]:
+    """Flag languages the lean gate cannot test when the repository has no CI of its own for them."""
+    outside = [label for key, label in _OUTSIDE_LEAN_GATE.items() if key in detect_languages(facts.paths)]
+    own_ci = [
+        path
+        for path in facts.paths
+        if posixpath.dirname(path) == ".github/workflows"
+        and path.endswith((".yml", ".yaml"))
+        and path != QUALITY_CALLER
+    ]
+    if not outside or own_ci:
+        return []
+    return [
+        FileAction(
+            ".github/workflows/",
+            "gap",
+            f"{', '.join(outside)} source has no CI lane: the lean gate does not test it and the repository "
+            "has no workflow of its own",
+        )
+    ]
 
 
 def _plan_quality_caller(
@@ -700,6 +733,7 @@ def plan_baseline(facts: RepoFacts, read: Callable[[str], Optional[str]], qzp_pi
     actions.extend(_plan_issue_forms(facts, context))
     actions.extend(_plan_gate_configs(facts, context))
     actions.extend(caller)
+    actions.extend(_plan_outside_languages(facts))
     return actions
 
 

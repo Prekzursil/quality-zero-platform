@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
-from typing import Any, List, Mapping
+from typing import Any, List, Mapping, Tuple
 from unittest.mock import patch
 from urllib.error import HTTPError
 
@@ -231,20 +231,35 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
                 return build_admin_dashboard._open_pr_health("token", "Prekzursil/example")
 
         pulls = [{"number": 1, "head": {"sha": "h1"}}, {"number": 2, "head": {"sha": "h2"}}, {"head": None}]
-        green = {"workflow_runs": [{"head_sha": "h1", "name": "CI", "conclusion": "success"}]}
-        self.assertEqual(live(pulls, green), "success")
-        red = {
-            "workflow_runs": [
-                {"head_sha": "h2", "name": "CI", "conclusion": "failure"},
-                {"head_sha": "closed-pr", "name": "CI", "conclusion": "success"},
-            ]
-        }
-        self.assertEqual(live(pulls, red), "partial")
-        self.assertEqual(live(pulls, {"workflow_runs": []}), "unknown")
-        self.assertEqual(live(pulls, ["not", "a", "dict"]), "unknown")
+
+        def runs(*pairs: Tuple[str, str]) -> dict:
+            return {"workflow_runs": [{"head_sha": sha, "name": "CI", "conclusion": c} for sha, c in pairs]}
+
+        self.assertEqual(live(pulls, runs(("h1", "success"), ("h2", "success"))), "success")
+        # A closed PR's runs never count; h2's failure does.
+        self.assertEqual(
+            live(pulls, runs(("h2", "failure"), ("closed", "success")), runs(("h1", "success"))), "partial"
+        )
+        # THE review finding: h2's runs fell off the newest page; its own lookup finds the old failure.
+        self.assertEqual(live(pulls, runs(("h1", "success")), runs(("h2", "failure"))), "partial")
+        # A head with no run anywhere is not a pass...
+        self.assertEqual(live(pulls, runs(("h1", "success")), {"workflow_runs": []}), "unknown")
+        # ...and neither is an unusable page with nothing found per head.
+        self.assertEqual(live(pulls, ["not", "a", "dict"], None, {"workflow_runs": ["junk"]}), "unknown")
         self.assertEqual(live([]), "none")
         self.assertEqual(live({"message": "not a list"}), "unknown")
         self.assertEqual(live(None), "unknown")  # 403/404: degraded to this field only
+
+    def test_per_head_lookups_are_capped(self) -> None:
+        """A huge PR backlog cannot stall the hourly build; uncovered heads keep the verdict unknown."""
+        cap = build_admin_dashboard.MAX_PR_HEAD_LOOKUPS
+        pulls = [{"head": {"sha": f"h{i:03d}"}} for i in range(cap + 5)]
+        found = {"workflow_runs": [{"head_sha": "h000", "name": "CI", "conclusion": "success"}]}
+        with patch.object(
+            build_admin_dashboard, "_github_payload_or_degraded", side_effect=[pulls, {}] + [found] * cap
+        ) as fetch:
+            self.assertEqual(build_admin_dashboard._open_pr_health("token", "o/r"), "unknown")
+        self.assertEqual(fetch.call_count, 2 + cap)
 
     def test_a_denied_pull_request_feed_degrades_only_open_pr_health(self) -> None:
         """A 403 on /pulls (metadata readable, PRs denied) must not fail the whole dashboard build."""

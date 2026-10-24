@@ -34,6 +34,9 @@ GITHUB_API_BASE = "https://api.github.com"
 # is far beyond any real required-context set — the cap stops a pathological
 # repo from stalling the hourly build.
 MAX_CHECK_RUN_PAGES = 5
+# Per-head run lookups for open PRs the newest pull_request runs page missed;
+# capped so a repo with a huge PR backlog cannot stall the hourly build.
+MAX_PR_HEAD_LOOKUPS = 20
 #: Conclusions that neither pass nor fail a workflow (the platform's own
 #: failing-workflow alert uses the same set): a run that concurrency
 #: cancelled, or a skipped job, says nothing about health.
@@ -328,13 +331,22 @@ def _head_sha(pull: Any) -> str:
     return str(head.get("sha") or "") if isinstance(head, Mapping) else ""
 
 
+def _workflow_runs_of(payload: Any) -> List[Mapping[str, Any]]:
+    """The ``workflow_runs`` list of an ``actions/runs`` response ([] when unusable)."""
+    runs = payload.get("workflow_runs", []) if isinstance(payload, dict) else []
+    return [run for run in runs if isinstance(run, Mapping)]
+
+
 def _open_pr_health(token: str, repo_slug: str) -> str:
     """The verdict over the newest run of each workflow on each OPEN PR's head commit.
 
     ``none`` when no PR is open. This used to filter the DEFAULT-branch runs
     for ``pull_request`` events, and a PR run never carries the default
-    branch, so every repo read ``unknown``. A PR whose runs all fall outside
-    the newest 100 pull_request runs contributes nothing.
+    branch, so every repo read ``unknown``. An open head missing from the
+    newest pull_request runs is looked up by ``head_sha`` (a stale PR's old
+    failure still counts). A head with no run at all leaves the verdict
+    ``unknown`` unless another PR already failed: CI that never reported is
+    not a pass.
     """
     # 403 as well as 404 degrades just this field (the Lane-8 contract): a
     # token can read a repo's metadata yet be denied its pull requests.
@@ -344,11 +356,22 @@ def _open_pr_health(token: str, repo_slug: str) -> str:
     heads = {_head_sha(pull) for pull in pulls} - {""}
     if not heads:
         return "none"
-    runs = _github_payload_or_degraded(
+    page = _github_payload_or_degraded(
         f"{GITHUB_API_BASE}/repos/{repo_slug}/actions/runs?event=pull_request&per_page=100", token
     )
-    workflow_runs = runs.get("workflow_runs", []) if isinstance(runs, dict) else []
-    return _compute_health(workflow_runs, filter_fn=lambda run: run.get("head_sha") in heads, per_commit=True)
+    runs = [run for run in _workflow_runs_of(page) if run.get("head_sha") in heads]
+    missed = sorted(heads - {run.get("head_sha") for run in runs})
+    for sha in missed[:MAX_PR_HEAD_LOOKUPS]:
+        runs.extend(
+            _workflow_runs_of(
+                _github_payload_or_degraded(
+                    f"{GITHUB_API_BASE}/repos/{repo_slug}/actions/runs?head_sha={sha}&per_page=100", token
+                )
+            )
+        )
+    verdict = _compute_health(runs, per_commit=True)
+    uncovered = heads - {run.get("head_sha") for run in runs}
+    return "unknown" if uncovered and verdict != "partial" else verdict
 
 
 def _gate_status_from_context(context_name: str, contexts: Mapping[str, Dict[str, str]]) -> str:

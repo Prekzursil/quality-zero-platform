@@ -166,6 +166,20 @@ class DownloadContractTests(unittest.TestCase):
             self.assertIn(url_part, script, name)
             self.assertEqual([m.group(1) for m in DIGEST_CHECK.finditer(script)], [digest], name)
 
+    def test_the_platform_runs_the_sast_engine_it_enforces(self) -> None:
+        """QZP's own SAST job and the fleet's gate 4 fetch the identical pinned opengrep asset.
+
+        They used to drift (the self-gate on v1.23.0, the fleet on v1.22.0): the
+        platform was not held to exactly what it enforces.
+        """
+        pins = tool_pins()
+        (step,) = [s for s in downloading_steps("quality-zero-platform.yml") if "opengrep" in str(s["run"])]
+        script = str(step["run"])
+        self.assertIn(f"opengrep/releases/download/{pins['pins']['opengrep']}/opengrep_manylinux_x86", script)
+        self.assertEqual(
+            [m.group(1) for m in DIGEST_CHECK.finditer(script)], [pins["asset_sha256"]["opengrep_manylinux_x86"]]
+        )
+
     def test_cve_sweep_verifies_the_same_osv_scanner_asset_as_the_gate(self) -> None:
         """The standing sweep and gate 6 must run the identical binary."""
         digest = tool_pins()["asset_sha256"]["osv-scanner_linux_amd64"]

@@ -451,8 +451,8 @@ jobs:
           dir="$HOME/.opengrep/cli/latest"
           mkdir -p "$dir"
           curl -fsSL --retry 3 -o "$dir/opengrep.download" \
-            https://github.com/opengrep/opengrep/releases/download/v1.22.0/opengrep_manylinux_x86
-          echo "45bcd58440e397ed52c50e953ccf5948909ea77087c9186fc7d277216f62e319  $dir/opengrep.download" | sha256sum -c -
+            https://github.com/opengrep/opengrep/releases/download/v1.32.0/opengrep_manylinux_x86
+          echo "7360d60174880bd9214f2dfbe439b7bce82b7a3d44cfe945ba833c85cc8bda75  $dir/opengrep.download" | sha256sum -c -
           mv "$dir/opengrep.download" "$dir/opengrep"
           chmod +x "$dir/opengrep"
           echo "$dir" >> "$GITHUB_PATH"
@@ -2201,7 +2201,7 @@ jobs:
           # With NO `.semgrepignore` in the scanned root the engine falls back
           # to a BUILT-IN ignore template that drops test code. Nobody in this
           # fleet picked that. Measured 2026-08-11 against the PINNED engine
-          # (opengrep v1.22.0 CLI on Linux, exactly the build installed above),
+          # (opengrep v1.22.0 CLI on Linux, the engine pinned at the time),
           # controlled detector, one variable at a time:
           #
           #   src/inline.go    `db.Query(fmt.Sprintf(...))`      -> FIRES

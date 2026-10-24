@@ -93,6 +93,25 @@ class DriftSyncPrTests(unittest.TestCase):
                 self.assertIn("public repositories only", fleet_state.drift_search_scope(bare))
         self.assertIn("Prekzursil/PrimariRo", fleet_state.PRIVATE_SLUGS)
 
+    def test_a_private_members_drift_pr_never_reaches_a_public_surface_by_name(self) -> None:
+        """Dashboard rows and public alert subjects get a stable tag, never the private slug or URL."""
+        prs = self._prs() + [
+            {
+                "number": 3,
+                "repository": {"nameWithOwner": "Prekzursil/PrimariRo"},
+                "createdAt": "2026-10-01T00:00:00Z",
+                "url": "https://github.com/Prekzursil/PrimariRo/pull/3",
+            }
+        ]
+        public, private = fleet_state.drift_sync_prs("o", runner=_gh(prs), environ={})
+        self.assertEqual((public["slug"], public["visibility"]), ("o/r", "public"))
+        self.assertTrue(private["slug"].startswith(fleet_state.PRIVATE_SUBJECT_PREFIX))
+        self.assertEqual(private["slug"], fleet_state.public_slug("Prekzursil/PrimariRo"))  # stable: alerts dedupe
+        self.assertEqual((private["pr_url"], private["visibility"]), ("", "private"))
+        self.assertNotIn("PrimariRo", fleet_state.to_jsonl([private]))
+        (trigger,) = alert_dispatch._drift_pr_triggers([private], now=NOW)
+        self.assertNotIn("PrimariRo", trigger.subject + trigger.body)
+
     def test_a_pr_without_repository_data_keeps_an_empty_slug(self) -> None:
         """Malformed search rows degrade one field, not the whole state."""
         runner = _gh([{"number": 1, "createdAt": "2026-10-23T00:00:00Z"}])

@@ -22,6 +22,7 @@ from __future__ import absolute_import
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import os
 import subprocess  # nosec B404 # noqa: S404 — gh CLI wrapper; args are controlled
@@ -104,6 +105,20 @@ def bypass_followups(platform_slug: str, *, runner: ProcessRunner = subprocess.r
     ]
 
 
+PRIVATE_SUBJECT_PREFIX = "<private:"
+
+
+def public_slug(slug: str) -> str:
+    """The slug as it may appear on a PUBLIC surface (the dashboard, a platform alert issue).
+
+    A private member's name is replaced by a stable, non-reversible tag, so an
+    alert still dedupes per repository without disclosing it.
+    """
+    if slug not in PRIVATE_SLUGS:
+        return slug
+    return f"{PRIVATE_SUBJECT_PREFIX}{hashlib.sha256(slug.encode('utf-8')).hexdigest()[:8]}>"
+
+
 def fleet_read_env(environ: Mapping[str, str]) -> Optional[Dict[str, str]]:
     """``GH_TOKEN`` swapped for the fleet-read PAT when one is set, else ``None`` (public repos only)."""
     token = str(environ.get(FLEET_READ_PAT_ENV, "")).strip()
@@ -127,7 +142,9 @@ def drift_sync_prs(
 
     GitHub search's ``head:`` qualifier matches branch names that START with
     the value, which is exactly the drift-sync branch prefix. With the
-    fleet-read PAT the search also sees private members.
+    fleet-read PAT the search also sees private members. Their records carry
+    ``visibility: private``, a masked slug and no URL: every consumer (the
+    public dashboard, the platform's public alert issues) sees only the tag.
     """
     prs = _gh_json(
         [
@@ -147,16 +164,21 @@ def drift_sync_prs(
         runner=runner,
         env=fleet_read_env(os.environ if environ is None else environ),
     )
-    return [
-        {
-            "slug": str((pr.get("repository") or {}).get("nameWithOwner", "")),
-            "pr_number": int(pr["number"]),
-            "opened_at": _opened_at(pr["createdAt"]),
-            "status": "open",
-            "pr_url": str(pr.get("url", "")),
-        }
-        for pr in prs
-    ]
+    records: List[Dict[str, Any]] = []
+    for pr in prs:
+        slug = str((pr.get("repository") or {}).get("nameWithOwner", ""))
+        private = slug in PRIVATE_SLUGS
+        records.append(
+            {
+                "slug": public_slug(slug),
+                "pr_number": int(pr["number"]),
+                "opened_at": _opened_at(pr["createdAt"]),
+                "status": "open",
+                "pr_url": "" if private else str(pr.get("url", "")),
+                "visibility": "private" if private else "public",
+            }
+        )
+    return records
 
 
 def to_jsonl(records: Sequence[Mapping[str, Any]]) -> str:

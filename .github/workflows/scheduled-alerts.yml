@@ -151,7 +151,6 @@ jobs:
               dry_run=dry_run,
           )
           # A closed follow-up / merged drift PR leaves the live set: close its alert.
-          private = {slug + "#" for slug in fleet_state.PRIVATE_SLUGS}
           resolved = alert_dispatch.close_resolved_alerts(
               platform_slug=PLATFORM,
               alert_type=alerts.AlertType.BYPASS_STALE,
@@ -164,9 +163,8 @@ jobs:
               live_subjects={f"{p['slug']}#{p['pr_number']}" for p in drift_prs},
               close_comment="The drift-sync PR `{subject}` is no longer open; closing.",
               # Without the fleet-read PAT a private member's PR is invisible, not gone.
-              unverifiable=lambda subject: drift_scope.startswith("public") and any(
-                  subject.startswith(prefix) for prefix in private
-              ),
+              unverifiable=lambda subject: drift_scope.startswith("public")
+              and subject.startswith(fleet_state.PRIVATE_SUBJECT_PREFIX),
               dry_run=dry_run,
           )
 

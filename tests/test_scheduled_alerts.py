@@ -109,6 +109,7 @@ class ScheduledAlertsWorkflowTests(unittest.TestCase):
         self.assertIn("alert_type=alerts.AlertType.DRIFT_STUCK", self.text)
         self.assertIn("alert_dispatch.close_resolved_alerts(", self.text)
         self.assertIn('unverifiable=lambda subject: drift_scope.startswith("public")', self.text)
+        self.assertIn("subject.startswith(fleet_state.PRIVATE_SUBJECT_PREFIX)", self.text)
 
     def test_the_drift_search_may_use_the_fleet_read_pat_but_writes_keep_the_workflow_token(self) -> None:
         """Private members' drift PRs are only visible to the fleet-read PAT."""

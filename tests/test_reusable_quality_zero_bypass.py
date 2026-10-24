@@ -104,7 +104,10 @@ class ReusableBypassWorkflowTests(unittest.TestCase):
         self.assertNotIn("token", code["with"])
         self.assertEqual(store["if"], "${{ env.HAS_AUDIT_PAT == 'true' }}")
         self.assertEqual(store["with"]["path"], "audit-store")
-        self.assertNotIn("ref", store["with"])
+        self.assertEqual(store["with"]["ref"], "main")  # a constant, never caller- or PR-derived
+        # The gate's flag lives in the JOB env: a step's own env is invisible to its `if:`.
+        self.assertEqual(self.doc["jobs"]["bypass"]["env"]["HAS_AUDIT_PAT"], "${{ secrets.BYPASS_AUDIT_PAT != '' }}")
+        self.assertFalse(any("HAS_AUDIT_PAT" in (step.get("env") or {}) for step in steps))
         self.assertEqual(store["with"]["token"], "${{ secrets.BYPASS_AUDIT_PAT }}")
         (commit,) = [s for s in steps if s.get("name") == "Commit audit log"]
         self.assertEqual(commit["working-directory"], "audit-store")

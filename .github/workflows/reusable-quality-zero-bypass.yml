@@ -56,6 +56,10 @@ on:
 jobs:
   bypass:
     runs-on: ubuntu-latest
+    # Presence flags the steps' `if:` read live here: a step's own env is
+    # not visible to that step's `if:`, which silently skipped it forever.
+    env:
+      HAS_AUDIT_PAT: ${{ secrets.BYPASS_AUDIT_PAT != '' }}
     permissions:
       contents: read
       issues: write
@@ -72,11 +76,12 @@ jobs:
       # append the record and push it. Nothing in it is executed.
       - name: Check out the audit store
         if: ${{ env.HAS_AUDIT_PAT == 'true' }}
-        env:
-          HAS_AUDIT_PAT: ${{ secrets.BYPASS_AUDIT_PAT != '' }}
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: ${{ job.workflow_repository }}
+          # The platform's default branch, by name: a constant, never a
+          # caller- or PR-derived ref.
+          ref: main
           path: audit-store
           token: ${{ secrets.BYPASS_AUDIT_PAT }}
           persist-credentials: true
@@ -174,7 +179,6 @@ jobs:
         # gate on ``env.*`` instead.
         if: ${{ env.HAS_AUDIT_PAT == 'true' }}
         env:
-          HAS_AUDIT_PAT: ${{ secrets.BYPASS_AUDIT_PAT != '' }}
           QZ_AUDIT_PATH: ${{ steps.evaluate.outputs.audit_path }}
           QZ_LABEL: ${{ inputs.label }}
           QZ_PR_SLUG: ${{ inputs.pr_slug }}

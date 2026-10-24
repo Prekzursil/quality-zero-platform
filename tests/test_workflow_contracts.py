@@ -2,6 +2,7 @@
 
 from __future__ import absolute_import, division
 
+import re
 import unittest
 from pathlib import Path
 
@@ -60,6 +61,30 @@ class WorkflowContractTests(unittest.TestCase):
                             self.assertEqual(settings["repository"], "${{ job.workflow_repository }}")
                             if settings.get("path") != "audit-store":
                                 self.assertEqual(settings["ref"], "${{ job.workflow_sha }}")
+
+    def test_no_step_gates_on_its_own_env(self) -> None:
+        """A step's own env does not exist yet when its `if:` is evaluated.
+
+        `if: env.X == 'true'` with X defined only in that step's `env:` is
+        always false, so the step is skipped silently on every run. That
+        is how the drift-sync and bump PR steps, the bypass audit commit
+        and the SonarCloud scan never ran. Gate flags belong in the job
+        or workflow env, which may read `secrets`.
+        """
+        env_ref = re.compile(r"\benv\.([A-Za-z_][A-Za-z0-9_]*)")
+        for path in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+            doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+            outer = set(doc.get("env") or {})
+            for job_name, job in (doc.get("jobs") or {}).items():
+                visible = outer | set(job.get("env") or {})
+                for step in job.get("steps") or []:
+                    own_only = {
+                        name
+                        for name in env_ref.findall(str(step.get("if", "")))
+                        if name in (step.get("env") or {}) and name not in visible
+                    }
+                    with self.subTest(workflow=path.name, job=job_name, step=step.get("name") or step.get("uses")):
+                        self.assertEqual(own_only, set())
 
     def test_actionlint_ignores_only_the_job_workflow_properties(self) -> None:
         """The one actionlint exception is the job context's workflow_* fields, nothing broader."""

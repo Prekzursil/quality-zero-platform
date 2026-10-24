@@ -1,0 +1,20 @@
+# gitleaks findings triaged as FAKE test data (reviewed 2026-10-24).
+#
+# Each line ignores ONE exact finding (commit:file:rule:line), so a new secret
+# in the same file - or the same value anywhere else - is still caught. The
+# values are sequential placeholders ("sk_live_abcd...", "sk-abc123def...", a
+# PEM block truncated after "...abc123") that exist to exercise the quality
+# rollup's secret redaction (tests/quality/rollup_v2/test_redaction.py and the
+# hardcoded_secret patch fixtures), to illustrate the security-review rubric,
+# and to quote those tests in a design plan.
+cd58d99075d83709f5beadd2fa233cbdf383e66f:tests/quality/rollup_v2/test_redaction.py:generic-api-key:106
+312ced397e42c192d6793065f0e11353931dbce0:tests/quality/rollup_v2/test_redaction.py:private-key:67
+312ced397e42c192d6793065f0e11353931dbce0:tests/quality/rollup_v2/test_redaction.py:generic-api-key:41
+312ced397e42c192d6793065f0e11353931dbce0:tests/quality/rollup_v2/fixtures/patches/hardcoded_secret/case_01.input.py:stripe-access-token:1
+312ced397e42c192d6793065f0e11353931dbce0:tests/quality/rollup_v2/fixtures/patches/hardcoded_secret/case_01.expected.diff:stripe-access-token:4
+312ced397e42c192d6793065f0e11353931dbce0:.claude/plugins/metaswarm/skills/start/rubrics/security-review-rubric.md:generic-api-key:73
+312ced397e42c192d6793065f0e11353931dbce0:.claude/rubrics/security-review-rubric.md:generic-api-key:73
+312ced397e42c192d6793065f0e11353931dbce0:docs/plans/2026-04-09-quality-rollup-v2-pr1-plan.md:private-key:901
+312ced397e42c192d6793065f0e11353931dbce0:docs/plans/2026-04-09-quality-rollup-v2-pr1-plan.md:private-key:1056
+312ced397e42c192d6793065f0e11353931dbce0:docs/plans/2026-04-09-quality-rollup-v2-pr1-plan.md:generic-api-key:871
+312ced397e42c192d6793065f0e11353931dbce0:docs/plans/2026-04-09-quality-rollup-v2-pr1-plan.md:generic-api-key:1918

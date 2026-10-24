@@ -130,6 +130,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ inputs.sha != '' && inputs.sha || github.sha }}
+          persist-credentials: false
 
       - name: Set up Go
         if: ${{ needs.resolve-profile.outputs.go_version != '' }}

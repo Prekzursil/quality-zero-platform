@@ -8,6 +8,31 @@ from typing import Any, Dict, List, Mapping
 from scripts.quality import profile_coverage_normalization
 from scripts.quality.string_helpers import dedupe_strings
 
+#: Dependabot's documented ``versioning-strategy`` values, and the ecosystems
+#: the option is "Supported by" (docs.github.com, Dependabot options reference).
+#: The docs define no per-ecosystem restriction on the values themselves.
+DEPENDABOT_VERSIONING_STRATEGIES = frozenset({"auto", "increase", "increase-if-necessary", "lockfile-only", "widen"})
+DEPENDABOT_VERSIONING_ECOSYSTEMS = frozenset({"bundler", "cargo", "composer", "helm", "mix", "npm", "pip", "pub", "uv"})
+
+
+def validate_versioning_strategy(ecosystem: str, directory: str, strategy: str) -> None:
+    """Raise ``ValueError`` for a strategy Dependabot would reject.
+
+    Called while normalising every profile, so each rendering path (the
+    managed-baseline renderer and the drift-sync Jinja templates alike) fails
+    loudly instead of writing a dependabot.yml that stops dependency updates.
+    """
+    if strategy not in DEPENDABOT_VERSIONING_STRATEGIES:
+        raise ValueError(
+            f"unsupported Dependabot versioning-strategy {strategy!r} for {ecosystem} {directory}; "
+            f"expected one of {sorted(DEPENDABOT_VERSIONING_STRATEGIES)}"
+        )
+    if ecosystem not in DEPENDABOT_VERSIONING_ECOSYSTEMS:
+        raise ValueError(
+            f"Dependabot versioning-strategy is not supported for the {ecosystem!r} ecosystem ({directory}); "
+            f"supported: {sorted(DEPENDABOT_VERSIONING_ECOSYSTEMS)}"
+        )
+
 
 def _issue_policy_defaults(mode: str) -> Dict[str, str]:
     """Handle issue policy defaults."""
@@ -170,9 +195,11 @@ def normalize_dependabot(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
             "ecosystem": ecosystem,
             "directory": directory,
         }
-        # Optional Dependabot `versioning-strategy`; validated when rendered.
+        # Optional Dependabot `versioning-strategy`, validated here so no
+        # rendering path can emit a value Dependabot rejects.
         strategy = str(item.get("versioning_strategy", "") or "").strip()
         if strategy:
+            validate_versioning_strategy(ecosystem, directory, strategy)
             update["versioning_strategy"] = strategy
         updates.append(update)
     return {

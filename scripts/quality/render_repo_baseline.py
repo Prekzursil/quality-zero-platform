@@ -15,6 +15,7 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.quality.control_plane import load_inventory, load_repo_profile
+from scripts.quality.profile_normalization import validate_versioning_strategy
 
 LEGACY_ZERO_WORKFLOW_FILES = (
     "coverage-100.yml",
@@ -25,11 +26,6 @@ LEGACY_ZERO_WORKFLOW_FILES = (
     "sonar-zero.yml",
     "qlty-zero.yml",
 )
-
-#: The documented values of Dependabot's ``versioning-strategy`` option. A
-#: profile update may set ``versioning_strategy`` to pin the behaviour instead
-#: of relying on ``auto`` (app/library heuristics).
-DEPENDABOT_VERSIONING_STRATEGIES = frozenset({"auto", "increase", "increase-if-necessary", "lockfile-only", "widen"})
 
 
 def _parse_args() -> argparse.Namespace:
@@ -133,11 +129,8 @@ def render_dependabot_config(profile: Dict[str, Any]) -> str:
         }
         strategy = str(item.get("versioning_strategy") or "").strip()
         if strategy:
-            if strategy not in DEPENDABOT_VERSIONING_STRATEGIES:
-                raise ValueError(
-                    f"unsupported Dependabot versioning-strategy {strategy!r} for {ecosystem} {directory}; "
-                    f"expected one of {sorted(DEPENDABOT_VERSIONING_STRATEGIES)}"
-                )
+            # normalisation already validated loaded profiles; re-check for raw callers
+            validate_versioning_strategy(ecosystem, directory, strategy)
             entry["versioning-strategy"] = strategy
         entry.update(
             {

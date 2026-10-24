@@ -216,6 +216,20 @@ class SecurityBaselineProfileTests(unittest.TestCase):
             ],
         )
 
+    def test_normalize_dependabot_rejects_an_invalid_versioning_strategy(self) -> None:
+        """A typo fails at profile load, so the drift-sync template path is guarded too."""
+        with self.assertRaisesRegex(ValueError, "unsupported Dependabot versioning-strategy 'increse'"):
+            normalize_dependabot(
+                {"updates": [{"ecosystem": "pip", "directory": "/", "versioning_strategy": "increse"}]}
+            )
+
+    def test_normalize_dependabot_rejects_a_strategy_on_an_unsupported_ecosystem(self) -> None:
+        """versioning-strategy is documented only for bundler/cargo/composer/helm/mix/npm/pip/pub/uv."""
+        with self.assertRaisesRegex(ValueError, "not supported for the 'github-actions' ecosystem"):
+            normalize_dependabot(
+                {"updates": [{"ecosystem": "github-actions", "directory": "/", "versioning_strategy": "increase"}]}
+            )
+
     def test_render_codeql_wrapper_pins_requested_controller_sha(self) -> None:
         """Repo CodeQL wrappers must use immutable controller refs."""
         rendered = render_codeql_wrapper(

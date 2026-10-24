@@ -33,6 +33,11 @@ source = [
   "scripts.quality.generate_ruleset_payload",
   # The LIVE ruleset comparison (reusable-ruleset-sync.yml). Same bar.
   "scripts.quality.ruleset_live_drift",
+  # Fleet governor baseline (docs/FLEET-BASELINE.md): plans, renders and
+  # audits the community + Dependabot + lean-gate-caller files every governed
+  # repo carries. It writes into consumer checkouts, so it is held to the same
+  # 100% line+branch bar.
+  "scripts.quality.fleet_baseline",
 ]
 branch = true
 omit = [

@@ -94,30 +94,25 @@ class ReusableBypassWorkflowTests(unittest.TestCase):
             self.text,
         )
 
-    def test_code_and_audit_store_are_separate_checkouts(self) -> None:
-        """The code runs from the workflow's own commit; only the store holds a credential."""
+    def test_the_audit_record_is_appended_without_a_checkout(self) -> None:
+        """One read-only code checkout; the record goes through the Contents API with the PAT."""
         steps = self.doc["jobs"]["bypass"]["steps"]
-        code, store = [s for s in steps if str(s.get("uses", "")).startswith("actions/checkout@")]
+        (code,) = [s for s in steps if str(s.get("uses", "")).startswith("actions/checkout@")]
         self.assertEqual(code["with"]["repository"], "${{ job.workflow_repository }}")
         self.assertEqual(code["with"]["ref"], "${{ job.workflow_sha }}")
         self.assertIs(code["with"]["persist-credentials"], False)
         self.assertNotIn("token", code["with"])
-        self.assertEqual(store["if"], "${{ env.HAS_AUDIT_PAT == 'true' }}")
-        self.assertEqual(store["with"]["path"], "audit-store")
-        self.assertEqual(store["with"]["ref"], "main")  # a constant, never caller- or PR-derived
+        (commit,) = [s for s in steps if s.get("name") == "Commit audit log"]
+        self.assertEqual(commit["if"], "${{ env.HAS_AUDIT_PAT == 'true' }}")
+        self.assertEqual(commit["env"]["GH_TOKEN"], "${{ secrets.BYPASS_AUDIT_PAT }}")
+        self.assertEqual(commit["env"]["QZ_PLATFORM_REPO"], "${{ job.workflow_repository }}")
+        self.assertIn("python scripts/quality/audit_log_append.py", commit["run"])
+        self.assertIn("--branch main", commit["run"])
+        self.assertNotIn("git push", self.text)
+        self.assertNotIn("audit-store", self.text)
         # The gate's flag lives in the JOB env: a step's own env is invisible to its `if:`.
         self.assertEqual(self.doc["jobs"]["bypass"]["env"]["HAS_AUDIT_PAT"], "${{ secrets.BYPASS_AUDIT_PAT != '' }}")
         self.assertFalse(any("HAS_AUDIT_PAT" in (step.get("env") or {}) for step in steps))
-        self.assertEqual(store["with"]["token"], "${{ secrets.BYPASS_AUDIT_PAT }}")
-        (commit,) = [s for s in steps if s.get("name") == "Commit audit log"]
-        self.assertEqual(commit["working-directory"], "audit-store")
-        self.assertIn('rel="${QZ_AUDIT_PATH#audit-store/}"', commit["run"])
-        self.assertIn('git push origin "HEAD:$branch"', commit["run"])
-        # A lost race re-appends this run's record on the winner's tip, never a conflicting rebase.
-        self.assertNotIn("git pull --rebase", commit["run"])
-        self.assertIn('git reset --hard "origin/$branch"', commit["run"])
-        self.assertIn('printf \'%s\\n\' "$record" >> "$rel"', commit["run"])
-        self.assertIn('audit_dir = Path("audit-store") / audit_dir', self.text)
         self.assertIn("QZ_PLATFORM_REPO: ${{ job.workflow_repository }}", self.text)
 
     def test_tracking_issue_step_runs_only_for_break_glass(self) -> None:

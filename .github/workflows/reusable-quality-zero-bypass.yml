@@ -72,20 +72,6 @@ jobs:
           ref: ${{ job.workflow_sha }}
           persist-credentials: false
 
-      # The audit STORE: the platform's default branch, checked out only to
-      # append the record and push it. Nothing in it is executed.
-      - name: Check out the audit store
-        if: ${{ env.HAS_AUDIT_PAT == 'true' }}
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          repository: ${{ job.workflow_repository }}
-          # The platform's default branch, by name: a constant, never a
-          # caller- or PR-derived ref.
-          ref: main
-          path: audit-store
-          token: ${{ secrets.BYPASS_AUDIT_PAT }}
-          persist-credentials: true
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -118,10 +104,6 @@ jobs:
           head_sha = os.environ["QZ_HEAD_SHA"].strip()
           actor = os.environ["QZ_ACTOR"].strip()
           audit_dir = Path(os.environ.get("QZ_AUDIT_DIR", "audit"))
-          if Path("audit-store/.git").is_dir():
-            # Append to the default branch's CURRENT log, not to the copy
-            # at this workflow's commit (that copy may be behind).
-            audit_dir = Path("audit-store") / audit_dir
 
           if label == bl.BREAK_GLASS_LABEL:
             try:
@@ -170,44 +152,26 @@ jobs:
           PY
 
       - name: Commit audit log
-        # The ``secrets`` context is NOT available in step ``if:`` conditions
-        # (only github/needs/strategy/matrix/job/runner/env/vars/steps/inputs
-        # are). Referencing ``secrets.*`` here made the workflow fail to
-        # compile (startup_failure on every event). Mirror the proven in-repo
-        # pattern (see ``SonarCloud scan`` in reusable-scanner-matrix.yml):
-        # surface the secret's presence as a step-level ``env`` boolean and
-        # gate on ``env.*`` instead.
+        # Appended through the Contents API (scripts/quality/audit_log_append.py):
+        # no checkout, no write token on disk, and a concurrent bypass only
+        # costs a retry from the new content. Gated on the JOB-level
+        # HAS_AUDIT_PAT: a step's own env is invisible to its `if:`.
         if: ${{ env.HAS_AUDIT_PAT == 'true' }}
         env:
+          GH_TOKEN: ${{ secrets.BYPASS_AUDIT_PAT }}
+          QZ_PLATFORM_REPO: ${{ job.workflow_repository }}
           QZ_AUDIT_PATH: ${{ steps.evaluate.outputs.audit_path }}
           QZ_LABEL: ${{ inputs.label }}
           QZ_PR_SLUG: ${{ inputs.pr_slug }}
           QZ_PR_NUMBER: ${{ inputs.pr_number }}
-        working-directory: audit-store
         run: |
           set -euo pipefail
-          rel="${QZ_AUDIT_PATH#audit-store/}"
-          # The evaluate step appended exactly one JSONL record.
-          record="$(tail -n 1 "$rel")"
-          branch="$(git rev-parse --abbrev-ref HEAD)"
-          git config user.email "platform-bot@quality-zero.local"
-          git config user.name "quality-zero-platform bypass"
-          for _ in 1 2 3; do
-            git add "$rel"
-            git commit -m "chore(audit): record $QZ_LABEL for $QZ_PR_SLUG#$QZ_PR_NUMBER"
-            if git push origin "HEAD:$branch"; then
-              exit 0
-            fi
-            # Another bypass appended first. Both edits touch the same file
-            # end, so a rebase would conflict: start again from their tip and
-            # re-append this run's record.
-            git fetch origin "$branch"
-            git reset --hard "origin/$branch"
-            mkdir -p "$(dirname "$rel")"
-            printf '%s\n' "$record" >> "$rel"
-          done
-          echo "::error::Could not push the audit record after 3 attempts."
-          exit 1
+          python scripts/quality/audit_log_append.py \
+            --repo "$QZ_PLATFORM_REPO" \
+            --path "$QZ_AUDIT_PATH" \
+            --branch main \
+            --record-file "$QZ_AUDIT_PATH" \
+            --message "chore(audit): record $QZ_LABEL for $QZ_PR_SLUG#$QZ_PR_NUMBER"
 
       - name: Open post-merge tracking issue
         if: ${{ inputs.label == 'quality-zero:break-glass' && steps.evaluate.outputs.tracking_issue_title != '' }}

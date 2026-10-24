@@ -178,9 +178,9 @@ jobs:
           TARGET_SHA: ${{ inputs.sha || github.sha }}
           ACTIONS_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          CANONICAL_ARG=""
+          canonical_args=()
           if [ -f "$RUNNER_TEMP/quality-rollup/canonical.json" ]; then
-            CANONICAL_ARG="--canonical-json $RUNNER_TEMP/quality-rollup/canonical.json"
+            canonical_args=(--canonical-json "$RUNNER_TEMP/quality-rollup/canonical.json")
           fi
           python platform/scripts/quality/render_codex_prompt.py \
             --repo-slug "$REPO_SLUG" \
@@ -189,7 +189,7 @@ jobs:
             --failure-context "$FAILURE_CONTEXT" \
             --artifact "Actions run: $ACTIONS_RUN_URL" \
             --artifact "Target SHA: $TARGET_SHA" \
-            $CANONICAL_ARG \
+            "${canonical_args[@]}" \
             --output "$RUNNER_TEMP/remediation-prompt.md"
       - name: Run Codex on the trusted private runner
         run: |

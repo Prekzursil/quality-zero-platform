@@ -34,6 +34,7 @@ jobs:
         run: |
           python scripts/quality/admin_dashboard_pages.py \
             --audit-jsonl audit/break-glass.jsonl \
+            --audit-jsonl audit/skip.jsonl \
             --coverage-json quality-rollup/coverage-trend.json \
             --drift-jsonl audit/drift-sync.jsonl \
             --output-dir site

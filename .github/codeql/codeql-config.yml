@@ -24,3 +24,16 @@ query-filters:
       id: py/clear-text-storage-sensitive-data
   - exclude:
       id: py/clear-text-logging-sensitive-data
+  # ``actions/untrusted-checkout/medium`` flags every checkout of a
+  # caller-supplied ref in a NON-privileged workflow. That checkout is the
+  # whole job of each reusable workflow here: it checks out the code under
+  # test (``inputs.sha``), or QZP's own scripts at the caller's pin
+  # (``inputs.platform_ref``), in the caller's pull_request/push context,
+  # where a fork PR gets a read-only token and no secrets. Its fingerprint
+  # is the ``uses:`` line, so every actions/checkout bump re-opened the
+  # same accepted findings. The dismissal rule (docs/CODE-SCANNING-
+  # DISMISSALS.md, rule 4) says a dismissal that keeps recurring is fixed
+  # in the query config instead. The privileged variants
+  # (``actions/untrusted-checkout/high`` and ``/critical``) stay enabled.
+  - exclude:
+      id: actions/untrusted-checkout/medium

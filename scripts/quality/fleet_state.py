@@ -15,10 +15,13 @@ source here is something the platform can READ right now:
 ``opened_at`` is a timezone-aware ``datetime``: the detectors subtract it
 from ``now``, so a raw API string would raise.
 
-A failed or unparseable ``gh`` call RAISES, and so does a listing that
-reached its ``--limit``. Reading either as "no follow-ups" or "no drift"
-would silently report an all-clear, and reconciling against a truncated
-list would close alerts whose subject is still live.
+A failed or unparseable ``gh`` call, or a listing that reached its
+``--limit``, is never read as "no follow-ups" or "no drift": that would
+silently report an all-clear, and reconciling against a truncated list would
+close alerts whose subject is still live. The single follow-up listing
+RAISES. A fleet member whose PRs cannot be read is returned as UNREAD, so
+the rest of the fleet is still evaluated and every consumer can say which
+part is unknown.
 """
 
 from __future__ import absolute_import
@@ -31,7 +34,7 @@ import os
 import subprocess  # nosec B404 # noqa: S404 — gh CLI wrapper; args are controlled
 import sys
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 if str(Path(__file__).resolve().parents[2]) not in sys.path:  # pragma: no cover - direct CLI use
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -166,23 +169,30 @@ def drift_sync_prs(
     *,
     runner: ProcessRunner = subprocess.run,
     environ: Optional[Mapping[str, str]] = None,
-) -> List[Dict[str, Any]]:
-    """Every OPEN drift-sync pull request in the declared fleet ``slugs``, as detector input.
+) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
+    """``(open drift-sync PRs, unread members)`` for the declared fleet ``slugs``.
 
-    Each repository's open PRs are listed and their ACTUAL head branch is
-    matched against the prefix ``apply_drift_pr`` uses, so neither search
-    semantics nor a repository outside the fleet can change the result.
-    Without the fleet-read PAT, private members are not read
-    (``drift_search_scope`` says so). A private member's record carries
-    ``visibility: private``, a masked slug and no URL, and a failed read
-    never names it: every consumer (the public dashboard, the platform's
-    public alert issues and workflow logs) sees only the tag.
+    Each repository's open PRs are listed. A PR counts only when its ACTUAL
+    head branch is one ``apply_drift_pr`` creates AND it is not from a fork
+    (``isCrossRepository``): a fork branch can mimic the name, not the
+    platform. Neither search semantics nor a repository outside the fleet
+    can change the result.
+
+    ``unread`` maps a member's public tag to why it was not read: a private
+    member without the fleet-read PAT, or a failed or truncated listing.
+    Its drift is UNKNOWN, not "none": the dashboard says the read is
+    partial, and its open drift alerts are not closed. A private member's
+    record carries ``visibility: private``, a masked slug and no URL, and its
+    failure reason never names it: every consumer (the public dashboard, the
+    platform's public alert issues and workflow logs) sees only the tag.
     """
     env = fleet_read_env(os.environ if environ is None else environ)
     records: List[Dict[str, Any]] = []
+    unread: Dict[str, str] = {}
     for slug in slugs:
         private = slug in PRIVATE_SLUGS
         if private and env is None:
+            unread[public_slug(slug)] = "private, and no fleet-read token"
             continue
         try:
             prs = _gh_json(
@@ -196,16 +206,15 @@ def drift_sync_prs(
                     "--limit",
                     str(LIST_LIMIT + 1),
                     "--json",
-                    "number,headRefName,createdAt,url",
+                    "number,headRefName,isCrossRepository,createdAt,url",
                 ],
                 runner=runner,
                 env=env,
                 limit=LIST_LIMIT,
             )
         except FleetStateError as exc:
-            if private:
-                raise FleetStateError(f"listing the open PRs of {public_slug(slug)} failed") from None
-            raise FleetStateError(f"{slug}: {exc}") from exc
+            unread[public_slug(slug)] = "the read failed" if private else str(exc)
+            continue
         records.extend(
             {
                 "slug": public_slug(slug),
@@ -216,9 +225,14 @@ def drift_sync_prs(
                 "visibility": "private" if private else "public",
             }
             for pr in prs
-            if _is_drift_branch(str(pr.get("headRefName", "")))
+            if pr.get("isCrossRepository") is False and _is_drift_branch(str(pr.get("headRefName", "")))
         )
-    return records
+    return records, unread
+
+
+def partial_marker(*, read: int, unread: int) -> Dict[str, Any]:
+    """The JSONL line that tells the drift page its rows cover only ``read`` of the fleet's repositories."""
+    return {"kind": "partial", "read": read, "unread": unread}
 
 
 def to_jsonl(records: Sequence[Mapping[str, Any]]) -> str:
@@ -236,15 +250,21 @@ def main(argv: Optional[Sequence[str]] = None, *, runner: ProcessRunner = subpro
     parser.add_argument("--inventory", default=str(INVENTORY_PATH), help="the declared fleet (inventory/repos.yml)")
     parser.add_argument("--drift-jsonl", required=True)
     args = parser.parse_args(argv)
-    try:
-        records = drift_sync_prs(fleet_slugs(args.inventory), runner=runner)
-    except FleetStateError as exc:
-        print(f"fleet_state: {exc}", file=sys.stderr)
+    slugs = fleet_slugs(args.inventory)
+    records, unread = drift_sync_prs(slugs, runner=runner)
+    for tag, reason in unread.items():
+        print(f"::warning::fleet_state: {tag} was not read ({reason}); its drift is unknown")
+    if slugs and len(unread) == len(slugs):
+        print("fleet_state: no fleet repository could be read; writing nothing", file=sys.stderr)
         return 1
     out = Path(args.drift_jsonl)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(to_jsonl(records), encoding="utf-8", newline="\n")
-    print(f"fleet_state: {len(records)} open drift-sync PR(s) -> {out}; scope: {drift_search_scope(os.environ)}")
+    lines = records + ([partial_marker(read=len(slugs) - len(unread), unread=len(unread))] if unread else [])
+    out.write_text(to_jsonl(lines), encoding="utf-8", newline="\n")
+    print(
+        f"fleet_state: {len(records)} open drift-sync PR(s) in {len(slugs) - len(unread)} of {len(slugs)} "
+        f"repositories -> {out}; scope: {drift_search_scope(os.environ)}"
+    )
     return 0
 
 

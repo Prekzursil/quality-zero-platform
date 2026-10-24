@@ -96,7 +96,7 @@ class ScheduledAlertsWorkflowTests(unittest.TestCase):
         """They used to read files nothing wrote, so they were never evaluated."""
         self.assertIn("from scripts.quality import alert_dispatch, alerts, fleet_state", self.text)
         self.assertIn("bypass_issues = fleet_state.bypass_followups(PLATFORM)", self.text)
-        self.assertIn("drift_prs = fleet_state.drift_sync_prs(fleet_state.fleet_slugs())", self.text)
+        self.assertIn("drift_prs, drift_unread = fleet_state.drift_sync_prs(fleet_state.fleet_slugs())", self.text)
         self.assertNotIn("bypass-tracking.jsonl", self.text)
         self.assertNotIn('_safe_jsonl("audit/drift-sync.jsonl")', self.text)
         # The detectors still without a producer are named as NOT evaluated.
@@ -108,8 +108,8 @@ class ScheduledAlertsWorkflowTests(unittest.TestCase):
         self.assertIn("alert_type=alerts.AlertType.BYPASS_STALE", self.text)
         self.assertIn("alert_type=alerts.AlertType.DRIFT_STUCK", self.text)
         self.assertIn("alert_dispatch.close_resolved_alerts(", self.text)
-        self.assertIn('unverifiable=lambda subject: drift_scope.startswith("public")', self.text)
-        self.assertIn("subject.startswith(fleet_state.PRIVATE_SUBJECT_PREFIX)", self.text)
+        self.assertIn('unverifiable=lambda subject: subject.rsplit("#", 1)[0] in drift_unread,', self.text)
+        self.assertIn("Fleet repositories NOT read (drift unknown): {len(drift_unread)}", self.text)
 
     def test_the_drift_search_may_use_the_fleet_read_pat_but_writes_keep_the_workflow_token(self) -> None:
         """Private members' drift PRs are only visible to the fleet-read PAT."""

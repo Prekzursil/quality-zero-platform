@@ -118,7 +118,9 @@ jobs:
           # LIVE sources: read now, never from a file nothing writes. A failed
           # read raises and fails the run - never a silent all-clear.
           bypass_issues = fleet_state.bypass_followups(PLATFORM)
-          drift_prs = fleet_state.drift_sync_prs(fleet_state.fleet_slugs())
+          drift_prs, drift_unread = fleet_state.drift_sync_prs(fleet_state.fleet_slugs())
+          for tag, reason in drift_unread.items():
+              print(f"::warning::{tag} was not read ({reason}): its drift is unknown, its drift alerts stay open.")
           drift_scope = fleet_state.drift_search_scope(os.environ)
 
           active = alert_dispatch.fetch_active_workflows(PLATFORM)
@@ -162,9 +164,9 @@ jobs:
               alert_type=alerts.AlertType.DRIFT_STUCK,
               live_subjects={f"{p['slug']}#{p['pr_number']}" for p in drift_prs},
               close_comment="The drift-sync PR `{subject}` is no longer open; closing.",
-              # Without the fleet-read PAT a private member's PR is invisible, not gone.
-              unverifiable=lambda subject: drift_scope.startswith("public")
-              and subject.startswith(fleet_state.PRIVATE_SUBJECT_PREFIX),
+              # An unread member's PR is invisible, not gone (no fleet-read PAT,
+              # or a failed read): never close its alert on missing evidence.
+              unverifiable=lambda subject: subject.rsplit("#", 1)[0] in drift_unread,
               dry_run=dry_run,
           )
 
@@ -178,6 +180,7 @@ jobs:
                   fh.write(f"- QZP workflows watched: {len(state['workflow_runs'])}\n")
                   fh.write(f"- Open break-glass follow-ups (live): {len(bypass_issues)}\n")
                   fh.write(f"- Open drift-sync PRs (live, {drift_scope}): {len(drift_prs)}\n")
+                  fh.write(f"- Fleet repositories NOT read (drift unknown): {len(drift_unread)}\n")
                   fh.write(f"- Resolved bypass/drift alerts closed: {sum(1 for c in resolved if c.get('closed'))}\n")
                   for path, detectors in missing.items():
                       fh.write(f"- NOT evaluated ({detectors}): no `{path}` - nothing produces it yet\n")

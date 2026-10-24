@@ -79,10 +79,11 @@ class DismissalLogTests(unittest.TestCase):
         """Including a pending won't-fix with no owner yet, and an escaped pipe in a cell."""
         pending = _row("8", reason="won't fix", dismissed="2026-04-27", verdict="**Re-review.** wrong category")
         spaced = _row("11", location="`fixtures/my case.py:12`")
+        expiring = _row("12", owner="Prekzursil", review_by="2027-01-24", verdict="Kept until CodeQL models it.")
         piped = _row("9", rationale="a \\| b")
         accepted = _row("10", reason="won't fix", owner="@owner", review_by="2027-01-01")
         aligned = _doc(_row(), separator="| :--- | ---: | :---: | --- | --- | --- | --- | --- | --- |")
-        self.assertEqual(_check(_doc(_row(), pending, piped, accepted, spaced)), [])
+        self.assertEqual(_check(_doc(_row(), pending, piped, accepted, spaced, expiring)), [])
         self.assertEqual(_check(aligned), [])
 
     def test_each_malformation_is_named(self) -> None:
@@ -108,6 +109,10 @@ class DismissalLogTests(unittest.TestCase):
             _row(reason="won't fix", owner="@owner", dismissed="2026-01-02", review_by="2026-06-30"): (
                 "was due for review on 2026-06-30"
             ),
+            # Any row's review-by expires: a false positive whose justification can lapse, too.
+            _row(dismissed="2026-01-02", review_by="2026-06-30"): "was due for review on 2026-06-30",
+            _row(review_by="2026-10-01"): "is not after its dismissal",
+            _row(review_by="soon"): "is neither '-' nor a real date",
             _row(reason="won't fix", review_by="2027-01-01", verdict="**Fixed by design.** accepted"): "names no owner",
             # A pending marker exempts only PRE-policy rows; a new won't-fix needs owner + date.
             _row(reason="won't fix", review_by="2027-01-01", verdict="**Re-review.** later"): "names no owner",

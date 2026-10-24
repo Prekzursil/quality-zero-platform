@@ -9,10 +9,11 @@ itself well-formed so the audit trail cannot drift silently:
 * every row links an alert OF THIS REPOSITORY, names a backticked rule, a
   ``path:line`` location, a GitHub dismissal reason, a real calendar date that
   is not in the future, a rationale and a verdict, and no alert appears twice;
-* a ``won't fix`` row names an owner and a real review-by date that has not
-  passed (accepted risk always has someone answerable and a date, and an
-  expired one fails until it is re-reviewed), unless it predates the rule and
+* a ``won't fix`` row names an owner and a real review-by date (accepted risk
+  always has someone answerable and a date), unless it predates the rule and
   is marked for re-review;
+* a review-by date, on any row, is after the dismissal and has not passed:
+  a dismissal whose justification can expire fails until it is re-reviewed;
 * every query the CodeQL configuration excludes has a row in the "Query
   configuration decisions" table.
 
@@ -133,12 +134,13 @@ def _row_problems(cells: Sequence[str], seen: set, *, repo: str, today: str, lat
             problems.append("an accepted `won't fix` names no owner")
         if not _is_date(review_by):
             problems.append(f"an accepted `won't fix` has no real review-by date (got {review_by!r})")
-        elif _is_date(dismissed) and review_by <= dismissed:
-            problems.append(f"an accepted `won't fix` review-by {review_by} is not after its dismissal {dismissed}")
+    elif review_by not in ("", "-") and not _is_date(review_by):
+        problems.append(f"review-by {review_by!r} is neither '-' nor a real date")
+    if _is_date(review_by):
+        if _is_date(dismissed) and review_by <= dismissed:
+            problems.append(f"review-by {review_by} is not after its dismissal {dismissed}")
         elif review_by < today:
-            problems.append(
-                f"an accepted `won't fix` was due for review on {review_by}: re-review it and log the outcome"
-            )
+            problems.append(f"the dismissal was due for review on {review_by}: re-review it and log the outcome")
     return problems
 
 

@@ -393,6 +393,19 @@ class TemplateTests(unittest.TestCase):
         bug = yaml.safe_load(fb.render_template("ISSUE_TEMPLATE/bug_report.yml", context))
         self.assertIn("/blob/main/.github/SECURITY.md", bug["body"][0]["attributes"]["value"])
 
+    def test_fork_notes(self) -> None:
+        facts = fb.RepoFacts("Prekzursil/demo", "main", False, ("a.py",), "upstream/demo")
+        context = fb.template_context(facts, _reader({}), PIN)
+        security = fb.render_template("SECURITY.md", context)
+        self.assertIn("fork of [upstream/demo](https://github.com/upstream/demo)", security)
+        self.assertIn("report one introduced by this fork's changes here", security)
+        self.assertIn(
+            "Changes that are useful beyond this fork belong upstream", fb.render_template("CONTRIBUTING.md", context)
+        )
+        plain = fb.template_context(_facts(["a.py"]), _reader({}), PIN)
+        self.assertEqual((plain["fork_security_note"], plain["fork_contributing_note"]), ("", ""))
+        self.assertNotIn("fork of", fb.render_template("SECURITY.md", plain))
+
     def test_private_context(self) -> None:
         context = fb.template_context(_facts(["a.py"], private=True), _reader({}), PIN)
         self.assertEqual(
@@ -758,11 +771,21 @@ class MainTests(unittest.TestCase):
             self.assertIn(
                 {"path": "SECURITY.md", "action": "create", "reason": "no security policy in the repository"}, payload
             )
-            write = ["--write", "--private", "--default-branch", "trunk", "--deps-severity-floor", "any"]
+            write = [
+                "--write",
+                "--private",
+                "--default-branch",
+                "trunk",
+                "--deps-severity-floor",
+                "any",
+                "--upstream",
+                "up/demo",
+            ]
             code, out, _err = self._run(base + write, ["app.py"])
             self.assertEqual(code, 0)
             self.assertIn("wrote SECURITY.md", out)
             self.assertIn("`trunk`", (root / "SECURITY.md").read_text(encoding="utf-8"))
+            self.assertIn("fork of [up/demo]", (root / "SECURITY.md").read_text(encoding="utf-8"))
             caller = yaml.safe_load((root / fb.QUALITY_CALLER).read_text(encoding="utf-8"))
             self.assertEqual(caller["jobs"]["quality"]["with"], {"deps-severity-floor": "any"})
             tracked = [

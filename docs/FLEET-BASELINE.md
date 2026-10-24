@@ -23,7 +23,10 @@ Dependabot rails and the zero-tolerance dependency gate come from the
   only lists them once the owner opts them in through `PRIVATE_INCLUDE_SLUGS`
   in `scripts/quality/fleet_inventory.py`, because listing them publishes
   their names.
-- Forks are governed only when explicitly whitelisted (`FORK_INCLUDE_SLUGS`).
+- Forks the owner has worked on (commits ahead of upstream) carry the baseline too. Their
+  `SECURITY.md` and `CONTRIBUTING.md` send upstream code to the upstream project
+  (`--upstream owner/name`). The public inventory lists a fork only when it is
+  explicitly whitelisted (`FORK_INCLUDE_SLUGS`).
 
 ## The baseline, file by file
 

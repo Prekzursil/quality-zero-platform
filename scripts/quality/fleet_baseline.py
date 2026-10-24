@@ -202,6 +202,7 @@ class RepoFacts:
     default_branch: str
     private: bool
     paths: Tuple[str, ...]
+    upstream: Optional[str] = None  # owner/name of the parent when this repository is a fork
 
     @property
     def name(self) -> str:
@@ -545,6 +546,27 @@ def _private_reporting(facts: RepoFacts) -> str:
     return f"https://github.com/{facts.slug}/security/advisories/new"
 
 
+def _fork_security_note(facts: RepoFacts) -> str:
+    """Where a fork's vulnerabilities belong: upstream code upstream, the fork's own changes here."""
+    if not facts.upstream:
+        return ""
+    return (
+        f"This repository is a fork of [{facts.upstream}](https://github.com/{facts.upstream}). Report a "
+        "vulnerability in code inherited from upstream to the upstream project through its own security policy; "
+        "report one introduced by this fork's changes here."
+    )
+
+
+def _fork_contributing_note(facts: RepoFacts) -> str:
+    """A fork's contribution note: changes that belong upstream should go upstream too."""
+    if not facts.upstream:
+        return ""
+    return (
+        f"This repository is a fork of [{facts.upstream}](https://github.com/{facts.upstream}). Changes that are "
+        "useful beyond this fork belong upstream as well; keep fork-only changes small and easy to rebase."
+    )
+
+
 def _first_present(paths: Sequence[str], candidates: Sequence[str]) -> Optional[str]:
     """Return the checkout's spelling of the first candidate present, matched case-insensitively.
 
@@ -611,6 +633,8 @@ def template_context(facts: RepoFacts, read: Reader, qzp_pin: str, deps_floor: s
     caller_with = "    with:\n      deps-severity-floor: any\n" if deps_floor == "any" else ""
     return {
         "repo_slug": facts.slug,
+        "fork_security_note": _fork_security_note(facts),
+        "fork_contributing_note": _fork_contributing_note(facts),
         "display_name": facts.name,
         "default_branch": facts.default_branch,
         "default_branch_yaml": json.dumps(facts.default_branch),
@@ -957,6 +981,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--slug", required=True, help="owner/name of the consumer repository.")
     parser.add_argument("--default-branch", default="main")
     parser.add_argument("--private", action="store_true", help="The repository is private (no PVR / CodeQL).")
+    parser.add_argument("--upstream", default="", help="owner/name of the parent repository when this is a fork.")
     parser.add_argument("--qzp-pin", required=True, help="40-hex quality-zero-platform commit for the caller.")
     parser.add_argument(
         "--deps-severity-floor",
@@ -978,7 +1003,7 @@ def main(argv: Optional[List[str]] = None, *, runner: ProcessRunner = subprocess
         return 2
     repo_dir = Path(args.repo_dir).resolve()
     paths = list_checkout_files(repo_dir, runner=runner)
-    facts = RepoFacts(args.slug, args.default_branch, bool(args.private), paths)
+    facts = RepoFacts(args.slug, args.default_branch, bool(args.private), paths, args.upstream or None)
     actions = plan_baseline(facts, _reader(repo_dir), args.qzp_pin, args.deps_severity_floor)
     print(render_plan(args.slug, actions))
     if args.json_out:

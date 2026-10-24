@@ -14,6 +14,7 @@ source = [
   # 100%-covered here — the workflow copy is byte-identical by contract test.
   "scripts.quality.osv_severity_gate",
   "scripts.quality.jsts_coverage_assert",
+  "scripts.quality.jsts_projects",
   # The standing dependency-CVE surface. NOT embedded in the reusable gate (it
   # runs from this repo's own scheduled workflow), but it reuses the tiering
   # classifier above and is the only thing that surfaces the T2 tier at all, so

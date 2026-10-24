@@ -7,10 +7,11 @@
 #
 # When bumping a pin:
 #   1. edit THIS file;
-#   2. for biome, CI reads this file at runtime — also update the offline
-#      fallback literal in reusable-quality.yml gate-lint-format-jsts (and the
-#      group echo); for every other tool the workflow still carries literals —
-#      keep each of them in sync with this file;
+#   2. update the matching literal in .github/workflows/reusable-quality.yml.
+#      The workflow carries LITERALS on purpose: a caller pins the workflow by
+#      commit SHA, and a value read from this repo's main at run time would
+#      change under that pin. tests/test_workflow_contracts.py and the weekly
+#      fleet-health pin-drift check fail on any mismatch;
 #   3. update docs/lean-gate/pre-commit-config.template.yaml to match;
 #   4. re-run scripts/quality/preflight.sh on a consumer repo to confirm
 #      local/CI parity before merging the bump.
@@ -23,6 +24,11 @@ pins:
   ruff: "0.15.17"
   # gate 2 (py): basedpyright (standard typeCheckingMode unless caller config)
   basedpyright: "1.39.8"
+  # gate 3 (py): the measuring tools. pytest + pytest-cov when the caller's
+  # config mentions pytest, otherwise coverage.py over unittest (--branch).
+  pytest: "9.1.1"
+  pytest-cov: "7.1.0"
+  coverage: "7.16.2"
   # gate 1 (jsts): oxlint --deny-warnings
   oxlint: "1.69.0"
   # gate 1 (jsts): biome ci --formatter-enabled (formatter-only)

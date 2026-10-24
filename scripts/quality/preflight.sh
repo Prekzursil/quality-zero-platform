@@ -16,10 +16,10 @@
 #   gate 1 jsts  oxlint --deny-warnings + biome ci (formatter-only)
 #   gate 2 ts    tsc --noEmit (per tsconfig, like CI)
 #   gate 2 py    basedpyright (caller config honored, else --typecheckingmode standard)
-#   gate 3 py    pytest --cov --cov-branch --cov-fail-under=100 (or unittest+coverage)
+#   gate 3 py    pinned pytest --cov --cov-branch --cov-fail-under=100 (or unittest + coverage run --branch)
 #   gate 3 jsts  caller test:coverage script + jsts_coverage_assert --min-percent
 #   gate 3 go/c++ caller's own coverage-gate script (default scripts/coverage-gate.sh)
-#   gate 4       opengrep scan --config .quality/opengrep --error
+#   gate 4       opengrep scan --error with .quality/opengrep, else the platform default ruleset
 #   gate 5       gitleaks detect --redact (ALWAYS, like CI)
 #   gate 6       osv-scanner scan source + the T0 severity-floor classifier
 #   charter      .quality/charter_check.sh when the caller ships the charter
@@ -37,6 +37,10 @@
 # version. Set QZP_PREFLIGHT_NO_INSTALL=1 to skip downloads; the lane then
 # SKIPs (never silently passes — the skip is printed and listed in the summary).
 #
+# A repo whose quality.yml sets `deps-severity-floor: any` reproduces that
+# zero-tolerance gate 6 locally with QZP_PREFLIGHT_DEPS_SEVERITY_FLOOR=any
+# (default t0, the same default as CI).
+#
 # WINDOWS CONSUMERS: clone with core.autocrlf=false (or input). A default
 # autocrlf=true checkout rewrites LF files to CRLF, and the biome lane
 # (lineEnding: lf) then reports "File content differs from formatting output"
@@ -52,6 +56,11 @@ usage() {
 
 REPO_DIR="$(pwd)"
 QZP_NO_INSTALL="${QZP_PREFLIGHT_NO_INSTALL:-0}"
+DEPS_SEVERITY_FLOOR="${QZP_PREFLIGHT_DEPS_SEVERITY_FLOOR:-t0}"
+case "$DEPS_SEVERITY_FLOOR" in
+  t0|any) ;;
+  *) echo "preflight: QZP_PREFLIGHT_DEPS_SEVERITY_FLOOR must be t0 or any" >&2; exit 2 ;;
+esac
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --repo-dir) REPO_DIR="$2"; shift 2 ;;
@@ -82,6 +91,9 @@ pin() {
 
 PIN_RUFF="$(pin ruff)"
 PIN_BASEDPYRIGHT="$(pin basedpyright)"
+PIN_PYTEST="$(pin pytest)"
+PIN_PYTEST_COV="$(pin pytest-cov)"
+PIN_COVERAGE="$(pin coverage)"
 PIN_OXLINT="$(pin oxlint)"
 PIN_BIOME="$(pin biome)"
 PIN_OPENGREP="$(pin opengrep)"
@@ -89,6 +101,7 @@ PIN_GITLEAKS="$(pin gitleaks)"
 PIN_OSV="$(pin osv-scanner)"
 echo "QZP preflight — pins from $PINS_FILE:"
 echo "  ruff=$PIN_RUFF basedpyright=$PIN_BASEDPYRIGHT oxlint=$PIN_OXLINT biome=$PIN_BIOME"
+echo "  pytest=$PIN_PYTEST pytest-cov=$PIN_PYTEST_COV coverage=$PIN_COVERAGE"
 echo "  opengrep=$PIN_OPENGREP gitleaks=$PIN_GITLEAKS osv-scanner=$PIN_OSV"
 
 cd "$REPO_DIR" || fail preflight "cannot cd to --repo-dir $REPO_DIR"
@@ -195,7 +208,7 @@ if [ "$DETECT_JSTS" = "true" ]; then
     . || rc=$?
   biome_cfg_args=()
   if [ ! -f biome.json ] && [ ! -f biome.jsonc ]; then
-    printf '%s' '{"$schema":"https://biomejs.dev/schemas/2.5.0/schema.json","files":{"includes":["**/*.ts","**/*.tsx","**/*.js","**/*.jsx","**/*.mjs","**/*.cjs","!**/node_modules/**","!**/dist/**","!**/build/**","!**/out/**","!**/.venv/**","!**/vendor/**"]},"formatter":{"enabled":true,"indentStyle":"space","indentWidth":2,"lineWidth":100,"lineEnding":"lf"},"javascript":{"formatter":{"quoteStyle":"single","trailingCommas":"all","semicolons":"always"}},"linter":{"enabled":false},"assist":{"enabled":false}}' \
+    printf '%s' '{"$schema":"https://biomejs.dev/schemas/2.5.15/schema.json","files":{"includes":["**/*.ts","**/*.tsx","**/*.js","**/*.jsx","**/*.mjs","**/*.cjs","!**/node_modules/**","!**/dist/**","!**/build/**","!**/out/**","!**/.venv/**","!**/vendor/**"]},"formatter":{"enabled":true,"indentStyle":"space","indentWidth":2,"lineWidth":100,"lineEnding":"lf"},"javascript":{"formatter":{"quoteStyle":"single","trailingCommas":"all","semicolons":"always"}},"linter":{"enabled":false},"assist":{"enabled":false}}' \
       > "$WORK_DIR/biome.json"
     biome_cfg_args=(--config-path "$WORK_DIR")
     echo "No caller biome.json/biome.jsonc - using the lean template's bundled biome config."
@@ -309,11 +322,15 @@ if [ "$DETECT_PYTHON" = "true" ]; then
     fi
     rc=0
     if grep -rqs 'pytest' pyproject.toml setup.cfg tox.ini pytest.ini 2>/dev/null; then
-      pip install pytest pytest-cov >/dev/null 2>&1
+      pip install "pytest==$PIN_PYTEST" "pytest-cov==$PIN_PYTEST_COV" "coverage==$PIN_COVERAGE" >/dev/null 2>&1
       python -m pytest --cov --cov-branch --cov-fail-under=100 || rc=$?
     else
-      pip install coverage >/dev/null 2>&1
-      python -m coverage run -m unittest discover || rc=$?
+      pip install "coverage==$PIN_COVERAGE" >/dev/null 2>&1
+      # Same as CI: branch coverage, and a tests/ dir without __init__.py is
+      # discovered from inside (a root discover never enters it).
+      start_dir=.
+      if [ -d tests ] && [ ! -f tests/__init__.py ]; then start_dir=tests; fi
+      python -m coverage run --branch -m unittest discover -s "$start_dir" || rc=$?
       python -m coverage report --fail-under=100 --show-missing || rc=$?
     fi
     if [ "$rc" -ne 0 ]; then
@@ -333,19 +350,21 @@ if [ "$DETECT_JSTS" = "true" ]; then
     if node -e "const s=(require('$d/package.json').scripts||{}).test||'';process.exit(/(vitest|jest).*--coverage|--coverage.*(vitest|jest)/.test(s)?0:1)" 2>/dev/null; then echo "runner"; return 0; fi
     echo ""; return 0
   }
-  declare -a proj_dirs=()
-  if [ -f package.json ]; then
-    proj_dirs=(.)
-  else
-    set +o pipefail
-    mapfile -t pkgs < <(git ls-files '**/package.json' \
-      | grep -Ev '(^|/)(node_modules|dist|out|build|\.venv|vendor)/' || true)
-    set -o pipefail
-    for p in "${pkgs[@]}"; do proj_dirs+=("$(dirname "$p")"); done
-  fi
+  # Same planner as CI: every project (root AND nested), each test file
+  # attributed to its deepest project, workspace members of a measured root
+  # counted as measured.
+  git ls-files > "$WORK_DIR/jsts-files.txt"
+  plan_args=(--files "$WORK_DIR/jsts-files.txt")
+  if [ -f package.json ]; then plan_args+=(--root-package-json package.json); fi
+  if [ -f pnpm-workspace.yaml ]; then plan_args+=(--pnpm-workspace pnpm-workspace.yaml); fi
+  python "$QZP_ROOT/scripts/quality/jsts_projects.py" "${plan_args[@]}" > "$WORK_DIR/jsts-plan.tsv"
+  mapfile -t plan < "$WORK_DIR/jsts-plan.tsv"
   ran_any=false
+  root_measured=false
+  declare -a unmeasured=()
   rc=0
-  for d in "${proj_dirs[@]}"; do
+  for row in "${plan[@]}"; do
+    IFS=$'\t' read -r d has_tests member <<< "${row%$'\r'}"
     lane_kind="$(has_cov_lane "$d")"
     if [ -n "$lane_kind" ]; then
       slug="$(printf '%s' "$d" | tr -c 'A-Za-z0-9' '_')"
@@ -355,9 +374,14 @@ if [ "$DETECT_JSTS" = "true" ]; then
       python "$QZP_ROOT/scripts/quality/jsts_coverage_assert.py" \
         --project-dir "$d" --log "$log" --min-percent 100 || rc=$?
       ran_any=true
+      if [ "$d" = "." ]; then root_measured=true; fi
+    elif [ "$has_tests" = "yes" ] && ! { [ "$member" = "yes" ] && [ "$root_measured" = "true" ]; }; then
+      unmeasured+=("$d")
     fi
   done
-  if [ "$ran_any" = "true" ]; then
+  if [ "${#unmeasured[@]}" -gt 0 ]; then
+    lane_fail gate-tests-coverage-jsts "project dir(s) with JS/TS test files but no coverage lane, never measured: ${unmeasured[*]}"
+  elif [ "$ran_any" = "true" ]; then
     if [ "$rc" -ne 0 ]; then
       lane_fail gate-tests-coverage-jsts "a measured JS/TS coverage figure was below the 100% line+branch bar (or no figure could be parsed)"
     else
@@ -393,25 +417,30 @@ elif [ "$DETECT_GO" = "true" ] || [ "$DETECT_CPP" = "true" ]; then
   lane_skip gate-tests-coverage-compiled "compiled source present with ZERO test files - no test surface by design"
 fi
 
-# ── GATE 4 — opengrep SAST ─────────────────────────────────────────────────
-if [ "$DETECT_OPENGREP" = "true" ]; then
-  echo "== gate-sast opengrep@$PIN_OPENGREP =="
-  if [ ! -f .semgrepignore ]; then
-    echo "WARN gate-sast: no .semgrepignore in the repo root - opengrep's built-in template silently skips *_test.go plus test/ and tests/ (same warning CI emits)."
-  fi
-  og="$(resolve_opengrep)" || og=""
-  if [ -z "$og" ]; then
-    lane_skip gate-sast "opengrep@$PIN_OPENGREP binary not on PATH and not installable here (set QZP_PREFLIGHT_NO_INSTALL=0 on linux/darwin, or install opengrep). CI still runs this lane."
+# ── GATE 4 — opengrep SAST (ALWAYS, like CI round-10) ──────────────────────
+# The repo's own .quality/opengrep when present, else the platform default
+# ruleset: the same curated rules CI embeds, read here from this QZP checkout.
+echo "== gate-sast opengrep@$PIN_OPENGREP =="
+ruleset_dir=.quality/opengrep
+if [ "$DETECT_OPENGREP" != "true" ]; then
+  ruleset_dir="$QZP_ROOT/.quality/opengrep"
+  echo "NOTE gate-sast: no .quality/opengrep in this repo - scanning with the platform default ruleset (same as CI)."
+fi
+if [ ! -f .semgrepignore ]; then
+  echo "WARN gate-sast: no .semgrepignore in the repo root - opengrep's built-in template silently skips *_test.go plus test/ and tests/ (same warning CI emits)."
+fi
+og="$(resolve_opengrep)" || og=""
+if [ -z "$og" ]; then
+  lane_skip gate-sast "opengrep@$PIN_OPENGREP binary not on PATH and not installable here (set QZP_PREFLIGHT_NO_INSTALL=0 on linux/darwin, or install opengrep). CI still runs this lane."
+else
+  rc=0
+  "$og" scan --config "$ruleset_dir" --error \
+    --exclude .venv --exclude node_modules --exclude dist --exclude out --exclude build \
+    . || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    lane_fail gate-sast "opengrep@$PIN_OPENGREP reported findings"
   else
-    rc=0
-    "$og" scan --config .quality/opengrep --error \
-      --exclude .venv --exclude node_modules --exclude dist --exclude out --exclude build \
-      . || rc=$?
-    if [ "$rc" -ne 0 ]; then
-      lane_fail gate-sast "opengrep@$PIN_OPENGREP reported findings"
-    else
-      lane_pass gate-sast "opengrep@$PIN_OPENGREP clean"
-    fi
+    lane_pass gate-sast "opengrep@$PIN_OPENGREP clean"
   fi
 fi
 
@@ -471,7 +500,14 @@ else
     elif [ "$rc" -eq 1 ]; then
       jrc=0
       "$osv" scan source "${osv_config_args[@]}" --recursive --format json . > "$WORK_DIR/osv-report.json" || jrc=$?
-      if [ "$jrc" -ne 0 ] && [ "$jrc" -ne 1 ]; then
+      if [ "$DEPS_SEVERITY_FLOOR" = "any" ]; then
+        # Zero tolerance, like CI with `deps-severity-floor: any`: the table is
+        # printed for the reader, and any finding fails the lane.
+        if [ "$jrc" -eq 0 ] || [ "$jrc" -eq 1 ]; then
+          python "$QZP_ROOT/scripts/quality/osv_severity_gate.py" "$WORK_DIR/osv-report.json" || true
+        fi
+        lane_fail gate-deps "deps-severity-floor=any: osv-scanner reported at least one advisory and every finding blocks"
+      elif [ "$jrc" -ne 0 ] && [ "$jrc" -ne 1 ]; then
         lane_fail gate-deps "the JSON re-scan needed to classify findings exited $jrc - NOT a vulnerability verdict; the gate blocks rather than passing silently"
       else
         grc=0

@@ -68,6 +68,9 @@ PINS_FILE="${PINS_FILE:-$QZP_ROOT/.quality/tool-pins.yml}"
 fail() { echo "FAIL $1: $2" >&2; exit "${3:-1}"; }
 
 [ -f "$PINS_FILE" ] || fail preflight "pin file not found at $PINS_FILE (set PINS_FILE or run from a QZP checkout)"
+# Absolute before the `cd "$REPO_DIR"` below: the asset digests are read from
+# it lazily (preflight_tools.sh), after the working directory has changed.
+PINS_FILE="$(cd "$(dirname "$PINS_FILE")" && pwd)/$(basename "$PINS_FILE")"
 
 # pin <name> — extract `  <name>: "value"` from the pin file.
 pin() {
@@ -167,63 +170,11 @@ case "$machine" in
   *) arch=unknown ;;
 esac
 
-resolve_gitleaks() {
-  if command -v gitleaks >/dev/null 2>&1; then command -v gitleaks; return 0; fi
-  if [ "$QZP_NO_INSTALL" = "1" ] || [ "$os" = "unknown" ] || { [ "$os" = "windows" ] && [ "$arch" != "amd64" ]; } || { [ "$os" != "windows" ] && [ "$arch" = "unknown" ]; }; then
-    return 1
-  fi
-  local bin="$CACHE_DIR/gitleaks/$PIN_GITLEAKS/gitleaks"
-  if [ ! -x "$bin" ] && [ "$os" != "windows" ]; then
-    mkdir -p "$CACHE_DIR/gitleaks/$PIN_GITLEAKS"
-    curl -fsSL -o "$CACHE_DIR/gitleaks/gitleaks.tgz" \
-      "https://github.com/gitleaks/gitleaks/releases/download/v${PIN_GITLEAKS}/gitleaks_${PIN_GITLEAKS}_${os}_${arch}.tar.gz" \
-      || return 1
-    tar -xzf "$CACHE_DIR/gitleaks/gitleaks.tgz" -C "$CACHE_DIR/gitleaks/$PIN_GITLEAKS" gitleaks || return 1
-  fi
-  if [ ! -x "$bin" ] && [ "$os" = "windows" ]; then
-    mkdir -p "$CACHE_DIR/gitleaks/$PIN_GITLEAKS"
-    curl -fsSL -o "$CACHE_DIR/gitleaks/gitleaks.zip" \
-      "https://github.com/gitleaks/gitleaks/releases/download/v${PIN_GITLEAKS}/gitleaks_${PIN_GITLEAKS}_windows_x64.zip" \
-      || return 1
-    unzip -oq "$CACHE_DIR/gitleaks/gitleaks.zip" -d "$CACHE_DIR/gitleaks/$PIN_GITLEAKS" || return 1
-  fi
-  [ -x "$bin" ] || return 1
-  printf '%s' "$bin"
-}
-
-resolve_osv() {
-  local name="osv-scanner"
-  [ "$os" = "windows" ] && name="osv-scanner.exe"
-  if command -v osv-scanner >/dev/null 2>&1; then command -v osv-scanner; return 0; fi
-  if [ "$QZP_NO_INSTALL" = "1" ] || [ "$os" = "unknown" ] || [ "$arch" = "unknown" ]; then
-    return 1
-  fi
-  local url_name="osv-scanner_${os}_${arch}"
-  [ "$os" = "windows" ] && url_name="osv-scanner_windows_amd64.exe"
-  local bin="$CACHE_DIR/osv-scanner/$PIN_OSV/$name"
-  if [ ! -x "$bin" ]; then
-    mkdir -p "$CACHE_DIR/osv-scanner/$PIN_OSV"
-    curl -fsSL -o "$bin" \
-      "https://github.com/google/osv-scanner/releases/download/${PIN_OSV}/${url_name}" || return 1
-    chmod +x "$bin" 2>/dev/null || true
-  fi
-  [ -x "$bin" ] || return 1
-  printf '%s' "$bin"
-}
-
-resolve_opengrep() {
-  if command -v opengrep >/dev/null 2>&1; then command -v opengrep; return 0; fi
-  if [ "$QZP_NO_INSTALL" = "1" ]; then return 1; fi
-  case "$os" in linux|darwin) : ;; *) return 1 ;; esac
-  local dir="$CACHE_DIR/opengrep/$PIN_OPENGREP"
-  if [ ! -x "$dir/bin/opengrep" ]; then
-    mkdir -p "$dir"
-    ( cd "$dir" && curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh \
-      | bash -s -- -v "$PIN_OPENGREP" ) >/dev/null 2>&1 || return 1
-  fi
-  [ -x "$dir/bin/opengrep" ] || return 1
-  printf '%s' "$dir/bin/opengrep"
-}
+# resolve_gitleaks / resolve_osv / resolve_opengrep: each tool is the pinned
+# release asset, verified against .quality/tool-pins.yml (asset_sha256)
+# before it is installed -- see preflight_tools.sh.
+# shellcheck source=preflight_tools.sh
+. "$SCRIPT_DIR/preflight_tools.sh"
 
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT

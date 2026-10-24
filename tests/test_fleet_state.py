@@ -164,6 +164,38 @@ class DriftSyncPrTests(unittest.TestCase):
                 self.assertIn("public repositories only", fleet_state.drift_search_scope(bare))
         self.assertIn(PRIVATE, fleet_state.PRIVATE_SLUGS)
 
+    def test_a_rejected_fleet_read_token_falls_back_for_public_members(self) -> None:
+        """Review finding: an expired PAT blinded every read, public members included."""
+        expired = subprocess.CompletedProcess(["gh"], 1, "", "gh: Bad credentials (HTTP 401)\n")
+        runner = MagicMock(
+            side_effect=[
+                expired,  # o/a with the PAT: rejected
+                subprocess.CompletedProcess(["gh"], 0, json.dumps([_pr(1, repo="o/a")]), ""),  # o/a, workflow token
+                subprocess.CompletedProcess(["gh"], 0, json.dumps([_pr(2, repo="o/b")]), ""),  # o/b, workflow token
+            ]
+        )
+        environ = {"GH_TOKEN": "workflow", fleet_state.FLEET_READ_PAT_ENV: "expired-pat"}
+        records, unread = fleet_state.drift_sync_prs(["o/a", "o/b", PRIVATE], runner=runner, environ=environ)
+        self.assertEqual([(r["slug"], r["pr_number"]) for r in records], [("o/a", 1), ("o/b", 2)])
+        self.assertEqual(unread, {fleet_state.public_slug(PRIVATE): "private, and the fleet-read token was rejected"})
+        self.assertEqual(runner.call_args_list[0].kwargs["env"]["GH_TOKEN"], "expired-pat")
+        self.assertNotIn("env", runner.call_args_list[1].kwargs)
+        self.assertNotIn("env", runner.call_args_list[2].kwargs)
+        # A private member that meets the rejection first is unread with a name-free reason; the next public
+        # member is read with the workflow token straight away.
+        runner = MagicMock(
+            side_effect=[expired, subprocess.CompletedProcess(["gh"], 0, json.dumps([_pr(3, repo="o/a")]), "")]
+        )
+        records, unread = fleet_state.drift_sync_prs([PRIVATE, "o/a"], runner=runner, environ=environ)
+        self.assertEqual([r["pr_number"] for r in records], [3])
+        self.assertEqual(unread, {fleet_state.public_slug(PRIVATE): "private, and the fleet-read token was rejected"})
+        self.assertNotIn("env", runner.call_args_list[1].kwargs)
+        # The workflow-token retry can fail too: that member is unread with its own reason.
+        runner = MagicMock(side_effect=[expired, subprocess.CompletedProcess(["gh"], 1, "", "boom\n")])
+        records, unread = fleet_state.drift_sync_prs(["o/a"], runner=runner, environ=environ)
+        self.assertEqual(records, [])
+        self.assertIn("exited 1: boom", unread["o/a"])
+
     def test_a_private_members_drift_pr_never_reaches_a_public_surface_by_name(self) -> None:
         """Dashboard rows, public alert subjects and failure reasons get a stable tag, never the private slug."""
         environ = {fleet_state.FLEET_READ_PAT_ENV: "pat"}

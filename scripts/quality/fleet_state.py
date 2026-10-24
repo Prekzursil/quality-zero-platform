@@ -189,32 +189,29 @@ def drift_sync_prs(
     env = fleet_read_env(os.environ if environ is None else environ)
     records: List[Dict[str, Any]] = []
     unread: Dict[str, str] = {}
+    rejected = False  # the fleet-read PAT answered 401: public members fall back to the workflow token
     for slug in slugs:
         private = slug in PRIVATE_SLUGS
-        if private and env is None:
-            unread[public_slug(slug)] = "private, and no fleet-read token"
+        if private and (env is None or rejected):
+            unread[public_slug(slug)] = (
+                f"private, and {'the fleet-read token was rejected' if rejected else 'no fleet-read token'}"
+            )
             continue
         try:
-            prs = _gh_json(
-                [
-                    "pr",
-                    "list",
-                    "--repo",
-                    slug,
-                    "--state",
-                    "open",
-                    "--limit",
-                    str(LIST_LIMIT + 1),
-                    "--json",
-                    "number,headRefName,isCrossRepository,createdAt,url",
-                ],
-                runner=runner,
-                env=env,
-                limit=LIST_LIMIT,
-            )
+            prs = _open_prs(slug, runner=runner, env=None if rejected else env)
         except FleetStateError as exc:
-            unread[public_slug(slug)] = "the read failed" if private else str(exc)
-            continue
+            if env is None or rejected or not _token_rejected(exc):
+                unread[public_slug(slug)] = "the read failed" if private else str(exc)
+                continue
+            rejected = True
+            if private:
+                unread[public_slug(slug)] = "private, and the fleet-read token was rejected"
+                continue
+            try:
+                prs = _open_prs(slug, runner=runner, env=None)
+            except FleetStateError as retry:
+                unread[slug] = str(retry)
+                continue
         records.extend(
             {
                 "slug": public_slug(slug),
@@ -228,6 +225,33 @@ def drift_sync_prs(
             if pr.get("isCrossRepository") is False and _is_drift_branch(str(pr.get("headRefName", "")))
         )
     return records, unread
+
+
+def _open_prs(slug: str, *, runner: ProcessRunner, env: Optional[Mapping[str, str]]) -> List[Mapping[str, Any]]:
+    """One fleet member's open PRs (raises like ``_gh_json``, including past ``LIST_LIMIT``)."""
+    return _gh_json(
+        [
+            "pr",
+            "list",
+            "--repo",
+            slug,
+            "--state",
+            "open",
+            "--limit",
+            str(LIST_LIMIT + 1),
+            "--json",
+            "number,headRefName,isCrossRepository,createdAt,url",
+        ],
+        runner=runner,
+        env=env,
+        limit=LIST_LIMIT,
+    )
+
+
+def _token_rejected(exc: FleetStateError) -> bool:
+    """``gh`` failed because the token itself was refused (expired or revoked), not because of the repository."""
+    text = str(exc)
+    return "HTTP 401" in text or "Bad credentials" in text
 
 
 def partial_marker(*, read: int, unread: int) -> Dict[str, Any]:

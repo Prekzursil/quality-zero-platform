@@ -71,10 +71,11 @@ masked before the payload is serialised, so the public site cannot leak them.
 
 ## Health semantics
 
-- **Default branch:** the NEWEST decisive run of each workflow among the 100 newest default-branch runs. A workflow with no run in that window (dormant for 100+ runs) does not count. That is a deliberate bound: per-workflow paging would cost one API call per workflow per repo on every hourly build.
+- **Default branch:** the NEWEST decisive run of each workflow among the 100 newest runs of the repository's own default-branch code. A workflow with no run in that window (dormant for 100+ runs) does not count. That is a deliberate bound: per-workflow paging would cost one API call per workflow per repo on every hourly build.
   Runs a pull request triggered (`pull_request*` events) or that come from another repository
   do not count: the branch filter matches a run's head branch, so a fork PR from its own `main`
-  would otherwise land in the window.
+  would otherwise land in the window. Up to 3 pages are read to fill the 100 with eligible runs.
+  If PR runs crowd all 3, the verdict is `unknown`, unless a failure is already visible.
   `success` means every workflow's newest completed run passed. `partial` means at least one failed.
   `pending` means a workflow has only runs still in flight. `unknown` means no run says anything.
   Cancelled, skipped, neutral, stale and action-required runs never decide (the same set as the

@@ -38,6 +38,12 @@ MAX_CHECK_RUN_PAGES = 5
 # One pull_request-run lookup per open PR head, capped so a repo with a huge
 # PR backlog cannot stall the hourly build (heads past the cap: no verdict).
 MAX_PR_HEAD_LOOKUPS = 20
+#: The default-branch verdict reads this many of the repository's own newest
+#: runs: 100, not 20, so a weekly or schedule-only workflow still has a run in
+#: the window instead of silently dropping out of the verdict.
+DEFAULT_BRANCH_WINDOW = 100
+#: Pages read to fill that window once PR-triggered runs are filtered out.
+MAX_DEFAULT_BRANCH_PAGES = 3
 #: Conclusions that neither pass nor fail a workflow (the platform's own
 #: failing-workflow alert uses the same set): a run that concurrency
 #: cancelled, or a skipped job, says nothing about health.
@@ -353,6 +359,36 @@ def _is_default_branch_run(run: Mapping[str, Any], repo_slug: str) -> bool:
     return run.get("event") not in PR_EVENTS and not foreign
 
 
+def _default_branch_health(token: str, repo_slug: str, default_branch: str) -> str:
+    """The verdict over the newest ``DEFAULT_BRANCH_WINDOW`` runs of this repository's own default-branch code.
+
+    The branch filter matches HEAD branches, so PR-triggered and fork runs
+    share the listing; they are dropped, and further pages are read until the
+    window is full or the listing ends. If the page cap stops that first, a
+    failure already visible is still reported; anything else is unproven.
+    """
+    eligible: List[Mapping[str, Any]] = []
+    exhausted = False
+    for page in range(1, MAX_DEFAULT_BRANCH_PAGES + 1):
+        payload = _github_payload_or_none(
+            f"{GITHUB_API_BASE}/repos/{repo_slug}/actions/runs"
+            f"?branch={default_branch}&per_page={DEFAULT_BRANCH_WINDOW}&page={page}",
+            token,
+        )
+        runs = _workflow_runs_of(payload)
+        eligible.extend(run for run in runs if _is_default_branch_run(run, repo_slug))
+        if len(runs) < DEFAULT_BRANCH_WINDOW:
+            exhausted = True
+            break
+        if len(eligible) >= DEFAULT_BRANCH_WINDOW:
+            break
+    newest = sorted(eligible, key=lambda run: str(run.get("created_at", "")), reverse=True)
+    verdict = _compute_health(newest[:DEFAULT_BRANCH_WINDOW])
+    if verdict != "partial" and not exhausted and len(eligible) < DEFAULT_BRANCH_WINDOW:
+        return "unknown"
+    return verdict
+
+
 def _failed(run: Mapping[str, Any]) -> bool:
     """A completed run that decided against its commit (not a pass, not a neutral outcome)."""
     conclusion = str(run.get("conclusion") or "")
@@ -546,12 +582,7 @@ def _live_health(
     # such resource visible to the token" (private repo, no runs, no
     # rulesets) and must degrade that ONE row, never abort the whole
     # dashboard build.
-    runs = _github_payload_or_none(
-        # 100, not 20: a weekly or schedule-only workflow must still have a
-        # run in the window, or it silently drops out of the verdict.
-        (f"{GITHUB_API_BASE}/repos/{repo_slug}/actions/runs?branch={default_branch}&per_page=100"),
-        token,
-    )
+    default_branch_health = _default_branch_health(token, repo_slug, default_branch)
     rulesets = _github_payload_or_none(f"{GITHUB_API_BASE}/repos/{repo_slug}/rulesets", token)
     # Fetch repo metadata to capture visibility for the redaction step
     # in ``build_dashboard_payload``. Using the same token lets private
@@ -570,11 +601,8 @@ def _live_health(
         raw_visibility = repo_meta.get("visibility")
         if isinstance(raw_visibility, str) and raw_visibility.strip():
             visibility = raw_visibility.strip().lower()
-    workflow_runs = runs.get("workflow_runs", []) if isinstance(runs, dict) else []
     health: Dict[str, Any] = {
-        "default_branch_health": _compute_health(
-            workflow_runs, filter_fn=lambda run: _is_default_branch_run(run, repo_slug)
-        ),
+        "default_branch_health": default_branch_health,
         # A repo the token cannot see at all has no readable PRs either.
         "open_pr_health": _open_pr_health(token, repo_slug) if repo_meta is not None else "unknown",
         "ruleset_present": bool(rulesets),

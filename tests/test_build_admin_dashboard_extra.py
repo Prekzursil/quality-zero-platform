@@ -290,6 +290,42 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
         self.assertEqual(verdict("cancelled", "success"), "success")  # nothing failed: nothing ambiguous
         self.assertEqual(verdict("success", "success"), "success")
 
+    def test_the_default_branch_window_is_filled_with_eligible_runs(self) -> None:
+        """Review finding: 99 PR-triggered runs on page 1 pushed a real failure out of a 100-run window."""
+        own = {"full_name": "o/r"}
+
+        def runs(n: int, event: str, conclusion: str, start: int, name: str = "CI") -> List[dict]:
+            return [
+                {
+                    "name": name,
+                    "event": event,
+                    "conclusion": conclusion,
+                    "head_repository": own,
+                    "created_at": f"2026-10-{24 - (start + i) // 1000:02d}T{(start + i) % 1000:06d}",
+                }
+                for i in range(n)
+            ]
+
+        def health(*pages: List[dict]) -> str:
+            payloads = [{"workflow_runs": page} for page in pages]
+            with patch.object(build_admin_dashboard, "_github_payload_or_none", side_effect=payloads) as fetch:
+                verdict = build_admin_dashboard._default_branch_health("token", "o/r", "main")
+            for number, call in enumerate(fetch.call_args_list, start=1):
+                self.assertIn(f"?branch=main&per_page=100&page={number}", call.args[0])
+            return verdict
+
+        crowded = runs(1, "push", "success", 0) + runs(99, "pull_request_target", "failure", 1, name="Label")
+        weekly_failure = runs(1, "schedule", "failure", 200, name="Weekly")
+        self.assertEqual(health(crowded, weekly_failure), "partial")  # was "success"
+        self.assertEqual(health(crowded, runs(1, "schedule", "success", 200, name="Weekly")), "success")
+        # Page cap reached with the window still short: unproven, unless a failure is already visible.
+        pr_only = runs(100, "pull_request", "success", 300)
+        self.assertEqual(health(crowded, pr_only, pr_only), "unknown")
+        visible = runs(1, "push", "failure", 0) + runs(99, "pull_request", "success", 1)
+        self.assertEqual(health(visible, pr_only, pr_only), "partial")
+        full = runs(100, "push", "success", 0)
+        self.assertEqual(health(full), "success")  # a full window needs no second page
+
     def test_default_branch_health_ignores_runs_a_pull_request_triggered(self) -> None:
         """Review finding: ?branch=main matches head branches, so a fork PR from its own main landed in the window."""
         own = {"full_name": "Prekzursil/Example"}

@@ -357,10 +357,11 @@ if [ "$DETECT_JSTS" = "true" ]; then
   }
   # Same planner and rules as CI: every project (root AND nested), each test
   # file attributed to its deepest project; orphans fail; a project without
-  # tests of its own is not run, except an aggregator root that a lane-less
-  # workspace member relies on; a member without a lane counts only when the
-  # root's coverage reports name a file inside it. `-z` keeps non-ASCII paths
-  # unquoted.
+  # tests of its own is not run; every project WITH tests needs its own
+  # coverage lane, workspace members included (a root workspace run can cover a
+  # member's code without running its tests). `-z` keeps non-ASCII paths
+  # unquoted. Each lane clears <dir>/coverage first, so the number assertion
+  # reads only this run's reports.
   git ls-files -z > "$WORK_DIR/jsts-files.txt"
   plan_args=(--files "$WORK_DIR/jsts-files.txt" --orphans-out "$WORK_DIR/jsts-orphans.txt")
   if [ -f package.json ]; then plan_args+=(--root-package-json package.json); fi
@@ -368,43 +369,30 @@ if [ "$DETECT_JSTS" = "true" ]; then
   python "$QZP_ROOT/scripts/quality/jsts_projects.py" "${plan_args[@]}" > "$WORK_DIR/jsts-plan.tsv"
   mapfile -t plan < "$WORK_DIR/jsts-plan.tsv"
   mapfile -t orphans < "$WORK_DIR/jsts-orphans.txt"
-  declare -a dirs=() tests=() members=() lanes=()
-  root_run_needed=false
-  for row in "${plan[@]}"; do
-    IFS=$'\t' read -r d has_tests member <<< "${row%$'\r'}"
-    lane_kind="$(has_cov_lane "$d")"
-    dirs+=("$d"); tests+=("$has_tests"); members+=("$member"); lanes+=("$lane_kind")
-    if [ "$member" = "yes" ] && [ "$has_tests" = "yes" ] && [ -z "$lane_kind" ]; then root_run_needed=true; fi
-  done
-  run_jsts_lane() { # $1 dir, $2 lane-kind
-    local slug log
-    slug="$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '_')"
-    log="$WORK_DIR/jsts-coverage-$slug.log"
-    ( cd "$1" && { npm ci || npm install; } >/dev/null 2>&1 \
-      && if [ "$2" = "script" ]; then npm run test:coverage; else npm test; fi ) 2>&1 | tee "$log" || rc=$?
-    python "$QZP_ROOT/scripts/quality/jsts_coverage_assert.py" \
-      --project-dir "$1" --log "$log" --min-percent 100 || rc=$?
-    ran_any=true
-  }
   ran_any=false
   declare -a unmeasured=()
   rc=0
-  for i in "${!dirs[@]}"; do
-    d="${dirs[$i]}"; has_tests="${tests[$i]}"; member="${members[$i]}"; lane_kind="${lanes[$i]}"
-    if [ "$has_tests" != "yes" ]; then
-      if [ "$d" = "." ] && [ -n "$lane_kind" ] && [ "$root_run_needed" = "true" ]; then run_jsts_lane "$d" "$lane_kind"; fi
+  for row in "${plan[@]}"; do
+    IFS=$'\t' read -r d has_tests member <<< "${row%$'\r'}"
+    if [ "$has_tests" != "yes" ]; then continue; fi
+    lane_kind="$(has_cov_lane "$d")"
+    if [ -z "$lane_kind" ]; then
+      if [ "$member" = "yes" ]; then unmeasured+=("$d (workspace member)"); else unmeasured+=("$d"); fi
       continue
     fi
-    if [ -n "$lane_kind" ]; then
-      run_jsts_lane "$d" "$lane_kind"
-    elif ! { [ "$member" = "yes" ] && python "$QZP_ROOT/scripts/quality/jsts_projects.py" --member-evidence "$d" --project-dir .; }; then
-      unmeasured+=("$d")
-    fi
+    slug="$(printf '%s' "$d" | tr -c 'A-Za-z0-9' '_')"
+    log="$WORK_DIR/jsts-coverage-$slug.log"
+    rm -rf -- "$d/coverage"
+    ( cd "$d" && { npm ci || npm install; } >/dev/null 2>&1 \
+      && if [ "$lane_kind" = "script" ]; then npm run test:coverage; else npm test; fi ) 2>&1 | tee "$log" || rc=$?
+    python "$QZP_ROOT/scripts/quality/jsts_coverage_assert.py" \
+      --project-dir "$d" --log "$log" --min-percent 100 || rc=$?
+    ran_any=true
   done
   if [ "${#orphans[@]}" -gt 0 ]; then
     lane_fail gate-tests-coverage-jsts "JS/TS test file(s) outside every package.json project, run by no coverage lane: ${orphans[*]}"
   elif [ "${#unmeasured[@]}" -gt 0 ]; then
-    lane_fail gate-tests-coverage-jsts "project dir(s) with JS/TS test files but no coverage lane (and, for workspace members, no root coverage report naming their files), never measured: ${unmeasured[*]}"
+    lane_fail gate-tests-coverage-jsts "project dir(s) with JS/TS test files but no coverage lane of their own, never measured: ${unmeasured[*]} (a root workspace run does not count for a member)"
   elif [ "$ran_any" = "true" ]; then
     if [ "$rc" -ne 0 ]; then
       lane_fail gate-tests-coverage-jsts "a measured JS/TS coverage figure was below the 100% line+branch bar (or no figure could be parsed)"

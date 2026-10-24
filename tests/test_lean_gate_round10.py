@@ -458,12 +458,6 @@ npm() { echo "npm $* in $PWD" >> npm-calls.txt; }
                 dirs.append(match.group(1))
         return dirs
 
-    def _root_report(self, *files: str) -> None:
-        """Simulate the coverage report the root's run would have written."""
-        report = self.workdir / "coverage" / "lcov.info"
-        report.parent.mkdir(parents=True, exist_ok=True)
-        report.write_text("".join(f"SF:{name}\nend_of_record\n" for name in files), encoding="utf-8")
-
     def test_root_and_nested_projects_are_all_measured(self) -> None:
         """THE hole: a root package.json used to hide every nested project."""
         self.write("package.json", '{"scripts": {"test:coverage": "vitest run --coverage"}}')
@@ -485,35 +479,47 @@ npm() { echo "npm $* in $PWD" >> npm-calls.txt; }
         self.assertEqual(result.returncode, 1)
         self.assertIn("never measured: admin", result.stderr)
 
-    def test_workspace_member_is_measured_when_the_root_reports_its_files(self) -> None:
-        """A member with no script of its own passes only on report evidence, relative or absolute."""
+    def test_a_lane_less_workspace_member_fails_even_when_the_root_runs(self) -> None:
+        """THE review findings: a root workspace run (or a report on disk) is never a member's lane.
+
+        A root `jest src --coverage` that imports the member covers its code
+        without running a single member test, and a committed report can name
+        the member's files without any run at all.
+        """
         self.write(
             "package.json",
-            '{"workspaces": ["packages/*"], "scripts": {"test:coverage": "vitest run --coverage"}}',
+            '{"workspaces": ["packages/*"], "scripts": {"test:coverage": "jest src --coverage"}}',
         )
+        self.write("src/a.test.ts")
         self.write("packages/ui/package.json", '{"name": "ui"}')
         self.write("packages/ui/button.test.ts")
-        for reported in ("packages/ui/button.ts", str(self.workdir.resolve() / "packages" / "ui" / "button.ts")):
-            with self.subTest(reported=reported):
-                self._root_report(reported)
-                (self.workdir / "assert-calls.txt").unlink(missing_ok=True)
-                result = self._run()
-                self.assertEqual(result.returncode, 0, result.stderr)
-                # The root has no tests of its own; it runs because the member relies on it.
-                self.assertEqual(self._measured_dirs(), ["."])
-                self.assertIn("running its workspace coverage for the members without a lane", result.stdout)
-                self.assertIn("the root coverage reports name its files", result.stdout)
-
-    def test_a_colliding_directory_name_is_no_evidence(self) -> None:
-        """`lib` is not measured because the root report names `src/lib/util.ts`."""
-        self.write("package.json", '{"workspaces": ["lib"], "scripts": {"test:coverage": "jest src --coverage"}}')
-        self.write("src/a.test.ts")
-        self.write("lib/package.json", '{"name": "lib"}')
-        self.write("lib/b.test.ts")
-        self._root_report("src/lib/util.ts", "src/a.ts")
+        (self.workdir / "coverage").mkdir()
+        (self.workdir / "coverage" / "lcov.info").write_text("SF:packages/ui/button.ts\n", encoding="utf-8")
         result = self._run()
         self.assertEqual(result.returncode, 1)
-        self.assertIn("never measured: lib", result.stderr)
+        self.assertEqual(self._measured_dirs(), ["."])
+        self.assertIn("never measured: packages/ui (workspace member)", result.stderr)
+        self.assertIn("a root workspace run does not count for a member", result.stderr)
+
+    def test_stale_coverage_reports_are_cleared_before_a_run(self) -> None:
+        """The number assertion reads <dir>/coverage, so a committed report must be gone first."""
+        self.write("package.json", '{"scripts": {"test:coverage": "vitest run --coverage"}}')
+        self.write("src/a.test.ts")
+        self.write("coverage/coverage-summary.json", '{"total": {"lines": {"pct": 100}}}')
+        result = self._run()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((self.workdir / "coverage").exists())
+
+    def test_mocha_style_test_directories_are_a_test_surface(self) -> None:
+        """THE review finding: `test/smoke.js` used to read as "no tests", skipping the lane."""
+        self.write("package.json", '{"scripts": {"test:coverage": "c8 mocha"}}')
+        self.write("lib/index.js")
+        self.write("test/smoke.js")
+        self.write("api/package.json", '{"scripts": {"test:coverage": "c8 mocha"}}')
+        self.write("api/tests/unit.ts")
+        result = self._run()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self._measured_dirs(), [".", "api"])
 
     def test_an_aggregator_root_is_not_required_when_members_measure_themselves(self) -> None:
         """THE review finding: a root with no tests and no lane used to be flagged unmeasured."""
@@ -527,7 +533,7 @@ npm() { echo "npm $* in $PWD" >> npm-calls.txt; }
         self.assertIn("project .: no JS/TS test files of its own - nothing to measure.", result.stdout)
 
     def test_a_root_lane_without_root_tests_is_skipped_when_members_have_lanes(self) -> None:
-        """Nothing relies on the root run, and it has no tests of its own to run."""
+        """A root with no tests of its own has nothing to measure; its members run their own lanes."""
         self.write(
             "package.json",
             '{"workspaces": ["packages/*"], "scripts": {"test:coverage": "vitest run --coverage"}}',
@@ -539,24 +545,10 @@ npm() { echo "npm $* in $PWD" >> npm-calls.txt; }
         self.assertEqual(self._measured_dirs(), ["packages/ui"])
 
     def test_a_lane_less_member_without_a_root_lane_is_unmeasured(self) -> None:
-        """No root run exists to measure it, so the member fails by name."""
+        """A member with tests and no lane of its own fails by name."""
         self.write("package.json", '{"workspaces": ["packages/*"]}')
         self.write("packages/ui/package.json", '{"name": "ui"}')
         self.write("packages/ui/a.test.ts")
-        result = self._run()
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("never measured: packages/ui", result.stderr)
-
-    def test_workspace_member_without_report_evidence_fails(self) -> None:
-        """A `workspaces` entry alone does not prove the root run measured the member."""
-        self.write(
-            "package.json",
-            '{"workspaces": ["packages/*"], "scripts": {"test:coverage": "jest src --coverage"}}',
-        )
-        self.write("src/a.test.ts")
-        self.write("packages/ui/package.json", '{"name": "ui"}')
-        self.write("packages/ui/button.test.ts")
-        self._root_report("src/a.ts")
         result = self._run()
         self.assertEqual(result.returncode, 1)
         self.assertIn("never measured: packages/ui", result.stderr)

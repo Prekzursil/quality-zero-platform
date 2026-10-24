@@ -49,12 +49,14 @@ locally; a FAIL names the lane and the fix.
 
 ### The single pin source
 
-Every tool version lives in **`.quality/tool-pins.yml`**. The workflow reads
-the **biome** pin from that file at runtime (offline fallback = the literal in
-the workflow); the other tools still carry literals in the workflow and MUST
-be kept in sync with the file when bumping. Consumers should never pin these
-tools to different versions locally — a finding that only reproduces on a
-different tool version is not the gate's finding.
+Every tool version lives in **`.quality/tool-pins.yml`**, and the workflow
+carries each one, biome included, as a **literal** that must change in the same
+commit: a caller pins the workflow by commit SHA, so nothing may be read from
+this repo's `main` at run time (an edit to the pin file alone changes nothing
+for any caller). The contract tests and the weekly fleet-health pin-drift check
+fail on any mismatch. Consumers should never pin these tools to different
+versions locally — a finding that only reproduces on a different tool version
+is not the gate's finding.
 
 ### The two costliest rules (learn them once, save a red run each)
 
@@ -194,16 +196,17 @@ hard-fail *before* a gate can run:
   was "root OR nested": with a root `package.json`, nested projects were never
   measured and a nested project with tests but no coverage runner passed
   silently. Every project is now planned (`scripts/quality/jsts_projects.py`,
-  embedded in the workflow): each JS/TS test file belongs to its deepest
-  enclosing project, and every project with test files of its own is measured
-  by its own coverage lane. A project with test files but no lane FAILS, unless
-  it is a workspace member (`workspaces` / `pnpm-workspace.yaml`) AND the root's
-  coverage reports (lcov / clover / istanbul JSON) name a file inside it: a
-  `workspaces` entry alone proves nothing. A root without tests of its own runs
-  only when such a lane-less member relies on it, so an aggregator root whose
-  members measure themselves needs no script. A test file outside every
-  project FAILS (no lane ever runs it), and a project with a coverage script but
-  zero test files is not run.
+  embedded in the workflow): each JS/TS test file (`*.test.*`, `*.spec.*`,
+  `__tests__/`, or a file under a `test/` / `tests/` directory of a project)
+  belongs to its deepest enclosing project, and every project with test files
+  of its OWN is measured by its OWN coverage lane. A project with test files but
+  no lane FAILS, workspace members included: a root workspace run can cover a
+  member's code without running a single member test, so it never stands in
+  for the member's `test:coverage`. A root without tests of its own (an
+  aggregator) has nothing to measure; a named test file outside every project
+  FAILS (no lane ever runs it); a project with a coverage script but zero test
+  files is not run; and each lane clears its project's `coverage/` first, so a
+  committed or cached report can never stand in for the run.
 - **Tests that import a runtime dependency** — gate 3 installs the caller's
   Python **runtime** deps before `pytest`/`coverage`, in priority order:
   `requirements.txt` / `requirements/*.txt` / `requirements*.txt`
@@ -228,8 +231,8 @@ hard-fail *before* a gate can run:
     honoring a caller `[tool.ruff]` / `ruff.toml` when present (else ruff
     defaults). Pinned **ruff 0.15.17** (mirrors Reframe).
   - `gate-lint-format-jsts` — the workflow's OWN pinned **oxlint 1.69.0** (linter)
-    + **biome** (formatter-only; pin read at runtime from `.quality/tool-pins.yml`,
-      currently 2.5.15) over the caller's ts/js (already
+    + **biome 2.5.15** (formatter-only; a workflow literal kept equal to
+      `.quality/tool-pins.yml`) over the caller's ts/js (already
     self-contained pre-round-6; unchanged).
   - `gate-secrets` — **gitleaks 8.30.1** (mirrors Reframe) over the working tree
     whenever a `.gitleaks.toml` allowlist is present.

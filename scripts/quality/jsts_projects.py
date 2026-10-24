@@ -10,25 +10,31 @@ script was never flagged - while the lane printed PASS.
 This module turns ``git ls-files`` output into the full project plan:
 
 * every ``package.json`` outside vendored / build trees is a project;
-* every JS/TS test file is attributed to its DEEPEST enclosing project;
+* every JS/TS test file is attributed to its DEEPEST enclosing project. A test
+  file is a ``*.test.*`` / ``*.spec.*`` file, anything under ``__tests__/``, or
+  (Mocha-style layouts) a JS/TS file under a ``test/`` or ``tests/`` directory
+  inside a project;
 * a project that the root ``package.json`` ``workspaces`` (or a root
-  ``pnpm-workspace.yaml``) declares is marked as a workspace member, because a
-  root coverage run over a workspace measures its members.
+  ``pnpm-workspace.yaml``) declares is marked as a workspace member, so the
+  lane can say why a root workspace run does not count for it.
 
 Output is one tab-separated line per project, the root first and then the rest
 sorted by path::
 
     <dir>\t<has_tests: yes|no>\t<workspace_member: yes|no>
 
-JS/TS test files that belong to no project at all are reported on stderr and,
-with ``--orphans-out``, written to a file so the lane can fail on them: no
-coverage lane ever runs a test that lives outside every project.
+``has_tests`` is the project's OWN test files. Every project with tests is
+measured by its OWN coverage lane, workspace members included: a root
+workspace run can show that a member's code was covered, never that the
+member's own tests ran (a root ``jest src --coverage`` that merely imports the
+member covers its code and runs none of its tests), and a coverage report on
+disk may predate the run. A member therefore needs its own ``test:coverage``.
 
-``--member-evidence <dir>`` answers the one question a plan cannot: did the
-root's coverage run actually measure that workspace member? Only a coverage
-report that names a file INSIDE the member (its path, relative to the project
-root, starts with the member directory) says so; a ``workspaces`` entry alone
-does not.
+``*.test.*`` / ``*.spec.*`` / ``__tests__`` files that belong to no project at
+all are reported on stderr and, with ``--orphans-out``, written to a file so the
+lane can fail on them: no coverage lane ever runs them. A file under a
+``test/`` directory outside every project is not an orphan: outside a JS/TS
+project that name says nothing about JavaScript tests.
 
 The module is pure standard library because the lane runs it with the runner's
 bare ``python3``.
@@ -38,7 +44,6 @@ from __future__ import absolute_import
 
 import argparse
 import fnmatch
-import html
 import json
 import re
 import sys
@@ -49,12 +54,12 @@ VENDORED = re.compile(r"(^|/)(node_modules|dist|out|build|\.venv|vendor)/")
 """Trees that are never first-party projects or first-party tests."""
 
 JSTS_TEST = re.compile(r"(\.(test|spec)\.([cm]?[jt]s|[jt]sx)$)|((^|/)__tests__/.+\.([cm]?[jt]s|[jt]sx)$)")
-"""A JS/TS test file: ``*.test.*`` / ``*.spec.*`` or anything under ``__tests__/``."""
+"""A JS/TS test file by name: ``*.test.*`` / ``*.spec.*`` or anything under ``__tests__/``."""
+
+JSTS_TEST_DIR = re.compile(r"(^|/)tests?/.+\.([cm]?[jt]s|[jt]sx)$")
+"""A JS/TS file under a ``test/`` or ``tests/`` directory: Mocha-style layouts (``test/smoke.js``)."""
 
 ROOT = "."
-
-CLOVER_FILE_PATH = re.compile(r'<file\b[^>]*?\bpath="([^"]*)"')
-"""``<file ... path="...">`` in a clover report (istanbul writes the absolute path)."""
 
 PlanRow = Tuple[str, bool, bool]
 
@@ -167,22 +172,22 @@ def plan(
 ) -> Tuple[List[PlanRow], List[str]]:
     """Return ``(rows, orphan_tests)`` for the tracked file list ``paths``.
 
-    ``has_tests`` is the project's OWN test files only. Whether an aggregator
-    root must still run (because a member without a coverage lane of its own
-    relies on the root's workspace run) depends on the members' lanes, which
-    the lane decides; a plan row never invents a test surface.
+    ``has_tests`` is the project's OWN test files only: a workspace root does
+    not inherit its members' tests, and an aggregator root without tests of its
+    own has nothing to measure.
     """
     dirs = project_dirs(paths)
     with_tests = set()
     orphans: List[str] = []
     for path in paths:
-        if VENDORED.search(path) or not JSTS_TEST.search(path):
+        named = JSTS_TEST.search(path)
+        if VENDORED.search(path) or not (named or JSTS_TEST_DIR.search(path)):
             continue
         owner = owning_project(path, dirs)
-        if owner is None:
-            orphans.append(path)
-        else:
+        if owner is not None:
             with_tests.add(owner)
+        elif named:
+            orphans.append(path)
     globs = workspace_globs(root_package_json, pnpm_workspace)
     rows = [(directory, directory in with_tests, is_workspace_member(directory, globs)) for directory in dirs]
     return rows, orphans
@@ -194,66 +199,6 @@ def render(rows: Sequence[PlanRow]) -> str:
         f"{directory}\t{'yes' if has_tests else 'no'}\t{'yes' if member else 'no'}\n"
         for directory, has_tests, member in rows
     )
-
-
-def coverage_report_paths(project_dir: Path) -> List[str]:
-    """Return every source path the project's machine-readable coverage reports name.
-
-    Read from ``coverage/**/lcov.info`` (``SF:`` records), ``coverage/**/clover.xml``
-    (``<file path=...>``) and the istanbul ``coverage-summary.json`` /
-    ``coverage-final.json`` keys: every reporter the coverage-number assertion
-    accepts, plus istanbul's per-file JSON. Clover is read with a regex, like
-    the assertion, so no XML parser touches the report.
-    """
-    paths = set()
-    coverage_dir = Path(project_dir) / "coverage"
-    for report in sorted(coverage_dir.glob("**/lcov.info")):
-        for line in report.read_text(encoding="utf-8", errors="replace").splitlines():
-            if line.startswith("SF:"):
-                paths.add(line[3:].strip().replace("\\", "/"))
-    for report in sorted(coverage_dir.glob("**/clover.xml")):
-        text = report.read_text(encoding="utf-8", errors="replace")
-        paths.update(html.unescape(found).replace("\\", "/") for found in CLOVER_FILE_PATH.findall(text))
-    for name in ("coverage-summary.json", "coverage-final.json"):
-        for report in sorted(coverage_dir.glob(f"**/{name}")):
-            try:
-                document = json.loads(report.read_text(encoding="utf-8"))
-            except ValueError:
-                continue
-            if isinstance(document, dict):
-                paths.update(str(key).replace("\\", "/") for key in document if key != "total")
-    return sorted(paths)
-
-
-def project_relative(path: str, project_root: str = "") -> str:
-    """Return a report path relative to ``project_root``.
-
-    Reporters write project-relative paths (lcov) or absolute ones (clover,
-    istanbul JSON). An absolute path inside ``project_root`` loses that prefix;
-    a relative one loses only leading ``./`` segments, so a dot-named directory
-    (``.apps/web``) keeps its name. An absolute path elsewhere stays absolute
-    and therefore never matches a member.
-    """
-    normalized = path.replace("\\", "/")
-    root = project_root.replace("\\", "/").rstrip("/")
-    if root and normalized.startswith(root + "/"):
-        return normalized[len(root) + 1 :]
-    while normalized.startswith("./"):
-        normalized = normalized[2:]
-    return normalized
-
-
-def measured_by(member: str, report_paths: Iterable[str], project_root: str = "") -> bool:
-    """True when a coverage report names at least one file inside ``member``.
-
-    The member directory must START the project-relative path: ``lib`` never
-    matches ``src/lib/util.ts``, and ``packages/ui`` never matches
-    ``packages/ui-kit/x.ts``. A workspace declaration alone does not prove the
-    root's coverage run measured a member (a root ``jest src --coverage``
-    never does); a report that lists the member's files does.
-    """
-    prefix = project_relative(member.strip("/")) + "/"
-    return any(project_relative(path, project_root).startswith(prefix) for path in report_paths)
 
 
 def _read_optional(path: str) -> str:
@@ -276,24 +221,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--root-package-json", default="", help="The root package.json, if the repo has one.")
     parser.add_argument("--pnpm-workspace", default="", help="The root pnpm-workspace.yaml, if the repo has one.")
     parser.add_argument("--orphans-out", default="", help="Write test files outside every project here.")
-    parser.add_argument(
-        "--member-evidence",
-        default="",
-        help="Instead of planning: exit 0 if --project-dir's coverage reports name a file in this member dir.",
-    )
-    parser.add_argument("--project-dir", default=".", help="Project whose coverage reports --member-evidence reads.")
     return parser
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    """Print the project plan, or answer a workspace-member evidence question."""
+    """Print the project plan for the file list given with ``--files``."""
     args = _build_parser().parse_args(argv)
-    if args.member_evidence:
-        project_dir = Path(args.project_dir)
-        evidence = measured_by(
-            args.member_evidence, coverage_report_paths(project_dir), project_root=str(project_dir.resolve())
-        )
-        return 0 if evidence else 1
     if not args.files:
         print("ERROR jsts-projects: --files is required to plan", file=sys.stderr)
         return 2

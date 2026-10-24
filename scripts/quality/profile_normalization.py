@@ -211,6 +211,78 @@ def normalize_dependabot(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
     }
 
 
+#: GitHub's documented values for the repository-ruleset fields a profile may
+#: set (REST "Create a repository ruleset"). Anything else would be rejected by
+#: the API at apply time, so it is rejected here, while rendering.
+RULESET_ENFORCEMENTS = frozenset({"active", "disabled", "evaluate"})
+RULESET_BYPASS_ACTOR_TYPES = frozenset(
+    {"Integration", "OrganizationAdmin", "RepositoryRole", "Team", "DeployKey", "User"}
+)
+RULESET_BYPASS_MODES = frozenset({"always", "pull_request"})
+CODE_SCANNING_ALERTS_THRESHOLDS = frozenset({"none", "errors", "errors_and_warnings", "all"})
+CODE_SCANNING_SECURITY_ALERTS_THRESHOLDS = frozenset({"none", "critical", "high_or_higher", "medium_or_higher", "all"})
+
+
+def _require_member(value: str, allowed: frozenset, what: str) -> str:
+    """Return ``value`` when it is one of ``allowed``; raise ``ValueError`` otherwise."""
+    if value not in allowed:
+        raise ValueError(f"unsupported ruleset {what} {value!r}; expected one of {sorted(allowed)}")
+    return value
+
+
+def _normalize_bypass_actor(item: Any) -> Dict[str, Any]:
+    """Validate one ruleset bypass actor."""
+    if not isinstance(item, Mapping):
+        raise ValueError(f"ruleset bypass_actors entries must be mappings, got {item!r}")
+    actor_type = _require_member(str(item.get("actor_type", "")).strip(), RULESET_BYPASS_ACTOR_TYPES, "actor_type")
+    raw_id = item.get("actor_id")
+    if raw_id is None:
+        actor_id = None
+    elif isinstance(raw_id, int) and not isinstance(raw_id, bool):
+        actor_id = raw_id
+    else:
+        raise ValueError(f"ruleset bypass actor_id must be an integer or null, got {raw_id!r}")
+    bypass_mode = _require_member(
+        str(item.get("bypass_mode", "always")).strip() or "always", RULESET_BYPASS_MODES, "bypass_mode"
+    )
+    return {"actor_id": actor_id, "actor_type": actor_type, "bypass_mode": bypass_mode}
+
+
+def _normalize_code_scanning_tool(item: Any) -> Dict[str, str]:
+    """Validate one code-scanning merge-protection tool entry."""
+    if not isinstance(item, Mapping):
+        raise ValueError(f"ruleset code_scanning entries must be mappings, got {item!r}")
+    tool = str(item.get("tool", "")).strip()
+    if not tool:
+        raise ValueError("ruleset code_scanning entries need a tool name")
+    alerts = _require_member(
+        str(item.get("alerts_threshold", "all")).strip(), CODE_SCANNING_ALERTS_THRESHOLDS, "alerts_threshold"
+    )
+    security = _require_member(
+        str(item.get("security_alerts_threshold", "all")).strip(),
+        CODE_SCANNING_SECURITY_ALERTS_THRESHOLDS,
+        "security_alerts_threshold",
+    )
+    return {"alerts_threshold": alerts, "security_alerts_threshold": security, "tool": tool}
+
+
+def normalize_ruleset(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
+    """Normalize the generated ruleset's enforcement, bypass actors and code-scanning rule.
+
+    Called while normalising every profile, so a value the GitHub API would
+    reject fails the render instead of a later ruleset apply.
+    """
+    payload = raw if isinstance(raw, Mapping) else {}
+    enforcement = _require_member(
+        str(payload.get("enforcement", "active")).strip() or "active", RULESET_ENFORCEMENTS, "enforcement"
+    )
+    return {
+        "enforcement": enforcement,
+        "bypass_actors": [_normalize_bypass_actor(item) for item in payload.get("bypass_actors") or []],
+        "code_scanning": [_normalize_code_scanning_tool(item) for item in payload.get("code_scanning") or []],
+    }
+
+
 # ---------------------------------------------------------------------------
 # v2 schema normalisers (see docs/QZP-V2-DESIGN.md §3).
 # Pure helpers; not yet wired into ``_finalize_normalized_profile_sections``.

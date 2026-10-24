@@ -59,44 +59,26 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
         )
 
     def test_common_phase1_template_contexts_resolve(self) -> None:
-        """Phase-1 overlays should keep their shared required-context defaults."""
+        """Phase-1 overlays resolve to the lean contract on every event.
+
+        The SaaS-era set (scanner matrix, Codecov, Sonar, Codacy, QLTY and the
+        retired visual vendors) is emitted by nothing any more; requiring it
+        would block every pull request once the ruleset is applied.
+        """
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
         pbinfo = load_repo_profile(inventory, "Prekzursil/pbinfo-get-unsolved")
-        pr_contexts = active_required_contexts(profile, event_name="pull_request")
-        merge_group_contexts = active_required_contexts(profile, event_name="merge_group")
+        lean = ["quality / quality", "CodeQL"]
 
         self.assertEqual(profile["stack"], "node-frontend")
         self.assertEqual(profile["coverage"]["branch_min_percent"], 100.0)
         self.assertEqual(pbinfo["coverage"]["branch_min_percent"], 100.0)
-        self.assertEqual(
-            active_required_contexts(profile, event_name="push"),
-            [
-                "shared-scanner-matrix / Coverage 100 Gate",
-                "shared-codecov-analytics / Codecov Analytics",
-                "codeql / CodeQL",
-                "shared-scanner-matrix / QLTY Zero",
-                "shared-scanner-matrix / Sonar Zero",
-                "shared-scanner-matrix / Codacy Zero",
-                "shared-scanner-matrix / Semgrep Zero",
-                "shared-scanner-matrix / Sentry Zero",
-                "SonarCloud Code Analysis",
-                "Chromatic Playwright",
-                "Applitools Visual",
-            ],
-        )
-        self.assertIn("shared-scanner-matrix / QLTY Zero", pr_contexts)
-        self.assertTrue({"qlty check", "qlty coverage", "qlty coverage diff"}.issubset(pr_contexts))
-        self.assertTrue(
-            {
-                "shared-scanner-matrix / QLTY Zero",
-                "qlty check",
-                "qlty coverage",
-                "qlty coverage diff",
-            }.issubset(pbinfo["required_contexts"]["target"])
-        )
-        self.assertTrue({"Chromatic Playwright", "Applitools Visual"}.issubset(profile["required_contexts"]["target"]))
-        self.assertEqual(pr_contexts, merge_group_contexts)
+        for event in ("push", "pull_request", "merge_group", "ruleset"):
+            with self.subTest(event=event):
+                self.assertEqual(active_required_contexts(profile, event_name=event), lean)
+                self.assertEqual(active_required_contexts(pbinfo, event_name=event), lean)
+        self.assertEqual(pbinfo["required_contexts"]["target"], lean)
+        self.assertFalse({"Chromatic Playwright", "Applitools Visual"} & set(profile["required_contexts"]["target"]))
 
     def test_phase1_repo_verify_commands_follow_repo_contracts(self) -> None:
         """Phase-1 repos should keep their repo-specific verify commands and lanes."""
@@ -132,36 +114,24 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
         )
 
     def test_airline_keeps_native_cloud_contexts_pr_only(self) -> None:
-        """Airline should keep native DeepSource and related cloud contexts PR-only."""
+        """Airline requires the lean pair on every event, and no retired vendor context."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/Airline-Reservations-System")
 
         push_contexts = active_required_contexts(profile, event_name="push")
         pr_contexts = active_required_contexts(profile, event_name="pull_request")
 
-        for required in (
+        self.assertEqual(push_contexts, ["quality / quality", "CodeQL"])
+        self.assertEqual(pr_contexts, push_contexts)
+        for retired in (
             "DeepSource: JavaScript",
-            "DeepSource: Python",
             "DeepSource: C & C++",
-            "DeepSource: Shell",
-            "DeepSource: Secrets",
+            "shared-scanner-matrix / QLTY Zero",
+            "Codacy Static Code Analysis",
+            "qlty coverage diff",
+            "DeepScan",
         ):
-            self.assertIn(required, push_contexts)
-            self.assertIn(required, pr_contexts)
-        self.assertNotIn("DeepScan Zero", push_contexts)
-        self.assertNotIn("DeepScan", push_contexts)
-        self.assertNotIn("Codacy Static Code Analysis", push_contexts)
-        self.assertNotIn("qlty check", push_contexts)
-        self.assertNotIn("qlty coverage", push_contexts)
-        self.assertNotIn("qlty coverage diff", push_contexts)
-        self.assertIn("shared-scanner-matrix / QLTY Zero", push_contexts)
-        self.assertNotIn("shared-scanner-matrix / DeepScan Zero", pr_contexts)
-        self.assertNotIn("DeepScan", pr_contexts)
-        self.assertIn("Codacy Static Code Analysis", pr_contexts)
-        self.assertIn("shared-scanner-matrix / QLTY Zero", pr_contexts)
-        self.assertIn("qlty check", pr_contexts)
-        self.assertIn("qlty coverage", pr_contexts)
-        self.assertIn("qlty coverage diff", pr_contexts)
+            self.assertNotIn(retired, pr_contexts)
 
     def test_quality_zero_platform_keeps_codacy_native_context_pr_only(self) -> None:
         """The control-plane repo should not require native Codacy contexts itself."""
@@ -205,7 +175,9 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
 
         self._assert_quality_zero_platform_contexts(
             "Control Plane Verify",
-            "codeql / CodeQL",
+            "gate-lint-format (ruff)",
+            "gate-sast (opengrep)",
+            "CodeQL",
             push_contexts=push_contexts,
             ruleset_contexts=ruleset_contexts,
             target_contexts=profile["required_contexts"]["target"],
@@ -236,7 +208,7 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
         pr_contexts = active_required_contexts(profile, event_name="pull_request")
         target_contexts = set(profile["required_contexts"]["target"])
 
-        for lean in ("Control Plane Verify", "codeql / CodeQL"):
+        for lean in ("Control Plane Verify", "gate-lint-format (ruff)", "gate-sast (opengrep)", "CodeQL"):
             self.assertIn(lean, push_contexts)
             self.assertIn(lean, pr_contexts)
             self.assertIn(lean, target_contexts)
@@ -251,20 +223,13 @@ class ControlPlaneTests(unittest.TestCase, ControlPlaneAssertions):
             self.assertNotIn(retired, target_contexts)
 
     def test_airline_target_contexts_include_deepsource_contracts(self) -> None:
-        """Airline should enforce the owned DeepSource contexts in target rulesets."""
+        """Airline's target no longer carries the retired DeepSource contexts."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/Airline-Reservations-System")
         target_contexts = set(profile["required_contexts"]["target"])
 
-        self.assertTrue(
-            {
-                "DeepSource: JavaScript",
-                "DeepSource: Python",
-                "DeepSource: C & C++",
-                "DeepSource: Shell",
-                "DeepSource: Secrets",
-            }.issubset(target_contexts)
-        )
+        self.assertEqual(target_contexts, {"quality / quality", "CodeQL"})
+        self.assertFalse({name for name in target_contexts if name.startswith("DeepSource")})
 
     def test_active_required_contexts_falls_back_to_required_now_for_other_events(
         self,

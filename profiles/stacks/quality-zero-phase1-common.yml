@@ -34,6 +34,26 @@ issue_policy:
   pr_behavior: absolute
   main_behavior: absolute
   baseline_ref: ""
+# The generated `quality-zero-platform / <repo>` ruleset, beyond its required
+# checks (scripts/quality/control_plane.py build_ruleset_payload; values are
+# validated against GitHub's documented sets while every profile normalises).
+ruleset:
+  enforcement: active
+  # Repository admins may merge past a red check only THROUGH A PULL REQUEST
+  # (an audited bypass); nobody may push past the ruleset directly. This is
+  # the bypass every live fleet ruleset already carries (measured 2026-10-24),
+  # where the generator used to emit none at all.
+  bypass_actors:
+    - actor_type: RepositoryRole
+      actor_id: 5
+      bypass_mode: pull_request
+  # Merge protection: a pull request that introduces a CodeQL alert of ANY
+  # severity is blocked, not only high/critical (owner directive 2026-10-24).
+  # Requires CodeQL to analyse pull requests; enable it before applying.
+  code_scanning:
+    - tool: CodeQL
+      alerts_threshold: all
+      security_alerts_threshold: all
 required_contexts:
   always:
     - shared-scanner-matrix / Coverage 100 Gate

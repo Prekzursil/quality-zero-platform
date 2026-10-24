@@ -140,7 +140,7 @@ def main() -> int:
     if args.json_log:
         log_path = Path(args.json_log)
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        log_path.write_text(completed.stdout, encoding="utf-8")
+        log_path.write_text(completed.stdout, encoding="utf-8", newline="\n")
 
     if completed.stdout:
         sys.stdout.write(completed.stdout)

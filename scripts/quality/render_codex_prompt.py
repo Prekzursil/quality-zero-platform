@@ -269,7 +269,7 @@ def main() -> int:
     if args.output:
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(prompt, encoding="utf-8")
+        output_path.write_text(prompt, encoding="utf-8", newline="\n")
     else:
         print(prompt)
     return 0

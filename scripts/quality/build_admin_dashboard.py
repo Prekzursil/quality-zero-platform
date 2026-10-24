@@ -186,7 +186,9 @@ def write_dashboard(output_dir: Path, payload: Mapping[str, Any], *, assets_dir:
     output_dir.mkdir(parents=True, exist_ok=True)
     data_dir = output_dir / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
-    (data_dir / "dashboard.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (data_dir / "dashboard.json").write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n"
+    )
     if assets_dir is not None:
         # ``panels.mjs`` (Lane 8 operator panels) is imported by ``app.js``
         # at runtime — it must ride the static asset copy or the published
@@ -194,7 +196,7 @@ def write_dashboard(output_dir: Path, payload: Mapping[str, Any], *, assets_dir:
         for asset_name in ("index.html", "styles.css", "app.js", "panels.mjs"):
             shutil.copy2(assets_dir / asset_name, output_dir / asset_name)
         return
-    (output_dir / "index.html").write_text(render_dashboard_html(payload), encoding="utf-8")
+    (output_dir / "index.html").write_text(render_dashboard_html(payload), encoding="utf-8", newline="\n")
 
 
 def _github_payload(url: str, token: str) -> Any:

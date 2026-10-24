@@ -386,10 +386,12 @@ def main(
             profile_dir = out_dir / "profiles" / "repos"
             profile_dir.mkdir(parents=True)
             profile_path = profile_dir / f"{profile_name}.yml"
-            profile_path.write_text(profile_yaml, encoding="utf-8")
+            profile_path.write_text(profile_yaml, encoding="utf-8", newline="\n")
             inv_path = out_dir / "inventory"
             inv_path.mkdir()
-            (inv_path / "repos.yml").write_text(f"version: 1\nrepos:\n{inventory_fragment}", encoding="utf-8")
+            (inv_path / "repos.yml").write_text(
+                f"version: 1\nrepos:\n{inventory_fragment}", encoding="utf-8", newline="\n"
+            )
             print(f"\ndry-run: skeleton written under {out_dir} (nothing in this repo was touched)")
             print(f"--- {profile_path} ---")
             print(profile_yaml, end="")
@@ -413,12 +415,12 @@ def main(
             profile_path = platform_root / "profiles" / "repos" / f"{profile_name}.yml"
             if profile_path.exists():
                 raise SystemExit(f"refusing to overwrite existing profile {profile_path}")
-            profile_path.write_text(profile_yaml, encoding="utf-8")
+            profile_path.write_text(profile_yaml, encoding="utf-8", newline="\n")
             inventory_path = platform_root / "inventory" / "repos.yml"
             text = inventory_path.read_text(encoding="utf-8")
             if not text.endswith("\n"):
                 text += "\n"
-            inventory_path.write_text(text + inventory_fragment, encoding="utf-8")
+            inventory_path.write_text(text + inventory_fragment, encoding="utf-8", newline="\n")
             print(f"profile written: {profile_path}")
             print(f"inventory entry appended: {inventory_path}")
             report = build_report(

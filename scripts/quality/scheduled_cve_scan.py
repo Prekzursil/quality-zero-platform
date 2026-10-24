@@ -930,7 +930,7 @@ def main(
 
     summary = render_summary(outcomes)
     if args.summary_file:
-        with open(args.summary_file, "a", encoding="utf-8") as handle:
+        with open(args.summary_file, "a", encoding="utf-8", newline="\n") as handle:
             handle.write(summary)
     if args.json_output:
         print(json.dumps(_json_payload(outcomes, generated_at=generated_at), indent=2, sort_keys=True))

@@ -76,6 +76,8 @@ DECIDED = re.compile(r"^(?:before )?(\d{4}-\d{2}-\d{2})$")
 EXCLUDED = "**Excluded"
 #: The document's marker for "no value" (Owner, Review by); never a rationale or verdict.
 MISSING = ("", "-")
+#: What the documented dismiss command appends to the rationale core in GitHub's comment.
+POINTER = ". Logged: docs/CODE-SCANNING-DISMISSALS.md"
 #: One backtick pair around a non-blank id with no padding inside it.
 RULE_ID = re.compile(r"^`[^`\s](?:[^`]*[^`\s])?`$")
 QUERY_ID = re.compile(r"`([^`\s](?:[^`]*[^`\s])?)`")
@@ -284,27 +286,63 @@ def logged_alerts(text: str) -> List[str]:
     return [link.group(1) for link in links if link]
 
 
-def unlogged_dismissals(text: str, dismissed: Sequence[Mapping[str, Any]]) -> List[str]:
-    """Every alert GitHub reports dismissed that the log does not record, or records with another reason.
+def _normalized(text: str) -> str:
+    """A rationale compared by its words: collapsed whitespace, no trailing period."""
+    return re.sub(r"\s+", " ", text).strip().rstrip(".").strip()
 
-    ``dismissed``: GitHub's dismissed alerts (``number``, ``dismissed_reason``).
+
+def _mismatch(number: str, cells: Sequence[str], alert: Mapping[str, Any]) -> Optional[str]:
+    """How one logged row disagrees with GitHub's record of that dismissal (None when it agrees).
+
+    The reason must be equal; the logged date within a day of ``dismissed_at``
+    (time zones); and the logged rationale must begin with the comment GitHub
+    holds, minus the log pointer: the comment carries the rationale's core.
+    """
+    reason = str(alert.get("dismissed_reason") or "")
+    if cells[3] != reason:
+        return f"alert #{number} is dismissed on GitHub as {reason!r} but logged as {cells[3]!r}"
+    when = str(alert.get("dismissed_at") or "")[:10]
+    if "dismissed_at" in alert and not (
+        _is_date(when)
+        and _is_date(cells[4])
+        and abs(dt.date.fromisoformat(when) - dt.date.fromisoformat(cells[4])).days <= 1
+    ):
+        return f"alert #{number} was dismissed on GitHub on {when or '?'} but is logged as {cells[4]}"
+    if "dismissed_comment" in alert:
+        core = _normalized(str(alert.get("dismissed_comment") or "").removesuffix(POINTER))
+        if not core:
+            return f"alert #{number} was dismissed on GitHub without a comment: the logged rationale was never attached"
+        if not _normalized(cells[5]).startswith(core):
+            return f"alert #{number}'s GitHub comment does not match its logged rationale"
+    return None
+
+
+def unlogged_dismissals(text: str, dismissed: Sequence[Mapping[str, Any]]) -> List[str]:
+    """Every alert GitHub reports dismissed that the log does not record, or records differently.
+
+    ``dismissed``: GitHub's dismissed alerts (``number``, ``dismissed_reason``,
+    and, when exported, ``dismissed_at`` and ``dismissed_comment``). A row
+    whose reason, date or rationale disagrees with GitHub's record fails, so
+    neither a pre-policy date nor an unattached rationale can be invented.
     A log that cannot be read reconciles nothing; ``validate`` says why.
     """
     rows, problems = _log_rows(text)
     if problems:
         return []
-    logged: Dict[str, str] = {}
+    logged: Dict[str, Sequence[str]] = {}
     for cells in rows:
         match = ALERT_NUMBER.match(cells[0]) if len(cells) == len(COLUMNS) else None
         if match:
-            logged[match.group(1)] = cells[3]
+            logged[match.group(1)] = cells
     found: List[str] = []
     for alert in dismissed:
         number, reason = str(alert.get("number", "")), str(alert.get("dismissed_reason") or "")
         if number not in logged:
             found.append(f"alert #{number} is dismissed on GitHub ({reason}) but has no log row")
-        elif logged[number] != reason:
-            found.append(f"alert #{number} is dismissed on GitHub as {reason!r} but logged as {logged[number]!r}")
+            continue
+        mismatch = _mismatch(number, logged[number], alert)
+        if mismatch:
+            found.append(mismatch)
     return found
 
 

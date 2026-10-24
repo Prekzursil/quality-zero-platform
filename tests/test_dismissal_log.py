@@ -10,6 +10,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import yaml
@@ -341,6 +342,7 @@ class DismissalLogTests(unittest.TestCase):
         self.assertEqual(job["permissions"], {"contents": "read", "security-events": "read"})
         listing, check = job["steps"][-2:]
         self.assertIn("code-scanning/alerts?state=dismissed", listing["run"])
+        self.assertIn("{number, dismissed_reason, dismissed_at, dismissed_comment}", listing["run"])
         self.assertIn("--paginate", listing["run"])
         self.assertIn('> "$RUNNER_TEMP/dismissed.jsonl"', listing["run"])
         self.assertEqual(
@@ -379,6 +381,35 @@ class DismissalLogTests(unittest.TestCase):
                 )
         self.assertEqual(code, 1)
         self.assertIn("alert #99 is dismissed on GitHub (false positive) but has no log row", err.getvalue())
+
+    def test_a_rows_date_and_rationale_must_match_githubs_record(self) -> None:
+        """Review findings: an invented pre-policy date, or a rationale never attached on GitHub, passed."""
+        rationale = "the flow cannot happen: the input is a constant"
+        text = _doc(_row(dismissed="2026-10-24", rationale=rationale))
+
+        def check(**fields: Any) -> list:
+            alert = {"number": 7, "dismissed_reason": "false positive", **fields}
+            return log.unlogged_dismissals(text, [alert])
+
+        attached = f"{rationale}. Logged: docs/CODE-SCANNING-DISMISSALS.md"
+        self.assertEqual(check(dismissed_at="2026-10-24T22:10:00Z", dismissed_comment=attached), [])
+        self.assertEqual(check(dismissed_at="2026-10-25T01:00:00Z", dismissed_comment=rationale), [])  # time zones
+        self.assertEqual(check(), [])  # an export without the fields checks the reason only
+        self.assertEqual(
+            check(dismissed_at="2026-04-27T09:00:00Z"),
+            ["alert #7 was dismissed on GitHub on 2026-04-27 but is logged as 2026-10-24"],
+        )
+        self.assertEqual(
+            check(dismissed_at=None), ["alert #7 was dismissed on GitHub on ? but is logged as 2026-10-24"]
+        )
+        self.assertEqual(
+            check(dismissed_comment=None),
+            ["alert #7 was dismissed on GitHub without a comment: the logged rationale was never attached"],
+        )
+        self.assertEqual(
+            check(dismissed_comment="won't matter. Logged: docs/CODE-SCANNING-DISMISSALS.md"),
+            ["alert #7's GitHub comment does not match its logged rationale"],
+        )
 
     def test_a_row_without_its_closing_pipe_is_rejected_not_truncated(self) -> None:
         """Review finding: '[1:-1]' turned a verdict '**Re-review.**X' into the exact pending marker."""

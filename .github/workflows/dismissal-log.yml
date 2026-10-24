@@ -4,7 +4,8 @@ name: Dismissal Log
 # justification can expire fails the check from the day after its date. A
 # date passes without a commit, so this runs the validator every day too.
 # It also reconciles the log with GitHub: an alert dismissed in the UI
-# without a log row (or with another reason) fails. Three red runs in a row
+# without a log row, or whose row disagrees with GitHub's reason, date or
+# comment, fails. Three red runs in a row
 # open an alert:workflow-failing issue (scheduled-alerts.yml).
 
 permissions: {}
@@ -36,7 +37,7 @@ jobs:
           QZ_REPO: ${{ github.repository }}
         run: |
           gh api --paginate "repos/$QZ_REPO/code-scanning/alerts?state=dismissed&per_page=100" \
-            --jq '.[] | {number, dismissed_reason}' > "$RUNNER_TEMP/dismissed.jsonl"
+            --jq '.[] | {number, dismissed_reason, dismissed_at, dismissed_comment}' > "$RUNNER_TEMP/dismissed.jsonl"
       - name: Check the dismissal log
         env:
           QZ_REPO: ${{ github.repository }}

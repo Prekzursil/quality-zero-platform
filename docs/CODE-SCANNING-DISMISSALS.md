@@ -89,7 +89,9 @@ runs it on every change, through `tests/test_dismissal_log.py`, and
 `dismissal-log.yml` runs it every day, so a review-by date that passes fails
 CI without waiting for an unrelated commit. That daily run also reconciles
 the log with GitHub (`--dismissed-jsonl`): an alert dismissed in the UI
-without a log row, or with another reason, fails it. A governed repo runs step 3
+without a log row fails it, and so does a row whose reason, date (within a
+day) or rationale disagrees with GitHub's record. The comment GitHub holds,
+minus the log pointer, must begin the logged rationale. A governed repo runs step 3
 against its receipt; wiring it into the fleet's reusable gate is a follow-up.
 It checks:
 - one log section, with the columns and a real separator row, and one

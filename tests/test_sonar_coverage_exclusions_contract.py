@@ -8,9 +8,9 @@ condition (≥80% on new code).
 
 This test pins the contract: every Python/TypeScript file under ``scripts/``
 that is NOT in the coverage-run source MUST appear in
-``sonar.coverage.exclusions`` in ``sonar-project.properties``. When Phase 4
-expands the coverage source to the full ``scripts/quality/`` tree, the
-exclusion list shrinks accordingly — and this test prevents the two
+``sonar.coverage.exclusions`` in ``sonar-project.properties``. The source is
+now the whole ``scripts/`` tree, so only the files coverage.py can never trace
+(the TypeScript helpers) remain excluded - and this test prevents the two
 configurations from drifting silently.
 """
 
@@ -57,8 +57,14 @@ def _coverage_run_source_modules() -> Set[str]:
 
 
 def _is_in_coverage_source(rel_path: str, source_tokens: Set[str]) -> bool:
-    """Return True if ``rel_path`` is inside any ``tool.coverage.run.source`` entry."""
+    """Return True if ``rel_path`` is inside any ``tool.coverage.run.source`` entry.
+
+    Only Python is traced by coverage.py: a ``.ts`` file inside a source
+    directory never appears in the coverage XML, so it always needs excluding.
+    """
     posix = rel_path.replace("\\", "/")
+    if not posix.endswith(".py"):
+        return False
     candidate = posix
     candidate_no_ext = candidate[:-3] if candidate.endswith(".py") else candidate
     for token in source_tokens:

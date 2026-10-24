@@ -112,7 +112,8 @@ It checks:
 - the decisions table below, when present: its columns, backticked query
   ids, a real date (or `before YYYY-MM-DD`) that is not in the future, a
   decision, and one row per query (a changed decision is updated in place);
-- headings and tables inside a code fence are examples, not the document;
+- headings and tables inside a code fence or an HTML comment are examples
+  or hidden text, not the document;
 - with `--codeql-config` (default `.github/codeql/codeql-config.yml`, skipped
   when absent): for every query the configuration excludes, a well-formed
   decision that starts with **Excluded**. A malformed row documents nothing,

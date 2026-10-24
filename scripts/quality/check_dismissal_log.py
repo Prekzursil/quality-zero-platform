@@ -48,6 +48,8 @@ DECISIONS_TITLE = "## Query configuration decisions"
 SECTION_END = re.compile(r"^#{1,2} ")
 #: A code fence (CommonMark: up to three spaces, then three or more backticks or tildes).
 FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
+#: An HTML comment, possibly across lines: hidden text, never part of the rendered receipt.
+HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 COLUMNS = (
     "Alert",
     "Rule",
@@ -140,9 +142,23 @@ def _unfenced(lines: Sequence[str]) -> List[str]:
     return out
 
 
+def _rendered(lines: Sequence[str]) -> List[str]:
+    """``lines`` as a reader sees them: code fences and HTML comments blanked, line count unchanged.
+
+    A sample log in a fence, or a table hidden in ``<!-- ... -->``, is not
+    the receipt; an unclosed comment hides everything after it.
+    """
+    text = "\n".join(_unfenced(lines))
+    text = HTML_COMMENT.sub(lambda match: "\n" * match.group(0).count("\n"), text)
+    start = text.find("<!--")
+    if start != -1:
+        text = text[:start] + "\n" * text[start:].count("\n")
+    return text.split("\n")
+
+
 def _sections(lines: Sequence[str], heading: re.Pattern[str]) -> List[List[str]]:
-    """The lines under EVERY real ``heading`` (not one inside a code fence), each up to the next h1/h2 heading."""
-    lines = _unfenced(lines)
+    """The lines under EVERY rendered ``heading`` (not in a fence or comment), each up to the next h1/h2 heading."""
+    lines = _rendered(lines)
     sections: List[List[str]] = []
     for start, line in enumerate(lines):
         if not heading.match(line):

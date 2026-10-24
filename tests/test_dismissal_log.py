@@ -249,6 +249,19 @@ class DismissalLogTests(unittest.TestCase):
             log._unfenced(["a", "```", "## Log", "``` trailing", "x", "```", "b"]), ["a", "", "", "", "", "", "b"]
         )
 
+    def test_an_html_comment_is_not_the_document(self) -> None:
+        """Review finding: a log or decision hidden in <!-- --> satisfied the contract while nothing rendered."""
+        hidden = "<!--\n## Log (sample)\n\n" + HEADER + "\n" + RULE + "\n" + _row("8") + "\n-->\n\n"
+        self.assertEqual(_check(hidden + _doc(_row())), [])  # the rendered log is read, not a duplicate
+        self.assertEqual(_check("# Doc\n\n" + hidden), ["no '## Log' or '## Log (<repo>)' section"])
+        self.assertEqual(
+            _check("# Doc\n\n<!-- never closed\n" + _doc(_row())), ["no '## Log' or '## Log (<repo>)' section"]
+        )
+        self.assertEqual(log._rendered(["a <!-- x --> b", "c<!--", "d", "-->e"]), ["a  b", "c", "", "e"])
+        decision = "## Query configuration decisions\n\n<!--\n| Query | Decided | Decision |\n| --- | --- | --- |\n"
+        decision += "| `py/x` | 2026-10-24 | **Excluded.** |\n-->\n"
+        self.assertEqual(log.documented_queries(decision), set())
+
     def test_the_decisions_table_is_validated_before_its_ids_count(self) -> None:
         """Review finding: a one-cell pipe row under the heading 'documented' an exclusion."""
         text = DOC.read_text(encoding="utf-8")

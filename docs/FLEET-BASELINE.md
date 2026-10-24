@@ -34,7 +34,10 @@ Dependabot rails and the zero-tolerance dependency gate come from the
 | `CODE_OF_CONDUCT.md` | `CODE_OF_CONDUCT.md.tmpl` | Contributor Covenant 2.1, with the repository's private contact channel. |
 | `.github/PULL_REQUEST_TEMPLATE.md` | `PULL_REQUEST_TEMPLATE.md.tmpl` | A gate checklist that maps 1:1 to CI. |
 | `.github/ISSUE_TEMPLATE/*.yml` | `ISSUE_TEMPLATE/*.yml.tmpl` | Bug and feature forms. `config.yml` links security reports to the private channel. Created only when the repository has no `ISSUE_TEMPLATE/` of its own. |
-| `.github/dependabot.yml` | rendered | Created when missing. An existing config is kept and audited: any manifest tree without an update rail is reported as a gap. |
+| `.github/dependabot.yml` | rendered | Created when missing. An existing config is kept and audited: any manifest tree without an update rail is reported as a gap. A caller created in the same run counts, so the first workflow arrives with its `github-actions` rail. |
+| `.quality/opengrep/*.yaml` | QZP's own `.quality/opengrep/` | Seeded when the repository has no ruleset. `general-security.yaml` always, plus the Python and JS/TS rules when those languages are present. The lean gate skips gate 4 without this directory. |
+| `.semgrepignore` | `docs/lean-gate/semgrepignore.template` | Seeded when missing. Without it, opengrep silently drops `test/`, `tests/` and every `*_test.go`. |
+| `osv-scanner.toml` | `osv-scanner.toml.tmpl` | Seeded when missing, with no ignores. The lean gate skips gate 6 without it. Any ignore needs a written reason and an `ignoreUntil` date. |
 | `.github/workflows/quality.yml` | `quality.yml.tmpl` | The lean-gate caller, pinned to a full 40-hex QZP commit. Existing callers get a pin bump. A repository with its own in-repo `quality.yml` is reported as a gap to migrate by hand. |
 
 Files are never overwritten unless they are known boilerplate. Nothing is

@@ -6,6 +6,7 @@ import io
 import json
 import subprocess
 import tempfile
+import tomllib
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -270,7 +271,14 @@ class TemplateTests(unittest.TestCase):
         self.assertIn("*extended* query suite", context["security_controls"])
         self.assertIn("push protection", context["security_controls"])
         self.assertIn("**Java**", context["extra_controls"])
-        for name in ("SECURITY.md", "CONTRIBUTING.md", "CODE_OF_CONDUCT.md", "PULL_REQUEST_TEMPLATE.md"):
+        self.assertEqual(tomllib.loads(fb.render_template("osv-scanner.toml", context)), {})
+        for name in (
+            "SECURITY.md",
+            "CONTRIBUTING.md",
+            "CODE_OF_CONDUCT.md",
+            "PULL_REQUEST_TEMPLATE.md",
+            "opengrep-README.md",
+        ):
             with self.subTest(name=name):
                 rendered = fb.render_template(name, context)
                 self.assertNotIn("${", rendered)
@@ -345,13 +353,32 @@ class PlanTests(unittest.TestCase):
             ".github/ISSUE_TEMPLATE/config.yml",
             ".github/ISSUE_TEMPLATE/bug_report.yml",
             ".github/ISSUE_TEMPLATE/feature_request.yml",
+            ".quality/opengrep/README.md",
+            ".quality/opengrep/general-security.yaml",
+            ".semgrepignore",
+            "osv-scanner.toml",
             fb.QUALITY_CALLER,
         ):
             with self.subTest(path=path):
                 self.assertEqual(index[path].action, "create")
                 self.assertTrue(index[path].writes)
+        self.assertNotIn(".quality/opengrep/python-security.yaml", index)
+        self.assertNotIn(".quality/opengrep/javascript-security.yaml", index)
+        self.assertEqual(index[".semgrepignore"].content, fb.SEMGREPIGNORE_SOURCE.read_text(encoding="utf-8"))
         rails = yaml.safe_load(index[".github/dependabot.yml"].content or "")["updates"]
         self.assertEqual([rail["package-ecosystem"] for rail in rails], ["github-actions", "gomod"])
+
+    def test_first_workflow_gets_an_actions_rail_and_language_rules(self) -> None:
+        actions = fb.plan_baseline(_facts(["app.py", "web/main.ts", "requirements.txt"]), _reader({}), PIN)
+        index = _by_path(actions)
+        rails = yaml.safe_load(index[".github/dependabot.yml"].content or "")["updates"]
+        self.assertEqual([rail["package-ecosystem"] for rail in rails], ["github-actions", "pip"])
+        for name in ("general-security.yaml", "python-security.yaml", "javascript-security.yaml"):
+            with self.subTest(name=name):
+                self.assertEqual(
+                    index[fb.OPENGREP_DIR + name].content,
+                    (fb.OPENGREP_SOURCE / name).read_text(encoding="utf-8"),
+                )
 
     def test_governed_repository_is_kept_bumped_and_audited(self) -> None:
         caller = (
@@ -369,10 +396,16 @@ class PlanTests(unittest.TestCase):
             ".github/pull_request_template.md",
             ".github/ISSUE_TEMPLATE/bug.md",
             ".github/workflows/notes.txt",
+            ".quality/opengrep/custom.yaml",
+            ".semgrepignore",
+            "osv-scanner.toml",
             "package.json",
         ]
         actions = fb.plan_baseline(_facts(paths), _reader(files), PIN)
         index = _by_path(actions)
+        self.assertEqual(index[".quality/opengrep/"].action, "keep")
+        self.assertEqual(index[".semgrepignore"].action, "keep")
+        self.assertEqual(index["osv-scanner.toml"].action, "keep")
         self.assertEqual(index["SECURITY.md"].action, "keep")
         self.assertEqual(index["docs/CONTRIBUTING.md"].action, "keep")
         self.assertEqual(index[".github/CODE_OF_CONDUCT.md"].action, "keep")
@@ -496,6 +529,9 @@ class MainTests(unittest.TestCase):
                 ".github/PULL_REQUEST_TEMPLATE.md",
                 ".github/ISSUE_TEMPLATE/config.yml",
                 ".github/dependabot.yml",
+                ".quality/opengrep/README.md",
+                ".semgrepignore",
+                "osv-scanner.toml",
                 fb.QUALITY_CALLER,
             ]
             dependabot = root / ".github" / "dependabot.yml"

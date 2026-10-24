@@ -56,7 +56,11 @@ from scripts.quality.render_repo_baseline import render_security_policy as rende
 
 ProcessRunner = Callable[..., "subprocess.CompletedProcess[str]"]
 
-TEMPLATES_ROOT = Path(__file__).resolve().parents[2] / "templates" / "fleet"
+PLATFORM_ROOT = Path(__file__).resolve().parents[2]
+TEMPLATES_ROOT = PLATFORM_ROOT / "templates" / "fleet"
+#: QZP's own curated gate-4 ruleset and gate-4 scope file: the single source the fleet is seeded from.
+OPENGREP_SOURCE = PLATFORM_ROOT / ".quality" / "opengrep"
+SEMGREPIGNORE_SOURCE = PLATFORM_ROOT / "docs" / "lean-gate" / "semgrepignore.template"
 MAINTAINER_URL = "https://github.com/Prekzursil"
 REUSABLE_QUALITY_RE = re.compile(
     r"(uses:\s*Prekzursil/quality-zero-platform/\.github/workflows/reusable-quality\.yml@)([^\s#'\"]+)"
@@ -141,6 +145,17 @@ DEPENDABOT_LOCATIONS = (".github/dependabot.yml", ".github/dependabot.yaml")
 ISSUE_TEMPLATE_DIR = ".github/ISSUE_TEMPLATE/"
 ISSUE_FORMS = ("config.yml", "bug_report.yml", "feature_request.yml")
 QUALITY_CALLER = ".github/workflows/quality.yml"
+#: The lean gate runs gate 4 only when this directory exists and gate 6 only when OSV_CONFIG
+#: exists, so the baseline seeds both; without them a "zero tolerance" caller silently skips.
+OPENGREP_DIR = ".quality/opengrep/"
+SEMGREPIGNORE = ".semgrepignore"
+OSV_CONFIG = "osv-scanner.toml"
+#: Curated rule files seeded per language present ("general" applies to every repository).
+OPENGREP_RULES = (
+    ("general-security.yaml", ()),
+    ("python-security.yaml", ("python",)),
+    ("javascript-security.yaml", ("js", "ts")),
+)
 
 #: sha256 of known platform-generated SECURITY.md boilerplate (stripped, LF line endings)
 #: that is safe to upgrade. Repo-authored policies never match and are kept untouched.
@@ -393,9 +408,13 @@ def gate_rows(languages: Sequence[str]) -> List[Tuple[str, str, str]]:
         ("1 · lint + format", "; ".join(lint) or none, "zero findings and zero format diffs"),
         ("2 · types", "; ".join(types) or none, "zero errors **and** zero warnings"),
         ("3 · tests + coverage", "; ".join(tests) or none, "every test passes at 100 % line **and** branch"),
-        ("4 · SAST", "opengrep (`.quality/opengrep` rules, else the QZP baseline rules)", "zero findings"),
+        ("4 · SAST", "opengrep with the curated `.quality/opengrep` ruleset (seeded from QZP)", "zero findings"),
         ("5 · secrets", "gitleaks", "zero findings"),
-        ("6 · dependencies", "osv-scanner on every lockfile and manifest", "zero known advisories, any severity"),
+        (
+            "6 · dependencies",
+            "osv-scanner on every lockfile and manifest (`osv-scanner.toml`)",
+            "zero known advisories, any severity",
+        ),
     ]
 
 
@@ -492,13 +511,11 @@ def template_context(facts: RepoFacts, read: Callable[[str], Optional[str]], qzp
     secrets = "- **Secrets** — gitleaks on every change" + (
         "." if facts.private else "; GitHub secret scanning with push protection is enabled."
     )
-    controls = [
-        codeql,
-        "- **SAST** — opengrep on every change.",
-        secrets,
+    dependencies = (
         "- **Dependencies** — osv-scanner on every lockfile and manifest, plus Dependabot alerts and grouped "
-        "security updates.",
-    ]
+        "security updates."
+    )
+    controls = [codeql, "- **SAST** — opengrep on every change.", secrets, dependencies]
     outside = [label for key, label in _OUTSIDE_LEAN_GATE.items() if key in languages]
     extra = [codeql, "- **Dependabot** — `.github/dependabot.yml` keeps every manifest tree on a weekly update rail."]
     if outside:
@@ -581,9 +598,56 @@ def _plan_issue_forms(facts: RepoFacts, context: Dict[str, str]) -> List[FileAct
     ]
 
 
-def _plan_dependabot(facts: RepoFacts, read: Callable[[str], Optional[str]]) -> FileAction:
-    """Create dependabot.yml, or audit an existing one for manifest trees without a rail."""
-    rails = detect_rails(facts.paths)
+def _plan_gate_configs(facts: RepoFacts, context: Dict[str, str]) -> List[FileAction]:
+    """Seed the gate-4 ruleset + scope file and the gate-6 config so neither gate silently skips."""
+    languages = set(detect_languages(facts.paths))
+    actions: List[FileAction] = []
+    if any(path.startswith(OPENGREP_DIR) for path in facts.paths):
+        actions.append(FileAction(OPENGREP_DIR, "keep", "repository-curated SAST ruleset"))
+    else:
+        actions.append(
+            FileAction(
+                OPENGREP_DIR + "README.md",
+                "create",
+                "gate 4 has no ruleset",
+                render_template("opengrep-README.md", context),
+            )
+        )
+        actions.extend(
+            FileAction(
+                OPENGREP_DIR + name,
+                "create",
+                "gate 4 has no ruleset",
+                (OPENGREP_SOURCE / name).read_text(encoding="utf-8"),
+            )
+            for name, needs in OPENGREP_RULES
+            if not needs or languages.intersection(needs)
+        )
+    if SEMGREPIGNORE in facts.paths:
+        actions.append(FileAction(SEMGREPIGNORE, "keep", "repository-chosen SAST scope"))
+    else:
+        actions.append(
+            FileAction(
+                SEMGREPIGNORE,
+                "create",
+                "without it opengrep silently skips test trees",
+                SEMGREPIGNORE_SOURCE.read_text(encoding="utf-8"),
+            )
+        )
+    if OSV_CONFIG in facts.paths:
+        actions.append(FileAction(OSV_CONFIG, "keep", "repository osv-scanner config"))
+    else:
+        actions.append(FileAction(OSV_CONFIG, "create", "gate 6 has no config", render_template(OSV_CONFIG, context)))
+    return actions
+
+
+def _plan_dependabot(facts: RepoFacts, read: Callable[[str], Optional[str]], planned: Sequence[str] = ()) -> FileAction:
+    """Create dependabot.yml, or audit an existing one for manifest trees without a rail.
+
+    ``planned`` are paths this run is about to create (the lean-gate caller), so a
+    repository that gains its first workflow also gains its ``github-actions`` rail.
+    """
+    rails = detect_rails(list(facts.paths) + list(planned))
     existing = _first_present(facts.paths, DEPENDABOT_LOCATIONS)
     if existing is None:
         if not rails:
@@ -624,15 +688,18 @@ def _plan_quality_caller(
 def plan_baseline(facts: RepoFacts, read: Callable[[str], Optional[str]], qzp_pin: str) -> List[FileAction]:
     """Return every baseline decision for one repository checkout."""
     context = template_context(facts, read, qzp_pin)
+    caller = _plan_quality_caller(facts, read, context, qzp_pin)
+    planned = [action.path for action in caller if action.action == "create"]
     actions = [
         _plan_security(facts, read, context),
         _plan_simple(facts, CONTRIBUTING_LOCATIONS, "CONTRIBUTING.md", "CONTRIBUTING.md", context),
         _plan_simple(facts, CONDUCT_LOCATIONS, "CODE_OF_CONDUCT.md", "CODE_OF_CONDUCT.md", context),
         _plan_simple(facts, PR_TEMPLATE_LOCATIONS, PR_TEMPLATE_LOCATIONS[0], "PULL_REQUEST_TEMPLATE.md", context),
-        _plan_dependabot(facts, read),
+        _plan_dependabot(facts, read, planned),
     ]
     actions.extend(_plan_issue_forms(facts, context))
-    actions.extend(_plan_quality_caller(facts, read, context, qzp_pin))
+    actions.extend(_plan_gate_configs(facts, context))
+    actions.extend(caller)
     return actions
 
 

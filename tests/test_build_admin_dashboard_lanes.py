@@ -284,7 +284,10 @@ class LiveHealthGateWiringTests(unittest.TestCase):
     """_live_health merges gate fields when a profile is supplied."""
 
     def test_live_health_without_profile_has_no_gate_fields(self) -> None:
-        with mock.patch.object(build_admin_dashboard, "_github_payload_or_none") as fake:
+        with (
+            mock.patch.object(build_admin_dashboard, "_github_payload_or_none") as fake,
+            mock.patch.object(build_admin_dashboard, "_github_payload_or_degraded", return_value=[]),
+        ):
             fake.return_value = {"workflow_runs": [], "visibility": "public"}
             health = build_admin_dashboard._live_health("t", "Prekzursil/x", "main")
         self.assertNotIn("gate_status", health)

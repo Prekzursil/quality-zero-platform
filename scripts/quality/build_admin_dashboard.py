@@ -336,13 +336,15 @@ def _open_pr_health(token: str, repo_slug: str) -> str:
     branch, so every repo read ``unknown``. A PR whose runs all fall outside
     the newest 100 pull_request runs contributes nothing.
     """
-    pulls = _github_payload_or_none(f"{GITHUB_API_BASE}/repos/{repo_slug}/pulls?state=open&per_page=100", token)
+    # 403 as well as 404 degrades just this field (the Lane-8 contract): a
+    # token can read a repo's metadata yet be denied its pull requests.
+    pulls = _github_payload_or_degraded(f"{GITHUB_API_BASE}/repos/{repo_slug}/pulls?state=open&per_page=100", token)
     if not isinstance(pulls, list):
         return "unknown"
     heads = {_head_sha(pull) for pull in pulls} - {""}
     if not heads:
         return "none"
-    runs = _github_payload_or_none(
+    runs = _github_payload_or_degraded(
         f"{GITHUB_API_BASE}/repos/{repo_slug}/actions/runs?event=pull_request&per_page=100", token
     )
     workflow_runs = runs.get("workflow_runs", []) if isinstance(runs, dict) else []

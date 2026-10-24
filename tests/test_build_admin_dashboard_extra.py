@@ -87,24 +87,30 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
         self.assertEqual(payload["workflow_runs"][0]["event"], "pull_request")
         self.assertEqual(load_json_mock.call_args.kwargs["allowed_hosts"], {"api.github.com"})
 
-        with patch.object(
-            build_admin_dashboard,
-            "_github_payload",
-            side_effect=[
-                {
-                    "workflow_runs": [
-                        {"event": "push", "conclusion": "success"},
-                        {"event": "pull_request", "conclusion": "success"},
-                    ]
-                },
-                [{"id": 1}],
-                # repo metadata fetch added in the Phase-5 redaction wiring
-                # (see _live_health) — third call returns visibility.
-                {"visibility": "public"},
-                # open PRs, then the pull_request runs on their heads
-                [{"number": 4, "head": {"sha": "abc"}}],
-                {"workflow_runs": [{"head_sha": "abc", "name": "CI", "status": "completed", "conclusion": "success"}]},
-            ],
+        pr_runs = {"workflow_runs": [{"head_sha": "abc", "name": "CI", "status": "completed", "conclusion": "success"}]}
+        with (
+            patch.object(
+                build_admin_dashboard,
+                "_github_payload",
+                side_effect=[
+                    {
+                        "workflow_runs": [
+                            {"event": "push", "conclusion": "success"},
+                            {"event": "pull_request", "conclusion": "success"},
+                        ]
+                    },
+                    [{"id": 1}],
+                    # repo metadata fetch added in the Phase-5 redaction wiring
+                    # (see _live_health) — third call returns visibility.
+                    {"visibility": "public"},
+                ],
+            ),
+            # open PRs, then the pull_request runs on their heads (403/404-tolerant)
+            patch.object(
+                build_admin_dashboard,
+                "_github_payload_or_degraded",
+                side_effect=[[{"number": 4, "head": {"sha": "abc"}}], pr_runs],
+            ),
         ):
             live = build_admin_dashboard._live_health("token", "Prekzursil/example", "main")
         self.assertEqual(live["default_branch_health"], "success")
@@ -154,15 +160,17 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
     def test_live_health_partial_404_keeps_reachable_data_and_public_default(self) -> None:
         """A 404 on one resource degrades only that field; unusable metadata stays public."""
         runs_payload = {"workflow_runs": [{"event": "push", "conclusion": "success"}]}
-        with patch.object(
-            build_admin_dashboard,
-            "_github_payload",
-            side_effect=[
-                runs_payload,  # actions/runs reachable
-                _http_error(404, "Not Found"),  # rulesets absent
-                ["unexpected"],  # metadata reachable but not a dict
-                [],  # no open PR
-            ],
+        with (
+            patch.object(
+                build_admin_dashboard,
+                "_github_payload",
+                side_effect=[
+                    runs_payload,  # actions/runs reachable
+                    _http_error(404, "Not Found"),  # rulesets absent
+                    ["unexpected"],  # metadata reachable but not a dict
+                ],
+            ),
+            patch.object(build_admin_dashboard, "_github_payload_or_degraded", return_value=[]),  # no open PR
         ):
             live = build_admin_dashboard._live_health("token", "Prekzursil/tracelines", "main")
         self.assertEqual(live["default_branch_health"], "success")
@@ -170,15 +178,17 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
         self.assertFalse(live["ruleset_present"])
         self.assertEqual(live["visibility"], "public")
 
-        with patch.object(
-            build_admin_dashboard,
-            "_github_payload",
-            side_effect=[
-                _http_error(404, "Not Found"),  # actions/runs absent
-                [{"id": 1}],  # rulesets reachable
-                {"visibility": "   "},  # metadata dict with blank visibility
-                _http_error(404, "Not Found"),  # pulls absent
-            ],
+        with (
+            patch.object(
+                build_admin_dashboard,
+                "_github_payload",
+                side_effect=[
+                    _http_error(404, "Not Found"),  # actions/runs absent
+                    [{"id": 1}],  # rulesets reachable
+                    {"visibility": "   "},  # metadata dict with blank visibility
+                ],
+            ),
+            patch.object(build_admin_dashboard, "_github_payload_or_degraded", return_value=None),  # pulls denied
         ):
             live = build_admin_dashboard._live_health("token", "Prekzursil/tracelines", "main")
         self.assertEqual(live["default_branch_health"], "unknown")
@@ -217,7 +227,7 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
         """THE bug: PR health filtered default-branch runs for PR events, so every repo read unknown."""
 
         def live(*responses: Any) -> str:
-            with patch.object(build_admin_dashboard, "_github_payload", side_effect=list(responses)):
+            with patch.object(build_admin_dashboard, "_github_payload_or_degraded", side_effect=list(responses)):
                 return build_admin_dashboard._open_pr_health("token", "Prekzursil/example")
 
         pulls = [{"number": 1, "head": {"sha": "h1"}}, {"number": 2, "head": {"sha": "h2"}}, {"head": None}]
@@ -234,7 +244,12 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
         self.assertEqual(live(pulls, ["not", "a", "dict"]), "unknown")
         self.assertEqual(live([]), "none")
         self.assertEqual(live({"message": "not a list"}), "unknown")
-        self.assertEqual(live(_http_error(404, "Not Found")), "unknown")
+        self.assertEqual(live(None), "unknown")  # 403/404: degraded to this field only
+
+    def test_a_denied_pull_request_feed_degrades_only_open_pr_health(self) -> None:
+        """A 403 on /pulls (metadata readable, PRs denied) must not fail the whole dashboard build."""
+        with patch.object(build_admin_dashboard, "load_json_https", side_effect=_http_error(403, "Forbidden")):
+            self.assertEqual(build_admin_dashboard._open_pr_health("token", "Prekzursil/example"), "unknown")
 
     def test_main_uses_live_health_when_token_is_present(self) -> None:
         """Cover main uses live health when token is present."""

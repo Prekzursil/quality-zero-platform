@@ -33,16 +33,34 @@ class AuditAppendError(RuntimeError):
 
 
 def _read(repo: str, path: str, branch: str, *, runner: ProcessRunner) -> Tuple[str, Optional[str]]:
-    """``(text, sha)`` of the file on ``branch``; ``("", None)`` when it does not exist yet."""
-    done = runner(
-        ["gh", "api", f"repos/{repo}/contents/{path}?ref={branch}"], capture_output=True, text=True, check=False
-    )  # nosec B603 — fixed argv
+    """``(text, sha)`` of the file on ``branch``; ``("", None)`` when it does not exist yet.
+
+    Above 1 MB the JSON form carries no content (``encoding: none``); the
+    text is then read through the raw media type. The bytes read must match
+    the reported ``size``: appending to a truncated copy would ERASE the log.
+    """
+    url = f"repos/{repo}/contents/{path}?ref={branch}"
+    done = runner(["gh", "api", url], capture_output=True, text=True, check=False)  # nosec B603 — fixed argv
     if done.returncode != 0:
         if "404" in done.stderr or "Not Found" in done.stderr:
             return "", None
         raise AuditAppendError(f"reading {path} failed: {done.stderr.strip()}")
     payload = json.loads(done.stdout)
-    return base64.b64decode(payload["content"]).decode("utf-8"), str(payload["sha"])
+    if payload.get("encoding") == "base64":
+        text = base64.b64decode(payload["content"]).decode("utf-8")
+    else:
+        raw = runner(
+            ["gh", "api", "-H", "Accept: application/vnd.github.raw+json", url],
+            capture_output=True,
+            text=True,
+            check=False,
+        )  # nosec B603 — fixed argv
+        if raw.returncode != 0:
+            raise AuditAppendError(f"reading {path} raw failed: {raw.stderr.strip()}")
+        text = raw.stdout
+    if len(text.encode("utf-8")) != int(payload.get("size", -1)):
+        raise AuditAppendError(f"read {path} incompletely (size {payload.get('size')}); refusing to overwrite it")
+    return text, str(payload["sha"])
 
 
 def append_record(

@@ -412,8 +412,6 @@ def build_triggers_from_fleet_state(
 
 
 if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
-    import json
-
     print(
         json.dumps(
             {

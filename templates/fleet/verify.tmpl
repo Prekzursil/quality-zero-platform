@@ -12,7 +12,7 @@ set -euo pipefail
 
 root="$$(git rev-parse --show-toplevel)"
 # the pin of whichever workflow calls the lean gate (quality.yml by convention)
-pin="$$(grep -rhoE 'reusable-quality\.yml@[0-9a-f]{40}' "$$root/.github/workflows" 2>/dev/null | head -n 1 | cut -d@ -f2 || true)"
+pin="$$(grep -rhE '^[^#]*uses:.*reusable-quality\.yml@[0-9a-f]{40}' "$$root/.github/workflows" 2>/dev/null | grep -oE 'reusable-quality\.yml@[0-9a-f]{40}' | head -n 1 | cut -d@ -f2 || true)"
 if [ -z "$$pin" ]; then
   echo "verify: no workflow in .github/workflows pins reusable-quality.yml to a 40-hex commit; wire the lean gate first." >&2
   exit 2

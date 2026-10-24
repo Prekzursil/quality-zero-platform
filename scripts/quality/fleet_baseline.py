@@ -147,9 +147,15 @@ _OUTSIDE_LEAN_GATE = {
     "swift": "Swift",
 }
 
-SECURITY_LOCATIONS = ("SECURITY.md", ".github/SECURITY.md", "docs/SECURITY.md")
-CONTRIBUTING_LOCATIONS = ("CONTRIBUTING.md", ".github/CONTRIBUTING.md", "docs/CONTRIBUTING.md")
-CONDUCT_LOCATIONS = ("CODE_OF_CONDUCT.md", ".github/CODE_OF_CONDUCT.md", "docs/CODE_OF_CONDUCT.md")
+
+def _community_locations(stem: str) -> Tuple[str, ...]:
+    """Every place and extension GitHub recognises for one community file, ``.md`` at the root first."""
+    return tuple(f"{folder}{stem}{ext}" for folder in ("", ".github/", "docs/") for ext in (".md", ".rst", ".txt"))
+
+
+SECURITY_LOCATIONS = _community_locations("SECURITY")
+CONTRIBUTING_LOCATIONS = _community_locations("CONTRIBUTING")
+CONDUCT_LOCATIONS = _community_locations("CODE_OF_CONDUCT")
 PR_TEMPLATE_LOCATIONS = (
     ".github/PULL_REQUEST_TEMPLATE.md",
     "PULL_REQUEST_TEMPLATE.md",
@@ -415,6 +421,9 @@ def uncovered_rails(rails: Dict[str, List[str]], config_text: str) -> List[Tuple
     for update in updates if isinstance(updates, list) else []:
         if not isinstance(update, dict):
             continue
+        schedule = update.get("schedule")
+        if not (isinstance(schedule, dict) and schedule.get("interval")):
+            continue
         directories = update.get("directories", [update.get("directory")])
         if not isinstance(directories, list) or not all(isinstance(item, str) for item in directories):
             continue
@@ -642,6 +651,7 @@ def template_context(facts: RepoFacts, read: Reader, qzp_pin: str, deps_floor: s
         "security_controls": "\n".join(controls),
         "security_contact_url": report_url,
         "security_policy_path": _first_present(facts.paths, SECURITY_LOCATIONS) or "SECURITY.md",
+        "conduct_policy_path": _first_present(facts.paths, CONDUCT_LOCATIONS) or "CODE_OF_CONDUCT.md",
         "conduct_contact": conduct,
         "gate_rows": "\n".join(f"| {gate} | {what} | {passes} |" for gate, what, passes in rows),
         "gate_checklist": "\n".join(checklist),
@@ -713,11 +723,37 @@ def _plan_issue_forms(facts: RepoFacts, context: Dict[str, str]) -> List[FileAct
     ]
 
 
-def _plan_gate_configs(facts: RepoFacts, context: Dict[str, str]) -> List[FileAction]:
+def _seeded_rules_only(rule_files: Sequence[str], read: Reader) -> bool:
+    """Whether every rule file is an unmodified copy of a QZP-seeded rule (managed, may grow)."""
+    seeded = {OPENGREP_DIR + name: name for name, _needs in OPENGREP_RULES}
+    for path in rule_files:
+        if path not in seeded:
+            return False
+        source = (OPENGREP_SOURCE / seeded[path]).read_text(encoding="utf-8")
+        if (read(path) or "").replace("\r\n", "\n") != source:
+            return False
+    return True
+
+
+#: .semgrepignore entries that drop first-party code from gate 4 (everything, or the test trees).
+_FORBIDDEN_SCOPE_ENTRIES = frozenset(
+    {"*", "**", "/", "**/*", "./", "test/", "tests/", "/test/", "/tests/", "**/test/", "**/tests/"}
+    | {"spec/", "**/spec/", "__tests__/", "**/__tests__/", "*_test.go", "**/*_test.go", "test", "tests"}
+)
+
+
+def _scope_gaps(text: str) -> List[str]:
+    """Entries of a repository-authored .semgrepignore that exclude first-party source or tests."""
+    entries = [line.strip() for line in text.splitlines()]
+    return [entry for entry in entries if entry in _FORBIDDEN_SCOPE_ENTRIES]
+
+
+def _plan_gate_configs(facts: RepoFacts, read: Reader, context: Dict[str, str]) -> List[FileAction]:
     """Seed the gate-4 ruleset + scope file and the gate-6 config so neither gate silently skips."""
     languages = set(detect_languages(facts.paths))
     actions: List[FileAction] = []
-    if any(path.startswith(OPENGREP_DIR) and path.endswith((".yml", ".yaml")) for path in facts.paths):
+    rule_files = [p for p in facts.paths if p.startswith(OPENGREP_DIR) and p.endswith((".yml", ".yaml"))]
+    if rule_files and not _seeded_rules_only(rule_files, read):
         actions.append(FileAction(OPENGREP_DIR, "keep", "repository-curated SAST ruleset"))
     else:
         if _first_present(facts.paths, (OPENGREP_DIR + "README.md",)) is None:
@@ -733,15 +769,20 @@ def _plan_gate_configs(facts: RepoFacts, context: Dict[str, str]) -> List[FileAc
             FileAction(
                 OPENGREP_DIR + name,
                 "create",
-                "gate 4 has no ruleset",
+                "gate 4 has no rule for this language" if rule_files else "gate 4 has no ruleset",
                 (OPENGREP_SOURCE / name).read_text(encoding="utf-8"),
             )
             for name, needs in OPENGREP_RULES
-            if not needs or languages.intersection(needs)
+            if (not needs or languages.intersection(needs)) and OPENGREP_DIR + name not in rule_files
         )
     scope = _first_present(facts.paths, (SEMGREPIGNORE,))
     if scope is not None:
-        actions.append(FileAction(scope, "keep", "repository-chosen SAST scope"))
+        dropped = _scope_gaps(read(scope) or "")
+        if dropped:
+            reason = f"excludes first-party code from gate 4: {', '.join(dropped)}"
+            actions.append(FileAction(scope, "gap", reason))
+        else:
+            actions.append(FileAction(scope, "keep", "repository-chosen SAST scope"))
     else:
         actions.append(
             FileAction(
@@ -820,6 +861,26 @@ def caller_refs(text: str) -> Set[str]:
     return refs
 
 
+def caller_contract_gap(text: str) -> str:
+    """Why a lean-gate caller would not report ``quality / quality`` on pull requests ('' when it does)."""
+    document = yaml.safe_load(text)
+    triggers = document.get("on", document.get(True)) if isinstance(document, dict) else None
+    if isinstance(triggers, str):
+        triggers = [triggers]
+    if not isinstance(triggers, (list, dict)) or "pull_request" not in triggers:
+        return "the caller does not run on pull_request, so `quality / quality` never reports on a pull request"
+    jobs = document.get("jobs") if isinstance(document, dict) else None
+    job = jobs.get("quality") if isinstance(jobs, dict) else None
+    if document.get("name") != "quality" or not (
+        isinstance(job, dict) and str(job.get("uses", "")).startswith(REUSABLE_QUALITY_PREFIX)
+    ):
+        return (
+            "the caller must be workflow `quality` with job `quality`, "
+            "or the required context is not `quality / quality`"
+        )
+    return ""
+
+
 def bump_caller(text: str, qzp_pin: str) -> str:
     """Re-pin every live ``uses:`` line of the lean-gate caller, leaving comments untouched."""
     lines = text.splitlines(keepends=True)
@@ -840,12 +901,18 @@ def _plan_quality_caller(facts: RepoFacts, read: Reader, context: Dict[str, str]
         refs = caller_refs(text)
         if not refs:
             continue
+        problem = caller_contract_gap(text)
+        if problem:
+            actions.append(FileAction(workflow, "gap", problem))
+            continue
         if refs == {qzp_pin}:
             actions.append(FileAction(workflow, "keep", "lean gate already pinned to the target commit"))
             continue
-        actions.append(
-            FileAction(workflow, "bump", f"pin {', '.join(sorted(refs))} -> {qzp_pin}", bump_caller(text, qzp_pin))
-        )
+        bumped = bump_caller(text, qzp_pin)
+        if caller_refs(bumped) != {qzp_pin}:
+            actions.append(FileAction(workflow, "gap", f"could not re-pin {', '.join(sorted(refs))} automatically"))
+            continue
+        actions.append(FileAction(workflow, "bump", f"pin {', '.join(sorted(refs))} -> {qzp_pin}", bumped))
     if actions:
         return actions
     if QUALITY_CALLER in facts.paths:
@@ -867,7 +934,32 @@ _NON_TEST_WORKFLOW_WORDS = (
 )
 
 
-def _plan_outside_languages(facts: RepoFacts) -> List[FileAction]:
+_CPP_TEST_RE = re.compile(
+    r"(^|/)([^/]*_tests?\.cpp|[^/]*_test\.(cc|cxx)|test_[^/]*\.cpp|[^/]*Test\.cpp)$|(^|/)tests?/.+\.(cpp|cc)$"
+)
+
+
+def _plan_compiled_lane(facts: RepoFacts) -> List[FileAction]:
+    """Flag the prerequisites the lean gate's compiled (Go / C++) coverage lane fails without."""
+    languages = detect_languages(facts.paths)
+    go_tests = "go" in languages and any(path.endswith("_test.go") for path in facts.paths)
+    cpp_tests = "cpp" in languages and any(_CPP_TEST_RE.search(path) for path in facts.paths)
+    gaps: List[FileAction] = []
+    if go_tests and "go.mod" not in facts.paths:
+        gaps.append(FileAction("go.mod", "gap", "Go tests exist but there is no root go.mod; the coverage lane fails"))
+    if (go_tests or cpp_tests) and "scripts/coverage-gate.sh" not in facts.paths:
+        gaps.append(
+            FileAction(
+                "scripts/coverage-gate.sh",
+                "gap",
+                "compiled tests exist but there is no coverage gate script; the coverage lane fails until it measures "
+                "100 % line and branch",
+            )
+        )
+    return gaps
+
+
+def _plan_outside_languages(facts: RepoFacts, read: Reader) -> List[FileAction]:
     """Flag languages the lean gate cannot test when the repository has no CI of its own for them."""
     outside = [label for key, label in _OUTSIDE_LEAN_GATE.items() if key in detect_languages(facts.paths)]
     own_ci = [
@@ -877,6 +969,7 @@ def _plan_outside_languages(facts: RepoFacts) -> List[FileAction]:
         and path.endswith((".yml", ".yaml"))
         and path != QUALITY_CALLER
         and not any(word in posixpath.basename(path).lower() for word in _NON_TEST_WORKFLOW_WORDS)
+        and not caller_refs(read(path) or "")
     ]
     if not outside or own_ci:
         return []
@@ -904,10 +997,11 @@ def plan_baseline(facts: RepoFacts, read: Reader, qzp_pin: str, deps_floor: str 
         _plan_dependabot(facts, read, planned),
     ]
     actions.extend(_plan_issue_forms(facts, context))
-    actions.extend(_plan_gate_configs(facts, context))
+    actions.extend(_plan_gate_configs(facts, read, context))
     actions.append(_plan_simple(facts, (VERIFY_SCRIPT,), VERIFY_SCRIPT, "verify", context, executable=True))
     actions.extend(caller)
-    actions.extend(_plan_outside_languages(facts))
+    actions.extend(_plan_compiled_lane(facts))
+    actions.extend(_plan_outside_languages(facts, read))
     return actions
 
 
@@ -948,6 +1042,7 @@ def list_checkout_files(repo_dir: Path, *, runner: ProcessRunner = subprocess.ru
         ["git", "-C", str(repo_dir), "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=True,
     )
     listed = dict.fromkeys(path for path in completed.stdout.split("\0") if path)

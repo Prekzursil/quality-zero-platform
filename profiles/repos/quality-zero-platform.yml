@@ -42,15 +42,24 @@ verify_command: bash scripts/verify
 # The shared reusable SaaS workflows are kept (still consumed by enrolled repos
 # per the lean-gate charter migration runbook) — only the SELF required contexts
 # are migrated here.
+# 2026-10-24: aligned with the live ruleset (14488866), which requires the
+# code-scanning aggregate `CodeQL`, not the job name `codeql / CodeQL`; and the
+# platform now holds itself to its own lean gates 1 and 4 too: the ruff and
+# opengrep jobs of quality-zero-platform.yml report on every push and pull
+# request, yet nothing required them.
 required_contexts_mode: replace
 required_contexts:
   always:
   - Control Plane Verify
-  - codeql / CodeQL
+  - gate-lint-format (ruff)
+  - gate-sast (opengrep)
+  - CodeQL
   pull_request_only: []
   target:
   - Control Plane Verify
-  - codeql / CodeQL
+  - gate-lint-format (ruff)
+  - gate-sast (opengrep)
+  - CodeQL
 enabled_scanners:
   # LEAN GATE MIGRATION (2026-06-27): retire the retired-tier SaaS coverage
   # *publish* legs on the platform's OWN self-CI. These are fail-closed

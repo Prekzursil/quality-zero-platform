@@ -23,6 +23,8 @@ TOP_LEVEL_KEYS: Set[str] = {
     "required_contexts",
     "coverage",
     "ruleset_mode",
+    # The generated ruleset's enforcement / bypass actors / code-scanning rule.
+    "ruleset",
     "preserve_public_check_names",
     "vendors",
     "providers",
@@ -80,6 +82,7 @@ NESTED_KEYS: Dict[str, Set[str]] = {
         "policy",
     },
     "trigger": {"mode", "pr_head_sha"},
+    "ruleset": {"enforcement", "bypass_actors", "code_scanning"},
     "visual_lane": {"kind"},
     "codeql": {"enabled", "languages", "runner", "build_mode", "setup"},
     "dependabot": {

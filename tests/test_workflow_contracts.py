@@ -81,6 +81,38 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertEqual(notice["if"], "${{ env.CODECOV_UPLOADABLE != 'true' }}")
         self.assertIn("::notice title=Codecov upload skipped::", notice["run"])
 
+    def test_a_reenabled_codex_workflow_fails_visibly_without_its_secret(self) -> None:
+        """CODEX_AUTH_JSON is being removed: re-enabling either Codex workflow must fail first, by name."""
+        for name, job in (
+            ("quality-zero-backlog.yml", "shared-backlog-sweep"),
+            ("quality-zero-remediation.yml", "shared-remediation-loop"),
+        ):
+            with self.subTest(workflow=name):
+                workflow = yaml.safe_load((ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8"))
+                guard = workflow["jobs"]["require-codex-auth"]
+                self.assertEqual(guard["permissions"], {})
+                self.assertEqual(guard["env"]["CODEX_AUTH_PRESENT"], "${{ secrets.CODEX_AUTH_JSON != '' }}")
+                (step,) = guard["steps"]
+                self.assertEqual(step["if"], "${{ env.CODEX_AUTH_PRESENT != 'true' }}")
+                self.assertIn("::error title=CODEX_AUTH_JSON not configured::", step["run"])
+                self.assertIn("exit 1", step["run"])
+                self.assertEqual(workflow["jobs"][job]["needs"], "require-codex-auth")
+                self.assertEqual(guard.get("if"), workflow["jobs"][job].get("if"))
+
+    def test_an_opted_in_sonar_scan_without_its_token_says_it_was_skipped(self) -> None:
+        """The scan is opt-in; opted in with no SONAR_TOKEN it must not vanish silently."""
+        workflow = yaml.safe_load(
+            (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
+        )
+        steps = workflow["jobs"]["scanner"]["steps"]
+        names = [step.get("name", "") for step in steps]
+        notice = steps[names.index("SonarCloud scan skipped (no SONAR_TOKEN)")]
+        self.assertIn("env.SONAR_TOKEN_PRESENT != 'true'", notice["if"])
+        self.assertIn("steps.profile.outputs.sonar_coverage_enabled == 'true'", notice["if"])
+        self.assertIn("::warning title=SonarCloud scan skipped::", notice["run"])
+        scan = steps[names.index("SonarCloud scan")]
+        self.assertIn("env.SONAR_TOKEN_PRESENT == 'true'", scan["if"])
+
     def test_the_workflow_gate_lints_the_consumer_templates_too(self) -> None:
         """Governed repos copy templates/repo/.github/workflows: a defect there must fail QZP's own gate."""
         workflow = yaml.safe_load(

@@ -352,6 +352,11 @@ class PythonRuntimeDepsTests(_StepHarness):
         calls = [line.strip() for line in run.splitlines() if line.strip().startswith("basedpyright")]
         self.assertEqual(len(calls), 2)
         self.assertTrue(all(call.endswith("--warnings") for call in calls), calls)
+        # The local preflight mirrors CI one-for-one: a warning fails it too.
+        preflight = (ROOT / "scripts" / "quality" / "preflight.sh").read_text(encoding="utf-8")
+        local = [line.strip() for line in preflight.splitlines() if line.strip().startswith("python -m basedpyright")]
+        self.assertEqual(len(local), 2)
+        self.assertTrue(all("--warnings" in call for call in local), local)
 
     def test_runtime_requirement_files_are_installed_dev_and_vendored_ones_are_not(self) -> None:
         """requirements*.txt wins over the project install; dev/test lists and vendored trees are skipped."""

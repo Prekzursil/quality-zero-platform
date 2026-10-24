@@ -83,6 +83,9 @@ masked before the payload is serialised, so the public site cannot leak them.
   concurrency cancelled, no longer paints a green branch red.
 - **Open PRs:** the same rule per open PR head commit, over the 100 newest `pull_request` runs.
   Runs created before the open PR are dropped: a commit a closed PR used first keeps that PR's runs.
+  Beyond that, CI belongs to the COMMIT, as on GitHub's own PR page and in branch protection: a run
+  that a since-closed PR triggered on the same commit counts. GitHub cannot say which PR a run came
+  from (a closed PR's runs list no PR at all).
   When two open PRs share a head commit (one branch, two bases), GitHub cannot say which PR a run
   belongs to. That head reads `unknown` unless a failure is already visible: green runs from one
   PR prove nothing about the other, which may have no run at all.

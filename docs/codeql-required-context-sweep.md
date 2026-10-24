@@ -7,10 +7,18 @@ context pinned to the old spelling.
 
 | setup | how it is configured | check names it emits |
 |---|---|---|
-| **advanced** | a `.github/workflows/codeql.yml` in the repo (the QZP-managed wrapper) | `codeql / CodeQL` (+ `codeql / Resolve CodeQL Profile`) |
+| **advanced** | a `.github/workflows/codeql.yml` in the repo (the QZP-managed wrapper) | `codeql / CodeQL` (+ `codeql / Resolve CodeQL Profile`) from Actions, **and** the aggregate **`CodeQL`** from the GitHub Advanced Security app once the analysis uploads |
 | **default** | GitHub-managed, Security tab → Code scanning → Default setup | aggregate **`CodeQL`** from the GitHub Advanced Security app (`app_id 57789`), plus `Analyze (<language>)` on *some* events only |
 
-Default setup **never** emits `codeql / CodeQL`. That is the whole defect class.
+Default setup **never** emits `codeql / CodeQL`. That is the whole defect class. The
+aggregate `CodeQL` is the one name **both** setups emit: it is code scanning's own
+check run, created for any uploaded CodeQL analysis, whichever workflow ran it.
+Re-measured 2026-10-24 on advanced-only pull-request heads
+(`GET /repos/.../commits/<head>/check-runs`): Personal-Finance-Management #60
+(`1e80d9d`), Star-Wars-Galactic-Battlegrounds-Save-Game-Editor #36 (`0caa4cc`) and
+codeblocks-pretty-prints-stable #44 (`b190aa9`) each carry `CodeQL`
+(`github-advanced-security`, success) next to `codeql / CodeQL` (`github-actions`).
+It is also fail-closed: no uploaded analysis, no `CodeQL` check.
 
 ## Which spelling to require
 

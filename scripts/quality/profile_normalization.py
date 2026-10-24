@@ -214,11 +214,17 @@ def normalize_dependabot(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
 #: GitHub's documented values for the repository-ruleset fields a profile may
 #: set (REST "Create a repository ruleset"). Anything else would be rejected by
 #: the API at apply time, so it is rejected here, while rendering.
+RULESET_KEYS = frozenset({"enforcement", "bypass_actors", "code_scanning"})
 RULESET_ENFORCEMENTS = frozenset({"active", "disabled", "evaluate"})
+RULESET_BYPASS_ACTOR_KEYS = frozenset({"actor_type", "actor_id", "bypass_mode"})
 RULESET_BYPASS_ACTOR_TYPES = frozenset(
     {"Integration", "OrganizationAdmin", "RepositoryRole", "Team", "DeployKey", "User"}
 )
-RULESET_BYPASS_MODES = frozenset({"always", "pull_request"})
+#: Actor types the API requires an ``actor_id`` for. ``DeployKey`` takes none
+#: (null), and ``OrganizationAdmin`` ignores it.
+RULESET_BYPASS_ACTOR_TYPES_WITH_ID = frozenset({"Integration", "RepositoryRole", "Team", "User"})
+RULESET_BYPASS_MODES = frozenset({"always", "pull_request", "exempt"})
+CODE_SCANNING_TOOL_KEYS = frozenset({"tool", "alerts_threshold", "security_alerts_threshold"})
 CODE_SCANNING_ALERTS_THRESHOLDS = frozenset({"none", "errors", "errors_and_warnings", "all"})
 CODE_SCANNING_SECURITY_ALERTS_THRESHOLDS = frozenset({"none", "critical", "high_or_higher", "medium_or_higher", "all"})
 
@@ -230,28 +236,52 @@ def _require_member(value: str, allowed: frozenset, what: str) -> str:
     return value
 
 
+def _reject_unknown_keys(item: Mapping[str, Any], allowed: frozenset, where: str) -> None:
+    """Raise on a key ``allowed`` does not list: a typo must fail, never vanish."""
+    unknown = sorted(str(key) for key in item if key not in allowed)
+    if unknown:
+        raise ValueError(f"unexpected {where} key(s) {unknown}; expected only {sorted(allowed)}")
+
+
+def _ruleset_list(payload: Mapping[str, Any], key: str) -> List[Any]:
+    """Return the list under ``key``: absent means empty, a blank value is an error.
+
+    A blank ``code_scanning:`` in a repo profile would replace the stack's list
+    in the merge and silently drop its merge protection; declaring none takes
+    an explicit ``[]``.
+    """
+    if key not in payload:
+        return []
+    value = payload[key]
+    if not isinstance(value, list):
+        raise ValueError(f"ruleset {key} must be a list (use [] to declare none), got {value!r}")
+    return value
+
+
 def _normalize_bypass_actor(item: Any) -> Dict[str, Any]:
-    """Validate one ruleset bypass actor."""
+    """Validate one ruleset bypass actor against the API's per-type rules."""
     if not isinstance(item, Mapping):
         raise ValueError(f"ruleset bypass_actors entries must be mappings, got {item!r}")
+    _reject_unknown_keys(item, RULESET_BYPASS_ACTOR_KEYS, "ruleset bypass actor")
     actor_type = _require_member(str(item.get("actor_type", "")).strip(), RULESET_BYPASS_ACTOR_TYPES, "actor_type")
     raw_id = item.get("actor_id")
-    if raw_id is None:
-        actor_id = None
-    elif isinstance(raw_id, int) and not isinstance(raw_id, bool):
-        actor_id = raw_id
-    else:
+    if raw_id is not None and (not isinstance(raw_id, int) or isinstance(raw_id, bool)):
         raise ValueError(f"ruleset bypass actor_id must be an integer or null, got {raw_id!r}")
-    bypass_mode = _require_member(
-        str(item.get("bypass_mode", "always")).strip() or "always", RULESET_BYPASS_MODES, "bypass_mode"
-    )
-    return {"actor_id": actor_id, "actor_type": actor_type, "bypass_mode": bypass_mode}
+    if raw_id is None and actor_type in RULESET_BYPASS_ACTOR_TYPES_WITH_ID:
+        raise ValueError(f"ruleset bypass actor_id is required for actor_type {actor_type!r}")
+    if raw_id is not None and actor_type == "DeployKey":
+        raise ValueError("ruleset bypass actor_id must be null for actor_type 'DeployKey'")
+    bypass_mode = _require_member(str(item.get("bypass_mode", "always")).strip(), RULESET_BYPASS_MODES, "bypass_mode")
+    if bypass_mode == "pull_request" and actor_type == "DeployKey":
+        raise ValueError("ruleset bypass_mode 'pull_request' is not applicable to actor_type 'DeployKey'")
+    return {"actor_id": raw_id, "actor_type": actor_type, "bypass_mode": bypass_mode}
 
 
 def _normalize_code_scanning_tool(item: Any) -> Dict[str, str]:
     """Validate one code-scanning merge-protection tool entry."""
     if not isinstance(item, Mapping):
         raise ValueError(f"ruleset code_scanning entries must be mappings, got {item!r}")
+    _reject_unknown_keys(item, CODE_SCANNING_TOOL_KEYS, "ruleset code_scanning")
     tool = str(item.get("tool", "")).strip()
     if not tool:
         raise ValueError("ruleset code_scanning entries need a tool name")
@@ -266,20 +296,25 @@ def _normalize_code_scanning_tool(item: Any) -> Dict[str, str]:
     return {"alerts_threshold": alerts, "security_alerts_threshold": security, "tool": tool}
 
 
-def normalize_ruleset(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
+def normalize_ruleset(raw: Any) -> Dict[str, Any]:
     """Normalize the generated ruleset's enforcement, bypass actors and code-scanning rule.
 
-    Called while normalising every profile, so a value the GitHub API would
-    reject fails the render instead of a later ruleset apply.
+    Called while normalising every profile (the merged stack + repo profile),
+    so a value the GitHub API would reject fails the render instead of a later
+    ruleset apply. Strict on purpose: profile shape validation runs on the
+    NORMALISED profile, so an unknown key, a blank value or a non-mapping
+    dropped here would never be reported anywhere. An absent block or field
+    takes its default; a blank one is an error, because in the merge it would
+    replace (and silently drop) what the stack declares.
     """
-    payload = raw if isinstance(raw, Mapping) else {}
-    enforcement = _require_member(
-        str(payload.get("enforcement", "active")).strip() or "active", RULESET_ENFORCEMENTS, "enforcement"
-    )
+    if not isinstance(raw, Mapping):
+        raise ValueError(f"ruleset must be a mapping (omit it to inherit the stack's), got {raw!r}")
+    _reject_unknown_keys(raw, RULESET_KEYS, "ruleset")
+    enforcement = _require_member(str(raw.get("enforcement", "active")).strip(), RULESET_ENFORCEMENTS, "enforcement")
     return {
         "enforcement": enforcement,
-        "bypass_actors": [_normalize_bypass_actor(item) for item in payload.get("bypass_actors") or []],
-        "code_scanning": [_normalize_code_scanning_tool(item) for item in payload.get("code_scanning") or []],
+        "bypass_actors": [_normalize_bypass_actor(item) for item in _ruleset_list(raw, "bypass_actors")],
+        "code_scanning": [_normalize_code_scanning_tool(item) for item in _ruleset_list(raw, "code_scanning")],
     }
 
 

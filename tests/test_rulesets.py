@@ -2,6 +2,7 @@ from __future__ import absolute_import
 
 import json
 import re
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -192,19 +193,24 @@ class NormalizeRulesetTests(unittest.TestCase):
     """Values the GitHub API would reject fail while the profile renders."""
 
     def test_defaults(self) -> None:
-        """No block, or a non-mapping, normalises to an empty active ruleset."""
-        expected = {"enforcement": "active", "bypass_actors": [], "code_scanning": []}
-        self.assertEqual(normalize_ruleset(None), expected)
-        self.assertEqual(normalize_ruleset(["not", "a", "mapping"]), expected)
-        self.assertEqual(normalize_ruleset({"enforcement": "  "}), expected)
+        """An absent block, or absent fields, normalise to an empty active ruleset."""
+        self.assertEqual(normalize_ruleset({}), {"enforcement": "active", "bypass_actors": [], "code_scanning": []})
+
+    def test_normalising_is_idempotent(self) -> None:
+        """build_ruleset_payload re-normalises an already normalised section."""
+        once = normalize_ruleset({"bypass_actors": [ADMIN_VIA_PULL_REQUEST], "code_scanning": [{"tool": "CodeQL"}]})
+        self.assertEqual(normalize_ruleset(once), once)
+        self.assertEqual(once["code_scanning"], [ANY_SEVERITY_CODEQL])
 
     def test_bypass_actor_forms(self) -> None:
-        """Integer or null ids; the mode defaults to always."""
+        """Integer ids where the API needs one, null where it takes none; the mode defaults to always."""
         result = normalize_ruleset(
             {
                 "bypass_actors": [
                     {"actor_type": "OrganizationAdmin", "actor_id": None},
                     {"actor_type": "User", "actor_id": 7, "bypass_mode": "pull_request"},
+                    {"actor_type": "DeployKey", "actor_id": None, "bypass_mode": "exempt"},
+                    {"actor_type": "Integration", "actor_id": 15368, "bypass_mode": "exempt"},
                 ]
             }
         )
@@ -213,29 +219,93 @@ class NormalizeRulesetTests(unittest.TestCase):
             [
                 {"actor_id": None, "actor_type": "OrganizationAdmin", "bypass_mode": "always"},
                 {"actor_id": 7, "actor_type": "User", "bypass_mode": "pull_request"},
+                {"actor_id": None, "actor_type": "DeployKey", "bypass_mode": "exempt"},
+                {"actor_id": 15368, "actor_type": "Integration", "bypass_mode": "exempt"},
             ],
         )
 
     def test_rejections(self) -> None:
         """Every invalid value raises with the offending field named."""
         cases = [
+            (None, "ruleset must be a mapping"),
+            (["not", "a", "mapping"], "ruleset must be a mapping"),
+            ({"enforcment": "active"}, r"unexpected ruleset key\(s\) \['enforcment'\]"),
             ({"enforcement": "on"}, "enforcement"),
+            ({"enforcement": "  "}, "enforcement"),
+            ({"enforcement": None}, "enforcement"),
+            ({"bypass_actors": None}, "bypass_actors must be a list"),
+            ({"bypass_actors": "admin"}, "bypass_actors must be a list"),
             ({"bypass_actors": ["admin"]}, "bypass_actors entries must be mappings"),
             ({"bypass_actors": [{"actor_type": "Admin", "actor_id": 5}]}, "actor_type"),
             ({"bypass_actors": [{"actor_type": "RepositoryRole", "actor_id": "5"}]}, "actor_id"),
             ({"bypass_actors": [{"actor_type": "RepositoryRole", "actor_id": True}]}, "actor_id"),
+            ({"bypass_actors": [{"actor_type": "Team"}]}, "actor_id is required for actor_type 'Team'"),
+            (
+                {"bypass_actors": [{"actor_type": "DeployKey", "actor_id": 3}]},
+                "must be null for actor_type 'DeployKey'",
+            ),
+            (
+                {"bypass_actors": [{"actor_type": "DeployKey", "bypass_mode": "pull_request"}]},
+                "not applicable to actor_type 'DeployKey'",
+            ),
             (
                 {"bypass_actors": [{"actor_type": "RepositoryRole", "actor_id": 5, "bypass_mode": "never"}]},
                 "bypass_mode",
             ),
+            ({"bypass_actors": [{"actor_type": "User", "actor_id": 7, "bypass_mode": " "}]}, "bypass_mode"),
+            (
+                {"bypass_actors": [{"actor_type": "RepositoryRole", "actor_id": 5, "mode": "always"}]},
+                "unexpected ruleset bypass actor key",
+            ),
+            ({"code_scanning": None}, "code_scanning must be a list"),
             ({"code_scanning": ["CodeQL"]}, "code_scanning entries must be mappings"),
             ({"code_scanning": [{"tool": " "}]}, "need a tool name"),
             ({"code_scanning": [{"tool": "CodeQL", "alerts_threshold": "warnings"}]}, "alerts_threshold"),
             ({"code_scanning": [{"tool": "CodeQL", "security_alerts_threshold": "low"}]}, "security_alerts_threshold"),
+            (
+                {"code_scanning": [{"tool": "CodeQL", "security_alert_threshold": "all"}]},
+                "unexpected ruleset code_scanning key",
+            ),
         ]
         for raw, message in cases:
             with self.subTest(raw=raw), self.assertRaisesRegex(ValueError, message):
                 normalize_ruleset(raw)
+
+
+class RulesetInheritanceTests(unittest.TestCase):
+    """A repo profile can narrow the stack's ruleset only on purpose."""
+
+    def _load(self, repo_ruleset: str) -> dict:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "inventory").mkdir()
+            (root / "profiles" / "stacks").mkdir(parents=True)
+            (root / "profiles" / "repos").mkdir(parents=True)
+            (root / "inventory" / "repos.yml").write_text(
+                "repos:\n  - slug: Example/Repo\n    profile: example\n", encoding="utf-8"
+            )
+            (root / "profiles" / "stacks" / "base.yml").write_text(
+                "required_contexts:\n  always:\n    - quality / quality\n"
+                "ruleset:\n  code_scanning:\n    - tool: CodeQL\n",
+                encoding="utf-8",
+            )
+            (root / "profiles" / "repos" / "example.yml").write_text("stack: base\n" + repo_ruleset, encoding="utf-8")
+            return load_repo_profile(load_inventory(root / "inventory" / "repos.yml"), "Example/Repo")
+
+    def test_blank_overrides_cannot_silently_drop_the_stack_protection(self) -> None:
+        """THE review finding: a blank block or list used to normalise to "no protection"."""
+        for repo_ruleset, message in (
+            ("ruleset:\n", "ruleset must be a mapping"),
+            ("ruleset:\n  code_scanning:\n", "code_scanning must be a list"),
+            ("ruleset:\n  code_scaning: []\n", "unexpected ruleset key"),
+        ):
+            with self.subTest(repo_ruleset=repo_ruleset), self.assertRaisesRegex(ValueError, message):
+                self._load(repo_ruleset)
+
+    def test_an_explicit_empty_list_is_a_deliberate_opt_out(self) -> None:
+        """`code_scanning: []` declares no merge protection, visibly in the profile."""
+        self.assertEqual(self._load("ruleset:\n  code_scanning: []\n")["ruleset"]["code_scanning"], [])
+        self.assertEqual(self._load("")["ruleset"]["code_scanning"], [ANY_SEVERITY_CODEQL])
 
 
 if __name__ == "__main__":  # pragma: no cover

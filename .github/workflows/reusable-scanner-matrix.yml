@@ -105,7 +105,8 @@ jobs:
           - job_name: Dependency Alerts
             lane: deps
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Check out the code under test
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           path: repo
           ref: ${{ inputs.sha != '' && inputs.sha || github.sha }}

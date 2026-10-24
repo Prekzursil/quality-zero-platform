@@ -5,9 +5,9 @@
 # lean gate running in Prekzursil/Reframe (.github/workflows/quality.yml) — same
 # tool pins, same single-job binary green/red model.
 #
-# It does NOT replace the existing fleet reusable workflows; the 13 enrolled
-# repos still call those. The ~80% deletion of the old SaaS machinery is
-# deferred to the migration runbook until the fleet moves off it.
+# It is the fleet's quality gate: every governed repo with a quality.yml calls
+# it. The legacy SaaS reusable workflows remain only for callers that have not
+# migrated yet.
 #
 # ── Adoption (≈5 lines in the caller repo) ──────────────────────────────────
 #   # .github/workflows/quality.yml in the CALLER repo
@@ -18,7 +18,9 @@
 #   permissions: { contents: read }
 #   jobs:
 #     quality:
-#       uses: Prekzursil/quality-zero-platform/.github/workflows/reusable-quality.yml@main
+#       # Pin a FULL commit SHA: a branch or tag ref lets a push to this repo
+#       # change the gate for every caller at once.
+#       uses: Prekzursil/quality-zero-platform/.github/workflows/reusable-quality.yml@<40-hex-sha>
 #
 # ── The closed 6-gate charter this workflow enforces ────────────────────────
 #   1. Lint+format (SELF-CONTAINED — the workflow's OWN pinned CLIs, NOT the
@@ -27,10 +29,16 @@
 #   3. Tests+cov:    STRICT 100% line+branch (standing policy; ratchet retired),
 #                    ASSERTED by this workflow for py/jsts, and measured for
 #                    go/c++ via the caller's own coverage gate
-#   4. SAST:         Opengrep (Semgrep CE acceptable), pinned in-repo ruleset
+#   4. SAST:         Opengrep (Semgrep CE acceptable) — ALWAYS runs: the
+#                    caller's .quality/opengrep ruleset when present, else the
+#                    platform's curated default ruleset embedded below
 #   5. Secrets:      gitleaks (pinned) — SELF-CONTAINED, ALWAYS runs; a caller
 #                    .gitleaks.toml is an optional allowlist, NOT the trigger
-#   6. Deps:         osv-scanner + Dependabot (no Renovate), T0 severity floor
+#   6. Deps:         osv-scanner + Dependabot (no Renovate) — runs whenever a
+#                    manifest or lockfile exists; osv-scanner.toml is optional.
+#                    Blocking policy per the `deps-severity-floor` input:
+#                    `t0` (default, the severity floor below) or `any` (zero
+#                    tolerance: every finding blocks)
 #
 # ── gate-6 T0 SEVERITY FLOOR (2026-08-11) ───────────────────────────────────
 # `osv-scanner` exits 1 for ANY advisory match, with no severity, dev/prod or
@@ -73,12 +81,18 @@
 # Auto-detection: the single `quality` job inspects the CALLER's checked-out
 # tree and runs ONLY the lanes whose language is present. A repo with no Python
 # skips the Python lanes, a repo with no JS/TS skips tsc, etc. The lint lanes run
-# whenever their language is present; opengrep/osv run when their config is
-# present. GITLEAKS IS THE EXCEPTION AND ALWAYS RUNS (round-7): its trigger used
-# to be "a .gitleaks.toml exists", but that file is an ALLOWLIST, so the presence
-# of things we decided to IGNORE was the opt-in signal for secret scanning and a
-# clean repo got none at all. Secret scanning is T0 absolute-zero; the allowlist
-# is now an optional input to the scan rather than a guard on it.
+# whenever their language is present. The SAST, secrets and deps gates are NOT
+# keyed on caller config any more: a config file is an optional INPUT to each
+# scan, never the switch that turns the scan on. GITLEAKS went first (round-7):
+# its trigger used to be "a .gitleaks.toml exists", but that file is an
+# ALLOWLIST, so the presence of things we decided to IGNORE was the opt-in signal
+# for secret scanning and a clean repo got none at all. round-10 closes the same
+# inverted trigger on the other two: gate 4 used to run only when
+# `.quality/opengrep` existed and gate 6 only when `osv-scanner.toml` existed,
+# so a caller that had never written either got NO SAST and NO dependency scan
+# while `quality` still reported green (measured 2026-10-24: SWFOC-Mod-Menu,
+# pbinfo-get-unsolved and fractal-darkroom had no SAST; fractal-darkroom and
+# Personal-Finance-Management had no dependency gate).
 #
 # No silent-pass: the coverage lane (gate 3) NEVER passes a language green
 # without measuring it. If a language has source AND test files but no coverage
@@ -145,10 +159,13 @@ on:
         required: false
         default: "3.12"
       node-version:
-        description: "Node toolchain version for the JS/TS lanes."
+        description: >-
+          Node toolchain version for the JS/TS lanes. Default 24: Node 20 reached
+          end of life on 2026-04-30 and Node 22 is maintenance-only until its
+          own end of life on 2027-04-30.
         type: string
         required: false
-        default: "20"
+        default: "24"
       opengrep-paths:
         description: "Space-separated paths the SAST gate scans (default: repo root '.')."
         type: string
@@ -175,6 +192,19 @@ on:
         type: string
         required: false
         default: "scripts/coverage-gate.sh"
+      deps-severity-floor:
+        description: >-
+          Gate 6 blocking policy. "t0" (default) blocks only a production
+          dependency whose advisory is CVSS >= 7.0 AND has a published fix;
+          everything else osv-scanner reports is printed as T2 inventory and
+          does not block. "any" is ZERO TOLERANCE: every finding blocks,
+          including dev-only, unscored, below-floor and not-yet-fixable ones,
+          and the same classified table is printed so a reader can see which
+          rows "t0" would have demoted. Any other value fails the job before a
+          single gate runs, never a silent fall-back to "t0".
+        type: string
+        required: false
+        default: "t0"
 
 permissions:
   contents: read
@@ -183,7 +213,28 @@ jobs:
   quality:
     name: quality
     runs-on: ubuntu-latest
+    # A wedged test run must not hold a runner for the 6-hour platform default.
+    timeout-minutes: 60
     steps:
+      # Inputs are validated FIRST, before any tool is installed or any gate
+      # runs: a typo'd policy must fail loudly, not quietly gate on a default.
+      - name: Validate workflow inputs
+        shell: bash
+        env:
+          DEPS_SEVERITY_FLOOR: ${{ inputs.deps-severity-floor }}
+        run: |
+          set -euo pipefail
+          case "$DEPS_SEVERITY_FLOOR" in
+            t0|any)
+              echo "deps-severity-floor: $DEPS_SEVERITY_FLOOR"
+              ;;
+            *)
+              echo "::error title=invalid deps-severity-floor::deps-severity-floor must be 't0' or 'any'."
+              printf 'FAIL: unsupported deps-severity-floor value %q\n' "$DEPS_SEVERITY_FLOOR" >&2
+              exit 1
+              ;;
+          esac
+
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
@@ -287,13 +338,19 @@ jobs:
             echo "ts=$(has '*.ts' '*.tsx')"
             echo "jsts=$(has '*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs' '*.cjs')"
             echo "pyrightcfg=$(any "$py_pyright_cfg")"
-            echo "opengrep=$([ -d .quality/opengrep ] && echo true || echo false)"
+            # round-10: NOT a guard on gate 4. Like the gitleaks allowlist
+            # below, this only tells the gate which ruleset to load; the scan
+            # itself always runs (the platform default ruleset when absent).
+            echo "opengrepcfg=$([ -d .quality/opengrep ] && echo true || echo false)"
             # NOT a guard on gate 5 (round-7): .gitleaks.toml is an ALLOWLIST,
             # so gating the SCAN on it made "things we decided to ignore" the
             # opt-in signal for secret scanning. This output now only tells the
             # gate whether to pass --config; the scan itself always runs.
             echo "gitleaksallowlist=$(file_exists .gitleaks.toml)"
-            echo "osv=$(file_exists osv-scanner.toml)"
+            # round-10: NOT a guard on gate 6 either. It only decides whether
+            # --config=osv-scanner.toml is passed; `osvsources` below decides
+            # whether there is anything to scan.
+            echo "osvconfig=$(file_exists osv-scanner.toml)"
             echo "charter=$([ -f .quality/charter.yml ] && echo true || echo false)"
             echo "pymanifest=$(any "$py_manifest")"
             echo "osvsources=$(any "$osv_sources")"
@@ -398,8 +455,10 @@ jobs:
       # page) and checked against the SHA-256 in .quality/tool-pins.yml
       # (asset_sha256) BEFORE it is installed: a tampered or truncated download
       # can never reach PATH. No remote install script is executed.
+      #
+      # Unconditional since round-10: gate 4 always runs (the caller's ruleset
+      # or the platform default), so the binary is always needed.
       - name: Install opengrep
-        if: steps.detect.outputs.opengrep == 'true'
         run: |
           set -euo pipefail
           # the asset opengrep's install.sh selects on a glibc x86-64 runner
@@ -424,8 +483,9 @@ jobs:
           tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
           chmod +x /usr/local/bin/gitleaks
 
+      # Keyed on "is there anything to scan", never on osv-scanner.toml.
       - name: Install osv-scanner
-        if: steps.detect.outputs.osv == 'true'
+        if: steps.detect.outputs.osvsources == 'true'
         run: |
           set -euo pipefail
           curl -fsSL --retry 3 -o /tmp/osv-scanner \
@@ -447,7 +507,7 @@ jobs:
       # whose extractor is detector-controlled, so the two cannot drift: edit
       # the module, re-paste it here, or that test goes red.
       #
-      # Deliberately UNCONDITIONAL. Writing two small files costs nothing, and
+      # Deliberately UNCONDITIONAL. Writing a few small files costs nothing, and
       # an `if:` guard here is a standing drift hazard: a future lane that needs
       # a helper but whose guard was not added to this step would fail with a
       # confusing "No such file" instead of running.
@@ -1057,13 +1117,499 @@ jobs:
           if __name__ == "__main__":
               raise SystemExit(main())
           QZP_EMBED_osv_severity_gate
+          cat > "${RUNNER_TEMP}/qzp-lean-gate/jsts_projects.py" <<'QZP_EMBED_jsts_projects'
+          #!/usr/bin/env python3
+          """Plan which JS/TS projects gate 3 must measure.
+
+          The jsts coverage lane used to measure ONLY the root project whenever a root
+          ``package.json`` existed: nested discovery ran only when the root had none. So a
+          nested project (``frontend/``, ``packages/ui``) with its own tests and its own
+          coverage script was never run, and a nested project with tests and NO coverage
+          script was never flagged - while the lane printed PASS.
+
+          This module turns ``git ls-files`` output into the full project plan:
+
+          * every ``package.json`` outside vendored / build trees is a project;
+          * every JS/TS test file is attributed to its DEEPEST enclosing project;
+          * a project that the root ``package.json`` ``workspaces`` (or a root
+            ``pnpm-workspace.yaml``) declares is marked as a workspace member, because a
+            root coverage run over a workspace measures its members.
+
+          Output is one tab-separated line per project, the root first and then the rest
+          sorted by path::
+
+              <dir>\t<has_tests: yes|no>\t<workspace_member: yes|no>
+
+          JS/TS test files that belong to no project at all are reported on stderr. The
+          module is pure standard library because the lane runs it with the runner's bare
+          ``python3``.
+          """
+
+          from __future__ import absolute_import
+
+          import argparse
+          import fnmatch
+          import json
+          import re
+          import sys
+          from pathlib import Path
+          from typing import Iterable, List, Optional, Sequence, Tuple
+
+          VENDORED = re.compile(r"(^|/)(node_modules|dist|out|build|\.venv|vendor)/")
+          """Trees that are never first-party projects or first-party tests."""
+
+          JSTS_TEST = re.compile(r"(\.(test|spec)\.([cm]?[jt]s|[jt]sx)$)|((^|/)__tests__/.+\.([cm]?[jt]s|[jt]sx)$)")
+          """A JS/TS test file: ``*.test.*`` / ``*.spec.*`` or anything under ``__tests__/``."""
+
+          ROOT = "."
+
+          PlanRow = Tuple[str, bool, bool]
+
+
+          def project_dirs(paths: Iterable[str]) -> List[str]:
+              """Return every project directory: the directory of each first-party package.json."""
+              dirs = set()
+              for path in paths:
+                  if VENDORED.search(path):
+                      continue
+                  if path == "package.json":
+                      dirs.add(ROOT)
+                  elif path.endswith("/package.json"):
+                      dirs.add(path[: -len("/package.json")])
+              return sorted(dirs, key=lambda item: (item != ROOT, item))
+
+
+          def owning_project(path: str, dirs: Sequence[str]) -> Optional[str]:
+              """Return the DEEPEST project directory that contains ``path``, if any."""
+              best: Optional[str] = None
+              for candidate in dirs:
+                  inside = candidate == ROOT or path.startswith(candidate + "/")
+                  if inside and (best is None or best == ROOT or len(candidate) > len(best)):
+                      best = candidate
+              return best
+
+
+          def _pnpm_globs(text: str) -> List[str]:
+              """Read the ``packages:`` list of a ``pnpm-workspace.yaml`` without a YAML parser."""
+              globs: List[str] = []
+              in_packages = False
+              for raw in text.splitlines():
+                  line = raw.split("#", 1)[0].rstrip()
+                  if not line.strip():
+                      continue
+                  if not line.startswith((" ", "\t", "-")):
+                      in_packages = line.strip() == "packages:"
+                      continue
+                  item = line.strip()
+                  if in_packages and item.startswith("-"):
+                      value = item[1:].strip().strip("'\"")
+                      if value:
+                          globs.append(value)
+              return globs
+
+
+          def workspace_globs(root_package_json: str = "", pnpm_workspace: str = "") -> List[str]:
+              """Return the workspace globs a root package.json / pnpm-workspace.yaml declares."""
+              globs: List[str] = []
+              if root_package_json:
+                  try:
+                      document = json.loads(root_package_json)
+                  except ValueError:
+                      document = {}
+                  workspaces = document.get("workspaces") if isinstance(document, dict) else None
+                  if isinstance(workspaces, dict):
+                      workspaces = workspaces.get("packages")
+                  if isinstance(workspaces, list):
+                      globs.extend(str(item) for item in workspaces if isinstance(item, str) and item.strip())
+              if pnpm_workspace:
+                  globs.extend(_pnpm_globs(pnpm_workspace))
+              return globs
+
+
+          def _match_segments(parts: Sequence[str], patterns: Sequence[str]) -> bool:
+              """Match path segments against glob segments; ``**`` spans any number of them."""
+              if not patterns:
+                  return not parts
+              head, rest = patterns[0], patterns[1:]
+              if head == "**":
+                  return any(_match_segments(parts[index:], rest) for index in range(len(parts) + 1))
+              return bool(parts) and fnmatch.fnmatchcase(parts[0], head) and _match_segments(parts[1:], rest)
+
+
+          def glob_match(directory: str, pattern: str) -> bool:
+              """Workspace-glob semantics: ``*`` stays inside ONE path segment, ``**`` crosses them.
+
+              ``fnmatch`` alone lets ``*`` match ``/``, so ``packages/*`` would also claim
+              ``packages/a/b`` - a nested project npm/pnpm would NOT treat as a member,
+              which the lane would then pass as "measured by the root" without measuring.
+              """
+              return _match_segments(directory.split("/"), pattern.split("/"))
+
+
+          def is_workspace_member(directory: str, globs: Sequence[str]) -> bool:
+              """True when ``directory`` matches an include glob and no ``!``-exclusion glob."""
+              if directory == ROOT:
+                  return False
+              included = False
+              for glob in globs:
+                  pattern = glob.strip().rstrip("/")
+                  excluded = pattern.startswith("!")
+                  if excluded:
+                      pattern = pattern[1:]
+                  if pattern.startswith("./"):
+                      pattern = pattern[2:]
+                  if not glob_match(directory, pattern):
+                      continue
+                  if excluded:
+                      return False
+                  included = True
+              return included
+
+
+          def plan(
+              paths: Sequence[str],
+              *,
+              root_package_json: str = "",
+              pnpm_workspace: str = "",
+          ) -> Tuple[List[PlanRow], List[str]]:
+              """Return ``(rows, orphan_tests)`` for the tracked file list ``paths``."""
+              dirs = project_dirs(paths)
+              with_tests = set()
+              orphans: List[str] = []
+              for path in paths:
+                  if VENDORED.search(path) or not JSTS_TEST.search(path):
+                      continue
+                  owner = owning_project(path, dirs)
+                  if owner is None:
+                      orphans.append(path)
+                  else:
+                      with_tests.add(owner)
+              globs = workspace_globs(root_package_json, pnpm_workspace)
+              rows = [(directory, directory in with_tests, is_workspace_member(directory, globs)) for directory in dirs]
+              return rows, orphans
+
+
+          def render(rows: Sequence[PlanRow]) -> str:
+              """Render the plan as the tab-separated lines the lane reads."""
+              return "".join(
+                  f"{directory}\t{'yes' if has_tests else 'no'}\t{'yes' if member else 'no'}\n"
+                  for directory, has_tests, member in rows
+              )
+
+
+          def _read_optional(path: str) -> str:
+              """Read ``path`` as UTF-8, or return an empty string when no path was given."""
+              if not path:
+                  return ""
+              return Path(path).read_text(encoding="utf-8")
+
+
+          def main(argv: Optional[Sequence[str]] = None) -> int:
+              """Print the project plan for the file list given with ``--files``."""
+              parser = argparse.ArgumentParser(description="Plan the JS/TS projects gate 3 must measure.")
+              parser.add_argument("--files", required=True, help="File holding `git ls-files` output, one path per line.")
+              parser.add_argument("--root-package-json", default="", help="The root package.json, if the repo has one.")
+              parser.add_argument("--pnpm-workspace", default="", help="The root pnpm-workspace.yaml, if the repo has one.")
+              args = parser.parse_args(argv)
+              try:
+                  paths = [line.strip() for line in Path(args.files).read_text(encoding="utf-8").splitlines() if line.strip()]
+                  root_package_json = _read_optional(args.root_package_json)
+                  pnpm_workspace = _read_optional(args.pnpm_workspace)
+              except OSError as exc:
+                  print(f"ERROR jsts-projects: cannot read the plan inputs: {exc}", file=sys.stderr)
+                  return 2
+              rows, orphans = plan(paths, root_package_json=root_package_json, pnpm_workspace=pnpm_workspace)
+              sys.stdout.write(render(rows))
+              for orphan in orphans:
+                  print(f"WARN jsts-projects: test file outside every package.json project: {orphan}", file=sys.stderr)
+              return 0
+
+
+          if __name__ == "__main__":
+              raise SystemExit(main())
+          QZP_EMBED_jsts_projects
           # Fail loudly HERE if a paste ever lands mis-indented, rather than
           # deep inside a gate where it would read as a scanner failure.
-          for helper in jsts_coverage_assert osv_severity_gate; do
+          for helper in jsts_coverage_assert osv_severity_gate jsts_projects; do
             python3 -c "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))" \
               "${RUNNER_TEMP}/qzp-lean-gate/${helper}.py"
             echo "materialized ${helper}.py"
           done
+
+      # ── Platform default SAST ruleset (EMBEDDED VERBATIM) ────────────────
+      # Gate 4 used to run ONLY when the caller shipped .quality/opengrep, so a
+      # repo that had never written a ruleset got no SAST at all while the job
+      # stayed green. Now the caller's ruleset still wins when it exists, and
+      # every other caller is scanned with quality-zero-platform's own curated
+      # ruleset (.quality/opengrep/*.yaml). The copies below are asserted
+      # BYTE-IDENTICAL to those files by tests/test_lean_gate_embedded_helpers.py,
+      # so the default a caller gets is exactly the ruleset this repo is held to,
+      # versioned by the SAME ref the caller pins. Unconditional for the same
+      # reason as the helper step above.
+      - name: Materialize the platform default SAST ruleset
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/qzp-lean-gate/opengrep-default"
+          cat > "${RUNNER_TEMP}/qzp-lean-gate/opengrep-default/general-security.yaml" <<'QZP_EMBED_opengrep_general_security'
+          # Curated language-agnostic security rules (subset of p/r2c-security-audit).
+          # opengrep/semgrep compatible. See README.md.
+          rules:
+            - id: generic-private-key-committed
+              languages: [generic]
+              severity: ERROR
+              message: >-
+                A PEM private key block appears to be committed to source. Private keys
+                must never live in the repo; use a secret manager / env vars.
+              metadata:
+                category: security
+                cwe: "CWE-798: Use of Hard-coded Credentials"
+              paths:
+                exclude:
+                  - "*.example"
+                  - ".env.example"
+                  - "**/tests/**"
+                  - "**/fixtures/**"
+              patterns:
+                - pattern-regex: "-----BEGIN (RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----"
+
+            - id: generic-aws-access-key-id
+              languages: [generic]
+              severity: ERROR
+              message: >-
+                A string matching an AWS Access Key ID was found. Rotate it and move
+                credentials to a secret manager / environment variables.
+              metadata:
+                category: security
+                cwe: "CWE-798"
+              paths:
+                exclude:
+                  - "*.example"
+                  - ".env.example"
+                  - "**/tests/**"
+              patterns:
+                - pattern-regex: "\\b(AKIA|ASIA)[0-9A-Z]{16}\\b"
+          QZP_EMBED_opengrep_general_security
+          cat > "${RUNNER_TEMP}/qzp-lean-gate/opengrep-default/javascript-security.yaml" <<'QZP_EMBED_opengrep_javascript_security'
+          # Curated JS/TS security rules (subset of p/javascript + p/r2c-security-audit).
+          # opengrep/semgrep compatible. See README.md.
+          rules:
+            - id: js-eval-use
+              languages: [javascript, typescript]
+              severity: ERROR
+              message: >-
+                Use of eval() detected. eval on untrusted input enables code injection.
+                Use a parser (e.g. JSON.parse) or explicit dispatch instead.
+              metadata:
+                category: security
+                cwe: "CWE-95"
+              patterns:
+                - pattern: eval(...)
+
+            - id: js-function-constructor
+              languages: [javascript, typescript]
+              severity: ERROR
+              message: >-
+                The Function constructor evaluates strings as code, equivalent to eval.
+                Avoid constructing functions from dynamic strings.
+              metadata:
+                category: security
+                cwe: "CWE-95"
+              patterns:
+                - pattern: new Function(...)
+
+            - id: js-dangerously-set-inner-html
+              languages: [javascript, typescript]
+              severity: ERROR
+              message: >-
+                dangerouslySetInnerHTML can introduce XSS if the HTML is not sanitized.
+                Sanitize with a vetted sanitizer or render as text.
+              metadata:
+                category: security
+                cwe: "CWE-79: Cross-site Scripting"
+              patterns:
+                - pattern: <$EL dangerouslySetInnerHTML={...} />
+
+            - id: js-document-write
+              languages: [javascript, typescript]
+              severity: ERROR
+              message: >-
+                document.write with dynamic content is an XSS sink. Build DOM nodes
+                explicitly or set textContent.
+              metadata:
+                category: security
+                cwe: "CWE-79"
+              patterns:
+                - pattern: document.write(...)
+
+            - id: js-inner-html-assignment
+              languages: [javascript, typescript]
+              severity: ERROR
+              message: >-
+                Assigning to innerHTML with dynamic data is an XSS sink. Use textContent
+                or a sanitizer.
+              metadata:
+                category: security
+                cwe: "CWE-79"
+              patterns:
+                - pattern: $EL.innerHTML = $X
+                - pattern-not: $EL.innerHTML = "..."
+
+            - id: js-child-process-exec
+              languages: [javascript, typescript]
+              severity: ERROR
+              message: >-
+                child_process.exec runs a shell and is prone to command injection with
+                dynamic input. Use execFile/spawn with an argument array.
+              metadata:
+                category: security
+                cwe: "CWE-78"
+              patterns:
+                - pattern-either:
+                    - pattern: child_process.exec($CMD, ...)
+                    - pattern: cp.exec($CMD, ...)
+                - pattern-not: child_process.exec("...", ...)
+
+            - id: js-insecure-math-random-token
+              languages: [javascript, typescript]
+              severity: ERROR
+              message: >-
+                Math.random() is not cryptographically secure. For tokens/IDs/secrets use
+                crypto.getRandomValues / crypto.randomUUID.
+              metadata:
+                category: security
+                cwe: "CWE-338: Use of Cryptographically Weak PRNG"
+              patterns:
+                - pattern: $X = Math.random()
+                - pattern-inside: |
+                    function $F(...) { ... }
+                - metavariable-regex:
+                    metavariable: $X
+                    regex: "(?i).*(token|secret|key|nonce|salt|password).*"
+          QZP_EMBED_opengrep_javascript_security
+          cat > "${RUNNER_TEMP}/qzp-lean-gate/opengrep-default/python-security.yaml" <<'QZP_EMBED_opengrep_python_security'
+          # Curated Python security rules (subset of p/python + p/r2c-security-audit).
+          # opengrep/semgrep compatible. See README.md.
+          rules:
+            - id: python-exec-use
+              languages: [python]
+              severity: ERROR
+              message: >-
+                Use of exec() detected. Executing dynamically-built code is dangerous and
+                can lead to remote code execution. Avoid exec; use explicit dispatch.
+              metadata:
+                category: security
+                cwe: "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"
+              patterns:
+                - pattern: exec(...)
+
+            - id: python-eval-use
+              languages: [python]
+              severity: ERROR
+              message: >-
+                Use of eval() detected. eval on untrusted input enables code injection.
+                Use ast.literal_eval or an explicit parser instead.
+              metadata:
+                category: security
+                cwe: "CWE-95"
+              patterns:
+                - pattern: eval(...)
+
+            - id: python-subprocess-shell-true
+              languages: [python]
+              severity: ERROR
+              message: >-
+                subprocess called with shell=True. If any argument is attacker-influenced
+                this allows command injection. Pass an argument list and shell=False.
+              metadata:
+                category: security
+                cwe: "CWE-78: OS Command Injection"
+              patterns:
+                - pattern-either:
+                    - pattern: subprocess.$F(..., shell=True, ...)
+                    - pattern: subprocess.$F(..., shell=$X, ...)
+                - metavariable-pattern:
+                    metavariable: $X
+                    patterns:
+                      - pattern: "True"
+
+            - id: python-os-system
+              languages: [python]
+              severity: ERROR
+              message: >-
+                os.system() invokes a shell and is prone to command injection. Use
+                subprocess with an argument list instead.
+              metadata:
+                category: security
+                cwe: "CWE-78"
+              patterns:
+                - pattern: os.system(...)
+
+            - id: python-yaml-unsafe-load
+              languages: [python]
+              severity: ERROR
+              message: >-
+                yaml.load without SafeLoader can construct arbitrary Python objects.
+                Use yaml.safe_load() or Loader=yaml.SafeLoader.
+              metadata:
+                category: security
+                cwe: "CWE-502: Deserialization of Untrusted Data"
+              patterns:
+                - pattern: yaml.load($X)
+
+            - id: python-pickle-loads
+              languages: [python]
+              severity: ERROR
+              message: >-
+                pickle deserialization of untrusted data enables arbitrary code execution.
+                Use a safe format (JSON) for untrusted input.
+              metadata:
+                category: security
+                cwe: "CWE-502"
+              patterns:
+                - pattern-either:
+                    - pattern: pickle.loads(...)
+                    - pattern: pickle.load(...)
+
+            - id: python-weak-hash-md5-sha1
+              languages: [python]
+              severity: ERROR
+              message: >-
+                Weak hash algorithm (md5/sha1) used. For security contexts use sha256+.
+                If non-security (e.g. content hashing), pass usedforsecurity=False.
+              metadata:
+                category: security
+                cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+              patterns:
+                - pattern-either:
+                    - pattern: hashlib.md5($X)
+                    - pattern: hashlib.sha1($X)
+
+            - id: python-requests-verify-false
+              languages: [python]
+              severity: ERROR
+              message: >-
+                TLS certificate verification disabled (verify=False). This permits
+                man-in-the-middle attacks. Keep verification enabled.
+              metadata:
+                category: security
+                cwe: "CWE-295: Improper Certificate Validation"
+              patterns:
+                - pattern: requests.$F(..., verify=False, ...)
+
+            - id: python-jwt-decode-verify-false
+              languages: [python]
+              severity: ERROR
+              message: >-
+                JWT decoded with signature verification disabled. Always verify signatures
+                on tokens you did not just mint.
+              metadata:
+                category: security
+                cwe: "CWE-347: Improper Verification of Cryptographic Signature"
+              patterns:
+                - pattern: jwt.decode(..., verify=False, ...)
+          QZP_EMBED_opengrep_python_security
+          echo "materialized $(find "${RUNNER_TEMP}/qzp-lean-gate/opengrep-default" -name '*.yaml' | wc -l) default ruleset file(s)"
 
       # ── GATE 1 (ts/js) — SELF-CONTAINED lint + format (Oxlint + Biome) ───────
       # GAP 2 FIX — the lean charter's gate-1 for ts/js runs SELF-CONTAINED in THIS
@@ -1078,7 +1624,7 @@ jobs:
       # round-3 FIX 1 — FORMATTER SWAP (decided design): the format check is now
       # BIOME (formatter-only; linting stays with Oxlint), mirroring the PROVEN
       # Reframe lean gate (Prekzursil/Reframe .github/workflows/quality.yml +
-      # biome.json: biome 2.5.0, `formatter.enabled`, `linter.enabled:false`,
+      # biome.json: biome 2.5.15, `formatter.enabled`, `linter.enabled:false`,
       # `assist.enabled:false`). `biome ci --formatter-enabled --linter-enabled=false
       # --assist-enabled=false` is check-only (no writes) and exits non-zero on any
       # unformatted file. If the caller ships its OWN biome.json/biome.jsonc we honor
@@ -1087,12 +1633,11 @@ jobs:
       # same style as Reframe's: 2-space, single quotes, trailingCommas all,
       # semicolons always, lineWidth 100, lf) via --config-path so formatting is
       # deterministic across callers. Oxlint linting is unchanged. Pins: oxlint
-      # 1.69.0 (mirrors Reframe); biome is READ AT RUNTIME from the platform's
-      # single pin source (.quality/tool-pins.yml on main) with the literal
-      # below kept as the offline fallback — bump the pin THERE first, then the
-      # fallback here. Keep in sync with
+      # 1.69.0 (mirrors Reframe); biome is the literal below, which must equal
+      # .quality/tool-pins.yml (bump both together). Keep in sync with
       # docs/lean-gate/pre-commit-config.template.yaml + docs/lean-gate/biome.template.json.
       - name: gate-lint-format-jsts (self-contained oxlint + biome)
+        id: lint_jsts
         if: steps.detect.outputs.jsts == 'true'
         shell: bash
         run: |
@@ -1116,20 +1661,16 @@ jobs:
             --ignore-pattern '**/*.min.js' \
             .
           echo "::endgroup::"
-          # round-9: the biome pin is READ from the platform's single pin source
-          # (.quality/tool-pins.yml@main) so a bump there takes effect here
-          # without editing this workflow. The caller checkout does not contain
-          # the platform repo, so the file is fetched over HTTPS from raw.githubusercontent
-          # (the platform repo is public). On ANY fetch/parse failure the literal
-          # below — the last committed pin — is used, so an outage can only pin
-          # biome to a KNOWN version, never to garbage or an empty string.
-          biome_pin="$(curl -fsSL --max-time 15 \
-            https://raw.githubusercontent.com/Prekzursil/quality-zero-platform/main/.quality/tool-pins.yml \
-            2>/dev/null | sed -n 's/^  biome: "\(.*\)"$/\1/p' | head -1 || true)"
-          case "$biome_pin" in
-            ''|*[!0-9.]*) biome_pin="2.5.15" ;;
-          esac
-          echo "biome pin: $biome_pin (source: .quality/tool-pins.yml)"
+          # round-10: the biome pin is a LITERAL again. round-9 read it at
+          # runtime from .quality/tool-pins.yml on this repo's `main`, which
+          # meant a caller pinned to a workflow SHA still ran whatever biome
+          # version `main` named on the day of the run: the SHA pin stopped
+          # pinning the formatter. The literal is kept equal to tool-pins.yml by
+          # tests/test_workflow_contracts.py and by fleet-health's weekly
+          # pin-drift check, so the pin file stays the single source of truth
+          # without making the gate mutable.
+          biome_pin="2.5.15"
+          echo "biome pin: $biome_pin (literal; equal to .quality/tool-pins.yml at this ref)"
           echo "::group::biome@${biome_pin} (format --check, formatter-only)"
           # Honor a caller-shipped biome config if present (biome auto-discovers
           # biome.json/biome.jsonc from cwd); otherwise use the template's bundled
@@ -1144,7 +1685,7 @@ jobs:
             # trees explicitly via files.includes negations instead. The config dir
             # is a mktemp dir OUTSIDE the scanned tree, so biome does not treat it
             # as a "nested root configuration".
-            printf '%s' '{"$schema":"https://biomejs.dev/schemas/2.5.0/schema.json","files":{"includes":["**/*.ts","**/*.tsx","**/*.js","**/*.jsx","**/*.mjs","**/*.cjs","!**/node_modules/**","!**/dist/**","!**/build/**","!**/out/**","!**/.venv/**","!**/vendor/**"]},"formatter":{"enabled":true,"indentStyle":"space","indentWidth":2,"lineWidth":100,"lineEnding":"lf"},"javascript":{"formatter":{"quoteStyle":"single","trailingCommas":"all","semicolons":"always"}},"linter":{"enabled":false},"assist":{"enabled":false}}' > "$tmp_biome_dir/biome.json"
+            printf '%s' '{"$schema":"https://biomejs.dev/schemas/2.5.15/schema.json","files":{"includes":["**/*.ts","**/*.tsx","**/*.js","**/*.jsx","**/*.mjs","**/*.cjs","!**/node_modules/**","!**/dist/**","!**/build/**","!**/out/**","!**/.venv/**","!**/vendor/**"]},"formatter":{"enabled":true,"indentStyle":"space","indentWidth":2,"lineWidth":100,"lineEnding":"lf"},"javascript":{"formatter":{"quoteStyle":"single","trailingCommas":"all","semicolons":"always"}},"linter":{"enabled":false},"assist":{"enabled":false}}' > "$tmp_biome_dir/biome.json"
             biome_cfg_args=(--config-path "$tmp_biome_dir")
             echo "No caller biome.json/biome.jsonc - using the lean template's bundled biome config."
           else
@@ -1177,6 +1718,7 @@ jobs:
       # Python still FAIL. Pin: ruff 0.15.17 (mirrors Reframe). Keep in sync with
       # docs/lean-gate/pre-commit-config.template.yaml.
       - name: gate-lint-format-py (self-contained ruff)
+        id: lint_py
         if: steps.detect.outputs.python == 'true'
         shell: bash
         run: |
@@ -1201,6 +1743,7 @@ jobs:
       # otherwise discover every nested tsconfig and run `tsc -p <dir> --noEmit`.
       # Each project's deps are installed from its own package.json when present.
       - name: gate-types tsc
+        id: types_tsc
         if: steps.detect.outputs.ts == 'true'
         shell: bash
         run: |
@@ -1243,6 +1786,7 @@ jobs:
       # default. This is NOT weakening — standard is the proven bar and reportAny-
       # everywhere is gold-plating; REAL type errors at standard level still FAIL.
       - name: gate-types basedpyright
+        id: types_py
         if: steps.detect.outputs.python == 'true'
         shell: bash
         env:
@@ -1267,6 +1811,7 @@ jobs:
       # design". Source + tests but no cov config (or source + cov config) => FAIL
       # unless 100%. The 100% gate cannot pass unmeasured.
       - name: gate-tests-coverage python
+        id: cov_py
         if: steps.detect.outputs.python == 'true'
         shell: bash
         env:
@@ -1313,12 +1858,27 @@ jobs:
             installed_runtime_deps=true
           fi
           [ "$installed_runtime_deps" = "true" ] || echo "No Python runtime manifest (requirements*.txt / pyproject.toml / setup.cfg / setup.py) - assuming pure-stdlib; proceeding."
+          # round-10: the measuring tools are PINNED (equal to
+          # .quality/tool-pins.yml). They used to be installed unpinned, so the
+          # tool that decides this gate changed under every caller whenever PyPI
+          # published a release, whatever ref the caller pinned.
           if grep -rqs 'pytest' pyproject.toml setup.cfg tox.ini pytest.ini 2>/dev/null; then
-            pip install pytest pytest-cov
+            pip install pytest==9.1.1 pytest-cov==7.1.0 coverage==7.16.2
             python -m pytest --cov --cov-branch --cov-fail-under=100
           else
-            pip install coverage
-            python -m coverage run -m unittest discover
+            pip install coverage==7.16.2
+            # round-10: --branch. This path measured LINES ONLY while the
+            # failure message above promised line AND branch, so a unittest
+            # repo could pass at 100% lines with untested branches.
+            # A tests/ directory without __init__.py is not importable as a
+            # package, so a root `discover` never finds the tests inside it and
+            # runs zero tests; discover from that directory instead.
+            start_dir=.
+            if [ -d tests ] && [ ! -f tests/__init__.py ]; then
+              start_dir=tests
+            fi
+            echo "unittest discover start dir: $start_dir"
+            python -m coverage run --branch -m unittest discover -s "$start_dir"
             python -m coverage report --fail-under=100 --show-missing
           fi
 
@@ -1338,9 +1898,15 @@ jobs:
       # has one. Mirror the tsc lane (round-1 FIX): if there is a root package.json
       # use it; otherwise DISCOVER every nested package.json (excluding vendored
       # trees) and run coverage in each project dir that has a coverage script /
-      # vitest|jest --coverage test script. The silent-pass hole stays closed: a
-      # nested project with test files but NO coverage runner FAILS; the only skip
-      # is the documented "no test surface by design" (zero ts/js test files).
+      # vitest|jest --coverage test script. The only skip is the documented
+      # "no test surface by design" (zero ts/js test files).
+      #
+      # round-10 FIX — the "root OR nested" choice above was itself a hole: with
+      # a root package.json, nested projects were never measured, and a nested
+      # project with test files but NO coverage runner passed silently. Every
+      # project is now planned (root first, then nested) and any project with
+      # JS/TS test files and no coverage lane FAILS, unless it is a workspace
+      # member of a measured root.
       #
       # round-7 FIX — ASSERT THE NUMBER. This lane used to run the caller's
       # coverage script and pass on exit 0, passing NO threshold and checking NO
@@ -1353,6 +1919,7 @@ jobs:
       # switched off by `jsts-coverage-min`, which only moves the numeric bar and
       # is itself rejected outside (0, 100].
       - name: gate-tests-coverage jsts
+        id: cov_jsts
         if: steps.detect.outputs.jsts == 'true'
         shell: bash
         env:
@@ -1394,28 +1961,51 @@ jobs:
             python3 "${RUNNER_TEMP}/qzp-lean-gate/jsts_coverage_assert.py" \
               --project-dir "$1" --log "$log" --min-percent "$JSTS_COVERAGE_MIN"
           }
-          # Build the candidate project dir list: root if it has package.json,
-          # otherwise every nested package.json dir (excluding vendored trees).
-          declare -a proj_dirs=()
-          if [ -f package.json ]; then
-            proj_dirs=(.)
-          else
-            mapfile -t pkgs < <(git ls-files '**/package.json' \
-              | grep -Ev '(^|/)(node_modules|dist|out|build|\.venv|vendor)/' || true)
-            for p in "${pkgs[@]}"; do proj_dirs+=("$(dirname "$p")"); done
-          fi
-          ran_any=false
-          if [ "${#proj_dirs[@]}" -gt 0 ]; then
-            for d in "${proj_dirs[@]}"; do
-              lane="$(has_cov_lane "$d")"
-              if [ -n "$lane" ]; then
-                run_cov_in_dir "$d" "$lane"
-                ran_any=true
+          # round-10: EVERY project is planned, root AND nested. The lane used
+          # to measure only the root whenever a root package.json existed, so a
+          # nested project's coverage was never run and a nested project with
+          # tests but no coverage lane was never flagged. The planner (embedded
+          # jsts_projects.py) attributes each JS/TS test file to its deepest
+          # enclosing project and marks the root's workspace members. The plan
+          # is written to a file first so a planner failure fails this step
+          # (a process substitution would swallow its exit status).
+          files_list="${RUNNER_TEMP}/qzp-lean-gate/jsts-files.txt"
+          plan_file="${RUNNER_TEMP}/qzp-lean-gate/jsts-plan.tsv"
+          git ls-files > "$files_list"
+          plan_args=(--files "$files_list")
+          if [ -f package.json ]; then plan_args+=(--root-package-json package.json); fi
+          if [ -f pnpm-workspace.yaml ]; then plan_args+=(--pnpm-workspace pnpm-workspace.yaml); fi
+          python3 "${RUNNER_TEMP}/qzp-lean-gate/jsts_projects.py" "${plan_args[@]}" > "$plan_file"
+          mapfile -t plan < "$plan_file"
+          measured=0
+          root_measured=false
+          declare -a unmeasured=()
+          for row in "${plan[@]}"; do
+            # tolerate a CRLF plan (python3 on a Windows runner writes one)
+            IFS=$'\t' read -r d has_tests member <<< "${row%$'\r'}"
+            lane="$(has_cov_lane "$d")"
+            if [ -n "$lane" ]; then
+              run_cov_in_dir "$d" "$lane"
+              measured=$(( measured + 1 ))
+              if [ "$d" = "." ]; then root_measured=true; fi
+            elif [ "$has_tests" = "yes" ]; then
+              # The root sorts first, so its result is known here. A workspace
+              # member's tests run inside the root's workspace coverage run.
+              if [ "$member" = "yes" ] && [ "$root_measured" = "true" ]; then
+                echo "project $d: no coverage script of its own; measured by the root workspace coverage run above."
+              else
+                unmeasured+=("$d")
               fi
-            done
+            else
+              echo "project $d: no JS/TS test files - nothing to measure."
+            fi
+          done
+          if [ "${#unmeasured[@]}" -gt 0 ]; then
+            echo "FAIL gate-tests-coverage jsts: these project dir(s) have JS/TS test files but no coverage lane, so their coverage was never measured: ${unmeasured[*]}. Add a 'test:coverage' npm script (or a vitest/jest '--coverage' test script) to each project's package.json." >&2
+            exit 1
           fi
-          if [ "$ran_any" = "true" ]; then
-            echo "PASS gate-tests-coverage jsts: measured coverage in ${#proj_dirs[@]} project dir(s) and every measured figure met the ${JSTS_COVERAGE_MIN}% bar."
+          if [ "$measured" -gt 0 ]; then
+            echo "PASS gate-tests-coverage jsts: measured coverage in ${measured} project dir(s) and every measured figure met the ${JSTS_COVERAGE_MIN}% bar."
           elif [ "$JSTSTESTS" != "true" ]; then
             echo "ts/js source present with NO test files and no coverage script - no test surface by design; coverage lane skipped."
             exit 0
@@ -1459,6 +2049,7 @@ jobs:
       # tests/test_lean_gate_compiled_coverage_lane.py, which extracts this very
       # script and executes it across the whole truth table.
       - name: gate-tests-coverage compiled (go / c++)
+        id: cov_compiled
         if: steps.detect.outputs.go == 'true' || steps.detect.outputs.cpp == 'true'
         shell: bash
         env:
@@ -1513,12 +2104,15 @@ jobs:
           echo "::endgroup::"
           echo "PASS gate-tests-coverage ($needs): the caller's own coverage gate '$COVERAGE_GATE_SCRIPT' measured the tests and passed."
 
-      # ── GATE 4 — SAST (opengrep, curated in-repo ruleset, clean-zero) ─────
+      # ── GATE 4 — SAST (opengrep, curated ruleset, clean-zero) ─────────────
+      # round-10: ALWAYS runs. The caller's .quality/opengrep ruleset when it
+      # exists, otherwise the platform default ruleset materialized above.
       - name: gate-sast opengrep
-        if: steps.detect.outputs.opengrep == 'true'
+        id: sast
         shell: bash
         env:
           OPENGREP_PATHS: ${{ inputs.opengrep-paths }}
+          OPENGREP_CALLER_RULESET: ${{ steps.detect.outputs.opengrepcfg }}
         run: |
           # OPENGREP_PATHS is an optional space-separated list of scan paths.
           # Passed via env (NOT an inline GHA expression in this run block) to
@@ -1571,8 +2165,20 @@ jobs:
           if [ ! -f .semgrepignore ]; then
             echo "::warning title=gate-sast scan set is inherited::No .semgrepignore in the repo root, so opengrep falls back to its built-in template and SILENTLY skips every *_test.go at any depth plus the test/ and tests/ directories, while paths.skipped still reports 'none'. Copy docs/lean-gate/semgrepignore.template from quality-zero-platform to .semgrepignore to choose the scanned set deliberately."
           fi
+          # round-10: the RULESET is chosen, never the decision to scan. A repo
+          # without .quality/opengrep used to skip this gate entirely and still
+          # report green; it is now scanned with the platform default ruleset
+          # (the same curated rules quality-zero-platform holds itself to),
+          # materialized above at the ref the caller pinned.
+          if [ "$OPENGREP_CALLER_RULESET" = "true" ]; then
+            ruleset_dir=.quality/opengrep
+            echo "Scanning with the repo's own curated ruleset (.quality/opengrep)."
+          else
+            ruleset_dir="${RUNNER_TEMP}/qzp-lean-gate/opengrep-default"
+            echo "::notice title=gate-sast platform default ruleset::This repo has no .quality/opengrep ruleset, so gate 4 scans with quality-zero-platform's curated default ruleset. Add .quality/opengrep/ to extend or replace it."
+          fi
           read -ra opengrep_paths <<< "$OPENGREP_PATHS"
-          opengrep scan --config .quality/opengrep --error \
+          opengrep scan --config "$ruleset_dir" --error \
             --exclude .venv --exclude node_modules --exclude dist --exclude out --exclude build \
             "${opengrep_paths[@]}"
 
@@ -1599,6 +2205,7 @@ jobs:
       # checkout above is shallow (fetch-depth 1), so `gitleaks detect` scans
       # effectively the checked-out tree rather than the whole history.
       - name: gate-secrets gitleaks (self-contained)
+        id: secrets
         shell: bash
         env:
           GITLEAKS_ALLOWLIST: ${{ steps.detect.outputs.gitleaksallowlist }}
@@ -1656,20 +2263,38 @@ jobs:
       # message and its own exit code (75 = EX_TEMPFAIL, "temporary failure, retry
       # later") so it is never read — or dashboarded — as a CVE. Short transient
       # resolver blips are absorbed first by a bounded retry (3 attempts, 20s then
-      # 40s backoff); 130 is deterministic so it is not retried. For a prolonged
-      # upstream outage the escape hatch stays the audited quality-zero:break-glass
-      # label path, NOT a silent pass here.
+      # 40s backoff); 130 is deterministic so it is not retried. A prolonged
+      # upstream outage is NOT a silent pass here either: this lean gate reads
+      # no bypass labels, so the only way past it is a repository admin merging
+      # through the ruleset bypass, which GitHub audits.
+      #
+      # round-10: this step used to run ONLY when the caller shipped an
+      # osv-scanner.toml, so a repo that had never written one had NO dependency
+      # gate while `quality` stayed green. It now runs whenever there is
+      # something to scan; the toml, when present, is passed as --config so the
+      # caller's hand-written ignores still apply first. The blocking policy is
+      # the `deps-severity-floor` input (validated before any gate ran).
       - name: gate-deps osv-scanner
-        if: steps.detect.outputs.osv == 'true'
+        id: deps
         shell: bash
         env:
           OSVSOURCES: ${{ steps.detect.outputs.osvsources }}
+          OSVCONFIG: ${{ steps.detect.outputs.osvconfig }}
+          DEPS_SEVERITY_FLOOR: ${{ inputs.deps-severity-floor }}
         run: |
           set -euo pipefail
           if [ "$OSVSOURCES" != "true" ]; then
             echo "No dependency manifests or lockfiles present - nothing for osv-scanner to scan; deps gate passes."
             exit 0
           fi
+          scan_args=(scan source --recursive)
+          if [ "$OSVCONFIG" = "true" ]; then
+            echo "Honoring the repo's osv-scanner.toml (its ignores apply before any finding is classified)."
+            scan_args+=(--config=osv-scanner.toml)
+          else
+            echo "No osv-scanner.toml in this repo - scanning with osv-scanner's defaults (no ignores)."
+          fi
+          echo "Blocking policy (deps-severity-floor): $DEPS_SEVERITY_FLOOR"
 
           # "The scan itself did not complete" — none of these is a vuln finding.
           is_scan_error() { case "$1" in 127|129|130) return 0 ;; *) return 1 ;; esac; }
@@ -1682,7 +2307,7 @@ jobs:
           rc=0
           while : ; do
             rc=0
-            osv-scanner scan source --config=osv-scanner.toml --recursive . || rc=$?
+            osv-scanner "${scan_args[@]}" . || rc=$?
             if ! is_retryable "$rc" || [ "$attempt" -ge "$max_attempts" ]; then
               break
             fi
@@ -1706,12 +2331,25 @@ jobs:
             # So: re-read the SAME scan as JSON and let the classifier decide.
             # BLOCK = not dev-only AND CVSS >= 7.0 AND a fixed version exists;
             # everything else is printed as T2 inventory and does not block.
-            # Note the re-scan keeps --config=osv-scanner.toml, so the caller's
-            # existing hand-written ignores still apply first, unchanged.
+            # Note the re-scan uses the SAME scan_args, so a caller's
+            # osv-scanner.toml ignores still apply first, unchanged.
             json_report="${RUNNER_TEMP}/qzp-lean-gate/osv-report.json"
             jrc=0
-            osv-scanner scan source --config=osv-scanner.toml --recursive --format json . \
+            osv-scanner "${scan_args[@]}" --format json . \
               > "$json_report" || jrc=$?
+            # deps-severity-floor: any = ZERO TOLERANCE. osv-scanner already
+            # proved at least one advisory matched (exit 1), so the verdict is
+            # FAIL whatever the classifier says; it runs only so the reader sees
+            # every finding, including the rows `t0` would have demoted.
+            if [ "$DEPS_SEVERITY_FLOOR" = "any" ]; then
+              if [ "$jrc" -eq 0 ] || [ "$jrc" -eq 1 ]; then
+                python3 "${RUNNER_TEMP}/qzp-lean-gate/osv_severity_gate.py" "$json_report" || true
+              else
+                echo "WARN gate-deps: the JSON re-scan exited $jrc, so the findings table could not be printed; the plain scan output above lists them." >&2
+              fi
+              echo "FAIL gate-deps (deps-severity-floor: any): osv-scanner reported at least one advisory and this repo runs ZERO TOLERANCE - every finding blocks, the T2 inventory rows included. Bump or remove each affected dependency, or record a reviewed ignore in osv-scanner.toml." >&2
+              exit 1
+            fi
             # The JSON pass must reach the same terminal state as the pass above
             # (0 = clean, 1 = findings). Anything else means we could not
             # classify, which is a SCAN error, not a clean tree - fail closed
@@ -1740,7 +2378,7 @@ jobs:
             esac
             echo "ERROR gate-deps: osv-scanner could not complete the scan (exit $rc) - this is NOT a vulnerability finding." >&2
             echo "ERROR gate-deps: exit $rc means $why." >&2
-            echo "ERROR gate-deps: attempts made ${attempt}/${max_attempts}. The dependency tree was NOT fully scanned, so this gate cannot certify it clean; it blocks rather than passing silently. Re-run the job once upstream recovers, or use the quality-zero:break-glass label for a prolonged outage." >&2
+            echo "ERROR gate-deps: attempts made ${attempt}/${max_attempts}. The dependency tree was NOT fully scanned, so this gate cannot certify it clean; it blocks rather than passing silently. Re-run the job once upstream recovers." >&2
             exit 75
           else
             echo "ERROR gate-deps: osv-scanner exited $rc, which is not a documented exit code for the pinned 2.3.8 (0/1/127/128/129/130) - treating it as a scan failure, NOT a vulnerability finding." >&2
@@ -1749,5 +2387,76 @@ jobs:
 
       # ── Charter ↔ active-gate consistency (fails if gate set != 6-charter) ─
       - name: charter-check
+        id: charter
         if: steps.detect.outputs.charter == 'true'
         run: bash .quality/charter_check.sh
+
+      # ── Per-gate summary (always) ─────────────────────────────────────────
+      # One table in the run summary saying which gate RAN, which was SKIPPED
+      # because its language is absent, and which NEVER RAN because an earlier
+      # step failed. Steps stop at the first failure, so without this table a
+      # red run hides every gate after the failing one, and a skipped gate is
+      # indistinguishable from a passed one in the step list.
+      - name: Lean-gate summary
+        if: always()
+        shell: bash
+        env:
+          DETECT_OUTCOME: ${{ steps.detect.outcome }}
+          PY: ${{ steps.detect.outputs.python }}
+          TS: ${{ steps.detect.outputs.ts }}
+          JSTS: ${{ steps.detect.outputs.jsts }}
+          GO: ${{ steps.detect.outputs.go }}
+          CPP: ${{ steps.detect.outputs.cpp }}
+          CHARTER: ${{ steps.detect.outputs.charter }}
+          LINT_JSTS: ${{ steps.lint_jsts.outcome }}
+          LINT_PY: ${{ steps.lint_py.outcome }}
+          TYPES_TSC: ${{ steps.types_tsc.outcome }}
+          TYPES_PY: ${{ steps.types_py.outcome }}
+          COV_PY: ${{ steps.cov_py.outcome }}
+          COV_JSTS: ${{ steps.cov_jsts.outcome }}
+          COV_COMPILED: ${{ steps.cov_compiled.outcome }}
+          SAST: ${{ steps.sast.outcome }}
+          SECRETS: ${{ steps.secrets.outcome }}
+          DEPS: ${{ steps.deps.outcome }}
+          CHARTER_CHECK: ${{ steps.charter.outcome }}
+        run: |
+          set -uo pipefail
+          compiled=false
+          if [ "$GO" = "true" ] || [ "$CPP" = "true" ]; then compiled=true; fi
+          # $1 gate, $2 step, $3 outcome, $4 does the gate apply here, $5 why not
+          row() {
+            local result
+            case "$3" in
+              success) result="ran - passed" ;;
+              failure) result="ran - **FAILED**" ;;
+              cancelled) result="cancelled" ;;
+              *)
+                if [ "$DETECT_OUTCOME" != "success" ]; then
+                  result="NOT RUN - language detection did not complete"
+                elif [ "$4" = "true" ]; then
+                  result="NOT RUN - an earlier step failed"
+                else
+                  result="skipped - $5"
+                fi
+                ;;
+            esac
+            printf '| %s | %s | %s |\n' "$1" "$2" "$result"
+          }
+          {
+            echo "## Lean 6-gate summary"
+            echo ""
+            echo "| gate | step | result |"
+            echo "| --- | --- | --- |"
+            row "1 lint+format" "oxlint + biome (JS/TS)" "$LINT_JSTS" "$JSTS" "no JS/TS source"
+            row "1 lint+format" "ruff (Python)" "$LINT_PY" "$PY" "no Python source"
+            row "2 types" "tsc" "$TYPES_TSC" "$TS" "no TypeScript source"
+            row "2 types" "basedpyright" "$TYPES_PY" "$PY" "no Python source"
+            row "3 tests+coverage" "Python" "$COV_PY" "$PY" "no Python source"
+            row "3 tests+coverage" "JS/TS" "$COV_JSTS" "$JSTS" "no JS/TS source"
+            row "3 tests+coverage" "Go / C++" "$COV_COMPILED" "$compiled" "no Go or C++ source"
+            row "4 SAST" "opengrep" "$SAST" "true" "-"
+            row "5 secrets" "gitleaks" "$SECRETS" "true" "-"
+            row "6 deps" "osv-scanner" "$DEPS" "true" "-"
+            row "charter" "charter-check" "$CHARTER_CHECK" "$CHARTER" "no .quality/charter.yml"
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat "$GITHUB_STEP_SUMMARY"

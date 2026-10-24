@@ -9,9 +9,8 @@ name: Fleet Health
 # What it checks:
 #   * PIN DRIFT   — every pin in .quality/tool-pins.yml (the single pin
 #     source) must match the literal the reusable-quality.yml lanes actually
-#     run. Biome is READ from the pin file at runtime, so its workflow
-#     presence is the offline FALLBACK literal in the gate-lint-format-jsts
-#     case-statement — that fallback is what must stay in sync.
+#     run, biome included (its runtime read of the pin file from `main` was
+#     removed because it made a caller's SHA pin mutable).
 #   * RULESET DRIFT — regenerating generated/rulesets from the profiles +
 #     inventory must reproduce the committed artifacts byte-for-byte (the
 #     same determinism scripts/verify enforces on every PR).
@@ -97,6 +96,9 @@ jobs:
           }
           check_pin ruff          "ruff==$(sed -n 's/^  ruff: \"\(.*\)\"$/\1/p' "$pins_file" | head -1)"
           check_pin basedpyright  "basedpyright==$(sed -n 's/^  basedpyright: \"\(.*\)\"$/\1/p' "$pins_file" | head -1)"
+          check_pin pytest        "pytest==$(sed -n 's/^  pytest: \"\(.*\)\"$/\1/p' "$pins_file" | head -1) "
+          check_pin pytest-cov    "pytest-cov==$(sed -n 's/^  pytest-cov: \"\(.*\)\"$/\1/p' "$pins_file" | head -1) "
+          check_pin coverage      "coverage==$(sed -n 's/^  coverage: \"\(.*\)\"$/\1/p' "$pins_file" | head -1)"
           check_pin oxlint        "oxlint@$(sed -n 's/^  oxlint: \"\(.*\)\"$/\1/p' "$pins_file" | head -1)"
           check_pin biome         "biome_pin=\"$(sed -n 's/^  biome: \"\(.*\)\"$/\1/p' "$pins_file" | head -1)\""
           check_pin opengrep      "opengrep/releases/download/$(sed -n 's/^  opengrep: \"\(.*\)\"$/\1/p' "$pins_file" | head -1)/opengrep_manylinux_x86"
@@ -113,7 +115,7 @@ jobs:
             echo "PIN DRIFT FOUND:"
             printf '%b' "$offenders"
           else
-            echo "pin drift: none (all 7 pins and 3 asset digests match reusable-quality.yml)"
+            echo "pin drift: none (all 10 pins and 3 asset digests match reusable-quality.yml)"
           fi
 
       # ── Check 2: ruleset drift (regenerate + compare) ─────────────────────

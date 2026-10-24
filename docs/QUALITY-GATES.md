@@ -170,7 +170,12 @@ lane runs `qlty smells`, which includes complexity smells, for a profile with
 `qlty: true`. Its only fleet caller is momentstudio's `quality-zero-platform.yml`,
 and that workflow is disabled. #290 adds complexity and duplication gate
 modules (gates 7 and 8), which are not wired into `reusable-quality.yml` yet.
-Until they are, nothing in active CI caps CCN. The intended cap is
+The python-tooling stack template
+(`profiles/templates/stack/python-tooling/ci.yml.j2`) still generates a
+`lizard scripts/ -C 15` lint step. None of that stack's public repos
+(tracelines, fractal-darkroom, llm-anthology) runs it in its current CI, so a
+lizard failure means a repo is still on that generated `ci.yml`. Apart from
+that template, nothing in active CI caps CCN. The intended cap is
 `lizard -C 15` (CCN > 15 fails).
 
 There is no threshold lever yet. A `qlty.complexity_threshold` profile key

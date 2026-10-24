@@ -34,7 +34,7 @@ pins:
   # gate 1 (jsts): biome ci --formatter-enabled (formatter-only)
   biome: "2.5.15"
   # gate 4: opengrep scan --config .quality/opengrep
-  opengrep: "v1.22.0"
+  opengrep: "v1.32.0"
   # gate 5: gitleaks detect --redact
   gitleaks: "8.30.1"
   # gate 6: osv-scanner scan source
@@ -50,15 +50,15 @@ pins:
 # any mismatch.
 asset_sha256:
   # linux x86-64: CI (reusable-quality.yml, scheduled-cve-scan.yml) + preflight
-  opengrep_manylinux_x86: "45bcd58440e397ed52c50e953ccf5948909ea77087c9186fc7d277216f62e319"
+  opengrep_manylinux_x86: "7360d60174880bd9214f2dfbe439b7bce82b7a3d44cfe945ba833c85cc8bda75"
   gitleaks_linux_x64: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
   osv-scanner_linux_amd64: "bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc"
   # other platforms: local preflight only
-  opengrep_manylinux_aarch64: "8df71670e20336646687c6f4ddf9b4532f1a7fcd8a8ea7bfa4ea46747f61e088"
-  opengrep_musllinux_x86: "4991ea777c0a853db45876a2c324fb4fed65873e725dd1677bcb9e707f959f99"
-  opengrep_musllinux_aarch64: "d12806eb2e8f67b3b2221bac57d57af763a7bb39cb9149806c0e42cdefe58bdd"
-  opengrep_osx_x86: "e9733c7ac4ad16ac5bbbcbff0264478c7b524d6750f29c847f93aacee3315d2b"
-  opengrep_osx_arm64: "6105ab78eca041fcb9f83055939088ba8f96a6cb66683ceced39652938b217ce"
+  opengrep_manylinux_aarch64: "dc6229319c0d68948733053786a5614873947e5ec1d4669cc0e94ae9038cb99d"
+  opengrep_musllinux_x86: "ad8732262e87aea94750cb06df8423c9cb4b640c1bb3b3b01a377fcf6f08d2ba"
+  opengrep_musllinux_aarch64: "918fead4e82e3d779fef04aeb4e85b3d30c7a3bb73cd7895bca4401257471b65"
+  opengrep_osx_x86: "7dfb68184b7da2895a56e86bc88192fe2b9414993026f5100bacccb4764d19f4"
+  opengrep_osx_arm64: "e161746226bccef5b85c57611946fa21dc3b00a2dc2591343d6160af99397e2f"
   gitleaks_linux_arm64: "e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080"
   gitleaks_darwin_x64: "dfe101a4db2255fc85120ac7f3d25e4342c3c20cf749f2c20a18081af1952709"
   gitleaks_darwin_arm64: "b40ab0ae55c505963e365f271a8d3846efbc170aa17f2607f13df610a9aeb6a5"

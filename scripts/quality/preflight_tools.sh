@@ -74,8 +74,30 @@ qzp_is_musl() {
   ldd /bin/sh 2>&1 | grep -qi musl
 }
 
+# qzp_path_tool_is_pinned <cmd> <pin> <version-args...> -- true when <cmd> is
+# on PATH AND reports EXACTLY the pinned version: one whitespace-separated word
+# of its version output, less a leading "v", must equal the pin (so 1.32.0-rc1
+# or 1.32.01 never pass for 1.32.0). Any other installed version (the previous
+# pin, say) would run a different engine than CI under the pin's name, so it
+# falls through to the verified pinned asset instead. The output is captured
+# first: under pipefail, `cmd | grep -q` can lose a match to SIGPIPE.
+qzp_path_tool_is_pinned() {
+  local cmd="$1" pin="${2#v}" out line word
+  local -a words
+  shift 2
+  command -v "$cmd" >/dev/null 2>&1 || return 1
+  out="$("$cmd" "$@" 2>/dev/null)" || true
+  while IFS= read -r line; do
+    read -ra words <<< "$line"
+    for word in "${words[@]}"; do
+      [ "${word#v}" = "$pin" ] && return 0
+    done
+  done <<< "$out"
+  return 1
+}
+
 resolve_gitleaks() {
-  if [ "${QZP_PREFLIGHT_PINNED_ONLY:-0}" != "1" ] && command -v gitleaks >/dev/null 2>&1; then command -v gitleaks; return 0; fi
+  if [ "${QZP_PREFLIGHT_PINNED_ONLY:-0}" != "1" ] && qzp_path_tool_is_pinned gitleaks "$PIN_GITLEAKS" version; then command -v gitleaks; return 0; fi
   [ "$QZP_NO_INSTALL" = "1" ] && return 1
   local garch
   case "$arch" in amd64) garch=x64 ;; arm64) garch=arm64 ;; *) return 1 ;; esac
@@ -98,7 +120,7 @@ resolve_gitleaks() {
 }
 
 resolve_osv() {
-  if [ "${QZP_PREFLIGHT_PINNED_ONLY:-0}" != "1" ] && command -v osv-scanner >/dev/null 2>&1; then command -v osv-scanner; return 0; fi
+  if [ "${QZP_PREFLIGHT_PINNED_ONLY:-0}" != "1" ] && qzp_path_tool_is_pinned osv-scanner "$PIN_OSV" --version; then command -v osv-scanner; return 0; fi
   [ "$QZP_NO_INSTALL" = "1" ] && return 1
   case "$arch" in amd64|arm64) : ;; *) return 1 ;; esac
   local asset key bin="$CACHE_DIR/osv-scanner/$PIN_OSV/osv-scanner"
@@ -115,7 +137,7 @@ resolve_osv() {
 }
 
 resolve_opengrep() {
-  if [ "${QZP_PREFLIGHT_PINNED_ONLY:-0}" != "1" ] && command -v opengrep >/dev/null 2>&1; then command -v opengrep; return 0; fi
+  if [ "${QZP_PREFLIGHT_PINNED_ONLY:-0}" != "1" ] && qzp_path_tool_is_pinned opengrep "$PIN_OPENGREP" --version; then command -v opengrep; return 0; fi
   [ "$QZP_NO_INSTALL" = "1" ] && return 1
   local asset
   case "$os/$arch" in

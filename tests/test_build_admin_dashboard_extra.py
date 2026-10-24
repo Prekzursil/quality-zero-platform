@@ -109,9 +109,8 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
             patch.object(
                 build_admin_dashboard,
                 "_github_fetch_degraded",
-                return_value=([{"number": 4, "head": {"sha": "abc"}}], {}),
+                side_effect=[([{"number": 4, "head": {"sha": "abc"}}], {}), (pr_runs, {})],
             ),
-            patch.object(build_admin_dashboard, "_github_payload_or_degraded", return_value=pr_runs),
         ):
             live = build_admin_dashboard._live_health("token", "Prekzursil/example", "main")
         self.assertEqual(live["default_branch_health"], "success")
@@ -222,14 +221,13 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
 
     def test_open_pr_health_reads_each_open_heads_runs(self) -> None:
         """THE bug: PR health filtered default-branch runs for PR events, so every repo read unknown."""
+        next_page = {"link": '<https://api.github.com/x?page=2>; rel="next"'}
 
         def live(pulls: Any, *runs: Any, link: str = "") -> str:
-            with (
-                patch.object(build_admin_dashboard, "_github_fetch_degraded", return_value=(pulls, {"link": link})),
-                patch.object(build_admin_dashboard, "_github_payload_or_degraded", side_effect=list(runs)) as fetch,
-            ):
+            responses = [(pulls, {"link": link})] + [r if isinstance(r, tuple) else (r, {}) for r in runs]
+            with patch.object(build_admin_dashboard, "_github_fetch_degraded", side_effect=responses) as fetch:
                 verdict = build_admin_dashboard._open_pr_health("token", "Prekzursil/example")
-            for call in fetch.call_args_list:  # every lookup: one head, pull_request runs only
+            for call in fetch.call_args_list[1:]:  # every lookup: one head, pull_request runs only
                 self.assertIn("event=pull_request", call.args[0])
                 self.assertIn("head_sha=", call.args[0])
             return verdict
@@ -252,27 +250,29 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
         self.assertEqual(live(pulls, runs("success"), {"workflow_runs": []}), "unknown")
         self.assertEqual(live(pulls, runs("success"), ["not", "a", "dict"]), "unknown")
         # ...unless another head already failed: a failure is a failure.
-        self.assertEqual(live(pulls, runs("failure"), None), "partial")
+        self.assertEqual(live(pulls, runs("failure"), (None, None)), "partial")
         self.assertEqual(
             live(pulls, runs("success"), {"workflow_runs": [{"name": "CI", "status": "in_progress"}]}), "pending"
         )
+        # Review finding: a head whose runs span more than one page is unproven, unless it already failed.
+        self.assertEqual(live(pulls, runs("success"), (runs("success"), next_page)), "unknown")
+        self.assertEqual(live(pulls, runs("success"), (runs("failure"), next_page)), "partial")
         self.assertEqual(live([]), "none")
         self.assertEqual(live({"message": "not a list"}), "unknown")
         self.assertEqual(live(None), "unknown")  # 403/404: degraded to this field only
         # Review finding: more open PRs than one page lists - no verdict rather than a partial one.
-        self.assertEqual(live(pulls, link='<https://api.github.com/x?page=2>; rel="next"'), "unknown")
+        self.assertEqual(live(pulls, link=next_page["link"]), "unknown")
 
     def test_per_head_lookups_are_capped(self) -> None:
         """A huge PR backlog cannot stall the hourly build; heads past the cap leave no verdict."""
         cap = build_admin_dashboard.MAX_PR_HEAD_LOOKUPS
         pulls = [{"head": {"sha": f"h{i:03d}"}} for i in range(cap + 5)]
-        green = {"workflow_runs": [{"name": "CI", "conclusion": "success"}]}
-        with (
-            patch.object(build_admin_dashboard, "_github_fetch_degraded", return_value=(pulls, {})),
-            patch.object(build_admin_dashboard, "_github_payload_or_degraded", return_value=green) as fetch,
-        ):
+        green = ({"workflow_runs": [{"name": "CI", "conclusion": "success"}]}, {})
+        with patch.object(
+            build_admin_dashboard, "_github_fetch_degraded", side_effect=[(pulls, {})] + [green] * cap
+        ) as fetch:
             self.assertEqual(build_admin_dashboard._open_pr_health("token", "o/r"), "unknown")
-        self.assertEqual(fetch.call_count, cap)
+        self.assertEqual(fetch.call_count, 1 + cap)
 
     def test_a_denied_pull_request_feed_degrades_only_open_pr_health(self) -> None:
         """A 403 on /pulls (metadata readable, PRs denied) must not fail the whole dashboard build."""

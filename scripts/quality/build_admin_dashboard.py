@@ -331,6 +331,21 @@ def _workflow_runs_of(payload: Any) -> List[Mapping[str, Any]]:
     return [run for run in runs if isinstance(run, Mapping)]
 
 
+def _head_health(token: str, repo_slug: str, sha: str) -> str:
+    """One open head's verdict from its pull_request runs (``unknown`` if they span more than one page).
+
+    With a next page the newest run of an older workflow may be unseen, so
+    only a failure already visible is reported; anything else is unproven.
+    """
+    payload, headers = _github_fetch_degraded(
+        f"{GITHUB_API_BASE}/repos/{repo_slug}/actions/runs?head_sha={sha}&event=pull_request&per_page=100", token
+    )
+    verdict = _compute_health(_workflow_runs_of(payload))
+    if verdict != "partial" and _next_page_url(headers or {}):
+        return "unknown"
+    return verdict
+
+
 def _open_pr_health(token: str, repo_slug: str) -> str:
     """The verdict over the newest run of each workflow on each OPEN PR's head commit.
 
@@ -353,17 +368,7 @@ def _open_pr_health(token: str, repo_slug: str) -> str:
     heads = sorted({_head_sha(pull) for pull in pulls} - {""})
     if not heads:
         return "none"
-    verdicts = [
-        _compute_health(
-            _workflow_runs_of(
-                _github_payload_or_degraded(
-                    f"{GITHUB_API_BASE}/repos/{repo_slug}/actions/runs?head_sha={sha}&event=pull_request&per_page=100",
-                    token,
-                )
-            )
-        )
-        for sha in heads[:MAX_PR_HEAD_LOOKUPS]
-    ]
+    verdicts = [_head_health(token, repo_slug, sha) for sha in heads[:MAX_PR_HEAD_LOOKUPS]]
     if "partial" in verdicts:
         return "partial"
     if len(heads) > MAX_PR_HEAD_LOOKUPS or "unknown" in verdicts:

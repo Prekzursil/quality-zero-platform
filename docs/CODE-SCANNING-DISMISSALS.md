@@ -74,9 +74,10 @@ review-by date. `scripts/quality/check_dismissal_log.py --repo OWNER/NAME` check
 shape. QZP's own CI runs it on every change, through
 `tests/test_dismissal_log.py`. A governed repo runs the same command against its
 receipt; wiring it into the fleet's reusable gate is a follow-up. It checks:
-- the columns and a real separator row, and one unbroken table: a row that
-  lost its leading pipe, or that a blank line cut off, is reported rather
-  than skipped;
+- one log section, with the columns and a real separator row, and one
+  unbroken table: a row that lost its leading pipe, or that sits outside the
+  table (before it, or cut off by a blank line), is reported rather than
+  skipped;
 - an alert link into *this* repository that matches its own number;
 - a backticked rule and a backticked `path:line`;
 - a GitHub reason and a real calendar date that is not in the future;
@@ -89,10 +90,25 @@ receipt; wiring it into the fleet's reusable gate is a follow-up. It checks:
   re-reviewed and the row records the outcome. A false positive that rests
   on a tool limitation carries one, so the dismissal cannot become permanent
   by accident;
+- the decisions table below, when present: its columns, backticked query
+  ids, a real date (or `before YYYY-MM-DD`) and a non-empty decision;
 - with `--codeql-config` (default `.github/codeql/codeql-config.yml`, skipped
-  when absent): a row in the decisions table below for every query the
-  configuration excludes. A filter that excludes by anything other than a
-  query id is rejected, since it could not be listed one decision at a time.
+  when absent): a well-formed row in the decisions table for every query the
+  configuration excludes. A malformed row documents nothing. A filter that
+  excludes by anything other than a query id is rejected, since it could not
+  be listed one decision at a time.
+
+The script needs only Python and PyYAML, so a governed repository runs it at
+the platform commit its callers pin, without a QZP checkout:
+
+```bash
+sha="<the QZP commit your caller workflows pin>"
+tmp="$(mktemp -d)"
+curl -fsSL -o "$tmp/check_dismissal_log.py" \
+  "https://raw.githubusercontent.com/Prekzursil/quality-zero-platform/$sha/scripts/quality/check_dismissal_log.py"
+python -m pip install --quiet pyyaml
+python "$tmp/check_dismissal_log.py" --repo OWNER/NAME
+```
 
 ## Query configuration decisions
 

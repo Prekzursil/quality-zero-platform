@@ -2,6 +2,7 @@
 
 from __future__ import absolute_import
 
+import ast
 import datetime as dt
 import io
 import json
@@ -149,7 +150,27 @@ class DismissalLogTests(unittest.TestCase):
         later = _doc(_row()) + "\n## Next\n\n| other | table |\n| --- | --- |\n"
         self.assertEqual(_check(later), [])
         (problem,) = _check(_doc(_row()) + "\n" + _row("8") + "\n")
-        self.assertIn("after the log table's end", problem)
+        self.assertIn("a row outside the log table", problem)
+
+    def test_no_row_hides_outside_the_table(self) -> None:
+        """Review finding: an unpiped row after the blank line, or an alert row before the table, skipped every check."""
+        unpiped = _row("8", dismissed="2026-99-99").lstrip("|").lstrip()
+        for text in (
+            _doc(_row()) + "\n" + unpiped + "\n",  # cut off by a blank line AND missing its pipe
+            _doc(_row()).replace("## Log (repo)\n", "## Log (repo)\n\n" + unpiped + "\n"),  # before the header
+            _doc(_row()) + "\nA note | with two | pipes\n",  # cells without a leading pipe
+        ):
+            with self.subTest(text=text[-60:]):
+                (problem,) = _check(text)
+                self.assertIn("a row outside the log table", problem)
+        self.assertEqual(_check(_doc(_row()) + "\nA closing note with one | pipe.\n"), [])
+
+    def test_a_second_log_section_is_rejected(self) -> None:
+        """Review finding: rows under a second '## Log' heading were never read."""
+        second = _doc(_row()) + "\n## Log (again)\n\n" + HEADER + "\n" + RULE + "\n" + _row("8") + "\n"
+        self.assertEqual(
+            _check(second), ["2 '## Log' sections: keep one, or the rows under the others skip every check"]
+        )
 
     def test_the_log_heading_is_matched_whole(self) -> None:
         """A '## Logging guidance' section before the log is not the log."""
@@ -199,6 +220,56 @@ class DismissalLogTests(unittest.TestCase):
         self.assertIn("reason 'nope' is not one of", err.getvalue())
         self.assertIn("excluded query 'py/undocumented' has no row", err.getvalue())
         self.assertIn("--repo is required", err.getvalue())
+
+    def test_the_decisions_table_is_validated_before_its_ids_count(self) -> None:
+        """Review finding: a one-cell pipe row under the heading 'documented' an exclusion."""
+        text = DOC.read_text(encoding="utf-8")
+        self.assertEqual(log.decision_problems(text), [])
+        self.assertIn("py/clear-text-storage-sensitive-data", log.documented_queries(text))
+        self.assertEqual(log.decision_problems("# Doc\n\nno decisions here\n"), [])
+
+        def decisions(*rows: str, header: str = "| Query | Decided | Decision |") -> str:
+            return "\n".join(["## Query configuration decisions", "", header, "| --- | --- | --- |", *rows, ""])
+
+        good = "| `py/a`, `py/b` | before 2026-10-24 | Re-review. |"
+        self.assertEqual(log.documented_queries(decisions(good)), {"py/a", "py/b"})
+        cases = {
+            "| `py/x` |": "1 cells, expected 3",
+            "| py/x | 2026-10-24 | why |": "is not a comma-separated list of backticked query ids",
+            "| `py/x` `py/y` | 2026-10-24 | why |": "is not a comma-separated list of backticked query ids",
+            "| `py/x` | soon | why |": "is neither a real YYYY-MM-DD date nor 'before YYYY-MM-DD'",
+            "| `py/x` | 2026-02-30 | why |": "is neither a real YYYY-MM-DD date nor 'before YYYY-MM-DD'",
+            "| `py/x` | 2026-10-24 |  |": "decision is empty",
+        }
+        for row, expected in cases.items():
+            with self.subTest(row=row):
+                (problem,) = log.decision_problems(decisions(good, row))
+                self.assertEqual(problem.split(": ", 1)[0], "decision 2")
+                self.assertIn(expected, problem)
+                self.assertEqual(log.documented_queries(decisions(good, row)), {"py/a", "py/b"})
+        (problem,) = log.decision_problems(decisions(good, header="| Query | Decision |"))
+        self.assertIn("decisions table's columns must be exactly", problem)
+        self.assertEqual(log.documented_queries(decisions(good, header="| Query | Decision |")), set())
+        twice = decisions(good) + "\n" + decisions(good)
+        self.assertEqual(log.decision_problems(twice), ["2 '## Query configuration decisions' sections: keep one"])
+        self.assertEqual(log.documented_queries(twice), set())
+
+    def test_the_validator_runs_standalone_from_a_governed_repo(self) -> None:
+        """Review finding: the documented command must work outside QZP - stdlib plus PyYAML, fetched at a pin."""
+        tree = ast.parse((ROOT / "scripts" / "quality" / "check_dismissal_log.py").read_text(encoding="utf-8"))
+        imported = {
+            alias.name.split(".")[0] for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names
+        }
+        imported |= {
+            node.module.split(".")[0] for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module
+        }
+        self.assertLessEqual(
+            imported, {"__future__", "argparse", "datetime", "json", "re", "sys", "pathlib", "typing", "yaml"}
+        )
+        text = DOC.read_text(encoding="utf-8")
+        raw = "https://raw.githubusercontent.com/Prekzursil/quality-zero-platform/$sha/scripts/quality/check_dismissal_log.py"
+        self.assertIn(raw, text)
+        self.assertIn('python "$tmp/check_dismissal_log.py" --repo OWNER/NAME', text)
 
     def test_every_query_exclusion_is_a_documented_decision(self) -> None:
         """Rule 4: a global query filter cannot land without its row in the decisions table."""

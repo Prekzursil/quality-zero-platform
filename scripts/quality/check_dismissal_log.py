@@ -4,8 +4,8 @@
 The dismissal rule makes every dismissal auditable. This check keeps the log
 itself well-formed so the audit trail cannot drift silently:
 
-* the log section holds one unbroken table with exactly the agreed columns
-  and a real separator row;
+* the document has one log section, holding one unbroken table with exactly
+  the agreed columns and a real separator row; no row hides outside it;
 * every row links an alert OF THIS REPOSITORY, names a backticked rule, a
   ``path:line`` location, a GitHub dismissal reason, a real calendar date that
   is not in the future, a rationale and a verdict, and no alert appears twice;
@@ -14,8 +14,8 @@ itself well-formed so the audit trail cannot drift silently:
   is marked for re-review;
 * a review-by date, on any row, is after the dismissal and has not passed:
   a dismissal whose justification can expire fails until it is re-reviewed;
-* every query the CodeQL configuration excludes has a row in the "Query
-  configuration decisions" table.
+* the "Query configuration decisions" table (when present) is well-formed,
+  and every query the CodeQL configuration excludes has a well-formed row.
 
 ``--classify`` reads one code-scanning alert (``gh api .../alerts/N``) on stdin
 and prints which rationale rule 2 requires for it: ``security`` or
@@ -30,7 +30,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any, List, Mapping, Optional, Sequence
+from typing import Any, List, Mapping, Optional, Sequence, Tuple
 
 import yaml
 
@@ -53,8 +53,16 @@ COLUMNS = (
 )
 REASONS = frozenset({"false positive", "won't fix", "used in tests"})
 SEPARATOR = re.compile(r"^:?-{3,}:?$")
+UNESCAPED_PIPE = re.compile(r"(?<!\\)\|")
+#: An alert link opening a line: a log row that lost its leading pipe.
+ALERT_LINK = re.compile(r"^\[#[0-9]+\]\(")
+DECISION_COLUMNS = ("Query", "Decided", "Decision")
+#: A decision's date, or ``before YYYY-MM-DD`` for one inherited from before the rule.
+DECIDED = re.compile(r"^(?:before )?(\d{4}-\d{2}-\d{2})$")
 #: One backtick pair around a non-blank id with no padding inside it.
 RULE_ID = re.compile(r"^`[^`\s](?:[^`]*[^`\s])?`$")
+QUERY_ID = re.compile(r"`([^`\s](?:[^`]*[^`\s])?)`")
+QUERY_CELL = re.compile(r"^`[^`\s](?:[^`]*[^`\s])?`(?:, `[^`\s](?:[^`]*[^`\s])?`)*$")
 # Backticks make a path with spaces unambiguous; the last ``:N`` is the line.
 LOCATION = re.compile(r"^`[^`]*[^`\s][^`]*:[1-9][0-9]*`$")
 #: Pending markers (Re-review / Fix) exempt only rows dismissed BEFORE this
@@ -87,17 +95,57 @@ def _is_date(value: str) -> bool:
     return True
 
 
-def _section(lines: Sequence[str], heading: re.Pattern[str]) -> Optional[List[str]]:
-    """The lines under the first ``heading``, up to the next h1/h2 heading (None when absent)."""
-    start = next((i for i, line in enumerate(lines) if heading.match(line)), None)
-    if start is None:
-        return None
-    section: List[str] = []
-    for line in lines[start + 1 :]:
-        if SECTION_END.match(line):
+def _sections(lines: Sequence[str], heading: re.Pattern[str]) -> List[List[str]]:
+    """The lines under EVERY ``heading`` match, each up to the next h1/h2 heading."""
+    sections: List[List[str]] = []
+    for start, line in enumerate(lines):
+        if not heading.match(line):
+            continue
+        body: List[str] = []
+        for following in lines[start + 1 :]:
+            if SECTION_END.match(following):
+                break
+            body.append(following)
+        sections.append(body)
+    return sections
+
+
+def _row_like(line: str) -> bool:
+    """A line that carries a table row Markdown may not render as one: a pipe row, an alert link, or cells."""
+    stripped = line.strip()
+    return stripped.startswith("|") or bool(ALERT_LINK.match(stripped)) or len(UNESCAPED_PIPE.findall(stripped)) >= 2
+
+
+def _table(section: Sequence[str], columns: Sequence[str], name: str) -> Tuple[List[List[str]], List[str]]:
+    """``(rows as cells, [])`` for the one unbroken table in ``section``, else ``([], [problem])``.
+
+    The table runs from its header to the first blank line, as Markdown
+    renders it. A row that lost its leading pipe, or one outside the table
+    (before it, or cut off by a blank line), is reported - never silently
+    skipped past the checks.
+    """
+    columns_problem = [f"the {name} table's columns must be exactly {list(columns)}"]
+    first = next((i for i, line in enumerate(section) if line.strip().startswith("|")), None)
+    if first is None:
+        return [], columns_problem
+    block: List[str] = []
+    for line in section[first:]:
+        if not line.strip():
             break
-        section.append(line)
-    return section
+        block.append(line)
+    table = [line.strip() for line in block if line.strip().startswith("|")]
+    if len(table) < 2 or tuple(_cells(table[0])) != tuple(columns):
+        return [], columns_problem
+    stray = next((line for line in block if not line.strip().startswith("|")), None)
+    if stray is not None:
+        return [], [f"the {name} table has a row that is not a |-delimited table row: {stray.strip()[:60]!r}"]
+    outside = next((line for line in [*section[:first], *section[first + len(block) :]] if _row_like(line)), None)
+    if outside is not None:
+        return [], [f"a row outside the {name} table (a blank line ends a table): {outside.strip()[:60]!r}"]
+    separator = _cells(table[1])
+    if len(separator) != len(columns) or not all(SEPARATOR.match(cell) for cell in separator):
+        return [], [f"the {name} table's second line must be its |---| separator (a row there would skip every check)"]
+    return [_cells(line) for line in table[2:]], []
 
 
 def _row_problems(cells: Sequence[str], seen: set, *, repo: str, today: str, latest: str) -> List[str]:
@@ -146,39 +194,19 @@ def _row_problems(cells: Sequence[str], seen: set, *, repo: str, today: str, lat
 
 def validate(text: str, *, repo: str, today: Optional[dt.date] = None) -> List[str]:
     """Return every problem with the log in ``text`` for ``repo`` (empty when well-formed)."""
-    section = _section(text.splitlines(), LOG_HEADING)
-    if section is None:
+    sections = _sections(text.splitlines(), LOG_HEADING)
+    if not sections:
         return ["no '## Log' or '## Log (<repo>)' section"]
-    first = next((i for i, line in enumerate(section) if line.strip().startswith("|")), None)
-    if first is None:
-        return [f"the log table's columns must be exactly {list(COLUMNS)}"]
-    # The table runs from its header to the first blank line, as Markdown
-    # renders it. A row that lost its leading pipe, or that a blank line cut
-    # off from the table, is reported - never silently skipped past the checks.
-    block = []
-    for line in section[first:]:
-        if not line.strip():
-            break
-        block.append(line)
-    table = [line.strip() for line in block if line.strip().startswith("|")]
-    if len(table) < 2 or tuple(_cells(table[0])) != COLUMNS:
-        return [f"the log table's columns must be exactly {list(COLUMNS)}"]
-    stray = next((line for line in block if not line.strip().startswith("|")), None)
-    if stray is not None:
-        return [f"the log table has a row that is not a |-delimited table row: {stray.strip()[:60]!r}"]
-    cut_off = next((line for line in section[first + len(block) :] if line.strip().startswith("|")), None)
-    if cut_off is not None:
-        return [f"a |-row after the log table's end (a blank line ends the table): {cut_off.strip()[:60]!r}"]
-    separator = _cells(table[1])
-    if len(separator) != len(COLUMNS) or not all(SEPARATOR.match(cell) for cell in separator):
-        return ["the log table's second line must be its |---| separator (a row there would skip every check)"]
+    if len(sections) > 1:
+        return [f"{len(sections)} '## Log' sections: keep one, or the rows under the others skip every check"]
+    rows, problems = _table(sections[0], COLUMNS, "log")
+    if problems:
+        return problems
     day = today or dt.datetime.now(dt.UTC).date()
     # One day of slack: a dismissal logged east of UTC can carry tomorrow's UTC date.
     latest = (day + dt.timedelta(days=1)).isoformat()
-    problems: List[str] = []
     seen: set = set()
-    for number, line in enumerate(table[2:], start=1):
-        cells = _cells(line)
+    for number, cells in enumerate(rows, start=1):
         if len(cells) != len(COLUMNS):
             problems.append(f"row {number}: {len(cells)} cells, expected {len(COLUMNS)}")
             continue
@@ -187,11 +215,44 @@ def validate(text: str, *, repo: str, today: Optional[dt.date] = None) -> List[s
     return problems
 
 
+def _decision_row_problems(cells: Sequence[str]) -> List[str]:
+    """Every contract violation of one query configuration decision."""
+    if len(cells) != len(DECISION_COLUMNS):
+        return [f"{len(cells)} cells, expected {len(DECISION_COLUMNS)}"]
+    query, decided, decision = cells
+    problems: List[str] = []
+    if not QUERY_CELL.match(query):
+        problems.append(f"query {query!r} is not a comma-separated list of backticked query ids")
+    match = DECIDED.match(decided)
+    if not match or not _is_date(match.group(1)):
+        problems.append(f"decided {decided!r} is neither a real YYYY-MM-DD date nor 'before YYYY-MM-DD'")
+    if not decision:
+        problems.append("decision is empty")
+    return problems
+
+
+def _decision_rows(text: str) -> Tuple[List[List[str]], List[str]]:
+    """The decisions table's rows, or the problem that stops reading it (no section: no rows, no problem)."""
+    sections = _sections(text.splitlines(), DECISIONS_HEADING)
+    if len(sections) > 1:
+        return [], [f"{len(sections)} '{DECISIONS_TITLE}' sections: keep one"]
+    return _table(sections[0], DECISION_COLUMNS, "decisions") if sections else ([], [])
+
+
+def decision_problems(text: str) -> List[str]:
+    """Every problem with the query configuration decisions table (none when there is no such section)."""
+    rows, problems = _decision_rows(text)
+    for number, cells in enumerate(rows, start=1):
+        problems.extend(f"decision {number}: {problem}" for problem in _decision_row_problems(cells))
+    return problems
+
+
 def documented_queries(text: str) -> set:
-    """Every backticked query id in the first column of the decisions table."""
-    section = _section(text.splitlines(), DECISIONS_HEADING) or []
-    rows = [line for line in section if line.strip().startswith("|")]
-    return {query for line in rows for query in re.findall(r"`([^`]+)`", _cells(line)[0])}
+    """The query ids of every WELL-FORMED decision: a malformed row documents nothing."""
+    rows, problems = _decision_rows(text)
+    if problems:
+        return set()
+    return {query for cells in rows if not _decision_row_problems(cells) for query in QUERY_ID.findall(cells[0])}
 
 
 def undocumented_exclusions(config: Any, text: str) -> List[str]:
@@ -257,7 +318,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if not args.repo:
         parser.error("--repo is required to validate a log")
     text = Path(args.path).read_text(encoding="utf-8")
-    problems = [f"{args.path}: {problem}" for problem in validate(text, repo=args.repo)]
+    problems = [f"{args.path}: {problem}" for problem in validate(text, repo=args.repo) + decision_problems(text)]
     config = Path(args.codeql_config)
     if config.is_file():
         loaded = yaml.safe_load(config.read_text(encoding="utf-8"))

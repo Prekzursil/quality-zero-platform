@@ -153,6 +153,14 @@ jobs:
               handle.write(f"- Audit log: `{audit_path}`\n")
           PY
 
+      - name: Audit record not committed (no BYPASS_AUDIT_PAT)
+        # Say so, instead of a silently skipped step: without the PAT this
+        # bypass leaves no record in the platform's audit log.
+        if: ${{ env.HAS_AUDIT_PAT != 'true' }}
+        run: |
+          echo "::warning title=Bypass NOT recorded::The caller passes no BYPASS_AUDIT_PAT, so this bypass was not committed to the platform's audit log. It is visible only in this run."
+          echo "- **Audit record: NOT committed** (the caller passes no \`BYPASS_AUDIT_PAT\`)." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Commit audit log
         # Appended through the Contents API (scripts/quality/audit_log_append.py):
         # no checkout, no write token on disk, and a concurrent bypass only

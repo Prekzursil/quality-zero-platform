@@ -568,8 +568,10 @@ def _status_section(scan: RepoScan) -> List[str]:
         return [
             "## Nothing to scan",
             "",
-            "osv-scanner found no dependency manifests or lockfiles here, so there is no advisory "
-            "surface to track. This issue is being closed.",
+            (
+                "osv-scanner found no dependency manifests or lockfiles here, so there is no advisory "
+                "surface to track. This issue is being closed."
+            ),
         ]
     if scan.status is ScanStatus.UNSCANNABLE:
         return [
@@ -587,8 +589,10 @@ def _status_section(scan: RepoScan) -> List[str]:
         "",
         scan.detail,
         "",
-        "The dependency tree was not fully scanned, so the run is **not a clean result**. No tracking "
-        "issue was opened, updated or closed on this evidence - a failed scan must never clear a finding.",
+        (
+            "The dependency tree was not fully scanned, so the run is **not a clean result**. No tracking "
+            "issue was opened, updated or closed on this evidence - a failed scan must never clear a finding."
+        ),
     ]
 
 

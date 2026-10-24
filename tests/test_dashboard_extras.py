@@ -9,9 +9,9 @@ import shutil
 import sys
 import tempfile
 import unittest
+import unittest.mock as mock
 from pathlib import Path
 from typing import Any, Dict, Iterator, Tuple
-from unittest import mock
 
 from tests.control_plane_support import ROOT
 

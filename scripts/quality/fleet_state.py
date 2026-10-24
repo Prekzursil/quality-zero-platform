@@ -54,8 +54,8 @@ INVENTORY_PATH = Path(__file__).resolve().parents[2] / "inventory" / "repos.yml"
 #: keeps every platform write, and private members' PRs are only visible to
 #: the PAT (the same contract as the CVE sweep).
 FLEET_READ_PAT_ENV = "QZ_FLEET_READ_TOKEN"
-#: The fleet's private members: invisible to a public-only read, never "gone".
-PRIVATE_SLUGS = frozenset(PRIVATE_INCLUDE_SLUGS)
+#: The fleet's known private members (lower-cased: GitHub slugs are case-insensitive).
+PRIVATE_SLUGS = frozenset(slug.lower() for slug in PRIVATE_INCLUDE_SLUGS)
 
 
 class FleetStateError(RuntimeError):
@@ -129,15 +129,31 @@ def bypass_followups(platform_slug: str, *, runner: ProcessRunner = subprocess.r
 PRIVATE_SUBJECT_PREFIX = "<private:"
 
 
-def public_slug(slug: str) -> str:
+def public_slug(slug: str, *, private: Optional[bool] = None) -> str:
     """The slug as it may appear on a PUBLIC surface (the dashboard, a platform alert issue).
 
-    A private member's name is replaced by a stable, non-reversible tag, so an
-    alert still dedupes per repository without disclosing it.
+    A private member's name is replaced by a stable, non-reversible tag
+    (hashed case-insensitively), so an alert still dedupes per repository
+    without disclosing it. ``private`` overrides the known-member list with a
+    live visibility check (``repo_is_private``).
     """
-    if slug not in PRIVATE_SLUGS:
+    if not (slug.lower() in PRIVATE_SLUGS if private is None else private):
         return slug
-    return f"{PRIVATE_SUBJECT_PREFIX}{hashlib.sha256(slug.encode('utf-8')).hexdigest()[:8]}>"
+    return f"{PRIVATE_SUBJECT_PREFIX}{hashlib.sha256(slug.lower().encode('utf-8')).hexdigest()[:8]}>"
+
+
+def repo_is_private(slug: str, *, runner: ProcessRunner = subprocess.run) -> bool:
+    """Whether ``slug`` must be masked. Fails CLOSED.
+
+    A known private member is private without a call. Any other repository
+    is private unless the workflow token reads it as public, so a repository
+    whose visibility flipped, or that this token cannot see, is never
+    published by name.
+    """
+    if slug.lower() in PRIVATE_SLUGS:
+        return True
+    completed = runner(["gh", "api", f"repos/{slug}", "--jq", ".private"], capture_output=True, text=True, check=False)
+    return completed.returncode != 0 or str(completed.stdout or "").strip() != "false"
 
 
 def fleet_read_env(environ: Mapping[str, str]) -> Optional[Dict[str, str]]:
@@ -154,9 +170,16 @@ def drift_search_scope(environ: Mapping[str, str]) -> str:
 
 
 def fleet_slugs(inventory_path: Path | str = INVENTORY_PATH) -> List[str]:
-    """The declared fleet: only these repositories' PRs are fleet state, not every repository of the owner."""
+    """The declared fleet: only these repositories' PRs are fleet state, not every repository of the owner.
+
+    Raises when it declares none: an empty roster would read as "no drift"
+    and close every open drift alert.
+    """
     repos = load_inventory(inventory_path).get("repos", [])
-    return sorted({str(repo["slug"]) for repo in repos if isinstance(repo, Mapping) and repo.get("slug")})
+    slugs = sorted({str(repo["slug"]) for repo in repos if isinstance(repo, Mapping) and repo.get("slug")})
+    if not slugs:
+        raise FleetStateError(f"{inventory_path} declares no fleet repository")
+    return slugs
 
 
 def _is_drift_branch(head: str) -> bool:
@@ -191,30 +214,29 @@ def drift_sync_prs(
     unread: Dict[str, str] = {}
     rejected = False  # the fleet-read PAT answered 401: public members fall back to the workflow token
     for slug in slugs:
-        private = slug in PRIVATE_SLUGS
+        private = repo_is_private(slug, runner=runner)
+        tag = public_slug(slug, private=private)
         if private and (env is None or rejected):
-            unread[public_slug(slug)] = (
-                f"private, and {'the fleet-read token was rejected' if rejected else 'no fleet-read token'}"
-            )
+            unread[tag] = f"private, and {'the fleet-read token was rejected' if rejected else 'no fleet-read token'}"
             continue
         try:
             prs = _open_prs(slug, runner=runner, env=None if rejected else env)
         except FleetStateError as exc:
             if env is None or rejected or not _token_rejected(exc):
-                unread[public_slug(slug)] = "the read failed" if private else str(exc)
+                unread[tag] = "the read failed" if private else str(exc)
                 continue
             rejected = True
             if private:
-                unread[public_slug(slug)] = "private, and the fleet-read token was rejected"
+                unread[tag] = "private, and the fleet-read token was rejected"
                 continue
             try:
                 prs = _open_prs(slug, runner=runner, env=None)
             except FleetStateError as retry:
-                unread[slug] = str(retry)
+                unread[tag] = str(retry)
                 continue
         records.extend(
             {
-                "slug": public_slug(slug),
+                "slug": tag,
                 "pr_number": int(pr["number"]),
                 "opened_at": _opened_at(pr["createdAt"]),
                 "status": "open",
@@ -274,7 +296,11 @@ def main(argv: Optional[Sequence[str]] = None, *, runner: ProcessRunner = subpro
     parser.add_argument("--inventory", default=str(INVENTORY_PATH), help="the declared fleet (inventory/repos.yml)")
     parser.add_argument("--drift-jsonl", required=True)
     args = parser.parse_args(argv)
-    slugs = fleet_slugs(args.inventory)
+    try:
+        slugs = fleet_slugs(args.inventory)
+    except FleetStateError as exc:
+        print(f"fleet_state: {exc}", file=sys.stderr)
+        return 1
     records, unread = drift_sync_prs(slugs, runner=runner)
     for tag, reason in unread.items():
         print(f"::warning::fleet_state: {tag} was not read ({reason}); its drift is unknown")

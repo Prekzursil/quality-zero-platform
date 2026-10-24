@@ -3,3 +3,10 @@ name: "Quality Zero Platform CodeQL Config"
 # Default query suite is security-and-quality. No custom packs.
 queries:
   - uses: security-and-quality
+
+# No query-filters. Excluding a query silences it for ALL code. Every query
+# exclusion needs an "**Excluded ...**" decision in
+# docs/CODE-SCANNING-DISMISSALS.md, and check_dismissal_log.py
+# --codeql-config enforces that. The py/clear-text-* exclusion was removed
+# on 2026-10-24: a full analysis without it found no clear-text result
+# anywhere (run 40138157571).

@@ -39,6 +39,7 @@ Usage, from the platform repo root::
 from __future__ import absolute_import
 
 import argparse
+import datetime
 import fnmatch
 import hashlib
 import json
@@ -48,6 +49,7 @@ import re
 import string
 import subprocess  # nosec B404 — git wrapper; all args are controlled
 import sys
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
@@ -173,6 +175,8 @@ QUALITY_CALLER = ".github/workflows/quality.yml"
 OPENGREP_DIR = ".quality/opengrep/"
 SEMGREPIGNORE = ".semgrepignore"
 OSV_CONFIG = "osv-scanner.toml"
+#: Pseudo-path for findings about what gate 6 can see at all (not a file the baseline writes).
+GATE6_SCOPE = "(gate 6 scope)"
 #: Curated rule files seeded per language present ("general" applies to every repository).
 OPENGREP_RULES = (
     ("general-security.yaml", ()),
@@ -296,16 +300,28 @@ def _is_ancestor(ancestor: str, directory: str) -> bool:
 _BUILD_COMMENT_RE = re.compile(r"<!--.*?-->|/\*.*?\*/|//[^\n]*", re.DOTALL)
 
 
-def _declares(text: str, relative: str) -> bool:
-    """Whether a build file's text names ``relative`` as a module (path, gradle or .sln spelling).
+_MAVEN_MODULE_RE = re.compile(r"<module>\s*([^<]+?)\s*</module>")
+_GRADLE_INCLUDE_RE = re.compile(r"\binclude\b\s*\(?([^)\n]*)")
+_GRADLE_PROJECT_RE = re.compile(r"[\"']:?([^\"']+)[\"']")
+_SLN_PROJECT_RE = re.compile(r'^Project\("[^"]*"\)\s*=\s*"[^"]*",\s*"([^"]+)"', re.MULTILINE)
 
-    XML, block and line comments are stripped first: a commented-out ``include`` declares nothing.
+
+def declared_modules(ecosystem: str, text: str) -> Set[str]:
+    """The nested module directories a root build declares, in ``a/b`` form.
+
+    Only each ecosystem's declaration syntax counts (Maven ``<module>``, Gradle ``include``,
+    ``.sln`` ``Project(...)`` entries), and comments are stripped first, so a dependency that
+    merely shares a directory's name, or a commented-out include, declares nothing.
     """
     text = _BUILD_COMMENT_RE.sub("", text)
-    for spelling in {relative, relative.replace("/", ":"), relative.replace("/", "\\")}:
-        if re.search(r"(?<![\w.-])" + re.escape(spelling) + r"(?![\w.-])", text):
-            return True
-    return False
+    if ecosystem == "maven":
+        return {m.strip().strip("/").removeprefix("./") for m in _MAVEN_MODULE_RE.findall(text)}
+    if ecosystem == "gradle":
+        found: Set[str] = set()
+        for args in _GRADLE_INCLUDE_RE.findall(text):
+            found.update(name.strip(":").replace(":", "/") for name in _GRADLE_PROJECT_RE.findall(args))
+        return found
+    return {posixpath.dirname(path.replace("\\", "/")) for path in _SLN_PROJECT_RE.findall(text)}
 
 
 def _build_text(ecosystem: str, directory: str, paths: Sequence[str], read: Reader) -> str:
@@ -331,7 +347,7 @@ def _drop_declared(ecosystem: str, directories: Set[str], paths: Sequence[str], 
             if not _is_ancestor(ancestor, nested):
                 continue
             relative = nested[len(ancestor.rstrip("/")) :].strip("/")
-            if _declares(_build_text(ecosystem, ancestor, paths, read), relative):
+            if relative in declared_modules(ecosystem, _build_text(ecosystem, ancestor, paths, read)):
                 kept.discard(nested)
                 break
     return kept
@@ -447,7 +463,7 @@ def detect_languages(paths: Iterable[str]) -> Tuple[str, ...]:
         path = _clean(raw)
         if not path or _is_excluded(path):
             continue
-        extension = posixpath.splitext(path)[1].lower()
+        extension = posixpath.splitext(path)[1]
         for language, extensions in LANGUAGE_EXTENSIONS.items():
             if extension in extensions:
                 present.add(language)
@@ -659,6 +675,7 @@ def template_context(facts: RepoFacts, read: Reader, qzp_pin: str, deps_floor: s
         "local_commands": local_commands(languages, read, facts.paths),
         "qzp_pin": qzp_pin,
         "caller_with": caller_with,
+        "deps_floor": deps_floor,
     }
 
 
@@ -748,8 +765,32 @@ def _scope_gaps(text: str) -> List[str]:
     return [entry for entry in entries if entry in _FORBIDDEN_SCOPE_ENTRIES]
 
 
-def _plan_gate_configs(facts: RepoFacts, read: Reader, context: Dict[str, str]) -> List[FileAction]:
+def osv_ignore_problems(config_text: str, today: datetime.date) -> List[str]:
+    """Why an osv-scanner.toml's ignores cannot be trusted: unparseable, unreasoned, open-ended or expired."""
+    try:
+        document = tomllib.loads(config_text)
+    except tomllib.TOMLDecodeError:
+        return ["osv-scanner.toml does not parse, so gate 6 fails with exit 130"]
+    problems: List[str] = []
+    entries = document.get("IgnoredVulns", [])
+    for entry in entries if isinstance(entries, list) else [entries]:
+        entry = entry if isinstance(entry, dict) else {}
+        ident = str(entry.get("id", "?"))
+        until = entry.get("ignoreUntil")
+        if not str(entry.get("reason", "")).strip():
+            problems.append(f"ignore {ident} has no reason")
+        if not isinstance(until, (datetime.date, datetime.datetime)):
+            problems.append(f"ignore {ident} has no ignoreUntil date")
+        elif (until.date() if isinstance(until, datetime.datetime) else until) < today:
+            problems.append(f"ignore {ident} expired on {until}")
+    return problems
+
+
+def _plan_gate_configs(
+    facts: RepoFacts, read: Reader, context: Dict[str, str], today: Optional[datetime.date] = None
+) -> List[FileAction]:
     """Seed the gate-4 ruleset + scope file and the gate-6 config so neither gate silently skips."""
+    today = today or datetime.date.today()
     languages = set(detect_languages(facts.paths))
     actions: List[FileAction] = []
     rule_files = [p for p in facts.paths if p.startswith(OPENGREP_DIR) and p.endswith((".yml", ".yaml"))]
@@ -775,14 +816,14 @@ def _plan_gate_configs(facts: RepoFacts, read: Reader, context: Dict[str, str]) 
             for name, needs in OPENGREP_RULES
             if (not needs or languages.intersection(needs)) and OPENGREP_DIR + name not in rule_files
         )
-    scope = _first_present(facts.paths, (SEMGREPIGNORE,))
-    if scope is not None:
-        dropped = _scope_gaps(read(scope) or "")
+    # gate 4 and gate 6 test these exact paths on a case-sensitive runner, so no case folding here
+    if SEMGREPIGNORE in facts.paths:
+        dropped = _scope_gaps(read(SEMGREPIGNORE) or "")
         if dropped:
             reason = f"excludes first-party code from gate 4: {', '.join(dropped)}"
-            actions.append(FileAction(scope, "gap", reason))
+            actions.append(FileAction(SEMGREPIGNORE, "gap", reason))
         else:
-            actions.append(FileAction(scope, "keep", "repository-chosen SAST scope"))
+            actions.append(FileAction(SEMGREPIGNORE, "keep", "repository-chosen SAST scope"))
     else:
         actions.append(
             FileAction(
@@ -792,9 +833,12 @@ def _plan_gate_configs(facts: RepoFacts, read: Reader, context: Dict[str, str]) 
                 SEMGREPIGNORE_SOURCE.read_text(encoding="utf-8"),
             )
         )
-    osv = _first_present(facts.paths, (OSV_CONFIG,))
-    if osv is not None:
-        actions.append(FileAction(osv, "keep", "repository osv-scanner config"))
+    if OSV_CONFIG in facts.paths:
+        problems = osv_ignore_problems(read(OSV_CONFIG) or "", today)
+        if problems:
+            actions.append(FileAction(OSV_CONFIG, "gap", "; ".join(problems)))
+        else:
+            actions.append(FileAction(OSV_CONFIG, "keep", "repository osv-scanner config"))
     else:
         actions.append(FileAction(OSV_CONFIG, "create", "gate 6 has no config", render_template(OSV_CONFIG, context)))
     return actions
@@ -830,6 +874,27 @@ def _plan_dependabot(facts: RepoFacts, read: Reader, planned: Sequence[str] = ()
     return FileAction(existing, "gap", "; ".join(problems))
 
 
+#: Lockfiles the lean gate's osv-scanner step detects, per package ecosystem (reusable-quality.yml).
+_SCANNED_LOCKFILES = {
+    "npm": ("package-lock.json", "yarn.lock", "pnpm-lock.yaml"),
+    "gradle": ("gradle.lockfile",),
+}
+#: Package ecosystems whose manifests the lean gate's dependency scan never reads.
+_UNSCANNED_ECOSYSTEMS = {"bun": "Bun lockfiles", "nuget": "NuGet manifests"}
+
+
+def unscanned_rails(rails: Dict[str, List[str]], paths: Sequence[str]) -> List[str]:
+    """Rails whose dependencies gate 6 (osv-scanner) does not scan, so it cannot fail on them."""
+    present = set(paths)
+    gaps = [f"{label} ({', '.join(rails[eco])})" for eco, label in _UNSCANNED_ECOSYSTEMS.items() if eco in rails]
+    for ecosystem, lockfiles in _SCANNED_LOCKFILES.items():
+        for directory in rails.get(ecosystem, []):
+            prefix = "" if directory == "/" else directory.strip("/") + "/"
+            if not any(prefix + name in present for name in lockfiles):
+                gaps.append(f"{ecosystem} {directory} has no lockfile ({' / '.join(lockfiles)})")
+    return gaps
+
+
 def ignores_majors(config_text: str) -> bool:
     """Whether any update entry of a dependabot.yml ignores semver-major updates."""
     try:
@@ -861,8 +926,13 @@ def caller_refs(text: str) -> Set[str]:
     return refs
 
 
-def caller_contract_gap(text: str) -> str:
-    """Why a lean-gate caller would not report ``quality / quality`` on pull requests ('' when it does)."""
+def caller_contract_gap(text: str, deps_floor: str = "t0") -> str:
+    """Why a lean-gate caller would not report ``quality / quality`` on pull requests ('' when it does).
+
+    The required context is ``<caller job name> / <reusable job name>``: the caller job must be
+    ``quality`` (id, and ``name`` if it sets one). With ``deps_floor == "any"`` it must also pass
+    ``deps-severity-floor: any``, or gate 6 keeps the T0 default the docs no longer describe.
+    """
     document = yaml.safe_load(text)
     triggers = document.get("on", document.get(True)) if isinstance(document, dict) else None
     if isinstance(triggers, str):
@@ -871,13 +941,15 @@ def caller_contract_gap(text: str) -> str:
         return "the caller does not run on pull_request, so `quality / quality` never reports on a pull request"
     jobs = document.get("jobs") if isinstance(document, dict) else None
     job = jobs.get("quality") if isinstance(jobs, dict) else None
-    if document.get("name") != "quality" or not (
-        isinstance(job, dict) and str(job.get("uses", "")).startswith(REUSABLE_QUALITY_PREFIX)
+    if not (
+        isinstance(job, dict)
+        and str(job.get("uses", "")).startswith(REUSABLE_QUALITY_PREFIX)
+        and job.get("name", "quality") == "quality"
     ):
-        return (
-            "the caller must be workflow `quality` with job `quality`, "
-            "or the required context is not `quality / quality`"
-        )
+        return "the caller job must be `quality` (id and name), or the required context is not `quality / quality`"
+    inputs = job.get("with")
+    if deps_floor == "any" and not (isinstance(inputs, dict) and inputs.get("deps-severity-floor") == "any"):
+        return "the caller does not pass `deps-severity-floor: any`, so gate 6 still applies the T0 floor"
     return ""
 
 
@@ -901,7 +973,7 @@ def _plan_quality_caller(facts: RepoFacts, read: Reader, context: Dict[str, str]
         refs = caller_refs(text)
         if not refs:
             continue
-        problem = caller_contract_gap(text)
+        problem = caller_contract_gap(text, context["deps_floor"])
         if problem:
             actions.append(FileAction(workflow, "gap", problem))
             continue
@@ -959,28 +1031,76 @@ def _plan_compiled_lane(facts: RepoFacts) -> List[FileAction]:
     return gaps
 
 
+#: Build/test tooling that shows a workflow actually exercises a language the lean gate skips.
+_LANGUAGE_CI_RE = {
+    "c": re.compile(r"\b(make|cmake|ctest|meson|gcc|clang)\b"),
+    "java": re.compile(r"\b(gradlew?|mvnw?|maven|setup-java)\b"),
+    "kotlin": re.compile(r"\b(gradlew?|mvnw?|maven|setup-java)\b"),
+    "csharp": re.compile(r"\b(dotnet|msbuild|setup-dotnet|vstest)\b"),
+    "rust": re.compile(r"\b(cargo|rust-toolchain|setup-rust)\b"),
+    "swift": re.compile(r"\b(swift|xcodebuild|xcrun)\b"),
+}
+
+
 def _plan_outside_languages(facts: RepoFacts, read: Reader) -> List[FileAction]:
-    """Flag languages the lean gate cannot test when the repository has no CI of its own for them."""
-    outside = [label for key, label in _OUTSIDE_LEAN_GATE.items() if key in detect_languages(facts.paths)]
-    own_ci = [
-        path
+    """Flag languages the lean gate cannot test when no workflow of the repository runs their tooling."""
+    outside = [key for key in _OUTSIDE_LEAN_GATE if key in detect_languages(facts.paths)]
+    texts = [
+        read(path) or ""
         for path in facts.paths
         if posixpath.dirname(path) == ".github/workflows"
         and path.endswith((".yml", ".yaml"))
         and path != QUALITY_CALLER
         and not any(word in posixpath.basename(path).lower() for word in _NON_TEST_WORKFLOW_WORDS)
-        and not caller_refs(read(path) or "")
     ]
-    if not outside or own_ci:
+    texts = [text for text in texts if not caller_refs(text)]
+    untested = [
+        _OUTSIDE_LEAN_GATE[key] for key in outside if not any(_LANGUAGE_CI_RE[key].search(text) for text in texts)
+    ]
+    if not untested:
         return []
     return [
         FileAction(
             ".github/workflows/",
             "gap",
-            f"{', '.join(outside)} source has no CI lane: the lean gate does not test it and the repository "
-            "has no workflow of its own",
+            f"{', '.join(untested)} source has no CI lane: the lean gate does not test it and no workflow of the "
+            "repository runs its build or test tooling",
         )
     ]
+
+
+def _plan_jsts_lane(facts: RepoFacts, read: Reader) -> List[FileAction]:
+    """Flag JS/TS tests the lean gate's coverage lane cannot measure (it fails without a coverage script)."""
+    if not _has_jsts(detect_languages(facts.paths)):
+        return []
+    tests = any(
+        posixpath.basename(path).split(".")[-2:-1] in (["test"], ["spec"]) or "/__tests__/" in "/" + path
+        for path in facts.paths
+        if path.endswith((".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs")) and not _is_excluded(path)
+    )
+    if not tests or _coverage_scripts(read, facts.paths) or _test_script_has_coverage(read, facts.paths):
+        return []
+    return [
+        FileAction(
+            "package.json",
+            "gap",
+            "JS/TS tests exist but no package.json has a `test:coverage` script (or a vitest/jest `--coverage` test "
+            "script); the coverage lane fails until it measures 100 %",
+        )
+    ]
+
+
+def _test_script_has_coverage(read: Reader, paths: Sequence[str]) -> bool:
+    """Whether a root or first-level package.json ``test`` script already collects coverage."""
+    for path in (p for p in paths if posixpath.basename(p) == "package.json" and p.count("/") <= 1):
+        try:
+            manifest = json.loads(read(path) or "{}")
+        except ValueError:
+            continue
+        scripts = manifest.get("scripts") if isinstance(manifest, dict) else None
+        if isinstance(scripts, dict) and "--coverage" in str(scripts.get("test", "")):
+            return True
+    return False
 
 
 def plan_baseline(facts: RepoFacts, read: Reader, qzp_pin: str, deps_floor: str = "t0") -> List[FileAction]:
@@ -1001,7 +1121,13 @@ def plan_baseline(facts: RepoFacts, read: Reader, qzp_pin: str, deps_floor: str 
     actions.append(_plan_simple(facts, (VERIFY_SCRIPT,), VERIFY_SCRIPT, "verify", context, executable=True))
     actions.extend(caller)
     actions.extend(_plan_compiled_lane(facts))
+    actions.extend(_plan_jsts_lane(facts, read))
     actions.extend(_plan_outside_languages(facts, read))
+    unscanned = unscanned_rails(detect_rails(facts.paths, read), facts.paths)
+    if unscanned:
+        actions.append(
+            FileAction(GATE6_SCOPE, "gap", f"gate 6 does not scan these dependencies: {'; '.join(unscanned)}")
+        )
     return actions
 
 

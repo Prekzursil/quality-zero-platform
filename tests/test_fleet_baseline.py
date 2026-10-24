@@ -2,6 +2,7 @@
 
 from __future__ import absolute_import
 
+import datetime
 import io
 import json
 import os
@@ -199,12 +200,14 @@ class DetectRailsTests(unittest.TestCase):
         self.assertEqual(rails["gradle"], ["/", "/old", "/tools"])
         self.assertEqual(rails["maven"], ["/", "/legacy"])
 
-    def test_declares_respects_word_boundaries(self) -> None:
-        self.assertTrue(fb._declares('include(":app")', "app"))
-        self.assertTrue(fb._declares('include(":libs:core")', "libs/core"))
-        self.assertTrue(fb._declares('"src\\lib\\Lib.csproj"', "src/lib"))
-        self.assertFalse(fb._declares('include(":application")', "app"))
-        self.assertFalse(fb._declares("", "app"))
+    def test_declared_modules_follow_each_ecosystems_syntax(self) -> None:
+        pom = "<artifactId>tools</artifactId><modules><module>svc</module><module> ./web/ </module></modules>"
+        self.assertEqual(fb.declared_modules("maven", pom), {"svc", "web"})
+        gradle = 'include(":app", ":libs:core")\ninclude \'extra\'\nincludeBuild("tools")\n// include(":old")\n'
+        self.assertEqual(fb.declared_modules("gradle", gradle), {"app", "libs/core", "extra"})
+        sln = 'Project("{FAE}") = "Lib", "src\\lib\\Lib.csproj", "{1}"\nEndProject\n'
+        self.assertEqual(fb.declared_modules("nuget", sln), {"src/lib"})
+        self.assertEqual(fb.declared_modules("maven", ""), set())
 
     def test_superseded_ecosystem_disappears_entirely(self) -> None:
         self.assertEqual(fb.detect_rails(["package.json", "bun.lockb"]), {"bun": ["/"]})
@@ -279,8 +282,10 @@ class LanguageAndGateTests(unittest.TestCase):
     """Language detection and the gate table."""
 
     def test_detect_languages(self) -> None:
-        paths = ["", "a.py", "web/x.TSX", "b.mjs", "node_modules/z.go", "main.go", "x.kt", "y.cs", "README.md"]
+        paths = ["", "a.py", "web/x.tsx", "b.mjs", "node_modules/z.go", "main.go", "x.kt", "y.cs", "README.md"]
         self.assertEqual(fb.detect_languages(paths), ("python", "ts", "js", "go", "kotlin", "csharp"))
+        # case-sensitive, exactly like the lean gate's git ls-files globs
+        self.assertEqual(fb.detect_languages(["main.CPP", "app.PY"]), ())
         self.assertEqual(fb.detect_languages(["a.c", "a.h", "b.hpp"]), ("cpp", "c"))
         self.assertEqual(fb.detect_languages(["only.h"]), ())
 
@@ -678,10 +683,13 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(fb.caller_contract_gap(good.replace("[push, pull_request]", "pull_request")), "")
         self.assertIn("does not run on pull_request", fb.caller_contract_gap(good.replace(", pull_request", "")))
         self.assertIn("does not run on pull_request", fb.caller_contract_gap("on: 3\n"))
-        self.assertIn(
-            "workflow `quality` with job `quality`", fb.caller_contract_gap(good.replace("name: quality", "name: ci"))
-        )
-        self.assertIn("job `quality`", fb.caller_contract_gap(good.replace("  quality:", "  lint:")))
+        self.assertEqual(fb.caller_contract_gap(good.replace("name: quality", "name: ci")), "")
+        self.assertIn("job must be `quality`", fb.caller_contract_gap(good.replace("  quality:", "  lint:")))
+        renamed = good.replace("    uses:", "    name: lean\n    uses:")
+        self.assertIn("job must be `quality`", fb.caller_contract_gap(renamed))
+        self.assertIn("deps-severity-floor: any", fb.caller_contract_gap(good, "any"))
+        with_floor = good + "    with:\n      deps-severity-floor: any\n"
+        self.assertEqual(fb.caller_contract_gap(with_floor, "any"), "")
         self.assertIn("does not run on pull_request", fb.caller_contract_gap("- a list\n"))
         context = fb.template_context(_facts([]), _reader({}), PIN)
         broken = {".github/workflows/quality.yml": good.replace("[push, pull_request]", "[push]")}
@@ -705,6 +713,64 @@ class PlanTests(unittest.TestCase):
             "[Contributor Covenant 2.1](docs/CODE_OF_CONDUCT.txt)",
             fb.render_template("CONTRIBUTING.md", context),
         )
+
+    def test_osv_ignores_must_be_reasoned_and_dated(self) -> None:
+        today = datetime.date(2026, 10, 24)
+        good = '[[IgnoredVulns]]\nid = "GHSA-1"\nignoreUntil = 2026-12-31\nreason = "unreachable"\n'
+        self.assertEqual(fb.osv_ignore_problems(good, today), [])
+        stamped = good.replace("2026-12-31", "2026-12-31T00:00:00Z")
+        self.assertEqual(fb.osv_ignore_problems(stamped, today), [])
+        self.assertEqual(fb.osv_ignore_problems("", today), [])
+        self.assertIn("does not parse", fb.osv_ignore_problems("[[broken", today)[0])
+        expired = good.replace("2026-12-31", "2026-01-01")
+        self.assertEqual(fb.osv_ignore_problems(expired, today), ["ignore GHSA-1 expired on 2026-01-01"])
+        bare = '[[IgnoredVulns]]\nid = "GHSA-2"\n'
+        self.assertEqual(
+            fb.osv_ignore_problems(bare, today),
+            ["ignore GHSA-2 has no reason", "ignore GHSA-2 has no ignoreUntil date"],
+        )
+        self.assertEqual(len(fb.osv_ignore_problems("IgnoredVulns = [1]\n", today)), 2)
+        self.assertEqual(len(fb.osv_ignore_problems('[IgnoredVulns]\nid = "x"\n', today)), 2)
+        context = fb.template_context(_facts([]), _reader({}), PIN)
+        files = {"osv-scanner.toml": bare}
+        actions = fb._plan_gate_configs(_facts(list(files)), _reader(files), context, today)
+        self.assertEqual(_by_path(actions)["osv-scanner.toml"].action, "gap")
+        upper = fb._plan_gate_configs(_facts(["OSV-SCANNER.TOML", ".SEMGREPIGNORE"]), _reader({}), context)
+        written = [a.path for a in upper if a.action == "create"]
+        self.assertIn("osv-scanner.toml", written)
+        self.assertIn(".semgrepignore", written)
+
+    def test_rails_gate_six_cannot_scan(self) -> None:
+        rails = {"bun": ["/"], "nuget": ["/src"], "npm": ["/", "/web"], "gradle": ["/"], "pip": ["/"]}
+        paths = ["package-lock.json", "web/package.json"]
+        self.assertEqual(
+            fb.unscanned_rails(rails, paths),
+            [
+                "Bun lockfiles (/)",
+                "NuGet manifests (/src)",
+                "npm /web has no lockfile (package-lock.json / yarn.lock / pnpm-lock.yaml)",
+                "gradle / has no lockfile (gradle.lockfile)",
+            ],
+        )
+        plan = _by_path(fb.plan_baseline(_facts(["package.json", "bun.lock", "a.js"]), _reader({}), PIN))
+        self.assertIn("Bun lockfiles", plan[fb.GATE6_SCOPE].reason)
+        self.assertNotIn(fb.GATE6_SCOPE, _by_path(fb.plan_baseline(_facts(["a.py"]), _reader({}), PIN)))
+
+    def test_jsts_tests_need_a_coverage_script(self) -> None:
+        files = {"package.json": json.dumps({"scripts": {"test": "vitest run"}})}
+        gaps = fb._plan_jsts_lane(_facts(["package.json", "src/a.ts", "src/a.test.ts"]), _reader(files))
+        self.assertEqual([a.path for a in gaps], ["package.json"])
+        spec = fb._plan_jsts_lane(_facts(["src/__tests__/b.js"]), _reader({}))
+        self.assertEqual([a.action for a in spec], ["gap"])
+        covered = {"package.json": json.dumps({"scripts": {"test": "vitest run --coverage"}})}
+        self.assertEqual(fb._plan_jsts_lane(_facts(["package.json", "a.test.js"]), _reader(covered)), [])
+        script = {"package.json": json.dumps({"scripts": {"test:coverage": "c8 node --test"}})}
+        self.assertEqual(fb._plan_jsts_lane(_facts(["package.json", "a.spec.mjs"]), _reader(script)), [])
+        broken = {"package.json": "{nope", "web/package.json": "[]"}
+        paths = ["package.json", "web/package.json", "a.test.js", "deep/x/package.json"]
+        self.assertEqual(len(fb._plan_jsts_lane(_facts(paths), _reader(broken))), 1)
+        self.assertEqual(fb._plan_jsts_lane(_facts(["a.js", "node_modules/x/y.test.js"]), _reader({})), [])
+        self.assertEqual(fb._plan_jsts_lane(_facts(["a.py", "test_a.py"]), _reader({})), [])
 
     def test_managed_dependabot_is_regenerated(self) -> None:
         managed = fb.render_dependabot({"github-actions": ["/"]})
@@ -736,7 +802,10 @@ class PlanTests(unittest.TestCase):
             ["gap"],
         )
         self.assertEqual([a.action for a in scanning_only], ["gap"])
-        own_ci = fb._plan_outside_languages(_facts(["Main.java", ".github/workflows/gradle.yaml"]), _reader({}))
+        empty_ci = fb._plan_outside_languages(_facts(["Main.java", ".github/workflows/ci.yml"]), _reader({}))
+        self.assertEqual([a.action for a in empty_ci], ["gap"])
+        gradle = {".github/workflows/gradle.yaml": "jobs:\n  t:\n    steps:\n      - run: ./gradlew test\n"}
+        own_ci = fb._plan_outside_languages(_facts(["Main.java"] + list(gradle)), _reader(gradle))
         self.assertEqual(own_ci, [])
         self.assertEqual(fb._plan_outside_languages(_facts(["app.py"]), _reader({})), [])
 

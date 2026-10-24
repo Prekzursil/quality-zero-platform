@@ -263,31 +263,61 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
         # Review finding: more open PRs than one page lists - no verdict rather than a partial one.
         self.assertEqual(live(pulls, link=next_page["link"]), "unknown")
 
-    def test_prs_sharing_a_head_keep_separate_verdicts(self) -> None:
-        """Review finding: one head, two PRs (different bases) - a newer success for one cannot hide the other's failure."""
+    def test_a_head_two_prs_share_never_reads_green_over_a_failure(self) -> None:
+        """Review findings: one head, two PRs (two bases, or two forks) - a newer success cannot hide a failure.
+
+        GitHub's ``pull_requests`` on a run lists every matching open PR (none
+        for a fork), not the one that triggered it, so the runs cannot be split.
+        """
         pulls = [{"number": 1, "head": {"sha": "h"}}, {"number": 2, "head": {"sha": "h"}}]
-        runs = {
-            "workflow_runs": [
-                {
-                    "name": "CI",
-                    "conclusion": "success",
-                    "created_at": "2026-10-24T10:02:00Z",
-                    "pull_requests": [{"number": 1}],
-                },
-                {
-                    "name": "CI",
-                    "conclusion": "failure",
-                    "created_at": "2026-10-24T10:01:00Z",
-                    "pull_requests": [{"number": 2}],
-                },
-                {"name": "Lint", "conclusion": "success", "created_at": "2026-10-24T10:00:00Z", "pull_requests": []},
-            ]
-        }
-        with patch.object(
-            build_admin_dashboard, "_github_fetch_degraded", side_effect=[(pulls, {}), (runs, {})]
-        ) as fetch:
-            self.assertEqual(build_admin_dashboard._open_pr_health("token", "o/r"), "partial")
-        self.assertEqual(fetch.call_count, 2)  # one lookup per distinct head
+
+        def verdict(*conclusions: str) -> str:
+            runs = {
+                "workflow_runs": [
+                    {"name": "CI", "conclusion": c, "created_at": f"2026-10-24T10:0{i}:00Z", "pull_requests": []}
+                    for i, c in enumerate(conclusions)
+                ]
+            }
+            with patch.object(
+                build_admin_dashboard, "_github_fetch_degraded", side_effect=[(pulls, {}), (runs, {})]
+            ) as fetch:
+                result = build_admin_dashboard._open_pr_health("token", "o/r")
+            self.assertEqual(fetch.call_count, 2)  # one lookup per distinct head
+            return result
+
+        self.assertEqual(verdict("failure", "success"), "unknown")  # was "success": PR 2's failure hidden
+        self.assertEqual(verdict("success", "failure"), "partial")
+        self.assertEqual(verdict("cancelled", "success"), "success")  # nothing failed: nothing ambiguous
+        self.assertEqual(verdict("success", "success"), "success")
+
+    def test_default_branch_health_ignores_runs_a_pull_request_triggered(self) -> None:
+        """Review finding: ?branch=main matches head branches, so a fork PR from its own main landed in the window."""
+        own = {"full_name": "Prekzursil/Example"}
+        runs = [
+            {"name": "CI", "event": "push", "conclusion": "success", "head_repository": own},
+            {"name": "Scan", "event": "schedule", "conclusion": "success", "head_repository": own},
+            {"name": "CI", "event": "pull_request", "conclusion": "failure", "created_at": "9"},
+            {"name": "Label", "event": "pull_request_target", "conclusion": "failure", "head_repository": own},
+            {
+                "name": "Report",
+                "event": "workflow_run",
+                "conclusion": "failure",
+                "head_repository": {"full_name": "someone/example"},
+            },
+        ]
+        keep = [run for run in runs if build_admin_dashboard._is_default_branch_run(run, "Prekzursil/example")]
+        self.assertEqual([run["name"] for run in keep], ["CI", "Scan"])
+        self.assertEqual(build_admin_dashboard._is_default_branch_run({"event": "push"}, "o/r"), True)
+        with (
+            patch.object(
+                build_admin_dashboard,
+                "_github_payload",
+                side_effect=[{"workflow_runs": runs}, [], {"visibility": "public"}],
+            ),
+            patch.object(build_admin_dashboard, "_github_fetch_degraded", return_value=([], {})),
+        ):
+            live = build_admin_dashboard._live_health("token", "Prekzursil/example", "main")
+        self.assertEqual(live["default_branch_health"], "success")
 
     def test_per_head_lookups_are_capped(self) -> None:
         """A huge PR backlog cannot stall the hourly build; heads past the cap leave no verdict."""

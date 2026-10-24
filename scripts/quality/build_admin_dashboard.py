@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Sequence, Set, Tuple
 from urllib.error import HTTPError
@@ -41,6 +42,11 @@ MAX_PR_HEAD_LOOKUPS = 20
 #: failing-workflow alert uses the same set): a run that concurrency
 #: cancelled, or a skipped job, says nothing about health.
 NEUTRAL_CONCLUSIONS = frozenset({"cancelled", "skipped", "neutral", "action_required", "stale"})
+#: Events a pull request triggers. ``actions/runs?branch=<default>`` matches a
+#: run's HEAD branch, so a fork PR opened from the fork's own ``main``, and a
+#: ``pull_request_target`` run (which carries the base branch), both land in
+#: the default-branch window while they test pull-request code.
+PR_EVENTS = frozenset({"pull_request", "pull_request_target", "pull_request_review", "pull_request_review_comment"})
 
 
 def parse_args() -> argparse.Namespace:
@@ -339,22 +345,35 @@ def _head_runs(token: str, repo_slug: str, sha: str) -> Tuple[List[Mapping[str, 
     return _workflow_runs_of(payload), not _next_page_url(headers or {})
 
 
-def _pr_health(runs: Sequence[Mapping[str, Any]], complete: bool, number: Any) -> str:
-    """One open PR's verdict from its head's runs.
+def _is_default_branch_run(run: Mapping[str, Any], repo_slug: str) -> bool:
+    """A run of this repository's own default-branch code, not one a pull request or a fork triggered."""
+    head_repo = run.get("head_repository")
+    name = head_repo.get("full_name") if isinstance(head_repo, Mapping) else None
+    foreign = isinstance(name, str) and name.lower() != repo_slug.lower()
+    return run.get("event") not in PR_EVENTS and not foreign
 
-    Two open PRs can share a head commit (different bases), so a run that
-    names its PRs counts only for those. A fork PR's runs name none and are
-    kept. With an incomplete run list, only a failure already visible is
-    reported; anything else is unproven.
+
+def _failed(run: Mapping[str, Any]) -> bool:
+    """A completed run that decided against its commit (not a pass, not a neutral outcome)."""
+    conclusion = str(run.get("conclusion") or "")
+    return bool(conclusion) and conclusion != "success" and conclusion not in NEUTRAL_CONCLUSIONS
+
+
+def _head_health(runs: Sequence[Mapping[str, Any]], complete: bool, *, shared: bool) -> str:
+    """One open head commit's verdict from its ``pull_request`` runs.
+
+    GitHub lists on a run every open PR whose head matches it, "not
+    necessarily" the one that triggered it, and none for a fork PR. So when
+    two open PRs share a head (one branch, two bases), their runs cannot be
+    split per PR: a failure that a later run of the same workflow superseded
+    may be the OTHER PR's, and that head reads ``unknown``, never ``success``.
+    With an incomplete run list, only a failure already visible is reported;
+    anything else is unproven.
     """
-    own = [
-        run
-        for run in runs
-        if not run.get("pull_requests")
-        or any(isinstance(pr, Mapping) and pr.get("number") == number for pr in run["pull_requests"])
-    ]
-    verdict = _compute_health(own)
-    if verdict != "partial" and not complete:
+    verdict = _compute_health(runs)
+    if verdict == "partial":
+        return verdict
+    if not complete or (shared and any(_failed(run) for run in runs)):
         return "unknown"
     return verdict
 
@@ -378,13 +397,14 @@ def _open_pr_health(token: str, repo_slug: str) -> str:
     pulls, headers = _github_fetch_degraded(f"{GITHUB_API_BASE}/repos/{repo_slug}/pulls?state=open&per_page=100", token)
     if not isinstance(pulls, list) or _next_page_url(headers or {}):
         return "unknown"
-    open_prs = [(pull.get("number"), _head_sha(pull)) for pull in pulls if isinstance(pull, Mapping)]
-    open_prs = [(number, sha) for number, sha in open_prs if sha]
-    if not open_prs:
+    prs_per_head = Counter(sha for sha in map(_head_sha, pulls) if sha)
+    if not prs_per_head:
         return "none"
-    heads = sorted({sha for _number, sha in open_prs})
-    looked_up = {sha: _head_runs(token, repo_slug, sha) for sha in heads[:MAX_PR_HEAD_LOOKUPS]}
-    verdicts = [_pr_health(*looked_up[sha], number) for number, sha in open_prs if sha in looked_up]
+    heads = sorted(prs_per_head)
+    verdicts = [
+        _head_health(*_head_runs(token, repo_slug, sha), shared=prs_per_head[sha] > 1)
+        for sha in heads[:MAX_PR_HEAD_LOOKUPS]
+    ]
     if "partial" in verdicts:
         return "partial"
     if len(heads) > MAX_PR_HEAD_LOOKUPS or "unknown" in verdicts:
@@ -552,7 +572,9 @@ def _live_health(
             visibility = raw_visibility.strip().lower()
     workflow_runs = runs.get("workflow_runs", []) if isinstance(runs, dict) else []
     health: Dict[str, Any] = {
-        "default_branch_health": _compute_health(workflow_runs),
+        "default_branch_health": _compute_health(
+            workflow_runs, filter_fn=lambda run: _is_default_branch_run(run, repo_slug)
+        ),
         # A repo the token cannot see at all has no readable PRs either.
         "open_pr_health": _open_pr_health(token, repo_slug) if repo_meta is not None else "unknown",
         "ruleset_present": bool(rulesets),

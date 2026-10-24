@@ -15,6 +15,7 @@ from typing import Any, List, Optional
 from scripts.quality import audit_log_append as audit
 
 RECORD = '{"label": "quality-zero:skip", "pr": {"slug": "o/r", "number": 5}}'
+WINNER = '{"winner": true}\n'
 
 
 class FakeGitHub:
@@ -79,6 +80,21 @@ class AppendRecordTests(unittest.TestCase):
         github = FakeGitHub('{"first": 1}\n', conflicts=1)
         self.assertEqual(_append(github), 2)
         self.assertEqual(github.content, '{"first": 1}\n{"other": true}\n' + RECORD + "\n")
+
+    def test_a_lost_creation_race_retries_too(self) -> None:
+        """Two first writers: the loser's sha-less PUT gets 422, re-reads, and appends after the winner."""
+        github = FakeGitHub(None)
+        real_call = github.__call__
+
+        def creator_wins_first(argv, **kwargs):
+            if argv[:3] == ["gh", "api", "-X"] and github.content is None and not github.puts:
+                github.puts.append(json.loads(kwargs["input"]))
+                github.content = WINNER
+                return subprocess.CompletedProcess(argv, 1, "", "Invalid request. sha was not supplied. (HTTP 422)")
+            return real_call(argv, **kwargs)
+
+        self.assertEqual(_append(creator_wins_first), 2)
+        self.assertEqual(github.content, WINNER + RECORD + "\n")
 
     def test_a_log_that_keeps_moving_is_an_error_not_a_dropped_record(self) -> None:
         """Three lost races in a row fail loudly."""

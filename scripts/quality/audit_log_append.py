@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Callable, Optional, Sequence, Tuple
 
 ProcessRunner = Callable[..., "subprocess.CompletedProcess[str]"]
+RETRYABLE = ("409", "422", "does not match", "wasn't supplied")
 
 
 class AuditAppendError(RuntimeError):
@@ -77,7 +78,10 @@ def append_record(
         )  # nosec B603 — fixed argv
         if done.returncode == 0:
             return attempt
-        if "409" not in done.stderr and "does not match" not in done.stderr:
+        # 409: the file moved under us. 422 "sha wasn't supplied": another
+        # writer CREATED it between our 404 read and this PUT. Both mean
+        # start again from the current content.
+        if not any(marker in done.stderr for marker in RETRYABLE):
             raise AuditAppendError(f"writing {path} failed: {done.stderr.strip()}")
     raise AuditAppendError(f"{path} kept changing underneath; the record was not written after {attempts} attempts")
 

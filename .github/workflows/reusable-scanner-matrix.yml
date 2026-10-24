@@ -428,14 +428,18 @@ jobs:
         run: |
           python platform/scripts/quality/rollup_v2/verify_action_pins.py \
             --workflows-dir platform/.github/workflows
+      - name: SonarCloud scan skipped (no SONAR_TOKEN)
+        if: matrix.lane == 'coverage' && env.SONAR_TOKEN_PRESENT != 'true' && steps.profile.outputs.sonar_coverage_enabled == 'true'
+        run: |
+          echo "::warning title=SonarCloud scan skipped::The profile opts in (sonar_coverage: true), but the caller passes no SONAR_TOKEN, so no SonarCloud analysis ran."
       - name: SonarCloud scan
-        # Profile-gated (default on) so a repo can retire the SonarCloud
-        # coverage scan without touching this shared workflow. The platform's
-        # own lean self-CI sets ``sonar_coverage: false`` because SonarCloud is
-        # a retired-tier tool there and CI analysis is rejected while
-        # Automatic Analysis is enabled on the project — the 100% coverage
-        # MEASURE stays in Control Plane Verify (scripts/verify --fail-under=100).
-        # The enrolled fleet (no toggle) keeps the legacy on-by-token behaviour.
+        # OPT-IN per profile (``sonar_coverage: true``; export_profile defaults
+        # it off): SonarCloud rejects CI analysis wherever Automatic Analysis
+        # is enabled. Until #336 this step could never run (its `if:` read its
+        # own env), so no repository has depended on it. QZP's own profile
+        # keeps it off; its 100% coverage MEASURE stays in Control Plane
+        # Verify (scripts/verify --fail-under=100). Opted in without a
+        # SONAR_TOKEN, the step above says the scan was skipped.
         if: matrix.lane == 'coverage' && env.SONAR_TOKEN_PRESENT == 'true' && steps.profile.outputs.sonar_coverage_enabled != 'false'
         # The Sonar action SHA pin (40-char hex) trips
         # generic.secrets.security.detected-sonarqube-docs-api-key on the

@@ -94,6 +94,16 @@ class ReusableBypassWorkflowTests(unittest.TestCase):
             self.text,
         )
 
+    def test_a_bypass_without_the_audit_pat_says_it_was_not_recorded(self) -> None:
+        """A skipped commit step was silent: the run must say the bypass left no audit record."""
+        steps = self.doc["jobs"]["bypass"]["steps"]
+        names = [step.get("name", "") for step in steps]
+        notice = steps[names.index("Audit record not committed (no BYPASS_AUDIT_PAT)")]
+        self.assertEqual(notice["if"], "${{ env.HAS_AUDIT_PAT != 'true' }}")
+        self.assertIn("::warning title=Bypass NOT recorded::", notice["run"])
+        self.assertIn('>> "$GITHUB_STEP_SUMMARY"', notice["run"])
+        self.assertEqual(names.index("Commit audit log"), names.index(notice["name"]) + 1)
+
     def test_the_audit_record_is_appended_without_a_checkout(self) -> None:
         """One read-only code checkout; the record goes through the Contents API with the PAT."""
         steps = self.doc["jobs"]["bypass"]["steps"]

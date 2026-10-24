@@ -164,8 +164,12 @@ template pyproject.toml.
 
 ## Complexity threshold (Lizard / QLTY)
 
-The platform runs `lizard -C 15` as a hard cap on cyclomatic
-complexity (CCN > 15 fails). To change:
+**Not enforced today.** No lean-gate workflow runs `lizard`. Only the legacy
+scanner matrix's QLTY lane can, and nothing calls it. #290 adds complexity and
+duplication gate modules (gates 7 and 8) that are not wired into
+`reusable-quality.yml` yet. Until they are, nothing in CI caps CCN. The
+settings below are what those gates will read; the intended cap is
+`lizard -C 15` (CCN > 15 fails). To change:
 
 - **Per repo (rare)**: override in the per-repo profile under
   `qlty.complexity_threshold` (default 15).

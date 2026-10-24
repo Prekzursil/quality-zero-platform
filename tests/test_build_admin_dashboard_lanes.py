@@ -295,6 +295,7 @@ class LiveHealthGateWiringTests(unittest.TestCase):
             "/actions/runs": ({"workflow_runs": []}, {}),
             "/rulesets": ([], {}),
             "/repos/Prekzursil/x": ({"visibility": "public"}, {}),
+            "/pulls": ([], {}),
             "/commits/main": (_head_payload(), {}),
             "/check-runs": (_contexts_payload(("quality / quality", "completed", "success")), {}),
             "/status": ({"statuses": []}, {}),

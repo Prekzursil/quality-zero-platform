@@ -34,6 +34,10 @@ GITHUB_API_BASE = "https://api.github.com"
 # is far beyond any real required-context set — the cap stops a pathological
 # repo from stalling the hourly build.
 MAX_CHECK_RUN_PAGES = 5
+#: Conclusions that neither pass nor fail a workflow (the platform's own
+#: failing-workflow alert uses the same set): a run that concurrency
+#: cancelled, or a skipped job, says nothing about health.
+NEUTRAL_CONCLUSIONS = frozenset({"cancelled", "skipped", "neutral", "action_required", "stale"})
 
 
 def parse_args() -> argparse.Namespace:
@@ -279,18 +283,70 @@ def _select_runs(workflow_runs: Sequence[Mapping[str, Any]], *, filter_fn=None) 
     return [item for item in workflow_runs if filter_fn(item)]
 
 
-def _run_conclusions(workflow_runs: Sequence[Mapping[str, Any]]) -> Set[str]:
-    """Handle run conclusions."""
-    return {str(item.get("conclusion") or "") for item in workflow_runs if item.get("conclusion")}
+def _compute_health(
+    workflow_runs: Sequence[Mapping[str, Any]],
+    *,
+    filter_fn=None,
+    per_commit: bool = False,
+) -> str:
+    """One verdict from the NEWEST decisive run of each workflow (of each commit, with ``per_commit``).
+
+    ``partial`` when some workflow's newest completed, non-neutral run did not
+    succeed; ``pending`` when a workflow has nothing but runs still in flight;
+    ``success`` when every decided workflow passed; ``unknown`` when no run
+    says anything. A failure that a later run fixed, or a run that concurrency
+    cancelled, no longer paints a green branch red.
+    """
+    runs = sorted(
+        _select_runs(workflow_runs, filter_fn=filter_fn),
+        key=lambda run: str(run.get("created_at", "")),
+        reverse=True,
+    )
+    decided: Dict[Tuple[str, str], str] = {}
+    in_flight: Set[Tuple[str, str]] = set()
+    for run in runs:
+        commit = str(run.get("head_sha", "")) if per_commit else ""
+        key = (commit, str(run.get("workflow_id") or run.get("name") or ""))
+        conclusion = str(run.get("conclusion") or "")
+        if key in decided or conclusion in NEUTRAL_CONCLUSIONS:
+            continue
+        if run.get("status", "completed") != "completed" or not conclusion:
+            in_flight.add(key)
+            continue
+        decided[key] = conclusion
+    verdicts = set(decided.values())
+    if verdicts - {"success"}:
+        return "partial"
+    if in_flight - decided.keys():
+        return "pending"
+    return "success" if verdicts else "unknown"
 
 
-def _compute_health(workflow_runs: Sequence[Mapping[str, Any]], *, filter_fn=None) -> str:
-    """Handle compute health."""
-    runs = _select_runs(workflow_runs, filter_fn=filter_fn)
-    if not runs:
+def _head_sha(pull: Any) -> str:
+    """The head commit of one ``GET /pulls`` record ("" if malformed)."""
+    head = pull.get("head") if isinstance(pull, Mapping) else None
+    return str(head.get("sha") or "") if isinstance(head, Mapping) else ""
+
+
+def _open_pr_health(token: str, repo_slug: str) -> str:
+    """The verdict over the newest run of each workflow on each OPEN PR's head commit.
+
+    ``none`` when no PR is open. This used to filter the DEFAULT-branch runs
+    for ``pull_request`` events, and a PR run never carries the default
+    branch, so every repo read ``unknown``. A PR whose runs all fall outside
+    the newest 100 pull_request runs contributes nothing.
+    """
+    pulls = _github_payload_or_none(f"{GITHUB_API_BASE}/repos/{repo_slug}/pulls?state=open&per_page=100", token)
+    if not isinstance(pulls, list):
         return "unknown"
-    conclusions = _run_conclusions(runs)
-    return "success" if conclusions and conclusions <= {"success"} else "partial"
+    heads = {_head_sha(pull) for pull in pulls} - {""}
+    if not heads:
+        return "none"
+    runs = _github_payload_or_none(
+        f"{GITHUB_API_BASE}/repos/{repo_slug}/actions/runs?event=pull_request&per_page=100", token
+    )
+    workflow_runs = runs.get("workflow_runs", []) if isinstance(runs, dict) else []
+    return _compute_health(workflow_runs, filter_fn=lambda run: run.get("head_sha") in heads, per_commit=True)
 
 
 def _gate_status_from_context(context_name: str, contexts: Mapping[str, Dict[str, str]]) -> str:
@@ -452,10 +508,8 @@ def _live_health(
     workflow_runs = runs.get("workflow_runs", []) if isinstance(runs, dict) else []
     health: Dict[str, Any] = {
         "default_branch_health": _compute_health(workflow_runs),
-        "open_pr_health": _compute_health(
-            workflow_runs,
-            filter_fn=lambda item: item.get("event") == "pull_request",
-        ),
+        # A repo the token cannot see at all has no readable PRs either.
+        "open_pr_health": _open_pr_health(token, repo_slug) if repo_meta is not None else "unknown",
         "ruleset_present": bool(rulesets),
         "visibility": visibility,
     }

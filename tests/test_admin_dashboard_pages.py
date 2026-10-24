@@ -133,6 +133,39 @@ class RenderAuditPageTests(unittest.TestCase):
         self.assertIn("No bypass", html)
 
 
+class NoSourceTests(unittest.TestCase):
+    """A page whose source file does not exist knows nothing - and must say so."""
+
+    def test_every_page_says_it_has_no_data_when_its_source_is_absent(self) -> None:
+        """THE bug: drift.html said "Fleet is in sync" with no drift data at all."""
+        rendered = (
+            pages.render_coverage_trend_page(rows=None, source="quality-rollup/coverage-trend.json"),
+            pages.render_drift_page(entries=None, source="audit/drift-sync.jsonl"),
+            pages.render_audit_page(entries=None, source="audit/break-glass.jsonl"),
+        )
+        sources = ("quality-rollup/coverage-trend.json", "audit/drift-sync.jsonl", "audit/break-glass.jsonl")
+        for html, source in zip(rendered, sources, strict=True):
+            with self.subTest(source=source):
+                self.assertIn("<strong>No data.</strong>", html)
+                self.assertIn(f"<code>{source}</code> does not exist", html)
+                self.assertIn("NOT an all-clear", html)
+                self.assertNotIn("in sync", html)
+        self.assertIn("Its data source does not exist", pages.render_drift_page(entries=None))
+
+    def test_load_source_tells_absent_from_empty(self) -> None:
+        """Absent (or not configured) is None; present-but-empty is an empty list."""
+        self.assertIsNone(pages.load_source("", pages.load_audit_jsonl))
+        self.assertIsNone(pages.load_source("/does/not/exist.jsonl", pages.load_audit_jsonl))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "drift.jsonl"
+            path.write_text("", encoding="utf-8")
+            self.assertEqual(pages.load_source(str(path), pages.load_drift_entries), [])
+            path.write_text('{"slug": "o/r", "status": "open"}\n', encoding="utf-8")
+            self.assertEqual(
+                pages.load_source(str(path), pages.load_drift_entries), [{"slug": "o/r", "status": "open"}]
+            )
+
+
 class LoadAuditJsonlTests(unittest.TestCase):
     """``load_audit_jsonl`` reads a JSONL bypass audit file."""
 

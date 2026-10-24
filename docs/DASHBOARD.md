@@ -64,10 +64,26 @@ masked before the payload is serialised, so the public site cannot leak them.
 | Panel | Renderer | Data source | Notes |
 | --- | --- | --- | --- |
 | Repo heatmap (main SPA) | `docs/admin/app.js` (client) | `site/data/dashboard.json` ← inventory + profiles + live REST queries | per-repo: profile, rollout, issue policy, scanners, branch-coverage min, deps policy, default-branch health, open-PR health, ruleset presence |
-| Coverage trend | `admin_dashboard_pages.py` (server) | `quality-rollup/coverage-trend.json` (build-time file) | absent in a plain checkout ⇒ "No coverage data available yet." |
-| Drift-sync status | `admin_dashboard_pages.py` (server) | `audit/drift-sync.jsonl` (runtime artifact) | written by drift-sync runs; absent in a plain checkout ⇒ "No drift entries." |
-| Bypass audit feed | `admin_dashboard_pages.py` (server) | `audit/break-glass.jsonl` (runtime artifact, appended by `reusable-quality-zero-bypass.yml`) | absent ⇒ "No bypass events recorded." |
+| Coverage trend | `admin_dashboard_pages.py` (server) | `quality-rollup/coverage-trend.json` (build-time file) | No job produces it yet. Absent ⇒ "**No data.** … does not exist … NOT an all-clear." |
+| Drift-sync status | `admin_dashboard_pages.py` (server) | `audit/drift-sync.jsonl` (runtime artifact) | No job produces it yet. Absent ⇒ "**No data.** … does not exist … NOT an all-clear." Present but empty ⇒ "No drift entries recorded." |
+| Bypass audit feed | `admin_dashboard_pages.py` (server) | `audit/break-glass.jsonl` (runtime artifact, committed by `reusable-quality-zero-bypass.yml` only when the caller has `BYPASS_AUDIT_PAT`) | Absent ⇒ "**No data.** … NOT an all-clear." Present but empty ⇒ "No bypass events recorded." |
 | Sub-pages (e.g. codex fleet) | self-contained HTML under `docs/admin/<name>/` | none (static) | copied verbatim |
+
+## Health semantics
+
+- **Default branch:** the NEWEST decisive run of each workflow on the default branch (from the 20 newest runs).
+  `success` means every workflow's newest completed run passed. `partial` means at least one failed.
+  `pending` means a workflow has only runs still in flight. `unknown` means no run says anything.
+  Cancelled, skipped, neutral, stale and action-required runs never decide (the same set as the
+  platform's own failing-workflow alert). So an old failure that a later run fixed, or a run that
+  concurrency cancelled, no longer paints a green branch red.
+- **Open PRs:** the same rule per open PR head commit, over the 100 newest `pull_request` runs.
+  `none` means no PR is open. Until 2026-10 this field filtered the *default-branch* runs for
+  `pull_request` events, and a PR run never carries the default branch, so all 19 repos read
+  `unknown`.
+- **A page whose source file does not exist says so.** It renders "No data", names the missing
+  file, and says it is not an all-clear. Before, it claimed "Fleet is in sync" or "No bypass
+  events recorded" with nothing behind the claim.
 
 ## Known gaps (pre-Lane-8)
 

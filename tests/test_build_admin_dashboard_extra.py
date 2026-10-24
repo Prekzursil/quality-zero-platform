@@ -50,8 +50,8 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
         self.assertIn("\n    1.\n", page)
 
         runs: List[Mapping[str, Any]] = [
-            {"event": "push", "conclusion": "success"},
-            {"event": "pull_request", "conclusion": "failure"},
+            {"event": "push", "name": "CI", "conclusion": "success"},
+            {"event": "pull_request", "name": "Lint", "conclusion": "failure"},
         ]
         self.assertEqual(len(build_admin_dashboard._select_runs(runs)), 2)
         self.assertEqual(
@@ -63,7 +63,6 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
             ),
             1,
         )
-        self.assertEqual(build_admin_dashboard._run_conclusions(runs), {"success", "failure"})
         self.assertEqual(build_admin_dashboard._compute_health([]), "unknown")
         self.assertEqual(build_admin_dashboard._compute_health(runs), "partial")
         self.assertEqual(
@@ -102,6 +101,9 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
                 # repo metadata fetch added in the Phase-5 redaction wiring
                 # (see _live_health) — third call returns visibility.
                 {"visibility": "public"},
+                # open PRs, then the pull_request runs on their heads
+                [{"number": 4, "head": {"sha": "abc"}}],
+                {"workflow_runs": [{"head_sha": "abc", "name": "CI", "status": "completed", "conclusion": "success"}]},
             ],
         ):
             live = build_admin_dashboard._live_health("token", "Prekzursil/example", "main")
@@ -159,10 +161,12 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
                 runs_payload,  # actions/runs reachable
                 _http_error(404, "Not Found"),  # rulesets absent
                 ["unexpected"],  # metadata reachable but not a dict
+                [],  # no open PR
             ],
         ):
             live = build_admin_dashboard._live_health("token", "Prekzursil/tracelines", "main")
         self.assertEqual(live["default_branch_health"], "success")
+        self.assertEqual(live["open_pr_health"], "none")
         self.assertFalse(live["ruleset_present"])
         self.assertEqual(live["visibility"], "public")
 
@@ -173,12 +177,64 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
                 _http_error(404, "Not Found"),  # actions/runs absent
                 [{"id": 1}],  # rulesets reachable
                 {"visibility": "   "},  # metadata dict with blank visibility
+                _http_error(404, "Not Found"),  # pulls absent
             ],
         ):
             live = build_admin_dashboard._live_health("token", "Prekzursil/tracelines", "main")
         self.assertEqual(live["default_branch_health"], "unknown")
+        self.assertEqual(live["open_pr_health"], "unknown")
         self.assertTrue(live["ruleset_present"])
         self.assertEqual(live["visibility"], "public")
+
+    def test_health_reads_the_newest_decisive_run_of_each_workflow(self) -> None:
+        """A fixed failure, a cancelled run, or a run in flight no longer paints a green branch red."""
+
+        def run(name: str, conclusion: str, status: str = "completed", minute: int = 0, sha: str = "a") -> dict:
+            return {
+                "name": name,
+                "conclusion": conclusion,
+                "status": status,
+                "created_at": f"2026-10-24T10:{minute:02d}:00Z",
+                "head_sha": sha,
+            }
+
+        health = build_admin_dashboard._compute_health
+        recovered = [run("CI", "failure", minute=1), run("CI", "success", minute=2)]
+        self.assertEqual(health(recovered), "success")
+        cancelled = [run("CI", "success", minute=1), run("CI", "cancelled", minute=2), run("Lint", "skipped")]
+        self.assertEqual(health(cancelled), "success")
+        broken = [run("CI", "success", minute=2), run("Lint", "failure", minute=1)]
+        self.assertEqual(health(broken), "partial")
+        in_flight = [run("CI", "", status="in_progress", minute=2), run("CI", "success", minute=1)]
+        self.assertEqual(health(in_flight), "success")
+        self.assertEqual(health([run("CI", "", status="queued")]), "pending")
+        self.assertEqual(health([run("CI", "neutral")]), "unknown")
+        per_head = [run("CI", "success", minute=2, sha="new"), run("CI", "failure", minute=1, sha="old")]
+        self.assertEqual(health(per_head), "success")
+        self.assertEqual(health(per_head, per_commit=True), "partial")
+
+    def test_open_pr_health_reads_each_open_heads_runs(self) -> None:
+        """THE bug: PR health filtered default-branch runs for PR events, so every repo read unknown."""
+
+        def live(*responses: Any) -> str:
+            with patch.object(build_admin_dashboard, "_github_payload", side_effect=list(responses)):
+                return build_admin_dashboard._open_pr_health("token", "Prekzursil/example")
+
+        pulls = [{"number": 1, "head": {"sha": "h1"}}, {"number": 2, "head": {"sha": "h2"}}, {"head": None}]
+        green = {"workflow_runs": [{"head_sha": "h1", "name": "CI", "conclusion": "success"}]}
+        self.assertEqual(live(pulls, green), "success")
+        red = {
+            "workflow_runs": [
+                {"head_sha": "h2", "name": "CI", "conclusion": "failure"},
+                {"head_sha": "closed-pr", "name": "CI", "conclusion": "success"},
+            ]
+        }
+        self.assertEqual(live(pulls, red), "partial")
+        self.assertEqual(live(pulls, {"workflow_runs": []}), "unknown")
+        self.assertEqual(live(pulls, ["not", "a", "dict"]), "unknown")
+        self.assertEqual(live([]), "none")
+        self.assertEqual(live({"message": "not a list"}), "unknown")
+        self.assertEqual(live(_http_error(404, "Not Found")), "unknown")
 
     def test_main_uses_live_health_when_token_is_present(self) -> None:
         """Cover main uses live health when token is present."""

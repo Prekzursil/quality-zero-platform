@@ -27,10 +27,12 @@ on:
         type: string
         required: false
         default: Prekzursil/quality-zero-platform
+        description: "Deprecated and ignored. The platform is checked out at this workflow file's own commit (job.workflow_repository / job.workflow_sha), so a caller can no longer pick, or drift from, the scripts it runs. Still declared so existing callers that pass it keep working."
       platform_ref:
         type: string
         required: false
         default: main
+        description: "Deprecated and ignored. The platform is checked out at this workflow file's own commit (job.workflow_repository / job.workflow_sha), so a caller can no longer pick, or drift from, the scripts it runs. Still declared so existing callers that pass it keep working."
     secrets:
       DRIFT_SYNC_PAT:
         required: false
@@ -39,13 +41,18 @@ on:
 jobs:
   drift-sync:
     runs-on: ubuntu-latest
+    # Presence flags the steps' `if:` read live here: a step's own env is
+    # not visible to that step's `if:`, which silently skipped it forever.
+    env:
+      DRIFT_SYNC_PAT_PRESENT: ${{ secrets.DRIFT_SYNC_PAT != '' }}
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out the platform at this workflow's own commit
+        uses: actions/checkout@v4
         with:
-          repository: ${{ inputs.platform_repository }}
-          ref: ${{ inputs.platform_ref }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: platform
           persist-credentials: false
 
@@ -134,10 +141,9 @@ jobs:
         env:
           REPO_SLUG: ${{ inputs.repo_slug }}
           DEFAULT_BRANCH: ${{ inputs.default_branch }}
-          PLATFORM_REF: ${{ inputs.platform_ref }}
+          PLATFORM_REF: ${{ job.workflow_sha }}
           DRIFT_REPORT_PATH: ${{ runner.temp }}/drift.json
           GH_TOKEN: ${{ secrets.DRIFT_SYNC_PAT }}
-          DRIFT_SYNC_PAT_PRESENT: ${{ secrets.DRIFT_SYNC_PAT != '' }}
         working-directory: repo
         run: |
           set -euo pipefail

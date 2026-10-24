@@ -92,6 +92,17 @@ class ScheduledAlertsWorkflowTests(unittest.TestCase):
         self.assertIn('active_workflows={str(workflow.get("name", "")) for workflow in active}', self.text)
         self.assertIn("if not dry_run:\n              # gh issue create rejects a label the repo lacks.", self.text)
 
+    def test_bypass_and_drift_detectors_read_live_state(self) -> None:
+        """They used to read files nothing wrote, so they were never evaluated."""
+        self.assertIn("from scripts.quality import alert_dispatch, alerts, fleet_state", self.text)
+        self.assertIn("bypass_issues = fleet_state.bypass_followups(PLATFORM)", self.text)
+        self.assertIn('drift_prs = fleet_state.drift_sync_prs(PLATFORM.split("/", 1)[0])', self.text)
+        self.assertNotIn("bypass-tracking.jsonl", self.text)
+        self.assertNotIn('_safe_jsonl("audit/drift-sync.jsonl")', self.text)
+        # The detectors still without a producer are named as NOT evaluated.
+        self.assertIn('"quality-rollup/coverage-trend.json": "regression / deadline / escalation / flag"', self.text)
+        self.assertIn('"audit/bump-staging-results.jsonl": "fleet-bump-fail"', self.text)
+
     def test_checkout_does_not_persist_credentials(self) -> None:
         """``persist-credentials: false`` — CodeQL safety."""
         steps = self.doc["jobs"]["dispatch"]["steps"]

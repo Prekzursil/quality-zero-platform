@@ -30,6 +30,16 @@ jobs:
           python scripts/quality/build_admin_dashboard.py \
             --assets-dir docs/admin \
             --output-dir site
+      # The drift page's source, read live: open drift-sync PRs across the
+      # fleet. A failed read writes NO file, so the page says "No data"
+      # instead of claiming the fleet is in sync.
+      - name: Read live drift-sync PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          QZ_OWNER: ${{ github.repository_owner }}
+        run: |
+          python scripts/quality/fleet_state.py --owner "$QZ_OWNER" --drift-jsonl audit/drift-sync.jsonl \
+            || echo "::warning::Live drift-sync PRs could not be read; the drift page will say it has no data."
       - name: Build Phase 5 dashboard pages (coverage / drift / audit)
         run: |
           python scripts/quality/admin_dashboard_pages.py \

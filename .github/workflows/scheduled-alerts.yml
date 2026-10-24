@@ -6,11 +6,13 @@ name: Scheduled Alerts
 # for each trigger via ``scripts.quality.alerts.open_alert_issue``.
 # Per-event only — no digest.
 #
-# Fleet state sources (all optional; absent → empty list):
-#   - quality-rollup/coverage-trend.json — coverage regression input
-#   - audit/bypass-tracking.jsonl — break-glass stale tracker
-#   - audit/drift-sync.jsonl — drift-stuck PRs
-#   - audit/bump-staging-results.jsonl — fleet-bump wave outcome
+# Fleet state sources:
+#   - LIVE (scripts/quality/fleet_state.py; a failed read fails the run):
+#     open break-glass follow-up issues -> bypass-stale;
+#     open drift-sync PRs across the fleet -> drift-stuck.
+#   - files nothing produces yet (absent -> the summary says NOT evaluated):
+#     quality-rollup/coverage-trend.json -> coverage regression detectors;
+#     audit/bump-staging-results.jsonl -> fleet-bump wave outcome.
 # plus the platform's OWN default-branch workflow runs (gh run list): a
 # workflow whose last 3 completed runs all failed opens an
 # alert:workflow-failing issue, closed again when the workflow next succeeds.
@@ -74,7 +76,7 @@ jobs:
           import os
           import sys
           from pathlib import Path
-          from scripts.quality import alert_dispatch, alerts
+          from scripts.quality import alert_dispatch, alerts, fleet_state
 
           PLATFORM = "Prekzursil/quality-zero-platform"
           dry_run = os.environ.get("QZ_DRY_RUN", "true").strip().lower() == "true"
@@ -100,20 +102,20 @@ jobs:
               parsed = json.loads(path.read_text(encoding="utf-8"))
               return parsed if isinstance(parsed, dict) else {}
 
-          # Inputs the fleet detectors read. None has a producer in this repo
-          # yet, so the summary below says which detectors had NO input and
-          # were therefore not evaluated: a green run must not imply they were.
+          # Files the remaining fleet detectors read. Nothing produces them
+          # yet, so the summary says which detectors had NO input and were
+          # therefore not evaluated: a green run must not imply they were.
           SOURCES = {
               "quality-rollup/coverage-trend.json": "regression / deadline / escalation / flag",
-              "audit/bypass-tracking.jsonl": "bypass-stale",
-              "audit/drift-sync.jsonl": "drift-stuck",
               "audit/bump-staging-results.jsonl": "fleet-bump-fail",
           }
           missing = {path: detectors for path, detectors in SOURCES.items() if not Path(path).is_file()}
           cov = _safe_json("quality-rollup/coverage-trend.json")
-          bypass_issues = _safe_jsonl("audit/bypass-tracking.jsonl")
-          drift_prs = _safe_jsonl("audit/drift-sync.jsonl")
           staging = _safe_jsonl("audit/bump-staging-results.jsonl")
+          # LIVE sources: read now, never from a file nothing writes. A failed
+          # read raises and fails the run - never a silent all-clear.
+          bypass_issues = fleet_state.bypass_followups(PLATFORM)
+          drift_prs = fleet_state.drift_sync_prs(PLATFORM.split("/", 1)[0])
 
           active = alert_dispatch.fetch_active_workflows(PLATFORM)
           state = {
@@ -153,6 +155,8 @@ jobs:
                   fh.write(f"- Triggers: {len(triggers)}\n")
                   fh.write(f"- Issues opened/reused: {len(results)}\n")
                   fh.write(f"- QZP workflows watched: {len(state['workflow_runs'])}\n")
+                  fh.write(f"- Open break-glass follow-ups (live): {len(bypass_issues)}\n")
+                  fh.write(f"- Open drift-sync PRs (live): {len(drift_prs)}\n")
                   for path, detectors in missing.items():
                       fh.write(f"- NOT evaluated ({detectors}): no `{path}` - nothing produces it yet\n")
                   fh.write(f"- Recovered workflow alerts closed: {sum(1 for c in closed if c.get('closed'))}\n")

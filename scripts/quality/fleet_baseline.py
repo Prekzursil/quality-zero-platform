@@ -90,8 +90,10 @@ REUSABLE_CODEQL = PLATFORM_ROOT / ".github" / "workflows" / "reusable-codeql.yml
 MANAGED_VERIFY_MARKER = "Managed by quality-zero-platform"
 #: Top-level keys and caller-job keys a thin lean-gate caller may have; anything more is hand-written.
 _THIN_CALLER_KEYS = frozenset({"name", "on", True, "permissions", "concurrency", "jobs"})
-_THIN_CALLER_JOB_KEYS = frozenset({"uses", "with", "name"})
+_THIN_CALLER_JOB_KEYS = frozenset({"uses", "with", "name", "permissions"})
 _PLAIN_SCALAR_RE = re.compile(r"[A-Za-z0-9_./-]+")
+#: The only token permissions a thin caller grants (the template sets them at the workflow level).
+READ_ONLY = {"contents": "read"}
 
 #: Path components holding third-party or installed code — never a rail. Everything else the
 #: dependency gate scans (osv-scanner --recursive) gets a rail, build/ and fixtures/ included.
@@ -1154,9 +1156,10 @@ def thin_caller(text: str) -> Optional[Tuple[Dict[str, object], bool]]:
 
     Thin means the managed shape and nothing else: top-level name / on / permissions /
     concurrency / jobs, one ``quality`` job that only ``uses`` the reusable workflow (with
-    optional ``with`` inputs and ``name: quality``), runs on pull_request, and read-only
-    contents permissions. The baseline owns such a caller and regenerates it from the
-    template, carrying its inputs over; anything more is hand-written and only re-pinned.
+    optional ``with`` inputs, ``name: quality`` and job-level permissions), runs on
+    pull_request, and read-only contents permissions at both levels. The baseline owns such
+    a caller and regenerates it from the template, carrying its inputs over; anything more
+    is hand-written and only re-pinned.
     """
     try:
         document = yaml.safe_load(text)
@@ -1171,7 +1174,8 @@ def thin_caller(text: str) -> Optional[Tuple[Dict[str, object], bool]]:
         list(jobs) != ["quality"]
         or set(job) - _THIN_CALLER_JOB_KEYS
         or not isinstance(inputs, dict)
-        or document.get("permissions", {"contents": "read"}) != {"contents": "read"}
+        or document.get("permissions", READ_ONLY) != READ_ONLY
+        or job.get("permissions", READ_ONLY) != READ_ONLY
     ):
         return None
     triggers = document.get("on", document.get(True))

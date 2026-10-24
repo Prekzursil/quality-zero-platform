@@ -18,6 +18,7 @@ assertion is evidence rather than a silent no-op.
 from __future__ import absolute_import
 
 import ast
+import re
 import unittest
 from pathlib import Path
 from typing import Dict, List
@@ -30,6 +31,14 @@ MARKER_PREFIX = "QZP_EMBED_"
 EMBEDDED_HELPERS: Dict[str, Path] = {
     "osv_severity_gate": ROOT / "scripts" / "quality" / "osv_severity_gate.py",
     "jsts_coverage_assert": ROOT / "scripts" / "quality" / "jsts_coverage_assert.py",
+    "jsts_projects": ROOT / "scripts" / "quality" / "jsts_projects.py",
+}
+
+#: marker -> the curated opengrep rule file the platform DEFAULT ruleset copy
+#: must equal. Gate 4 scans a caller without .quality/opengrep with these.
+OPENGREP_RULES_DIR = ROOT / ".quality" / "opengrep"
+EMBEDDED_RULESETS: Dict[str, Path] = {
+    "opengrep_" + path.stem.replace("-", "_"): path for path in sorted(OPENGREP_RULES_DIR.glob("*.yaml"))
 }
 
 RESYNC_HINT = (
@@ -89,6 +98,35 @@ class EmbeddedHelperParityTests(unittest.TestCase):
         for marker in EMBEDDED_HELPERS:
             with self.subTest(marker=marker):
                 ast.parse(extract_embedded_helper(self.workflow_text, marker))
+
+    def test_every_default_rule_file_is_embedded_byte_identical(self) -> None:
+        """The default ruleset a caller gets is exactly the one this repo is held to."""
+        self.assertGreaterEqual(len(EMBEDDED_RULESETS), 3, "the curated ruleset went missing")
+        for marker, rule_path in EMBEDDED_RULESETS.items():
+            with self.subTest(marker=marker):
+                embedded = extract_embedded_helper(self.workflow_text, marker)
+                self.assertEqual(embedded, rule_path.read_text(encoding="utf-8"), RESYNC_HINT)
+
+    def test_no_rule_file_is_left_out_of_the_default_ruleset(self) -> None:
+        """A rule file added to .quality/opengrep must reach the default too."""
+        embedded_markers = set(re.findall(r"<<'QZP_EMBED_(opengrep_\w+)'", self.workflow_text))
+        self.assertEqual(embedded_markers, set(EMBEDDED_RULESETS))
+
+    def test_every_embedded_rule_file_is_valid_yaml_with_rules(self) -> None:
+        """opengrep would reject a mangled paste at scan time; fail here first."""
+        import yaml
+
+        for marker in EMBEDDED_RULESETS:
+            with self.subTest(marker=marker):
+                document = yaml.safe_load(extract_embedded_helper(self.workflow_text, marker))
+                self.assertTrue(document["rules"])
+
+    def test_embedded_sources_carry_no_expression_syntax(self) -> None:
+        """GitHub evaluates expressions anywhere in a run block, heredocs included."""
+        sources = list(EMBEDDED_HELPERS.values()) + list(EMBEDDED_RULESETS.values())
+        for path in sources:
+            with self.subTest(path=path.name):
+                self.assertNotIn("${{", path.read_text(encoding="utf-8"))
 
     def test_extractor_reports_a_drifted_copy(self) -> None:
         """DETECTOR CONTROL: the extractor must FIRE on a mutated copy.
@@ -177,6 +215,26 @@ class EmbeddedHelperWiringTests(unittest.TestCase):
             if s.get("name") == "Materialize the lean-gate helper scripts"
         )
         self.assertNotIn("if", step)
+
+    def test_the_default_ruleset_is_materialized_before_gate_4(self) -> None:
+        """Gate 4 falls back to the default ruleset, so it must exist by then."""
+        import yaml
+
+        document = yaml.safe_load(self.workflow_text)
+        names = [str(s.get("name", "")) for s in document["jobs"]["quality"]["steps"]]
+        self.assertLess(
+            names.index("Materialize the platform default SAST ruleset"),
+            names.index("gate-sast opengrep"),
+        )
+        self.assertIn('ruleset_dir="${RUNNER_TEMP}/qzp-lean-gate/opengrep-default"', self.workflow_text)
+
+    def test_the_jsts_lane_plans_every_project(self) -> None:
+        """The planner, not a root-or-nested either/or, decides what is measured."""
+        self.assertIn(
+            'python3 "${RUNNER_TEMP}/qzp-lean-gate/jsts_projects.py" "${plan_args[@]}" > "$plan_file"',
+            self.workflow_text,
+        )
+        self.assertNotIn("proj_dirs=(.)", self.workflow_text)
 
     def test_helpers_are_materialized_before_the_first_gate_that_uses_them(self) -> None:
         """A helper written after its consumer would fail with 'No such file'."""

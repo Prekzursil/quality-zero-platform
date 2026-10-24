@@ -24,7 +24,7 @@ green/red model.
 | `biome.template.json` | The bundled minimal Biome formatter config (the same style as Reframe's `biome.json`). A JS/TS caller may copy it to `biome.json`; if absent, the reusable workflow falls back to this config in-process for the gate-1 format check. |
 | `../../.quality/charter.yml` | The single source of truth for the closed 6-gate set + the banned (deleted) gates. |
 | `../../.quality/charter_check.sh` | Pure-bash check that FAILS CI if the active gate set drifts from the charter. |
-| `../../.quality/tool-pins.yml` | **The single source for tool pins** (ruff, basedpyright, oxlint, biome, opengrep, gitleaks, osv-scanner). CI reads the biome pin from this file at runtime; every other literal in the workflow must be kept in sync with it. |
+| `../../.quality/tool-pins.yml` | **The single source for tool pins** (ruff, basedpyright, pytest, pytest-cov, coverage, oxlint, biome, opengrep, gitleaks, osv-scanner). The workflow carries each pin as a LITERAL equal to this file (a caller pins the workflow by SHA, so nothing may be read from `main` at run time); tests and the weekly fleet-health pin-drift check fail on any mismatch. |
 | `../../scripts/quality/preflight.sh` | **Local preflight** — reproduces every lane below, with the SAME pinned versions, in a consumer repo before pushing. |
 
 ## Local preflight (reproduce every lane before you push)
@@ -49,12 +49,14 @@ locally; a FAIL names the lane and the fix.
 
 ### The single pin source
 
-Every tool version lives in **`.quality/tool-pins.yml`**. The workflow reads
-the **biome** pin from that file at runtime (offline fallback = the literal in
-the workflow); the other tools still carry literals in the workflow and MUST
-be kept in sync with the file when bumping. Consumers should never pin these
-tools to different versions locally — a finding that only reproduces on a
-different tool version is not the gate's finding.
+Every tool version lives in **`.quality/tool-pins.yml`**, and the workflow
+carries each one, biome included, as a **literal** that must change in the same
+commit: a caller pins the workflow by commit SHA, so nothing may be read from
+this repo's `main` at run time (an edit to the pin file alone changes nothing
+for any caller). The contract tests and the weekly fleet-health pin-drift check
+fail on any mismatch. Consumers should never pin these tools to different
+versions locally — a finding that only reproduces on a different tool version
+is not the gate's finding.
 
 ### The two costliest rules (learn them once, save a red run each)
 
@@ -94,9 +96,9 @@ Model: **Prevent (auto-fix) - Binary green/red - Ratchet-retired (100% everywher
 1. **Lint + format** (SELF-CONTAINED in CI — the workflow's OWN pinned CLIs, NOT the caller's pre-commit): Ruff [py] (`gate-lint-format-py`: `ruff check` + `ruff format --check`, honoring a caller `[tool.ruff]`/`ruff.toml`) - Oxlint+Biome [ts/js] (`gate-lint-format-jsts`; Oxlint = linter, Biome = formatter-only). The other-language autofixers (clippy+rustfmt [rust], golangci-lint v2 [go], ErrorProne+Spotless [java], Roslyn+dotnet-format [c#], clang-tidy+clang-format [c/c++]) run in the LOCAL pre-commit only; they are not yet self-contained in CI (round-6).
 2. **Types**: `tsc --noEmit` [ts] - basedpyright at the **standard** `typeCheckingMode` [py] (honors a caller basedpyright/pyright config when present; otherwise `--typecheckingmode standard`, mirroring Reframe).
 3. **Tests + coverage**: STRICT **100% line+branch** (standing user policy; ratchet retired). Reasoned, greppable pragma only. **No silent-pass** — a language with source *and* test files but no coverage config/script **FAILS** (the 100% gate cannot pass unmeasured); the only skip is the narrow *no-test-surface-by-design* case (source present with **zero** test files).
-4. **SAST**: Opengrep (Semgrep CE acceptable), small pinned in-repo ruleset (`.quality/opengrep`).
-5. **Secrets**: gitleaks (pinned + allowlist) + push-protection. round-6: SELF-CONTAINED — `gate-secrets` runs gitleaks directly whenever a `.gitleaks.toml` is present (no longer via the caller pre-commit).
-6. **Deps**: osv-scanner + Dependabot (**no** Renovate).
+4. **SAST**: Opengrep (Semgrep CE acceptable). **Always runs** (round-10): the caller's curated `.quality/opengrep` ruleset when present, otherwise the platform's curated default ruleset, embedded in the workflow at the pinned ref.
+5. **Secrets**: gitleaks (pinned + allowlist) + push-protection. SELF-CONTAINED and **always runs** (round-7); a caller `.gitleaks.toml` is an optional allowlist, never the trigger.
+6. **Deps**: osv-scanner + Dependabot (**no** Renovate). **Always runs** (round-10): osv-scanner itself decides what is scannable and exits `128` when nothing is, which passes as *nothing to scan*; `osv-scanner.toml` is optional and only adds the caller's reviewed ignores. Blocking policy: the `deps-severity-floor` input — `t0` (default: a production dependency with CVSS >= 7.0 and a published fix blocks; the rest is printed as T2 inventory) or `any` (zero tolerance: every finding blocks).
 
 **Deleted as gates** (must NOT reappear): Sonar, Codacy, DeepSource, DeepScan,
 qlty, Codecov-as-gate, Snyk, Applitools, Chromatic, Percy, Sentry-as-gate,
@@ -115,22 +117,39 @@ on:
 permissions: { contents: read }
 jobs:
   quality:
-    uses: Prekzursil/quality-zero-platform/.github/workflows/reusable-quality.yml@main
+    # Pin a FULL commit SHA. A branch (`@main`) or a movable tag lets one push
+    # to quality-zero-platform change the gate for every caller at once.
+    uses: Prekzursil/quality-zero-platform/.github/workflows/reusable-quality.yml@<40-hex-sha>
+    # Optional inputs (defaults shown):
+    # with:
+    #   python-version: "3.12"
+    #   node-version: "24"
+    #   opengrep-paths: "."
+    #   jsts-coverage-min: 100
+    #   coverage-gate-script: scripts/coverage-gate.sh
+    #   deps-severity-floor: t0   # or `any` for zero tolerance
 ```
 
-Then add the per-language config the gates read:
+Then add the per-language config the gates read (all optional unless noted):
 
 - `.pre-commit-config.yaml` — copy `pre-commit-config.template.yaml`, keep the
-  language hooks you need (gate 1 + gate 5).
-- `.quality/opengrep/*.yaml` — the curated SAST ruleset (gate 4); see the
-  Reframe `.quality/opengrep/README.md` for the curated subset model.
+  language hooks you need (local write-time auto-fix for gates 1 + 5).
+- `.quality/opengrep/*.yaml` — your own curated SAST ruleset (gate 4); without
+  it, gate 4 scans with the platform default ruleset. See the Reframe
+  `.quality/opengrep/README.md` for the curated subset model.
+- `.semgrepignore` — choose gate 4's scanned file set deliberately (copy
+  `semgrepignore.template`).
 - `.gitleaks.toml` — secrets allowlist (gate 5).
-- `osv-scanner.toml` + Dependabot config — deps (gate 6).
+- `osv-scanner.toml` — reviewed dependency-advisory ignores (gate 6), plus a
+  Dependabot config.
 - `.quality/charter.yml` + `.quality/charter_check.sh` — the drift guard.
 
 Language auto-detection means a caller with no Python skips the Python lanes,
-a caller with no JS/TS skips `tsc`, and so on — each lane is guarded by an
-`if:` keyed off the detected language / present config.
+a caller with no JS/TS skips `tsc`, and so on. Gates 4, 5 and 6 are not keyed
+on caller config: a config file is an optional input to the scan, never the
+switch that turns it on. The run summary ends with a per-gate table saying
+which gate ran, which was skipped (and why), and which never ran because an
+earlier gate failed.
 
 ### Robustness on edge-shaped callers
 
@@ -150,14 +169,15 @@ hard-fail *before* a gate can run:
   cached setup now passes `cache-dependency-path` set to the **actual detected
   manifest paths** (incl. `requirements-dev.txt` / `requirements/*.txt`), so the
   cache key always hashes a real file and `setup-python` never hard-fails.
-- **Zero-dependency repos (round-3 FIX 4)** — `osv-scanner` is invoked only when
-  at least one scannable manifest/lockfile is detected; **and** when it *is* run,
-  its own exit `128` ("no package sources found") is mapped to **PASS**. The
-  round-1 pre-check alone was insufficient: a repo can match a manifest glob yet
-  still have nothing osv recognizes as a scannable source, so the scanner exited
-  128 and red the gate (observed: `star-wars`, a zero-dependency repo). "Nothing
-  to scan" is not a failure; any **other** non-zero exit (e.g. vulnerabilities
-  found) still fails the gate.
+- **Zero-dependency repos (round-3 FIX 4, round-10)** — osv-scanner's own exit
+  `128` ("no package sources found") is mapped to **PASS** and reported as
+  *nothing to scan*. A repo can match a manifest glob yet still have nothing osv
+  recognizes as a scannable source (observed: `star-wars`, a zero-dependency
+  repo), so the scanner's verdict is the only one used: the glob pre-check that
+  used to decide whether to run at all is gone, because it also missed sources
+  osv-scanner supports (`bun.lock`, `uv.lock`, NuGet, `pubspec.lock`,
+  `mix.lock`...) and turned them into a silent pass. Any **other** non-zero exit
+  (e.g. vulnerabilities found) still fails the gate.
 - **Monorepo / nested TypeScript** — `tsc` runs per `tsconfig.json`: the root
   config if present, otherwise every discovered nested config (e.g. a `ui/`
   subproject). A repo with nested-only configs is checked, not hard-failed.
@@ -172,6 +192,23 @@ hard-fail *before* a gate can run:
   test files but no coverage runner still **FAILS**; the only skip is the
   documented *no-test-surface-by-design* case (zero ts/js test files). 100% is
   unchanged.
+- **Root AND nested JS-TS projects (round-10)** — the round-3 discovery above
+  was "root OR nested": with a root `package.json`, nested projects were never
+  measured and a nested project with tests but no coverage runner passed
+  silently. Every project is now planned (`scripts/quality/jsts_projects.py`,
+  embedded in the workflow). Every project that DECLARES a coverage lane
+  (`test:coverage`, or a vitest/jest `--coverage` test script) runs it: no
+  file-name heuristic may decide that a declared runner has nothing to run.
+  A project WITHOUT a lane FAILS when it has test files of its own (`*.test.*`,
+  `*.spec.*`, `*.cy.*`, `__tests__/`, or a file under a `test/` / `tests/`
+  directory of the project), workspace members included: a root workspace run
+  can cover a member's code without running a single member test, so it never
+  stands in for the member's `test:coverage`. A lane-less project without tests
+  (an aggregator root, a tooling package) has nothing to measure; fixture and
+  test-data trees (`fixtures/`, `__fixtures__/`, `testdata/`, `__mocks__/`) are
+  inputs, never projects or tests; a named test file outside every project
+  FAILS (no lane ever runs it); and each lane clears its project's `coverage/`
+  first, so a committed or cached report can never stand in for the run.
 - **Tests that import a runtime dependency** — gate 3 installs the caller's
   Python **runtime** deps before `pytest`/`coverage`, in priority order:
   `requirements.txt` / `requirements/*.txt` / `requirements*.txt`
@@ -196,8 +233,8 @@ hard-fail *before* a gate can run:
     honoring a caller `[tool.ruff]` / `ruff.toml` when present (else ruff
     defaults). Pinned **ruff 0.15.17** (mirrors Reframe).
   - `gate-lint-format-jsts` — the workflow's OWN pinned **oxlint 1.69.0** (linter)
-    + **biome** (formatter-only; pin read at runtime from `.quality/tool-pins.yml`,
-      currently 2.5.15) over the caller's ts/js (already
+    + **biome 2.5.15** (formatter-only; a workflow literal kept equal to
+      `.quality/tool-pins.yml`) over the caller's ts/js (already
     self-contained pre-round-6; unchanged).
   - `gate-secrets` — **gitleaks 8.30.1** (mirrors Reframe) over the working tree
     whenever a `.gitleaks.toml` allowlist is present.
@@ -223,7 +260,7 @@ hard-fail *before* a gate can run:
     config (in-process via `--config-path`) so formatting is deterministic across
     callers — 2-space indent, single quotes, `trailingCommas: all`,
     `semicolons: always`, `lineWidth 100`, `lf`, mirroring Reframe's `biome.json`.
-    The local pre-commit hook (`biomejs/pre-commit@v2.5.0` `biome-format`) autofixes
+    The local pre-commit hook (`biomejs/pre-commit@v2.5.15` `biome-format`) autofixes
     on commit so local and CI agree. (Earlier rounds used Oxfmt 0.55.0; round-3
     swapped to Biome to match the proven Reframe gate.)
 - **basedpyright at the standard bar (round-5 FIX A).** basedpyright's *default*

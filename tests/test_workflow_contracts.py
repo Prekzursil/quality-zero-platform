@@ -2,6 +2,7 @@
 
 from __future__ import absolute_import, division
 
+import re
 import unittest
 from pathlib import Path
 
@@ -393,6 +394,16 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("run_quality_zero_gate.py", text)
         self.assertNotIn("python - <<'PY'", text)
 
+    def test_every_action_reference_is_pinned_to_a_commit(self) -> None:
+        """A tag can be moved under every caller; a commit SHA cannot (zizmor's unpinned-uses)."""
+        uses = re.compile(r"^\s*(?:-\s+)?uses:\s+(\S+)", re.MULTILINE)
+        for path in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+            for ref in uses.findall(path.read_text(encoding="utf-8")):
+                if ref.startswith("./"):
+                    continue
+                with self.subTest(workflow=path.name, ref=ref):
+                    self.assertRegex(ref, r"@[0-9a-f]{40}$")
+
     def test_all_flagged_checkout_steps_disable_persisted_credentials(self) -> None:
         """Require every checkout step in the flagged workflows to disable persisted credentials.
 
@@ -457,7 +468,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("quality-rollup", text)
         self.assertIn("build_quality_rollup.py", text)
         self.assertIn("post_pr_quality_comment.py", text)
-        self.assertIn("actions/download-artifact@v4", text)
+        self.assertRegex(text, r"uses: actions/download-artifact@[0-9a-f]{40} # v4\.\d+\.\d+")
         self.assertIn("job_name: Dependency Alerts", text)
         self.assertIn('lane == "deps"', text)
         self.assertIn("check_dependabot_alerts.py", text)

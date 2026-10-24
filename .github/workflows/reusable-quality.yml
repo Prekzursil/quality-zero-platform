@@ -237,6 +237,9 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          # No gate pushes or fetches with credentials: keep the token off disk.
+          persist-credentials: false
 
       # ── Language detection ────────────────────────────────────────────────
       # Sets boolean outputs consumed by the per-lane `if:` guards below.

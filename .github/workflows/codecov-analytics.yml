@@ -18,7 +18,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: ./.github/workflows/reusable-codecov-analytics.yml
+    uses: ./.github/workflows/reusable-codecov-analytics.yml # zizmor: ignore[self-repository]
     with:
       repo_slug: Prekzursil/quality-zero-platform
       event_name: ${{ github.event_name }}

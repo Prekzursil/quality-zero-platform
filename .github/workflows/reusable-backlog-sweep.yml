@@ -35,13 +35,13 @@ jobs:
       codex_auth_file: ${{ steps.profile.outputs.codex_auth_file }}
       codex_runner_labels_json: ${{ steps.profile.outputs.codex_runner_labels_json }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: ${{ inputs.platform_repository }}
           ref: ${{ inputs.platform_ref }}
           path: platform
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
       - name: Install platform dependencies
@@ -66,17 +66,17 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           path: repo
           persist-credentials: false
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: ${{ inputs.platform_repository }}
           ref: ${{ inputs.platform_ref }}
           path: platform
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
       - name: Install platform dependencies
@@ -113,7 +113,7 @@ jobs:
             --json-log "$RUNNER_TEMP/codex-events.jsonl"
       - name: Upload Codex execution artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: codex-backlog-artifacts
           path: |

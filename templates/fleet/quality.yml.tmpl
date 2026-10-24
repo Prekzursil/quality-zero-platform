@@ -5,21 +5,15 @@
 name: quality
 
 on:
-  push:
-    branches: [${default_branch_yaml}]
-  pull_request:
-    branches: [${default_branch_yaml}]
-  # a merge queue's synthetic commit must report the required check too
-  merge_group:
-    types: [checks_requested]
-${extra_triggers}
+${caller_triggers}
 permissions:
   contents: read
 
 concurrency:
-  group: quality-$${{ github.ref }}
-  # superseded pull-request runs are cancelled; runs on the default branch
-  # always finish, so a cancelled run never leaves an untested commit red
+  # a pull request's runs share one group, so a newer push cancels the superseded
+  # run; every other event (a push, a merge-queue commit) gets a group of its own
+  # commit, so no commit's run is ever replaced while it waits or left untested
+  group: quality-$${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: $${{ github.event_name == 'pull_request' }}
 
 jobs:

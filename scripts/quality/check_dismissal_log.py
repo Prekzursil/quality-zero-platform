@@ -22,6 +22,8 @@ from pathlib import Path
 from typing import List, Optional, Sequence
 
 LOG_HEADING = "## Log"
+#: The log section runs to the next h1/h2 heading (or the end of the file).
+SECTION_END = re.compile(r"^#{1,2} ")
 COLUMNS = (
     "Alert",
     "Rule",
@@ -35,7 +37,11 @@ COLUMNS = (
 )
 REASONS = frozenset({"false positive", "won't fix", "used in tests"})
 SEPARATOR = re.compile(r"^:?-{3,}:?$")
-LOCATION = re.compile(r"^`[^`\s]+:[1-9][0-9]*`$")
+# Backticks make a path with spaces unambiguous; the last ``:N`` is the line.
+LOCATION = re.compile(r"^`[^`]*[^`\s][^`]*:[1-9][0-9]*`$")
+#: Pending markers (Re-review / Fix) exempt only rows dismissed BEFORE this
+#: rule existed; a won't-fix dismissed under the rule needs an owner and date.
+POLICY_DATE = "2026-10-24"
 # Exact markers: a verdict that merely starts with "**Fix" (e.g. "**Fixed by
 # design.**") is an accepted risk and must carry an owner and a date.
 PENDING = ("**Re-review.**", "**Fix.**")
@@ -62,7 +68,9 @@ def _row_problems(cells: Sequence[str], seen: set, *, repo: str) -> List[str]:
     """Every contract violation of one data row."""
     alert, rule, location, reason, dismissed, rationale, owner, review_by, verdict = cells
     problems: List[str] = []
-    link = re.compile(rf"^\[#(\d+)\]\(https://github\.com/{re.escape(repo)}/security/code-scanning/(\d+)\)$")
+    link = re.compile(
+        rf"^\[#([1-9][0-9]*)\]\(https://github\.com/{re.escape(repo)}/security/code-scanning/([1-9][0-9]*)\)$"
+    )
     match = link.match(alert)
     if not match or match.group(1) != match.group(2):
         problems.append(f"alert cell {alert!r} is not a link to its own alert number in {repo}")
@@ -82,7 +90,8 @@ def _row_problems(cells: Sequence[str], seen: set, *, repo: str) -> List[str]:
         problems.append("rationale is empty")
     if not verdict:
         problems.append("verdict is empty")
-    if reason == "won't fix" and not verdict.startswith(PENDING):
+    pending = verdict.startswith(PENDING) and _is_date(dismissed) and dismissed < POLICY_DATE
+    if reason == "won't fix" and not pending:
         if owner in ("", "-"):
             problems.append("an accepted `won't fix` names no owner")
         if not _is_date(review_by):
@@ -98,9 +107,31 @@ def validate(text: str, *, repo: str) -> List[str]:
     start = next((i for i, line in enumerate(lines) if line.startswith(LOG_HEADING)), None)
     if start is None:
         return [f"no '{LOG_HEADING} ...' section"]
-    table = [line for line in lines[start + 1 :] if line.startswith("|")]
+    section = []
+    for line in lines[start + 1 :]:
+        if SECTION_END.match(line):
+            break
+        section.append(line)
+    first = next((i for i, line in enumerate(section) if line.strip().startswith("|")), None)
+    if first is None:
+        return [f"the log table's columns must be exactly {list(COLUMNS)}"]
+    # The table runs from its header to the first blank line, as Markdown
+    # renders it. A row that lost its leading pipe, or that a blank line cut
+    # off from the table, is reported - never silently skipped past the checks.
+    block = []
+    for line in section[first:]:
+        if not line.strip():
+            break
+        block.append(line)
+    table = [line.strip() for line in block if line.strip().startswith("|")]
     if len(table) < 2 or tuple(_cells(table[0])) != COLUMNS:
         return [f"the log table's columns must be exactly {list(COLUMNS)}"]
+    stray = next((line for line in block if not line.strip().startswith("|")), None)
+    if stray is not None:
+        return [f"the log table has a row that is not a |-delimited table row: {stray.strip()[:60]!r}"]
+    cut_off = next((line for line in section[first + len(block) :] if line.strip().startswith("|")), None)
+    if cut_off is not None:
+        return [f"a |-row after the log table's end (a blank line ends the table): {cut_off.strip()[:60]!r}"]
     separator = _cells(table[1])
     if len(separator) != len(COLUMNS) or not all(SEPARATOR.match(cell) for cell in separator):
         return ["the log table's second line must be its |---| separator (a row there would skip every check)"]

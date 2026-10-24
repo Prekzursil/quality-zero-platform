@@ -59,14 +59,19 @@ gh api -X PATCH repos/OWNER/REPO/code-scanning/alerts/NUMBER \
 Reviewers reject a dismissal PR that has no log row. They also reject a log
 row that breaks rule 2, or a `won't fix` row without an owner and a
 review-by date. `scripts/quality/check_dismissal_log.py --repo OWNER/NAME` checks the log's
-shape on every CI run (QZP's in `tests/test_dismissal_log.py`):
-- the columns and a real separator row;
+shape. QZP's own CI runs it on every change, through
+`tests/test_dismissal_log.py`. A governed repo runs the same command against its
+receipt; wiring it into the fleet's reusable gate is a follow-up. It checks:
+- the columns and a real separator row, and one unbroken table: a row that
+  lost its leading pipe, or that a blank line cut off, is reported rather
+  than skipped;
 - an alert link into *this* repository that matches its own number;
 - a backticked rule and a backticked `path:line`;
 - a GitHub reason and a real calendar date;
 - a non-empty rationale and verdict, and no duplicate alerts;
-- an owner plus a real review-by date on every `won't fix` that is not
-  marked for re-review.
+- an owner plus a real review-by date on every `won't fix`. Only a row
+  dismissed before this rule (2026-10-24) and marked **Re-review.** or
+  **Fix.** may defer them until that review.
 
 ## Query configuration decisions
 

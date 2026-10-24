@@ -3,6 +3,7 @@
 from __future__ import absolute_import
 
 import io
+import re
 import tempfile
 import unittest
 from contextlib import redirect_stderr
@@ -51,13 +52,24 @@ class DismissalLogTests(unittest.TestCase):
         """The QZP log itself passes, so CI catches any drift in it."""
         self.assertEqual(log.validate(DOC.read_text(encoding="utf-8"), repo=REPO), [])
 
+    def test_no_logged_dismissal_can_disappear(self) -> None:
+        """The receipt only grows: every alert logged so far must stay logged."""
+        logged = set(re.findall(r"^\| \[#(\d+)\]", DOC.read_text(encoding="utf-8"), flags=re.MULTILINE))
+        recorded = {
+            "25", "26", "27", "28", "29", "30", "31", "32", "57", "82", "100", "109", "110", "111", "112",
+            "113", "114", "126", "127", "128", "129", "138", "139", "166", "167", "168", "169", "173",
+            "245", "246", "247", "272", "273", "297", "298", "299", "300", "301", "302",
+        }  # fmt: skip
+        self.assertEqual(recorded - logged, set())
+
     def test_a_well_formed_row_passes(self) -> None:
         """Including a pending won't-fix with no owner yet, and an escaped pipe in a cell."""
-        pending = _row("8", reason="won't fix", verdict="**Re-review.** wrong category")
+        pending = _row("8", reason="won't fix", dismissed="2026-04-27", verdict="**Re-review.** wrong category")
+        spaced = _row("11", location="`fixtures/my case.py:12`")
         piped = _row("9", rationale="a \\| b")
         accepted = _row("10", reason="won't fix", owner="@owner", review_by="2027-01-01")
         aligned = _doc(_row(), separator="| :--- | ---: | :---: | --- | --- | --- | --- | --- | --- |")
-        self.assertEqual(log.validate(_doc(_row(), pending, piped, accepted), repo=REPO), [])
+        self.assertEqual(log.validate(_doc(_row(), pending, piped, accepted, spaced), repo=REPO), [])
         self.assertEqual(log.validate(aligned, repo=REPO), [])
 
     def test_each_malformation_is_named(self) -> None:
@@ -78,6 +90,10 @@ class DismissalLogTests(unittest.TestCase):
             _row(reason="won't fix", owner="@owner", review_by="2027-02-30"): "has no real review-by date",
             _row(reason="won't fix", owner="@owner", review_by="2020-01-01"): "is not after its dismissal",
             _row(reason="won't fix", review_by="2027-01-01", verdict="**Fixed by design.** accepted"): "names no owner",
+            # A pending marker exempts only PRE-policy rows; a new won't-fix needs owner + date.
+            _row(reason="won't fix", review_by="2027-01-01", verdict="**Re-review.** later"): "names no owner",
+            _row(link=f"{LINK}/0", number="0"): "is not a link to its own alert number",
+            _row(link=f"{LINK}/07", number="07"): "is not a link to its own alert number",
             "| [#7](x) | too | few |": "3 cells, expected 9",
         }
         for row, expected in cases.items():
@@ -85,6 +101,22 @@ class DismissalLogTests(unittest.TestCase):
                 (problem,) = log.validate(_doc(row), repo=REPO)
                 self.assertIn(expected, problem)
                 self.assertTrue(problem.startswith("row 1: "))
+
+    def test_a_row_without_its_leading_pipe_is_reported_not_skipped(self) -> None:
+        """An unpiped or indented row inside the table cannot slip past every check."""
+        stray = _row(dismissed="2026-99-99").lstrip("|").lstrip()
+        (problem,) = log.validate(_doc(_row(), stray), repo=REPO)
+        self.assertIn("not a |-delimited table row", problem)
+        indented = "   " + _row("9")
+        self.assertEqual(log.validate(_doc(_row(), indented), repo=REPO), [])
+
+    def test_the_table_ends_at_its_first_blank_line(self) -> None:
+        """A row a blank line cut off is reported; prose and later sections are not rows."""
+        self.assertEqual(log.validate(_doc(_row()) + "\nA closing note.\n", repo=REPO), [])
+        later = _doc(_row()) + "\n## Next\n\n| other | table |\n| --- | --- |\n"
+        self.assertEqual(log.validate(later, repo=REPO), [])
+        (problem,) = log.validate(_doc(_row()) + "\n" + _row("8") + "\n", repo=REPO)
+        self.assertIn("after the log table's end", problem)
 
     def test_a_duplicate_alert_is_rejected(self) -> None:
         """Two rows for one alert would let a dismissal be rewritten silently."""

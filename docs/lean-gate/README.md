@@ -209,8 +209,11 @@ hard-fail *before* a gate can run:
   inputs, never projects or tests; a named test file outside every project
   FAILS (no lane ever runs it); and each lane clears its project's `coverage/`
   first, so a committed or cached report can never stand in for the run.
-- **Tests that import a runtime dependency** — gate 3 installs the caller's
-  Python **runtime** deps before `pytest`/`coverage`, in priority order:
+- **Tests that import a runtime dependency** — the caller's Python **runtime**
+  deps are installed in their own step, BEFORE gate 2 (round-10 lane order:
+  basedpyright resolves imports against that environment, so a type check run
+  before the install reported every third-party import as missing) and
+  therefore before `pytest`/`coverage` too, in priority order:
   `requirements.txt` / `requirements/*.txt` / `requirements*.txt`
   (`pip install -r`, dev/test/lint/doc/ci-only requirements excluded), then
   `pyproject.toml` / `setup.cfg` / `setup.py` (`pip install .`, which pulls the

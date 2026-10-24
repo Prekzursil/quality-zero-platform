@@ -1811,6 +1811,49 @@ jobs:
             done
           fi
 
+      # round-10 LANE ORDER: gate 2 (basedpyright) resolves every import
+      # against THIS Python environment, and gate 3 runs the tests in it. The
+      # caller's runtime deps used to be installed INSIDE gate 3, i.e. after
+      # the type check, so gate 2 saw every third-party import as missing
+      # (reportMissingImports is an error at the standard bar). They are now
+      # installed once, here, before both.
+      # GAP 1 FIX — install the CALLER's Python RUNTIME deps before running the
+      # tests. Without this, a repo whose tests import a runtime dependency
+      # fails with ModuleNotFoundError (observed: env-inspector -> "No module
+      # named defusedxml"; the lane previously installed only pytest/coverage).
+      # Priority order: requirements*.txt -> pyproject.toml / setup.cfg /
+      # setup.py (PEP 517 install of the project itself, which pulls its
+      # declared dependencies, incl. Poetry's [tool.poetry.dependencies]).
+      # If NONE exist the repo is pure-stdlib -> proceed (no-op). Best-effort:
+      # a failing optional/heavy install must not mask the real test result,
+      # so each install is guarded and only logged on failure.
+      - name: Install the caller's Python runtime dependencies
+        id: py_deps
+        if: steps.detect.outputs.python == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          installed_runtime_deps=false
+          mapfile -t reqs < <(git ls-files \
+            requirements.txt 'requirements/*.txt' 'requirements-*.txt' 'requirements*.txt' \
+            '**/requirements.txt' 2>/dev/null \
+            | grep -Ev '(^|/)(node_modules|\.venv|venv|dist|build|out)/' \
+            | grep -Eiv 'requirements.*(dev|test|lint|doc|ci).*\.txt$' || true)
+          if [ "${#reqs[@]}" -gt 0 ]; then
+            for r in "${reqs[@]}"; do
+              echo "::group::pip install -r $r"
+              pip install -r "$r" || echo "WARN: 'pip install -r $r' failed; continuing (gates 2 and 3 will surface any missing import)."
+              echo "::endgroup::"
+            done
+            installed_runtime_deps=true
+          elif [ -f pyproject.toml ] || [ -f setup.cfg ] || [ -f setup.py ]; then
+            echo "::group::pip install . (project deps from pyproject/setup.cfg/setup.py)"
+            pip install . || echo "WARN: 'pip install .' failed; continuing (gates 2 and 3 will surface any missing import)."
+            echo "::endgroup::"
+            installed_runtime_deps=true
+          fi
+          [ "$installed_runtime_deps" = "true" ] || echo "No Python runtime manifest (requirements*.txt / pyproject.toml / setup.cfg / setup.py) - assuming pure-stdlib; proceeding."
+
       # round-5 FIX A — basedpyright at the STANDARD bar (consistency with Reframe).
       # basedpyright's DEFAULT mode is stricter than upstream pyright: it turns on
       # reportAny / reportUnknown* / reportUnusedCallResult, which flood untyped
@@ -1867,36 +1910,9 @@ jobs:
             echo "FAIL gate-tests-coverage python: the bar is 100% LINE **AND** BRANCH - line-only 100% typically sits at ~99.x once branches are counted and still FAILs; this lane always passes --cov-branch." >&2
             exit 1
           fi
-          # GAP 1 FIX — install the CALLER's Python RUNTIME deps before running the
-          # tests. Without this, a repo whose tests import a runtime dependency
-          # fails with ModuleNotFoundError (observed: env-inspector -> "No module
-          # named defusedxml"; the lane previously installed only pytest/coverage).
-          # Priority order: requirements*.txt -> pyproject.toml / setup.cfg /
-          # setup.py (PEP 517 install of the project itself, which pulls its
-          # declared dependencies, incl. Poetry's [tool.poetry.dependencies]).
-          # If NONE exist the repo is pure-stdlib -> proceed (no-op). Best-effort:
-          # a failing optional/heavy install must not mask the real test result,
-          # so each install is guarded and only logged on failure.
-          installed_runtime_deps=false
-          mapfile -t reqs < <(git ls-files \
-            requirements.txt 'requirements/*.txt' 'requirements-*.txt' 'requirements*.txt' \
-            '**/requirements.txt' 2>/dev/null \
-            | grep -Ev '(^|/)(node_modules|\.venv|venv|dist|build|out)/' \
-            | grep -Eiv 'requirements.*(dev|test|lint|doc|ci).*\.txt$' || true)
-          if [ "${#reqs[@]}" -gt 0 ]; then
-            for r in "${reqs[@]}"; do
-              echo "::group::pip install -r $r"
-              pip install -r "$r" || echo "WARN: 'pip install -r $r' failed; continuing (tests will surface any missing import)."
-              echo "::endgroup::"
-            done
-            installed_runtime_deps=true
-          elif [ -f pyproject.toml ] || [ -f setup.cfg ] || [ -f setup.py ]; then
-            echo "::group::pip install . (project deps from pyproject/setup.cfg/setup.py)"
-            pip install . || echo "WARN: 'pip install .' failed; continuing (tests will surface any missing import)."
-            echo "::endgroup::"
-            installed_runtime_deps=true
-          fi
-          [ "$installed_runtime_deps" = "true" ] || echo "No Python runtime manifest (requirements*.txt / pyproject.toml / setup.cfg / setup.py) - assuming pure-stdlib; proceeding."
+          # The caller's runtime deps were installed before gate 2 (step
+          # "Install the caller's Python runtime dependencies"), so the tests
+          # below import exactly what the type check resolved against.
           # round-10: the measuring tools are PINNED (equal to
           # .quality/tool-pins.yml). They used to be installed unpinned, so the
           # tool that decides this gate changed under every caller whenever PyPI

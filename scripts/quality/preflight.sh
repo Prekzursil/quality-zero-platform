@@ -262,6 +262,29 @@ if [ "$DETECT_TS" = "true" ]; then
   fi
 fi
 
+# ── Python runtime deps — BEFORE gate 2, like CI ───────────────────────────
+# basedpyright resolves imports against this environment and gate 3 runs the
+# tests in it, so the caller's runtime deps are installed once, first: a type
+# check run before them reports every third-party import as missing.
+if [ "$DETECT_PYTHON" = "true" ]; then
+  set +o pipefail
+  mapfile -t reqs < <(git ls-files \
+    requirements.txt 'requirements/*.txt' 'requirements-*.txt' 'requirements*.txt' \
+    '**/requirements.txt' 2>/dev/null \
+    | grep -Ev '(^|/)(node_modules|\.venv|venv|dist|build|out)/' \
+    | grep -Eiv 'requirements.*(dev|test|lint|doc|ci).*\.txt$' || true)
+  set -o pipefail
+  if [ "${#reqs[@]}" -gt 0 ]; then
+    for r in "${reqs[@]}"; do
+      echo "pip install -r $r (best-effort, like CI)"
+      pip install -r "$r" >/dev/null 2>&1 || echo "WARN: 'pip install -r $r' failed; continuing (gates 2 and 3 will surface any missing import)."
+    done
+  elif [ -f pyproject.toml ] || [ -f setup.cfg ] || [ -f setup.py ]; then
+    echo "pip install . (best-effort, like CI)"
+    pip install . >/dev/null 2>&1 || echo "WARN: 'pip install .' failed; continuing (gates 2 and 3 will surface any missing import)."
+  fi
+fi
+
 # ── GATE 2 py — basedpyright (caller config honored, else standard) ────────
 if [ "$DETECT_PYTHON" = "true" ]; then
   echo "== gate-types basedpyright@$PIN_BASEDPYRIGHT =="
@@ -290,22 +313,7 @@ if [ "$DETECT_PYTHON" = "true" ]; then
   elif [ "$DETECT_PYCOVCFG" != "true" ]; then
     lane_fail gate-tests-coverage-py "Python source + tests present but NO coverage config (pyproject.toml/setup.cfg/tox.ini/.coveragerc/pytest.ini) - the 100% line+BRANCH gate cannot pass unmeasured. LINE-ONLY 100% is not enough: without branch measurement you typically sit at ~99.x and still fail. Add a coverage config."
   else
-    set +o pipefail
-    mapfile -t reqs < <(git ls-files \
-      requirements.txt 'requirements/*.txt' 'requirements-*.txt' 'requirements*.txt' \
-      '**/requirements.txt' 2>/dev/null \
-      | grep -Ev '(^|/)(node_modules|\.venv|venv|dist|build|out)/' \
-      | grep -Eiv 'requirements.*(dev|test|lint|doc|ci).*\.txt$' || true)
-    set -o pipefail
-    if [ "${#reqs[@]}" -gt 0 ]; then
-      for r in "${reqs[@]}"; do
-        echo "pip install -r $r (best-effort, like CI)"
-        pip install -r "$r" >/dev/null 2>&1 || echo "WARN: 'pip install -r $r' failed; continuing (tests will surface any missing import)."
-      done
-    elif [ -f pyproject.toml ] || [ -f setup.cfg ] || [ -f setup.py ]; then
-      echo "pip install . (best-effort, like CI)"
-      pip install . >/dev/null 2>&1 || echo "WARN: 'pip install .' failed; continuing (tests will surface any missing import)."
-    fi
+    # The runtime deps were installed before gate 2 (see above), like CI.
     rc=0
     if grep -rqs 'pytest' pyproject.toml setup.cfg tox.ini pytest.ini 2>/dev/null; then
       pip install "pytest==$PIN_PYTEST" "pytest-cov==$PIN_PYTEST_COV" "coverage==$PIN_COVERAGE" >/dev/null 2>&1

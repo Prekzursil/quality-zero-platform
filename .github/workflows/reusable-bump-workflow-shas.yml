@@ -40,6 +40,10 @@ on:
 jobs:
   bump:
     runs-on: ubuntu-latest
+    # Presence flags the steps' `if:` read live here: a step's own env is
+    # not visible to that step's `if:`, which silently skipped it forever.
+    env:
+      DRIFT_SYNC_PAT_PRESENT: ${{ secrets.DRIFT_SYNC_PAT != '' }}
     permissions:
       contents: read
     steps:
@@ -162,7 +166,6 @@ jobs:
           TARGET_SHA: ${{ inputs.target_sha }}
           BUMPED_TOTAL: ${{ steps.bump.outputs.bumped_total }}
           GH_TOKEN: ${{ secrets.DRIFT_SYNC_PAT }}
-          DRIFT_SYNC_PAT_PRESENT: ${{ secrets.DRIFT_SYNC_PAT != '' }}
         working-directory: repo
         run: |
           set -euo pipefail

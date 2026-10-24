@@ -267,8 +267,10 @@ def next_commands(
             inventory_fragment,
             "# 3. regenerate the ruleset payload + update the fleet-size tripwire",
             "#    (tests/test_control_plane.py pins len(inventory['repos'])):",
-            "python scripts/quality/generate_ruleset_payload.py"
-            " --inventory inventory/repos.yml --output-dir generated/rulesets",
+            (
+                "python scripts/quality/generate_ruleset_payload.py"
+                " --inventory inventory/repos.yml --output-dir generated/rulesets"
+            ),
             "# 4. run the platform verifier locally, then open a PR:",
             "bash scripts/verify",
             "# 5. after merge: re-measure required contexts on a PR head before",
@@ -278,8 +280,10 @@ def next_commands(
     return [
         f"# 1. profile written to {profile_path}",
         "# 2. inventory entry appended (see the fragment above)",
-        "python scripts/quality/generate_ruleset_payload.py"
-        " --inventory inventory/repos.yml --output-dir generated/rulesets",
+        (
+            "python scripts/quality/generate_ruleset_payload.py"
+            " --inventory inventory/repos.yml --output-dir generated/rulesets"
+        ),
         "# 3. update the fleet-size tripwire in tests/test_control_plane.py, then:",
         "bash scripts/verify",
         "# 4. commit + PR; re-measure on a PR head before flipping rollout off observe.",

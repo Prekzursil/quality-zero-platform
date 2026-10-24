@@ -6,7 +6,7 @@ import unittest
 from typing import List, Tuple
 from unittest.mock import patch
 
-import scripts.quality.check_codacy_zero as check_codacy_zero
+from scripts.quality import check_codacy_zero
 from scripts.quality.check_codacy_zero import (
     CodacyQuery,
     CodacyRetryConfig,

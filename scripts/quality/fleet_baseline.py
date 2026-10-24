@@ -27,8 +27,13 @@ Ownership is conservative. A file the repository wrote itself is never
 overwritten: missing files are created, files that are byte-identical to a
 known platform-generated boilerplate (or carry the managed header) are
 regenerated, and everything else is kept and — where it matters — audited and
-reported as a gap. Nothing is committed or pushed here; ``--write`` only edits
-the checkout, and it refuses to create a file that already exists on disk.
+reported as a gap. A thin lean-gate caller (one ``quality`` job that only calls
+``reusable-quality.yml``) is platform-owned: it is regenerated from the
+template with its inputs carried over. The rendered documents describe the
+repository as it is: a checked-in CodeQL workflow, or a repository-authored
+``scripts/verify``, pull-request template or Dependabot config, is described as
+such. Nothing is committed or pushed here; ``--write`` only edits the checkout,
+and it refuses to create a file that already exists on disk.
 
 Usage, from the platform repo root::
 
@@ -76,6 +81,17 @@ REUSABLE_QUALITY_RE = re.compile(
 REUSABLE_QUALITY_PREFIX = "Prekzursil/quality-zero-platform/.github/workflows/reusable-quality.yml@"
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 DEPS_FLOORS = ("t0", "any")
+#: An advanced CodeQL setup is a checked-in workflow that runs CodeQL itself or through QZP.
+_CODEQL_INIT_RE = re.compile(r"github/codeql-action/init@")
+_REUSABLE_CODEQL_RE = re.compile(r"Prekzursil/quality-zero-platform/\.github/workflows/reusable-codeql\.yml@")
+_CODEQL_QUERIES_RE = re.compile(r"^\s*queries:\s*[\"']?([A-Za-z0-9_./+-]+)", re.MULTILINE)
+REUSABLE_CODEQL = PLATFORM_ROOT / ".github" / "workflows" / "reusable-codeql.yml"
+#: The managed scripts/verify carries this phrase; any other scripts/verify is the repository's own.
+MANAGED_VERIFY_MARKER = "Managed by quality-zero-platform"
+#: Top-level keys and caller-job keys a thin lean-gate caller may have; anything more is hand-written.
+_THIN_CALLER_KEYS = frozenset({"name", "on", True, "permissions", "concurrency", "jobs"})
+_THIN_CALLER_JOB_KEYS = frozenset({"uses", "with", "name"})
+_PLAIN_SCALAR_RE = re.compile(r"[A-Za-z0-9_./-]+")
 
 #: Path components holding third-party or installed code — never a rail. Everything else the
 #: dependency gate scans (osv-scanner --recursive) gets a rail, build/ and fixtures/ included.
@@ -604,11 +620,120 @@ def _first_present(paths: Sequence[str], candidates: Sequence[str]) -> Optional[
     return next((present[c.lower()] for c in candidates if c.lower() in present), None)
 
 
+def _codeql_suite(text: str) -> str:
+    """The ``queries:`` suite a CodeQL workflow selects, ignoring comments (``default`` when none)."""
+    live = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+    match = _CODEQL_QUERIES_RE.search(live)
+    return match.group(1) if match else "default"
+
+
+def codeql_workflow(facts: RepoFacts, read: Reader) -> Optional[Tuple[str, str, bool]]:
+    """The checked-in CodeQL workflow: ``(path, query suite, runs through QZP's reusable-codeql.yml)``.
+
+    ``None`` means no workflow runs CodeQL, so the repository relies on GitHub default setup.
+    Comment lines never count. For a QZP caller the suite is the one the platform's own
+    ``reusable-codeql.yml`` selects, read from this checkout of the platform.
+    """
+    workflows = sorted(
+        p for p in facts.paths if posixpath.dirname(p) == ".github/workflows" and p.endswith((".yml", ".yaml"))
+    )
+    for path in workflows:
+        live = "\n".join(line for line in (read(path) or "").splitlines() if not line.lstrip().startswith("#"))
+        if _REUSABLE_CODEQL_RE.search(live):
+            return path, _codeql_suite(REUSABLE_CODEQL.read_text(encoding="utf-8")), True
+        if _CODEQL_INIT_RE.search(live):
+            return path, _codeql_suite(live), False
+    return None
+
+
+def _codeql_control(facts: RepoFacts, read: Reader) -> str:
+    """The CodeQL bullet, describing the setup the repository actually has."""
+    if facts.private:
+        return (
+            "- **Code scanning** — CodeQL needs GitHub Advanced Security on private repositories; until it is "
+            "available the opengrep SAST gate is the code-scanning control here."
+        )
+    merge = "a pull request that introduces a code-scanning alert of any severity cannot be merged."
+    found = codeql_workflow(facts, read)
+    if found is None:
+        return (
+            "- **CodeQL** — GitHub default setup with the *extended* query suite and the remote + local threat "
+            f"model, on every pull request and weekly; {merge}"
+        )
+    path, suite, through_qzp = found
+    runner = f"`{path}` runs"
+    if through_qzp:
+        runner = f"`{path}` calls quality-zero-platform's `reusable-codeql.yml`, which runs"
+    queries = "the default query suite" if suite == "default" else f"the `{suite}` query suite"
+    return f"- **CodeQL** — advanced setup: {runner} {queries}; {merge}"
+
+
+def _verify_is_managed(facts: RepoFacts, read: Reader) -> bool:
+    """Whether scripts/verify is (or will be) the baseline's managed QZP-preflight wrapper."""
+    return VERIFY_SCRIPT not in facts.paths or MANAGED_VERIFY_MARKER in (read(VERIFY_SCRIPT) or "")
+
+
+def _dependabot_config(facts: RepoFacts, read: Reader) -> Optional[str]:
+    """The repository-authored Dependabot config, or ``None`` when the baseline manages (or creates) it."""
+    existing = _first_present(facts.paths, DEPENDABOT_LOCATIONS)
+    if existing is None or (read(existing) or "").replace("\r\n", "\n").startswith(_DEPENDABOT_HEADER):
+        return None
+    return existing
+
+
+_MANAGED_VERIFY_SECTION = (
+    "```bash\nbash scripts/verify\n```\n\n"
+    "`scripts/verify` runs QZP's preflight at the exact commit that\n"
+    "`.github/workflows/quality.yml` pins, so every CI lane runs locally with the\n"
+    "same pinned tool versions. Run it from this repository's root before every\n"
+    "push. A lane that cannot run locally (for example a missing toolchain) is\n"
+    "reported as `SKIP`, never as a silent pass — CI will still run it."
+)
+_OWN_VERIFY_SECTION = (
+    "```bash\nbash scripts/verify\n```\n\n"
+    "`scripts/verify` is this repository's own verification script: run it from\n"
+    "the repository root before every push. It is not the QZP lean gate — CI runs\n"
+    "every lean-gate lane on each pull request, and you can run them locally with\n"
+    "quality-zero-platform's `scripts/quality/preflight.sh`, checked out at the\n"
+    "commit `.github/workflows/quality.yml` pins."
+)
+_MANAGED_AGENTS_VERIFY = (
+    "- **Verify before claiming completion:** run `bash scripts/verify`. It runs\n"
+    "  every lane of the QZP lean gate at the exact commit CI pins. A finding of\n"
+    "  any severity is a failure."
+)
+_OWN_AGENTS_VERIFY = (
+    "- **Verify before claiming completion:** run `bash scripts/verify` (this\n"
+    "  repository's own checks) and confirm that every CI lane, the QZP lean gate\n"
+    "  included, is green. A finding of any severity is a failure."
+)
+_MANAGED_DEPENDENCIES = (
+    "Dependabot proposes updates weekly: minor and patch updates are grouped per\n"
+    "ecosystem, security updates are grouped so one pull request can clear every\n"
+    "open advisory, and major updates arrive one by one for review. Because the\n"
+    "dependency gate fails on *any* known advisory, keep lockfiles current — an\n"
+    "unmerged security update turns every other pull request red too."
+)
+_OWN_DEPENDENCIES = (
+    "Dependabot keeps dependencies current on the schedule set in\n"
+    "`{path}`. Because the dependency gate fails on *any* known\n"
+    "advisory, merge security updates promptly — an unmerged security update\n"
+    "turns every other pull request red too."
+)
+
+
 def template_context(facts: RepoFacts, read: Reader, qzp_pin: str, deps_floor: str = "t0") -> Dict[str, str]:
-    """Build the substitution context every fleet template renders against."""
+    """Build the substitution context every fleet template renders against.
+
+    Every statement the documents make is about this repository as it is, or as this
+    baseline run leaves it: a checked-in CodeQL workflow is described as advanced setup,
+    and a repository-authored ``scripts/verify``, pull-request template or Dependabot
+    config is described as the repository's own rather than as the managed one.
+    """
     languages = detect_languages(facts.paths)
     rows = gate_rows(languages, deps_floor)
     report_url = _private_reporting(facts)
+    policy_path = _first_present(facts.paths, SECURITY_LOCATIONS) or "SECURITY.md"
     if facts.private:
         reporting = (
             "This repository is private, so its issues are visible only to people with access to it: "
@@ -616,10 +741,8 @@ def template_context(facts: RepoFacts, read: Reader, qzp_pin: str, deps_floor: s
             "every collaborator, say so in that issue without the details and the maintainer will arrange a "
             "direct channel."
         )
-        codeql = (
-            "- **Code scanning** — CodeQL needs GitHub Advanced Security on private repositories; until it is "
-            "available the opengrep SAST gate is the code-scanning control here."
-        )
+        # GitHub has no private reporting form for private repositories: the issue form links the policy.
+        contact_url = f"https://github.com/{facts.slug}/blob/{facts.default_branch}/{policy_path}"
         conduct = (
             "Report conduct violations to the maintainer; this repository is private, so its issues reach only "
             "people with access to it, and the maintainer will arrange a direct channel on request."
@@ -628,34 +751,38 @@ def template_context(facts: RepoFacts, read: Reader, qzp_pin: str, deps_floor: s
         reporting = (
             f"**Please use [private vulnerability reporting]({report_url})** — the *Report a vulnerability* "
             "button in this repository's *Security* tab. Reports there go privately to the maintainer and allow "
-            "coordinated disclosure."
+            "coordinated disclosure. If that form is unavailable to you, contact the maintainer through their "
+            f"[GitHub profile]({MAINTAINER_URL}) without any details and ask for a private channel."
         )
-        codeql = (
-            "- **CodeQL** — GitHub default setup with the *extended* query suite and the remote + local threat "
-            "model, on every pull request and weekly; a pull request that introduces a code-scanning alert of any "
-            "severity cannot be merged."
-        )
+        contact_url = report_url
         conduct = (
             f"Report conduct violations privately via [private vulnerability reporting]({report_url}) (a private "
             f"channel to the maintainer) or through the maintainer's [GitHub profile]({MAINTAINER_URL})."
         )
-    secrets = "- **Secrets** — gitleaks on every change" + (
+    codeql = _codeql_control(facts, read)
+    events = f"on every pull request to and every push on `{facts.default_branch}`"
+    secrets = f"- **Secrets** — gitleaks {events}" + (
         "." if facts.private else "; GitHub secret scanning with push protection is enabled."
     )
-    dependencies = (
-        "- **Dependencies** — osv-scanner on every lockfile and manifest, plus Dependabot alerts and grouped "
-        "security updates."
+    own_dependabot = _dependabot_config(facts, read)
+    dependencies = "- **Dependencies** — osv-scanner over every lockfile it can read, plus Dependabot alerts and " + (
+        "security updates." if own_dependabot else "grouped security updates."
     )
-    controls = [codeql, "- **SAST** — opengrep on every change.", secrets, dependencies]
+    controls = [codeql, f"- **SAST** — opengrep {events}.", secrets, dependencies]
     outside = [label for key, label in _OUTSIDE_LEAN_GATE.items() if key in languages]
-    extra = [codeql, "- **Dependabot** — `.github/dependabot.yml` keeps every manifest tree on a weekly update rail."]
+    if own_dependabot:
+        dependabot = f"- **Dependabot** — `{own_dependabot}` (this repository's own configuration) proposes updates."
+    else:
+        dependabot = "- **Dependabot** — `.github/dependabot.yml` keeps every manifest tree on a weekly update rail."
+    extra = [codeql, dependabot]
     if outside:
         extra.append(
             f"- **{', '.join(outside)}** — not measured by the lean gate; this repository's own CI workflow(s) "
             "test it and must be green too."
         )
     checklist = [f"- [ ] **gate {gate}** — {what}: {passes}" for gate, what, passes in rows]
-    caller_with = "    with:\n      deps-severity-floor: any\n" if deps_floor == "any" else ""
+    managed_verify = _verify_is_managed(facts, read)
+    own_pr_template = _first_present(facts.paths, PR_TEMPLATE_LOCATIONS) is not None
     return {
         "repo_slug": facts.slug,
         "fork_security_note": _fork_security_note(facts),
@@ -665,16 +792,28 @@ def template_context(facts: RepoFacts, read: Reader, qzp_pin: str, deps_floor: s
         "default_branch_yaml": json.dumps(facts.default_branch),
         "reporting_channel": reporting,
         "security_controls": "\n".join(controls),
-        "security_contact_url": report_url,
-        "security_policy_path": _first_present(facts.paths, SECURITY_LOCATIONS) or "SECURITY.md",
+        "security_contact_url": contact_url,
+        "security_policy_path": policy_path,
         "conduct_policy_path": _first_present(facts.paths, CONDUCT_LOCATIONS) or "CODE_OF_CONDUCT.md",
         "conduct_contact": conduct,
         "gate_rows": "\n".join(f"| {gate} | {what} | {passes} |" for gate, what, passes in rows),
         "gate_checklist": "\n".join(checklist),
         "extra_controls": "\n".join(extra),
         "local_commands": local_commands(languages, read, facts.paths),
+        "verify_section": _MANAGED_VERIFY_SECTION if managed_verify else _OWN_VERIFY_SECTION,
+        "agents_verify": _MANAGED_AGENTS_VERIFY if managed_verify else _OWN_AGENTS_VERIFY,
+        "pr_template_step": (
+            "Open a pull request and fill in the pull-request template."
+            if own_pr_template
+            else "Open a pull request and fill in the checklist from the pull-request\n"
+            "   template; it maps 1:1 to what CI enforces."
+        ),
+        "dependencies_section": (
+            _OWN_DEPENDENCIES.format(path=own_dependabot) if own_dependabot else _MANAGED_DEPENDENCIES
+        ),
         "qzp_pin": qzp_pin,
-        "caller_with": caller_with,
+        "caller_with": caller_with({}, deps_floor),
+        "extra_triggers": "",
         "deps_floor": deps_floor,
     }
 
@@ -874,24 +1013,49 @@ def _plan_dependabot(facts: RepoFacts, read: Reader, planned: Sequence[str] = ()
     return FileAction(existing, "gap", "; ".join(problems))
 
 
-#: Lockfiles the lean gate's osv-scanner step detects, per package ecosystem (reusable-quality.yml).
+#: What gate 6 can read, per package ecosystem: the lockfiles osv-scanner v2.3.8 extracts in a
+#: source scan (docs/supported_languages_and_lockfiles.md at that tag), as fnmatch patterns
+#: relative to the rail directory. go.mod and pom.xml are read directly (maven resolves its
+#: transitive tree), so those ecosystems always count as scanned.
 _SCANNED_LOCKFILES = {
-    "npm": ("package-lock.json", "yarn.lock", "pnpm-lock.yaml"),
-    "gradle": ("gradle.lockfile",),
+    "npm": ("package-lock.json", "pnpm-lock.yaml", "yarn.lock"),
+    "bun": ("bun.lock",),
+    "pip": (
+        "*requirements*.txt",
+        "requirements/*requirements*.txt",
+        "Pipfile.lock",
+        "poetry.lock",
+        "pdm.lock",
+        "pylock.toml",
+    ),
+    "uv": ("uv.lock",),
+    "cargo": ("Cargo.lock",),
+    "composer": ("composer.lock",),
+    "bundler": ("Gemfile.lock", "gems.locked"),
+    "gradle": ("gradle.lockfile", "buildscript-gradle.lockfile", "gradle/verification-metadata.xml"),
+    "nuget": ("packages.lock.json", "packages.config", "*.deps.json"),
+    "pub": ("pubspec.lock",),
+    "mix": ("mix.lock",),
 }
-#: Package ecosystems whose manifests the lean gate's dependency scan never reads.
-_UNSCANNED_ECOSYSTEMS = {"bun": "Bun lockfiles", "nuget": "NuGet manifests"}
+#: Package ecosystems osv-scanner has no extractor for at all.
+_UNSCANNED_ECOSYSTEMS = {"swift": "Swift packages"}
 
 
 def unscanned_rails(rails: Dict[str, List[str]], paths: Sequence[str]) -> List[str]:
-    """Rails whose dependencies gate 6 (osv-scanner) does not scan, so it cannot fail on them."""
-    present = set(paths)
+    """Rails whose dependencies gate 6 (osv-scanner) cannot read, so it can never fail on them."""
     gaps = [f"{label} ({', '.join(rails[eco])})" for eco, label in _UNSCANNED_ECOSYSTEMS.items() if eco in rails]
     for ecosystem, lockfiles in _SCANNED_LOCKFILES.items():
         for directory in rails.get(ecosystem, []):
             prefix = "" if directory == "/" else directory.strip("/") + "/"
-            if not any(prefix + name in present for name in lockfiles):
-                gaps.append(f"{ecosystem} {directory} has no lockfile ({' / '.join(lockfiles)})")
+            local = [path[len(prefix) :] for path in paths if path.startswith(prefix)]
+            # a pattern matches at its own depth only: a nested lockfile belongs to its own rail
+            found = any(
+                fnmatch.fnmatchcase(name, pattern) and name.count("/") == pattern.count("/")
+                for name in local
+                for pattern in lockfiles
+            )
+            if not found:
+                gaps.append(f"{ecosystem} {directory} has no file osv-scanner reads ({' / '.join(lockfiles)})")
     return gaps
 
 
@@ -962,8 +1126,81 @@ def bump_caller(text: str, qzp_pin: str) -> str:
     )
 
 
+def _yaml_scalar(value: object) -> str:
+    """Render one caller input so that YAML reads it back as exactly the same value."""
+    if isinstance(value, str) and _PLAIN_SCALAR_RE.fullmatch(value) and yaml.safe_load(value) == value:
+        return value
+    return json.dumps(value)
+
+
+def caller_with(inputs: Dict[str, object], deps_floor: str) -> str:
+    """Render the caller job's ``with:`` block: the carried-over inputs plus the gate-6 floor.
+
+    ``any`` is always set when asked for; otherwise an existing floor is carried over as is,
+    so a regeneration never weakens a caller that already runs at zero tolerance.
+    """
+    merged = {key: value for key, value in inputs.items() if key != "deps-severity-floor"}
+    if deps_floor == "any":
+        merged["deps-severity-floor"] = "any"
+    elif "deps-severity-floor" in inputs:
+        merged["deps-severity-floor"] = inputs["deps-severity-floor"]
+    if not merged:
+        return ""
+    return "    with:\n" + "".join(f"      {key}: {_yaml_scalar(value)}\n" for key, value in merged.items())
+
+
+def thin_caller(text: str) -> Optional[Tuple[Dict[str, object], bool]]:
+    """``(inputs, runs on workflow_dispatch)`` when a workflow is a thin lean-gate caller, else ``None``.
+
+    Thin means the managed shape and nothing else: top-level name / on / permissions /
+    concurrency / jobs, one ``quality`` job that only ``uses`` the reusable workflow (with
+    optional ``with`` inputs and ``name: quality``), runs on pull_request, and read-only
+    contents permissions. The baseline owns such a caller and regenerates it from the
+    template, carrying its inputs over; anything more is hand-written and only re-pinned.
+    """
+    try:
+        document = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return None
+    if not isinstance(document, dict) or set(document) - _THIN_CALLER_KEYS or caller_contract_gap(text):
+        return None
+    jobs = document["jobs"]
+    job = jobs["quality"]
+    inputs = job.get("with") or {}
+    if (
+        list(jobs) != ["quality"]
+        or set(job) - _THIN_CALLER_JOB_KEYS
+        or not isinstance(inputs, dict)
+        or document.get("permissions", {"contents": "read"}) != {"contents": "read"}
+    ):
+        return None
+    triggers = document.get("on", document.get(True))
+    return dict(inputs), isinstance(triggers, (dict, list)) and "workflow_dispatch" in triggers
+
+
+def _regenerate_caller(
+    workflow: str, text: str, refs: Set[str], thin: Tuple[Dict[str, object], bool], context: Dict[str, str]
+) -> FileAction:
+    """Regenerate a thin caller from the template, keeping its inputs and a manual trigger."""
+    inputs, dispatch = thin
+    rendered = render_template(
+        "quality.yml",
+        {
+            **context,
+            "caller_with": caller_with(inputs, context["deps_floor"]),
+            "extra_triggers": "  workflow_dispatch:\n" if dispatch else "",
+        },
+    )
+    if rendered == text.replace("\r\n", "\n"):
+        return FileAction(workflow, "keep", "lean-gate caller is current")
+    reason = f"thin caller regenerated from the fleet template (pin {', '.join(sorted(refs))} -> {context['qzp_pin']}"
+    if context["deps_floor"] == "any":
+        reason += ", deps-severity-floor: any"
+    return FileAction(workflow, "replace", reason + ")", rendered)
+
+
 def _plan_quality_caller(facts: RepoFacts, read: Reader, context: Dict[str, str], qzp_pin: str) -> List[FileAction]:
-    """Create the lean-gate caller, bump existing callers to ``qzp_pin``, or flag an in-repo gate."""
+    """Create the lean-gate caller, regenerate or re-pin existing callers, or flag an in-repo gate."""
     actions: List[FileAction] = []
     workflows = sorted(
         p for p in facts.paths if posixpath.dirname(p) == ".github/workflows" and p.endswith((".yml", ".yaml"))
@@ -972,6 +1209,10 @@ def _plan_quality_caller(facts: RepoFacts, read: Reader, context: Dict[str, str]
         text = read(workflow) or ""
         refs = caller_refs(text)
         if not refs:
+            continue
+        thin = thin_caller(text)
+        if thin is not None:
+            actions.append(_regenerate_caller(workflow, text, refs, thin, context))
             continue
         problem = caller_contract_gap(text, context["deps_floor"])
         if problem:

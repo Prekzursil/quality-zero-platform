@@ -263,6 +263,32 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
         # Review finding: more open PRs than one page lists - no verdict rather than a partial one.
         self.assertEqual(live(pulls, link=next_page["link"]), "unknown")
 
+    def test_prs_sharing_a_head_keep_separate_verdicts(self) -> None:
+        """Review finding: one head, two PRs (different bases) - a newer success for one cannot hide the other's failure."""
+        pulls = [{"number": 1, "head": {"sha": "h"}}, {"number": 2, "head": {"sha": "h"}}]
+        runs = {
+            "workflow_runs": [
+                {
+                    "name": "CI",
+                    "conclusion": "success",
+                    "created_at": "2026-10-24T10:02:00Z",
+                    "pull_requests": [{"number": 1}],
+                },
+                {
+                    "name": "CI",
+                    "conclusion": "failure",
+                    "created_at": "2026-10-24T10:01:00Z",
+                    "pull_requests": [{"number": 2}],
+                },
+                {"name": "Lint", "conclusion": "success", "created_at": "2026-10-24T10:00:00Z", "pull_requests": []},
+            ]
+        }
+        with patch.object(
+            build_admin_dashboard, "_github_fetch_degraded", side_effect=[(pulls, {}), (runs, {})]
+        ) as fetch:
+            self.assertEqual(build_admin_dashboard._open_pr_health("token", "o/r"), "partial")
+        self.assertEqual(fetch.call_count, 2)  # one lookup per distinct head
+
     def test_per_head_lookups_are_capped(self) -> None:
         """A huge PR backlog cannot stall the hourly build; heads past the cap leave no verdict."""
         cap = build_admin_dashboard.MAX_PR_HEAD_LOOKUPS

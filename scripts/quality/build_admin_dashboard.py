@@ -331,17 +331,30 @@ def _workflow_runs_of(payload: Any) -> List[Mapping[str, Any]]:
     return [run for run in runs if isinstance(run, Mapping)]
 
 
-def _head_health(token: str, repo_slug: str, sha: str) -> str:
-    """One open head's verdict from its pull_request runs (``unknown`` if they span more than one page).
-
-    With a next page the newest run of an older workflow may be unseen, so
-    only a failure already visible is reported; anything else is unproven.
-    """
+def _head_runs(token: str, repo_slug: str, sha: str) -> Tuple[List[Mapping[str, Any]], bool]:
+    """``(pull_request runs on a head, complete)``; ``complete`` is False when they span more than one page."""
     payload, headers = _github_fetch_degraded(
         f"{GITHUB_API_BASE}/repos/{repo_slug}/actions/runs?head_sha={sha}&event=pull_request&per_page=100", token
     )
-    verdict = _compute_health(_workflow_runs_of(payload))
-    if verdict != "partial" and _next_page_url(headers or {}):
+    return _workflow_runs_of(payload), not _next_page_url(headers or {})
+
+
+def _pr_health(runs: Sequence[Mapping[str, Any]], complete: bool, number: Any) -> str:
+    """One open PR's verdict from its head's runs.
+
+    Two open PRs can share a head commit (different bases), so a run that
+    names its PRs counts only for those. A fork PR's runs name none and are
+    kept. With an incomplete run list, only a failure already visible is
+    reported; anything else is unproven.
+    """
+    own = [
+        run
+        for run in runs
+        if not run.get("pull_requests")
+        or any(isinstance(pr, Mapping) and pr.get("number") == number for pr in run["pull_requests"])
+    ]
+    verdict = _compute_health(own)
+    if verdict != "partial" and not complete:
         return "unknown"
     return verdict
 
@@ -365,10 +378,13 @@ def _open_pr_health(token: str, repo_slug: str) -> str:
     pulls, headers = _github_fetch_degraded(f"{GITHUB_API_BASE}/repos/{repo_slug}/pulls?state=open&per_page=100", token)
     if not isinstance(pulls, list) or _next_page_url(headers or {}):
         return "unknown"
-    heads = sorted({_head_sha(pull) for pull in pulls} - {""})
-    if not heads:
+    open_prs = [(pull.get("number"), _head_sha(pull)) for pull in pulls if isinstance(pull, Mapping)]
+    open_prs = [(number, sha) for number, sha in open_prs if sha]
+    if not open_prs:
         return "none"
-    verdicts = [_head_health(token, repo_slug, sha) for sha in heads[:MAX_PR_HEAD_LOOKUPS]]
+    heads = sorted({sha for _number, sha in open_prs})
+    looked_up = {sha: _head_runs(token, repo_slug, sha) for sha in heads[:MAX_PR_HEAD_LOOKUPS]}
+    verdicts = [_pr_health(*looked_up[sha], number) for number, sha in open_prs if sha in looked_up]
     if "partial" in verdicts:
         return "partial"
     if len(heads) > MAX_PR_HEAD_LOOKUPS or "unknown" in verdicts:
@@ -511,7 +527,9 @@ def _live_health(
     # rulesets) and must degrade that ONE row, never abort the whole
     # dashboard build.
     runs = _github_payload_or_none(
-        (f"{GITHUB_API_BASE}/repos/{repo_slug}/actions/runs?branch={default_branch}&per_page=20"),
+        # 100, not 20: a weekly or schedule-only workflow must still have a
+        # run in the window, or it silently drops out of the verdict.
+        (f"{GITHUB_API_BASE}/repos/{repo_slug}/actions/runs?branch={default_branch}&per_page=100"),
         token,
     )
     rulesets = _github_payload_or_none(f"{GITHUB_API_BASE}/repos/{repo_slug}/rulesets", token)

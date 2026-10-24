@@ -525,8 +525,10 @@ def _status_section(scan: RepoScan) -> List[str]:
             "",
             scan.detail,
             "",
-            "Nothing about this repository's dependencies is known: this is neither a vulnerability "
-            "verdict nor a clean result. The issue stays open until a scan completes.",
+            (
+                "Nothing about this repository's dependencies is known: this is neither a vulnerability "
+                "verdict nor a clean result. The issue stays open until a scan completes."
+            ),
         ]
     return [
         "## SCAN ERROR - this is NOT a vulnerability verdict",

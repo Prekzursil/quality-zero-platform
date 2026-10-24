@@ -9,7 +9,7 @@ from __future__ import absolute_import
 
 import unittest
 from typing import Any, Dict, Tuple
-from unittest import mock
+from unittest.mock import patch
 
 from scripts.quality import build_admin_dashboard
 
@@ -40,7 +40,7 @@ class PayloadShapeTests(unittest.TestCase):
                 "page=2": ({"check_runs": [{"name": "quality / quality"}, "junk"]}, {}),
             }
         )
-        with mock.patch.object(build_admin_dashboard, "_github_fetch_degraded", side_effect=fake):
+        with patch.object(build_admin_dashboard, "_github_fetch_degraded", side_effect=fake):
             runs, partial = build_admin_dashboard._collect_all_check_runs("https://api.github.com/x?page=1", "t")
         self.assertEqual(runs, [{"name": "quality / quality"}])
         self.assertFalse(partial)
@@ -57,7 +57,7 @@ class PayloadShapeTests(unittest.TestCase):
                 "/status": ({"statuses": []}, {}),
             }
         )
-        with mock.patch.object(build_admin_dashboard, "_github_fetch_degraded", side_effect=fake):
+        with patch.object(build_admin_dashboard, "_github_fetch_degraded", side_effect=fake):
             gates = build_admin_dashboard._lane_gates("t", "Prekzursil/x", "main", PROFILE)
         self.assertEqual(gates["gate_status"], "pass")
         self.assertEqual((gates["gate_head_sha"], gates["gate_head_date"]), (HEAD_SHA, ""))

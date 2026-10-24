@@ -254,6 +254,8 @@ its last real scan instead). Unlike a `scan-error`, that standing configuration
 gap does not fail the run every night: the sweep exits `3` and the workflow
 annotates it with a warning. Setting the optional `CODEX_FLEET_READ_PAT`
 (Contents: Read across the fleet) closes the gap; the next sweep scans them.
+That PAT only ever clones: the issue writes keep the workflow's own token, so
+a read-only PAT is all it needs.
 
 ## Scheduled Alerts and the platform's own workflows
 

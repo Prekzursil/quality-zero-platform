@@ -37,6 +37,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
+from unittest.mock import patch
 
 import yaml  # type: ignore[import-untyped]
 from tests.workspace_isolation import isolated_cwd
@@ -123,6 +124,7 @@ class FakeRunner:
     ) -> None:
         """Script the fake ``gh`` / ``osv-scanner`` responses for one test."""
         self.calls: List[List[str]] = []
+        self.call_kwargs: List[Dict[str, Any]] = []
         self.osv_results = list(osv_results or [(0, json.dumps(CLEAN_REPORT))])
         self.clone_returncode = clone_returncode
         self.issue_list = issue_list
@@ -136,10 +138,11 @@ class FakeRunner:
         self.inaccessible_stderr = inaccessible_stderr
         self._osv_index = 0
 
-    def __call__(self, args: Sequence[str], **_kwargs: Any) -> "subprocess.CompletedProcess[str]":
+    def __call__(self, args: Sequence[str], **kwargs: Any) -> "subprocess.CompletedProcess[str]":
         """Dispatch on the argv shape, exactly as the real binaries would be."""
         argv = list(args)
         self.calls.append(argv)
+        self.call_kwargs.append(kwargs)
         if argv[0] == "osv-scanner":
             return self._osv(argv)
         if argv[:3] == ["gh", "repo", "clone"]:
@@ -422,6 +425,42 @@ class ScanRepoTests(unittest.TestCase):
         self.assertIs(scan.status, sweep.ScanStatus.UNSCANNABLE)
         self.assertIn("The configured `CODEX_FLEET_READ_PAT` cannot see this repository", scan.detail)
         self.assertIn("Grant that token Contents: Read", scan.detail)
+
+    def test_only_the_clone_runs_with_the_fleet_read_token(self) -> None:
+        """The PAT replaces GH_TOKEN for `gh repo clone`; nothing else sees it."""
+        runner = FakeRunner()
+        environ = {"GH_TOKEN": "workflow-token", sweep.FLEET_READ_PAT_ENV: " read-pat ", "PATH": "/bin"}
+        with isolated_cwd() as tmp:
+            sweep.scan_repo(
+                "Prekzursil/momentstudio",
+                workdir=Path(tmp),
+                floor=severity.SEVERITY_FLOOR,
+                runner=runner,
+                sleeper=NoopSleeper(),
+                environ=environ,
+            )
+        clone_kwargs, osv_kwargs = runner.call_kwargs
+        self.assertEqual(runner.calls[0][:3], ["gh", "repo", "clone"])
+        self.assertEqual(clone_kwargs["env"]["GH_TOKEN"], "read-pat")
+        self.assertEqual(clone_kwargs["env"]["PATH"], "/bin")
+        self.assertNotIn("env", osv_kwargs)
+        self.assertEqual(environ["GH_TOKEN"], "workflow-token")
+
+    def test_without_a_read_token_the_clone_inherits_the_environment(self) -> None:
+        """No PAT (or a blank one): the clone runs with the workflow token like every other call."""
+        for environ in ({}, {sweep.FLEET_READ_PAT_ENV: "  "}):
+            with self.subTest(environ=environ):
+                self.assertIsNone(sweep.clone_env(environ))
+        runner = FakeRunner()
+        with isolated_cwd() as tmp, patch.dict(sweep.os.environ, {sweep.FLEET_READ_PAT_ENV: ""}):
+            sweep.scan_repo(
+                "Prekzursil/momentstudio",
+                workdir=Path(tmp),
+                floor=severity.SEVERITY_FLOOR,
+                runner=runner,
+                sleeper=NoopSleeper(),
+            )
+        self.assertNotIn("env", runner.call_kwargs[0])
 
     def test_transient_exit_is_retried_then_succeeds(self) -> None:
         """127 retries with gate 6's ``attempt * 20`` backoff, then passes."""
@@ -1272,11 +1311,13 @@ class ScheduledCveScanWorkflowTests(unittest.TestCase):
         self.assertNotIn("exit", branch)
         self.assertNotIn("PASS", branch)
 
-    def test_the_workflow_says_whether_the_read_pat_exists(self) -> None:
-        """Only whether it is set travels (never its value), and only through env:."""
+    def test_the_read_pat_never_becomes_the_issue_writing_token(self) -> None:
+        """THE review finding: a read-only PAT as GH_TOKEN 403s every issue write."""
         (step,) = [s for s in self.doc["jobs"]["sweep"]["steps"] if "scheduled_cve_scan" in str(s.get("run", ""))]
-        self.assertEqual(step["env"]["QZ_READ_PAT_CONFIGURED"], "${{ secrets.CODEX_FLEET_READ_PAT != '' }}")
-        self.assertIn('if [ "${QZ_READ_PAT_CONFIGURED:-false}" = "true" ]; then', step["run"])
+        self.assertEqual(step["env"]["GH_TOKEN"], "${{ github.token }}")
+        self.assertEqual(step["env"][sweep.FLEET_READ_PAT_ENV], "${{ secrets.CODEX_FLEET_READ_PAT }}")
+        self.assertNotIn("CODEX_FLEET_READ_PAT ||", self.text)
+        self.assertIn('if [ -n "${QZ_FLEET_READ_TOKEN:-}" ]; then', step["run"])
         self.assertIn("args+=(--read-token-configured)", step["run"])
 
     def test_osv_scanner_is_pinned_to_the_gate_version(self) -> None:

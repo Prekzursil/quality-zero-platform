@@ -54,6 +54,7 @@ import contextlib
 import datetime as dt
 import enum
 import json
+import os
 import re
 import subprocess  # nosec B404 — gh / osv-scanner CLI wrapper; every arg is controlled
 import sys
@@ -61,7 +62,7 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Iterator, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Mapping, Optional, Sequence, Tuple
 
 from scripts.quality import fleet_inventory
 from scripts.quality import osv_severity_gate as severity
@@ -320,9 +321,28 @@ def load_fleet_slugs(inventory_path: Path, *, only: Sequence[str] = ()) -> List[
 # ---------------------------------------------------------------------------
 
 
-def _run(args: Sequence[str], *, runner: ProcessRunner) -> "subprocess.CompletedProcess[str]":
-    """Invoke ``args`` through the injected runner, capturing text output."""
-    return runner(list(args), capture_output=True, text=True, check=False)
+def _run(
+    args: Sequence[str], *, runner: ProcessRunner, env: Optional[Mapping[str, str]] = None
+) -> "subprocess.CompletedProcess[str]":
+    """Invoke ``args`` through the injected runner, capturing text output (in ``env`` when given)."""
+    if env is None:
+        return runner(list(args), capture_output=True, text=True, check=False)
+    return runner(list(args), capture_output=True, text=True, check=False, env=dict(env))
+
+
+#: The fleet-read PAT arrives in this variable, NOT in ``GH_TOKEN``. It is
+#: read-only (Contents: Read is all it should hold), so it only ever clones;
+#: every issue write on the platform keeps the workflow token, which a
+#: read-only PAT in ``GH_TOKEN`` would have turned into a 403.
+FLEET_READ_PAT_ENV = "QZ_FLEET_READ_TOKEN"
+
+
+def clone_env(environ: Mapping[str, str]) -> Optional[Dict[str, str]]:
+    """The clone's environment: ``GH_TOKEN`` swapped for the fleet-read PAT, or ``None`` to inherit."""
+    token = str(environ.get(FLEET_READ_PAT_ENV, "")).strip()
+    if not token:
+        return None
+    return {**environ, "GH_TOKEN": token}
 
 
 def _tail(text: str) -> str:
@@ -392,15 +412,16 @@ def scan_repo(
     sleeper: Sleeper = time.sleep,
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
     read_token_configured: bool = False,
+    environ: Optional[Mapping[str, str]] = None,
 ) -> RepoScan:
     """Clone and scan one repository, splitting its report into T0 and T2.
 
     A repository that could not be cloned, or whose report could not be
     parsed, is a ``SCAN_ERROR``: we did not establish anything about it, so we
-    must not claim it is clean.
+    must not claim it is clean. Only the clone sees the fleet-read PAT.
     """
     dest = Path(workdir) / slug.replace("/", "__")
-    clone = _run(clone_command(slug, dest), runner=runner)
+    clone = _run(clone_command(slug, dest), runner=runner, env=clone_env(os.environ if environ is None else environ))
     if clone.returncode != 0 and INACCESSIBLE_CLONE.search(str(clone.stderr or "")):
         return RepoScan(
             slug=slug,

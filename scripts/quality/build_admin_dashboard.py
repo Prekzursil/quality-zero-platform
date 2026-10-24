@@ -34,8 +34,8 @@ GITHUB_API_BASE = "https://api.github.com"
 # is far beyond any real required-context set — the cap stops a pathological
 # repo from stalling the hourly build.
 MAX_CHECK_RUN_PAGES = 5
-# Per-head run lookups for open PRs the newest pull_request runs page missed;
-# capped so a repo with a huge PR backlog cannot stall the hourly build.
+# One pull_request-run lookup per open PR head, capped so a repo with a huge
+# PR backlog cannot stall the hourly build (heads past the cap: no verdict).
 MAX_PR_HEAD_LOOKUPS = 20
 #: Conclusions that neither pass nor fail a workflow (the platform's own
 #: failing-workflow alert uses the same set): a run that concurrency
@@ -286,13 +286,8 @@ def _select_runs(workflow_runs: Sequence[Mapping[str, Any]], *, filter_fn=None) 
     return [item for item in workflow_runs if filter_fn(item)]
 
 
-def _compute_health(
-    workflow_runs: Sequence[Mapping[str, Any]],
-    *,
-    filter_fn=None,
-    per_commit: bool = False,
-) -> str:
-    """One verdict from the NEWEST decisive run of each workflow (of each commit, with ``per_commit``).
+def _compute_health(workflow_runs: Sequence[Mapping[str, Any]], *, filter_fn=None) -> str:
+    """One verdict from the NEWEST decisive run of each workflow.
 
     ``partial`` when some workflow's newest completed, non-neutral run did not
     succeed; ``pending`` when a workflow has nothing but runs still in flight;
@@ -305,11 +300,10 @@ def _compute_health(
         key=lambda run: str(run.get("created_at", "")),
         reverse=True,
     )
-    decided: Dict[Tuple[str, str], str] = {}
-    in_flight: Set[Tuple[str, str]] = set()
+    decided: Dict[str, str] = {}
+    in_flight: Set[str] = set()
     for run in runs:
-        commit = str(run.get("head_sha", "")) if per_commit else ""
-        key = (commit, str(run.get("workflow_id") or run.get("name") or ""))
+        key = str(run.get("workflow_id") or run.get("name") or "")
         conclusion = str(run.get("conclusion") or "")
         if key in decided or conclusion in NEUTRAL_CONCLUSIONS:
             continue
@@ -342,36 +336,39 @@ def _open_pr_health(token: str, repo_slug: str) -> str:
 
     ``none`` when no PR is open. This used to filter the DEFAULT-branch runs
     for ``pull_request`` events, and a PR run never carries the default
-    branch, so every repo read ``unknown``. An open head missing from the
-    newest pull_request runs is looked up by ``head_sha`` (a stale PR's old
-    failure still counts). A head with no run at all leaves the verdict
-    ``unknown`` unless another PR already failed: CI that never reported is
-    not a pass.
+    branch, so every repo read ``unknown``.
+
+    Every open head gets its OWN pull_request-run lookup, so a stale PR's old
+    failure, or an older failing workflow beside a newer passing one, still
+    counts. Any failing head makes the repo ``partial``. Otherwise no verdict
+    is claimed (``unknown``) while a head has no decisive run (none at all,
+    or only cancelled/skipped ones), sits past the lookup cap, or more open
+    PRs exist than one page lists: CI that never reported is not a pass.
     """
     # 403 as well as 404 degrades just this field (the Lane-8 contract): a
     # token can read a repo's metadata yet be denied its pull requests.
-    pulls = _github_payload_or_degraded(f"{GITHUB_API_BASE}/repos/{repo_slug}/pulls?state=open&per_page=100", token)
-    if not isinstance(pulls, list):
+    pulls, headers = _github_fetch_degraded(f"{GITHUB_API_BASE}/repos/{repo_slug}/pulls?state=open&per_page=100", token)
+    if not isinstance(pulls, list) or _next_page_url(headers or {}):
         return "unknown"
-    heads = {_head_sha(pull) for pull in pulls} - {""}
+    heads = sorted({_head_sha(pull) for pull in pulls} - {""})
     if not heads:
         return "none"
-    page = _github_payload_or_degraded(
-        f"{GITHUB_API_BASE}/repos/{repo_slug}/actions/runs?event=pull_request&per_page=100", token
-    )
-    runs = [run for run in _workflow_runs_of(page) if run.get("head_sha") in heads]
-    missed = sorted(heads - {run.get("head_sha") for run in runs})
-    for sha in missed[:MAX_PR_HEAD_LOOKUPS]:
-        runs.extend(
+    verdicts = [
+        _compute_health(
             _workflow_runs_of(
                 _github_payload_or_degraded(
-                    f"{GITHUB_API_BASE}/repos/{repo_slug}/actions/runs?head_sha={sha}&per_page=100", token
+                    f"{GITHUB_API_BASE}/repos/{repo_slug}/actions/runs?head_sha={sha}&event=pull_request&per_page=100",
+                    token,
                 )
             )
         )
-    verdict = _compute_health(runs, per_commit=True)
-    uncovered = heads - {run.get("head_sha") for run in runs}
-    return "unknown" if uncovered and verdict != "partial" else verdict
+        for sha in heads[:MAX_PR_HEAD_LOOKUPS]
+    ]
+    if "partial" in verdicts:
+        return "partial"
+    if len(heads) > MAX_PR_HEAD_LOOKUPS or "unknown" in verdicts:
+        return "unknown"
+    return "pending" if "pending" in verdicts else "success"
 
 
 def _gate_status_from_context(context_name: str, contexts: Mapping[str, Dict[str, str]]) -> str:

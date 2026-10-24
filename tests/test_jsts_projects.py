@@ -138,6 +138,25 @@ class WorkspaceMembershipTests(unittest.TestCase):
         """No matching include glob means not a member."""
         self.assertFalse(planner.is_workspace_member("tools/cli", ["packages/*"]))
 
+    def test_single_star_stays_inside_one_segment(self) -> None:
+        """``packages/*`` names direct children only, as npm and pnpm do.
+
+        Plain fnmatch let ``*`` cross ``/``, so a project nested INSIDE a
+        member was claimed as a member and passed as "measured by the root".
+        """
+        self.assertTrue(planner.glob_match("packages/ui", "packages/*"))
+        self.assertFalse(planner.glob_match("packages/ui/legacy", "packages/*"))
+        self.assertFalse(planner.is_workspace_member("packages/ui/legacy", ["packages/*"]))
+
+    def test_double_star_spans_any_number_of_segments(self) -> None:
+        """``**`` matches zero or more whole segments."""
+        self.assertTrue(planner.glob_match("packages/ui/legacy", "packages/**"))
+        self.assertTrue(planner.glob_match("packages", "packages/**"))
+        self.assertTrue(planner.glob_match("a/fixtures/b", "**/fixtures/**"))
+        self.assertTrue(planner.glob_match("apps/web/app", "apps/*/app"))
+        self.assertFalse(planner.glob_match("apps/web/lib", "apps/*/app"))
+        self.assertFalse(planner.glob_match("apps", "apps/*"))
+
 
 class PlanTests(unittest.TestCase):
     """The plan attributes tests and flags members."""

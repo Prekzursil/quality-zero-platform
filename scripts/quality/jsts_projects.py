@@ -106,6 +106,26 @@ def workspace_globs(root_package_json: str = "", pnpm_workspace: str = "") -> Li
     return globs
 
 
+def _match_segments(parts: Sequence[str], patterns: Sequence[str]) -> bool:
+    """Match path segments against glob segments; ``**`` spans any number of them."""
+    if not patterns:
+        return not parts
+    head, rest = patterns[0], patterns[1:]
+    if head == "**":
+        return any(_match_segments(parts[index:], rest) for index in range(len(parts) + 1))
+    return bool(parts) and fnmatch.fnmatchcase(parts[0], head) and _match_segments(parts[1:], rest)
+
+
+def glob_match(directory: str, pattern: str) -> bool:
+    """Workspace-glob semantics: ``*`` stays inside ONE path segment, ``**`` crosses them.
+
+    ``fnmatch`` alone lets ``*`` match ``/``, so ``packages/*`` would also claim
+    ``packages/a/b`` - a nested project npm/pnpm would NOT treat as a member,
+    which the lane would then pass as "measured by the root" without measuring.
+    """
+    return _match_segments(directory.split("/"), pattern.split("/"))
+
+
 def is_workspace_member(directory: str, globs: Sequence[str]) -> bool:
     """True when ``directory`` matches an include glob and no ``!``-exclusion glob."""
     if directory == ROOT:
@@ -118,7 +138,7 @@ def is_workspace_member(directory: str, globs: Sequence[str]) -> bool:
             pattern = pattern[1:]
         if pattern.startswith("./"):
             pattern = pattern[2:]
-        if not fnmatch.fnmatchcase(directory, pattern):
+        if not glob_match(directory, pattern):
             continue
         if excluded:
             return False

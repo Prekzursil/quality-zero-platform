@@ -99,9 +99,13 @@ jobs:
           check_pin basedpyright  "basedpyright==$(sed -n 's/^  basedpyright: \"\(.*\)\"$/\1/p' "$pins_file" | head -1)"
           check_pin oxlint        "oxlint@$(sed -n 's/^  oxlint: \"\(.*\)\"$/\1/p' "$pins_file" | head -1)"
           check_pin biome         "biome_pin=\"$(sed -n 's/^  biome: \"\(.*\)\"$/\1/p' "$pins_file" | head -1)\""
-          check_pin opengrep      "opengrep/main/install.sh | bash -s -- -v $(sed -n 's/^  opengrep: \"\(.*\)\"$/\1/p' "$pins_file" | head -1)"
+          check_pin opengrep      "opengrep/releases/download/$(sed -n 's/^  opengrep: \"\(.*\)\"$/\1/p' "$pins_file" | head -1)/opengrep_manylinux_x86"
           check_pin gitleaks      "gitleaks/releases/download/v$(sed -n 's/^  gitleaks: \"\(.*\)\"$/\1/p' "$pins_file" | head -1)/gitleaks_"
           check_pin osv-scanner   "osv-scanner/releases/download/$(sed -n 's/^  osv-scanner: \"\(.*\)\"$/\1/p' "$pins_file" | head -1)/osv-scanner_linux_amd64"
+          # every download must be verified against its pinned asset digest
+          for asset in opengrep_manylinux_x86 gitleaks_linux_x64 osv-scanner_linux_amd64; do
+            check_pin "$asset" "$(sed -n "s/^  $asset: \"\(.*\)\"\$/\1/p" "$pins_file" | head -1)  "
+          done
           if [ -n "$offenders" ]; then
             printf 'offenders<<__QZT_EOF__\n' >> "$GITHUB_OUTPUT"
             printf '%b' "$offenders" >> "$GITHUB_OUTPUT"
@@ -109,7 +113,7 @@ jobs:
             echo "PIN DRIFT FOUND:"
             printf '%b' "$offenders"
           else
-            echo "pin drift: none (all 7 pins match reusable-quality.yml)"
+            echo "pin drift: none (all 7 pins and 3 asset digests match reusable-quality.yml)"
           fi
 
       # ── Check 2: ruleset drift (regenerate + compare) ─────────────────────

@@ -86,8 +86,9 @@ jobs:
       # (verified locally with semgrep CE 1.166.0).
       - name: gate-sast opengrep (curated in-repo ruleset)
         run: |
-          curl -fsSL -o /usr/local/bin/opengrep \
+          curl -fsSL --retry 3 -o /tmp/opengrep \
             https://github.com/opengrep/opengrep/releases/download/v1.23.0/opengrep_manylinux_x86
-          chmod +x /usr/local/bin/opengrep
+          echo "1f06548af379ab6080698a609612890ffad2d92dc2172f1e97d38d48096d5ef8  /tmp/opengrep" | sha256sum -c -
+          install -m 0755 /tmp/opengrep /usr/local/bin/opengrep
           opengrep scan --config .quality/opengrep --error \
             --exclude .venv --exclude node_modules --exclude dist --exclude out --exclude build .

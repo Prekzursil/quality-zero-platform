@@ -470,7 +470,7 @@ gl="$(resolve_gitleaks)" || gl=""
 if [ -z "$gl" ]; then
   lane_skip gate-secrets "gitleaks@$PIN_GITLEAKS binary not on PATH and download unavailable (set QZP_PREFLIGHT_NO_INSTALL=0 or install gitleaks). CI ALWAYS runs this lane - do not treat this skip as clean."
 else
-  args=(detect --no-banner --redact)
+  args=(detect --no-banner --redact --verbose)
   if [ "$DETECT_GITLEAKS_ALLOWLIST" = "true" ]; then
     echo "Honoring the caller's .gitleaks.toml allowlist."
     args+=(--config .gitleaks.toml)

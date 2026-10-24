@@ -335,6 +335,10 @@ class PythonRuntimeDepsTests(_StepHarness):
     def test_lane_order_is_deps_then_types_then_tests(self) -> None:
         """THE lane-order bug: basedpyright ran before the deps it resolves imports against."""
         names = [step.get("name") for step in workflow_steps()]
+        # The caller's deps install BEFORE the pinned gate tools, so a caller
+        # dependency that pulls ruff/basedpyright can never replace the pin.
+        self.assertLess(names.index(self.STEP), names.index("Install ruff"))
+        self.assertLess(names.index(self.STEP), names.index("Install basedpyright"))
         self.assertLess(names.index(self.STEP), names.index("gate-types basedpyright"))
         self.assertLess(names.index("gate-types basedpyright"), names.index("gate-tests-coverage python"))
         self.assertEqual(step_named(self.STEP).get("if"), "steps.detect.outputs.python == 'true'")

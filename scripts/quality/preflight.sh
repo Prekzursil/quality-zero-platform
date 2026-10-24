@@ -214,10 +214,20 @@ if [ "$DETECT_JSTS" = "true" ]; then
   fi
 fi
 
+# The EXACT pinned version of a pip-installed gate tool, like CI: an installed
+# ruff/basedpyright of another version (a caller dependency can pull one in) is
+# replaced, because a finding that only reproduces on another version is not
+# the gate's finding.
+installed_version() { python -m "$1" --version 2>/dev/null | head -1 | awk '{print $2}'; }
+ensure_pip_pin() { # $1 module = distribution, $2 pinned version
+  [ "$(installed_version "$1")" = "$2" ] && return 0
+  pip install "$1==$2" >/dev/null 2>&1 && [ "$(installed_version "$1")" = "$2" ]
+}
+
 # ── GATE 1 (py) — ruff (self-contained, pinned) ────────────────────────────
 if [ "$DETECT_PYTHON" = "true" ]; then
   echo "== gate-lint-format-py (ruff@$PIN_RUFF) =="
-  python -m ruff --version >/dev/null 2>&1 || pip install "ruff==$PIN_RUFF" >/dev/null 2>&1 \
+  ensure_pip_pin ruff "$PIN_RUFF" \
     || fail preflight "could not run or install ruff==$PIN_RUFF (pip install it manually)"
   rc=0
   python -m ruff check . || rc=$?
@@ -288,7 +298,7 @@ fi
 # ── GATE 2 py — basedpyright (caller config honored, else standard) ────────
 if [ "$DETECT_PYTHON" = "true" ]; then
   echo "== gate-types basedpyright@$PIN_BASEDPYRIGHT =="
-  python -m basedpyright --version >/dev/null 2>&1 || pip install "basedpyright==$PIN_BASEDPYRIGHT" >/dev/null 2>&1 \
+  ensure_pip_pin basedpyright "$PIN_BASEDPYRIGHT" \
     || fail preflight "could not run or install basedpyright==$PIN_BASEDPYRIGHT (pip install it manually)"
   rc=0
   if [ "$DETECT_PYRIGHTCFG" = "true" ]; then

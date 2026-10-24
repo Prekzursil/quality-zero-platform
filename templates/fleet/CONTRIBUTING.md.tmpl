@@ -6,7 +6,7 @@ Thanks for wanting to help! This guide explains how changes get into
 Bugs and feature requests go through the
 [issue tracker](https://github.com/${repo_slug}/issues/new/choose).
 Anything that looks security-sensitive does **not** — follow
-[SECURITY.md](SECURITY.md) instead.
+[SECURITY.md](${security_policy_path}) instead.
 
 ## The one rule
 
@@ -48,16 +48,15 @@ ${extra_controls}
 
 ## Running the gates locally
 
-The QZP preflight reproduces every CI lane with the same pinned tool versions:
-
 ```bash
-git clone https://github.com/Prekzursil/quality-zero-platform.git ../quality-zero-platform
-bash ../quality-zero-platform/scripts/quality/preflight.sh
+bash scripts/verify
 ```
 
-Run it from this repository's root before every push. A lane that cannot run
-locally (for example a missing toolchain) is reported as `SKIP`, never as a
-silent pass — CI will still run it.
+`scripts/verify` runs QZP's preflight at the exact commit that
+`.github/workflows/quality.yml` pins, so every CI lane runs locally with the
+same pinned tool versions. Run it from this repository's root before every
+push. A lane that cannot run locally (for example a missing toolchain) is
+reported as `SKIP`, never as a silent pass — CI will still run it.
 
 ${local_commands}
 

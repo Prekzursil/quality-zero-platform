@@ -8,23 +8,27 @@ decides, file by file, what the baseline requires and what to do about it:
 * **community files** — ``SECURITY.md`` (fractal-darkroom's shape: supported
   versions, a private reporting channel with a 72 h / 14 d SLA, scope, supply
   chain), ``CONTRIBUTING.md`` (the gates, the "never weaken a gate" rule, local
-  preflight, 100 % line+branch), ``CODE_OF_CONDUCT.md`` (Contributor Covenant
-  2.1), a pull-request template whose checklist maps 1:1 to the CI gates, and
-  issue forms that route security reports to the private channel;
+  verification, 100 % line+branch), ``CODE_OF_CONDUCT.md`` (Contributor
+  Covenant 2.1), a pull-request template whose checklist maps 1:1 to the CI
+  gates, issue forms that route security reports to the private channel, and a
+  minimal ``AGENTS.md``;
 * **Dependabot** — one update rail per manifest tree for every ecosystem the
   checkout actually contains, plus ``github-actions``. Security updates are
   grouped per ecosystem so ONE pull request can clear every open advisory
   (the dependency gate is zero tolerance, so a stranded advisory reddens every
   other PR); majors are never ignored, they arrive one by one;
-* **the lean gate caller** — ``.github/workflows/quality.yml`` calling
-  ``reusable-quality.yml`` pinned to an exact 40-hex commit, or a pin bump when
-  a caller already exists.
+* **the lean gate** — ``.github/workflows/quality.yml`` calling
+  ``reusable-quality.yml`` pinned to an exact 40-hex commit (or a pin bump when
+  a caller already exists), the gate-4/gate-6 configs the reusable workflow
+  needs to run those gates at all, and ``scripts/verify``, which runs every
+  lane locally at the pinned commit.
 
 Ownership is conservative. A file the repository wrote itself is never
 overwritten: missing files are created, files that are byte-identical to a
-known platform-generated boilerplate are upgraded, and everything else is kept
-and — for ``dependabot.yml`` — audited for manifest trees that have no rail.
-Nothing is committed or pushed here; ``--write`` only edits the checkout.
+known platform-generated boilerplate (or carry the managed header) are
+regenerated, and everything else is kept and — where it matters — audited and
+reported as a gap. Nothing is committed or pushed here; ``--write`` only edits
+the checkout, and it refuses to create a file that already exists on disk.
 
 Usage, from the platform repo root::
 
@@ -55,6 +59,7 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
 from scripts.quality.render_repo_baseline import render_security_policy as render_legacy_security_policy
 
 ProcessRunner = Callable[..., "subprocess.CompletedProcess[str]"]
+Reader = Callable[[str], Optional[str]]
 
 PLATFORM_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATES_ROOT = PLATFORM_ROOT / "templates" / "fleet"
@@ -65,7 +70,9 @@ MAINTAINER_URL = "https://github.com/Prekzursil"
 REUSABLE_QUALITY_RE = re.compile(
     r"(uses:\s*Prekzursil/quality-zero-platform/\.github/workflows/reusable-quality\.yml@)([^\s#'\"]+)"
 )
+REUSABLE_QUALITY_PREFIX = "Prekzursil/quality-zero-platform/.github/workflows/reusable-quality.yml@"
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+DEPS_FLOORS = ("t0", "any")
 
 #: Path components whose manifests are vendored, generated or test data — never a rail.
 EXCLUDED_DIRS = frozenset(
@@ -107,8 +114,12 @@ _SIMPLE_MANIFESTS = {
     "pom.xml": "maven",
     "Chart.yaml": "helm",
 }
-#: Ecosystems whose root manifest already covers nested modules (multi-project builds).
-_TOPMOST_ONLY = frozenset({"gradle", "maven", "nuget"})
+#: Ecosystems whose root build can own nested modules: a nested manifest only loses its own
+#: rail when the build file in an enclosing rail directory demonstrably declares it.
+_ROOT_BUILD_FILES = {
+    "gradle": ("settings.gradle", "settings.gradle.kts", "build.gradle", "build.gradle.kts"),
+    "maven": ("pom.xml",),
+}
 #: Ecosystems updated at the repository root regardless of where the marker file sits.
 _ROOT_RAILS = frozenset({"gitsubmodule", "devcontainers"})
 #: Ecosystems without semantic versions (update-types would be meaningless).
@@ -116,12 +127,14 @@ _NO_SEMVER = frozenset({"gitsubmodule"})
 #: (winner, loser): a lockfile that selects a dedicated ecosystem for its directory.
 _SUPERSEDES = (("bun", "npm"), ("uv", "pip"))
 
+#: Extensions per language, aligned with the lean gate's own detection (reusable-quality.yml).
 LANGUAGE_EXTENSIONS: Dict[str, Tuple[str, ...]] = {
     "python": (".py",),
     "ts": (".ts", ".tsx"),
     "js": (".js", ".jsx", ".mjs", ".cjs"),
     "go": (".go",),
-    "cpp": (".c", ".cc", ".cpp", ".cxx", ".h", ".hpp"),
+    "cpp": (".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx"),
+    "c": (".c",),
     "java": (".java",),
     "kotlin": (".kt",),
     "csharp": (".cs",),
@@ -129,20 +142,26 @@ LANGUAGE_EXTENSIONS: Dict[str, Tuple[str, ...]] = {
     "swift": (".swift",),
 }
 #: Languages the lean gate does not measure; their repos must test them in their own CI.
-_OUTSIDE_LEAN_GATE = {"java": "Java", "kotlin": "Kotlin", "csharp": "C#", "rust": "Rust", "swift": "Swift"}
+_OUTSIDE_LEAN_GATE = {
+    "c": "C",
+    "java": "Java",
+    "kotlin": "Kotlin",
+    "csharp": "C#",
+    "rust": "Rust",
+    "swift": "Swift",
+}
 
 SECURITY_LOCATIONS = ("SECURITY.md", ".github/SECURITY.md", "docs/SECURITY.md")
 CONTRIBUTING_LOCATIONS = ("CONTRIBUTING.md", ".github/CONTRIBUTING.md", "docs/CONTRIBUTING.md")
 CONDUCT_LOCATIONS = ("CODE_OF_CONDUCT.md", ".github/CODE_OF_CONDUCT.md", "docs/CODE_OF_CONDUCT.md")
 PR_TEMPLATE_LOCATIONS = (
     ".github/PULL_REQUEST_TEMPLATE.md",
-    ".github/pull_request_template.md",
     "PULL_REQUEST_TEMPLATE.md",
-    "pull_request_template.md",
     "docs/PULL_REQUEST_TEMPLATE.md",
-    "docs/pull_request_template.md",
 )
 DEPENDABOT_LOCATIONS = (".github/dependabot.yml", ".github/dependabot.yaml")
+AGENTS_LOCATIONS = ("AGENTS.md",)
+VERIFY_SCRIPT = "scripts/verify"
 ISSUE_TEMPLATE_DIR = ".github/ISSUE_TEMPLATE/"
 ISSUE_FORMS = ("config.yml", "bug_report.yml", "feature_request.yml")
 QUALITY_CALLER = ".github/workflows/quality.yml"
@@ -201,6 +220,7 @@ class FileAction:
     action: str  # create | replace | bump | keep | gap
     reason: str
     content: Optional[str] = None
+    executable: bool = False
 
     @property
     def writes(self) -> bool:
@@ -219,13 +239,20 @@ def _is_excluded(path: str) -> bool:
     return any(part in EXCLUDED_DIRS for part in path.split("/")[:-1])
 
 
+def _is_requirements_file(name: str, parent: str) -> bool:
+    """``requirements*.txt|.in`` anywhere, or any ``.txt|.in`` inside a ``requirements/`` directory."""
+    if not name.endswith((".txt", ".in")):
+        return False
+    return name.startswith("requirements") or posixpath.basename(parent) == "requirements"
+
+
 def _ecosystem_for(path: str) -> Optional[str]:
     """Return the Dependabot ecosystem a manifest path belongs to, if any."""
     name = posixpath.basename(path)
     parent = posixpath.dirname(path)
     if (parent == ".github/workflows" and name.endswith((".yml", ".yaml"))) or name in ("action.yml", "action.yaml"):
         return "github-actions"
-    if name in _PIP_NAMES or (name.startswith("requirements") and name.endswith((".txt", ".in"))):
+    if name in _PIP_NAMES or _is_requirements_file(name, parent):
         return "pip"
     if name in _GRADLE_NAMES:
         return "gradle"
@@ -249,6 +276,9 @@ def _rail_dir(ecosystem: str, path: str) -> str:
     parent = posixpath.dirname(path)
     if ecosystem in _ROOT_RAILS or (ecosystem == "github-actions" and parent == ".github/workflows"):
         return "/"
+    if ecosystem == "pip" and posixpath.basename(parent) == "requirements":
+        # Dependabot's pip updater reads requirements/*.txt from the enclosing directory.
+        parent = posixpath.dirname(parent)
     return "/" + parent if parent else "/"
 
 
@@ -259,9 +289,41 @@ def _is_ancestor(ancestor: str, directory: str) -> bool:
     return ancestor == "/" or directory.startswith(ancestor.rstrip("/") + "/")
 
 
-def _topmost(directories: Set[str]) -> Set[str]:
-    """Keep only directories that no other directory in the set contains."""
-    return {d for d in directories if not any(_is_ancestor(other, d) for other in directories)}
+def _declares(text: str, relative: str) -> bool:
+    """Whether a build file's text names ``relative`` as a module (path, gradle or .sln spelling)."""
+    for spelling in {relative, relative.replace("/", ":"), relative.replace("/", "\\")}:
+        if re.search(r"(?<![\w.-])" + re.escape(spelling) + r"(?![\w.-])", text):
+            return True
+    return False
+
+
+def _build_text(ecosystem: str, directory: str, paths: Sequence[str], read: Reader) -> str:
+    """Concatenate the build files that can declare nested modules for ``directory``."""
+    prefix = "" if directory == "/" else directory.strip("/") + "/"
+    if ecosystem == "nuget":
+        names = [p for p in paths if p.startswith(prefix) and "/" not in p[len(prefix) :] and p.endswith(".sln")]
+    else:
+        names = [prefix + name for name in _ROOT_BUILD_FILES[ecosystem]]
+    return "\n".join(read(name) or "" for name in names)
+
+
+def _drop_declared(ecosystem: str, directories: Set[str], paths: Sequence[str], read: Optional[Reader]) -> Set[str]:
+    """Drop nested directories an enclosing rail's build file declares as its own module.
+
+    Without a reader nothing is dropped: a duplicate rail is noise, a missing one is a blind spot.
+    """
+    if read is None or ecosystem not in ("gradle", "maven", "nuget"):
+        return directories
+    kept = set(directories)
+    for nested in directories:
+        for ancestor in directories:
+            if not _is_ancestor(ancestor, nested):
+                continue
+            relative = nested[len(ancestor.rstrip("/")) :].strip("/")
+            if _declares(_build_text(ecosystem, ancestor, paths, read), relative):
+                kept.discard(nested)
+                break
+    return kept
 
 
 def _dir_sort_key(directory: str) -> Tuple[bool, str]:
@@ -269,11 +331,11 @@ def _dir_sort_key(directory: str) -> Tuple[bool, str]:
     return (directory != "/", directory)
 
 
-def detect_rails(paths: Iterable[str]) -> Dict[str, List[str]]:
+def detect_rails(paths: Iterable[str], read: Optional[Reader] = None) -> Dict[str, List[str]]:
     """Map every Dependabot ecosystem present in ``paths`` to its manifest directories."""
+    cleaned = [_clean(raw) for raw in paths]
     found: Dict[str, Set[str]] = {}
-    for raw in paths:
-        path = _clean(raw)
+    for path in cleaned:
         if not path or _is_excluded(path):
             continue
         ecosystem = _ecosystem_for(path)
@@ -285,7 +347,7 @@ def detect_rails(paths: Iterable[str]) -> Dict[str, List[str]]:
             found.get(loser, set()).discard(directory)
     rails: Dict[str, List[str]] = {}
     for ecosystem in sorted(found):
-        directories = _topmost(found[ecosystem]) if ecosystem in _TOPMOST_ONLY else found[ecosystem]
+        directories = _drop_declared(ecosystem, found[ecosystem], cleaned, read)
         if directories:
             rails[ecosystem] = sorted(directories, key=_dir_sort_key)
     return rails
@@ -383,7 +445,7 @@ def _has_jsts(languages: Sequence[str]) -> bool:
     return "ts" in languages or "js" in languages
 
 
-def gate_rows(languages: Sequence[str]) -> List[Tuple[str, str, str]]:
+def gate_rows(languages: Sequence[str], deps_floor: str = "t0") -> List[Tuple[str, str, str]]:
     """Return ``(gate, what runs, passes when)`` rows for the lean gate."""
     python, jsts, typed_ts = "python" in languages, _has_jsts(languages), "ts" in languages
     lint = [
@@ -408,6 +470,10 @@ def gate_rows(languages: Sequence[str]) -> List[Tuple[str, str, str]]:
         )
         if flag
     ]
+    if deps_floor == "any":
+        deps_bar = "zero known advisories, any severity"
+    else:
+        deps_bar = "zero advisories at or above the T0 floor (CVSS >= 7.0 with a published fix); the rest is listed"
     none = "n/a — no such source in this repository"
     return [
         ("1 · lint + format", "; ".join(lint) or none, "zero findings and zero format diffs"),
@@ -415,15 +481,11 @@ def gate_rows(languages: Sequence[str]) -> List[Tuple[str, str, str]]:
         ("3 · tests + coverage", "; ".join(tests) or none, "every test passes at 100 % line **and** branch"),
         ("4 · SAST", "opengrep with the curated `.quality/opengrep` ruleset (seeded from QZP)", "zero findings"),
         ("5 · secrets", "gitleaks", "zero findings"),
-        (
-            "6 · dependencies",
-            "osv-scanner on every lockfile and manifest (`osv-scanner.toml`)",
-            "zero known advisories, any severity",
-        ),
+        ("6 · dependencies", "osv-scanner on every lockfile and manifest (`osv-scanner.toml`)", deps_bar),
     ]
 
 
-def _python_uses_pytest(read: Callable[[str], Optional[str]], paths: Sequence[str]) -> bool:
+def _python_uses_pytest(read: Reader, paths: Sequence[str]) -> bool:
     """Whether the Python suite runs under pytest (else unittest)."""
     if "pytest.ini" in paths or "conftest.py" in paths or any(p.endswith("/conftest.py") for p in paths):
         return True
@@ -434,7 +496,7 @@ def _python_uses_pytest(read: Callable[[str], Optional[str]], paths: Sequence[st
     return False
 
 
-def _coverage_scripts(read: Callable[[str], Optional[str]], paths: Sequence[str]) -> List[str]:
+def _coverage_scripts(read: Reader, paths: Sequence[str]) -> List[str]:
     """Return the directories (``.`` = root) whose package.json has a ``test:coverage`` script."""
     found: List[str] = []
     for path in sorted(p for p in paths if posixpath.basename(p) == "package.json" and not _is_excluded(p)):
@@ -450,7 +512,7 @@ def _coverage_scripts(read: Callable[[str], Optional[str]], paths: Sequence[str]
     return found
 
 
-def local_commands(languages: Sequence[str], read: Callable[[str], Optional[str]], paths: Sequence[str]) -> str:
+def local_commands(languages: Sequence[str], read: Reader, paths: Sequence[str]) -> str:
     """Render the language-specific 'run the tests yourself' bullets for CONTRIBUTING.md."""
     lines: List[str] = []
     if "python" in languages:
@@ -481,10 +543,22 @@ def _private_reporting(facts: RepoFacts) -> str:
     return f"https://github.com/{facts.slug}/security/advisories/new"
 
 
-def template_context(facts: RepoFacts, read: Callable[[str], Optional[str]], qzp_pin: str) -> Dict[str, str]:
+def _first_present(paths: Sequence[str], candidates: Sequence[str]) -> Optional[str]:
+    """Return the checkout's spelling of the first candidate present, matched case-insensitively.
+
+    GitHub recognises community files case-insensitively and macOS / Windows checkouts are
+    case-insensitive too, so ``security.md`` must count as an existing ``SECURITY.md``.
+    """
+    present: Dict[str, str] = {}
+    for path in paths:
+        present.setdefault(path.lower(), path)
+    return next((present[c.lower()] for c in candidates if c.lower() in present), None)
+
+
+def template_context(facts: RepoFacts, read: Reader, qzp_pin: str, deps_floor: str = "t0") -> Dict[str, str]:
     """Build the substitution context every fleet template renders against."""
     languages = detect_languages(facts.paths)
-    rows = gate_rows(languages)
+    rows = gate_rows(languages, deps_floor)
     report_url = _private_reporting(facts)
     if facts.private:
         reporting = (
@@ -529,6 +603,7 @@ def template_context(facts: RepoFacts, read: Callable[[str], Optional[str]], qzp
             "test it and must be green too."
         )
     checklist = [f"- [ ] **gate {gate}** — {what}: {passes}" for gate, what, passes in rows]
+    caller_with = "    with:\n      deps-severity-floor: any\n" if deps_floor == "any" else ""
     return {
         "repo_slug": facts.slug,
         "display_name": facts.name,
@@ -536,12 +611,14 @@ def template_context(facts: RepoFacts, read: Callable[[str], Optional[str]], qzp
         "reporting_channel": reporting,
         "security_controls": "\n".join(controls),
         "security_contact_url": report_url,
+        "security_policy_path": _first_present(facts.paths, SECURITY_LOCATIONS) or "SECURITY.md",
         "conduct_contact": conduct,
         "gate_rows": "\n".join(f"| {gate} | {what} | {passes} |" for gate, what, passes in rows),
         "gate_checklist": "\n".join(checklist),
         "extra_controls": "\n".join(extra),
         "local_commands": local_commands(languages, read, facts.paths),
         "qzp_pin": qzp_pin,
+        "caller_with": caller_with,
     }
 
 
@@ -565,13 +642,7 @@ def is_upgradable_security_policy(text: str, slug: str) -> bool:
     return text.replace("\r\n", "\n").strip() == legacy.strip()
 
 
-def _first_present(paths: Sequence[str], candidates: Sequence[str]) -> Optional[str]:
-    """Return the first candidate path present in the checkout."""
-    present = set(paths)
-    return next((candidate for candidate in candidates if candidate in present), None)
-
-
-def _plan_security(facts: RepoFacts, read: Callable[[str], Optional[str]], context: Dict[str, str]) -> FileAction:
+def _plan_security(facts: RepoFacts, read: Reader, context: Dict[str, str]) -> FileAction:
     """Decide what to do about SECURITY.md."""
     content = render_template("SECURITY.md", context)
     existing = _first_present(facts.paths, SECURITY_LOCATIONS)
@@ -584,18 +655,24 @@ def _plan_security(facts: RepoFacts, read: Callable[[str], Optional[str]], conte
 
 
 def _plan_simple(
-    facts: RepoFacts, candidates: Sequence[str], target: str, template: str, context: Dict[str, str]
+    facts: RepoFacts,
+    candidates: Sequence[str],
+    target: str,
+    template: str,
+    context: Dict[str, str],
+    *,
+    executable: bool = False,
 ) -> FileAction:
     """Create ``target`` from ``template`` unless any candidate location already exists."""
     existing = _first_present(facts.paths, candidates)
     if existing is not None:
         return FileAction(existing, "keep", "repository-authored file")
-    return FileAction(target, "create", "missing", render_template(template, context))
+    return FileAction(target, "create", "missing", render_template(template, context), executable)
 
 
 def _plan_issue_forms(facts: RepoFacts, context: Dict[str, str]) -> List[FileAction]:
     """Create the issue forms unless the repository already ships an ISSUE_TEMPLATE directory."""
-    if any(path.startswith(ISSUE_TEMPLATE_DIR) for path in facts.paths):
+    if any(path.lower().startswith(ISSUE_TEMPLATE_DIR.lower()) for path in facts.paths):
         return [FileAction(ISSUE_TEMPLATE_DIR, "keep", "repository-authored issue templates")]
     return [
         FileAction(ISSUE_TEMPLATE_DIR + form, "create", "missing", render_template("ISSUE_TEMPLATE/" + form, context))
@@ -628,8 +705,9 @@ def _plan_gate_configs(facts: RepoFacts, context: Dict[str, str]) -> List[FileAc
             for name, needs in OPENGREP_RULES
             if not needs or languages.intersection(needs)
         )
-    if SEMGREPIGNORE in facts.paths:
-        actions.append(FileAction(SEMGREPIGNORE, "keep", "repository-chosen SAST scope"))
+    scope = _first_present(facts.paths, (SEMGREPIGNORE,))
+    if scope is not None:
+        actions.append(FileAction(scope, "keep", "repository-chosen SAST scope"))
     else:
         actions.append(
             FileAction(
@@ -639,29 +717,30 @@ def _plan_gate_configs(facts: RepoFacts, context: Dict[str, str]) -> List[FileAc
                 SEMGREPIGNORE_SOURCE.read_text(encoding="utf-8"),
             )
         )
-    if OSV_CONFIG in facts.paths:
-        actions.append(FileAction(OSV_CONFIG, "keep", "repository osv-scanner config"))
+    osv = _first_present(facts.paths, (OSV_CONFIG,))
+    if osv is not None:
+        actions.append(FileAction(osv, "keep", "repository osv-scanner config"))
     else:
         actions.append(FileAction(OSV_CONFIG, "create", "gate 6 has no config", render_template(OSV_CONFIG, context)))
     return actions
 
 
-def _plan_dependabot(facts: RepoFacts, read: Callable[[str], Optional[str]], planned: Sequence[str] = ()) -> FileAction:
-    """Create dependabot.yml, or audit an existing one for manifest trees without a rail.
+def _plan_dependabot(facts: RepoFacts, read: Reader, planned: Sequence[str] = ()) -> FileAction:
+    """Create dependabot.yml, regenerate a managed one, or audit a repository-authored one.
 
     ``planned`` are paths this run is about to create (the lean-gate caller), so a
     repository that gains its first workflow also gains its ``github-actions`` rail.
     """
-    rails = detect_rails(list(facts.paths) + list(planned))
+    rails = detect_rails(list(facts.paths) + list(planned), read)
     existing = _first_present(facts.paths, DEPENDABOT_LOCATIONS)
     if existing is None:
         if not rails:
             return FileAction(DEPENDABOT_LOCATIONS[0], "keep", "no manifests or workflows to update")
         return FileAction(DEPENDABOT_LOCATIONS[0], "create", "missing", render_dependabot(rails))
-    text = read(existing) or ""
-    if text.replace("\r\n", "\n").startswith(_DEPENDABOT_HEADER):
+    text = (read(existing) or "").replace("\r\n", "\n")
+    if text.startswith(_DEPENDABOT_HEADER):
         rendered = render_dependabot(rails)
-        if text.replace("\r\n", "\n") == rendered:
+        if text == rendered:
             return FileAction(existing, "keep", "managed config is current")
         return FileAction(existing, "replace", "managed config regenerated for the current manifests", rendered)
     missing = uncovered_rails(rails, text)
@@ -669,6 +748,54 @@ def _plan_dependabot(facts: RepoFacts, read: Callable[[str], Optional[str]], pla
         return FileAction(existing, "keep", "every manifest tree has a rail")
     listed = ", ".join(f"{ecosystem} {directory}" for ecosystem, directory in missing)
     return FileAction(existing, "gap", f"manifest trees without a Dependabot rail: {listed}")
+
+
+def caller_refs(text: str) -> Set[str]:
+    """Return the ``reusable-quality.yml`` refs that real jobs (not comments) of a workflow call."""
+    try:
+        document = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return set()
+    jobs = document.get("jobs") if isinstance(document, dict) else None
+    refs: Set[str] = set()
+    for job in jobs.values() if isinstance(jobs, dict) else []:
+        uses = job.get("uses") if isinstance(job, dict) else None
+        if isinstance(uses, str) and uses.startswith(REUSABLE_QUALITY_PREFIX):
+            refs.add(uses[len(REUSABLE_QUALITY_PREFIX) :])
+    return refs
+
+
+def bump_caller(text: str, qzp_pin: str) -> str:
+    """Re-pin every live ``uses:`` line of the lean-gate caller, leaving comments untouched."""
+    lines = text.splitlines(keepends=True)
+    return "".join(
+        line if line.lstrip().startswith("#") else REUSABLE_QUALITY_RE.sub(lambda m: m.group(1) + qzp_pin, line)
+        for line in lines
+    )
+
+
+def _plan_quality_caller(facts: RepoFacts, read: Reader, context: Dict[str, str], qzp_pin: str) -> List[FileAction]:
+    """Create the lean-gate caller, bump existing callers to ``qzp_pin``, or flag an in-repo gate."""
+    actions: List[FileAction] = []
+    workflows = sorted(
+        p for p in facts.paths if posixpath.dirname(p) == ".github/workflows" and p.endswith((".yml", ".yaml"))
+    )
+    for workflow in workflows:
+        text = read(workflow) or ""
+        refs = caller_refs(text)
+        if not refs:
+            continue
+        if refs == {qzp_pin}:
+            actions.append(FileAction(workflow, "keep", "lean gate already pinned to the target commit"))
+            continue
+        actions.append(
+            FileAction(workflow, "bump", f"pin {', '.join(sorted(refs))} -> {qzp_pin}", bump_caller(text, qzp_pin))
+        )
+    if actions:
+        return actions
+    if QUALITY_CALLER in facts.paths:
+        return [FileAction(QUALITY_CALLER, "gap", "in-repo quality gate; migrate it to the QZP caller by hand")]
+    return [FileAction(QUALITY_CALLER, "create", "no QZP lean-gate caller", render_template("quality.yml", context))]
 
 
 def _plan_outside_languages(facts: RepoFacts) -> List[FileAction]:
@@ -693,34 +820,9 @@ def _plan_outside_languages(facts: RepoFacts) -> List[FileAction]:
     ]
 
 
-def _plan_quality_caller(
-    facts: RepoFacts, read: Callable[[str], Optional[str]], context: Dict[str, str], qzp_pin: str
-) -> List[FileAction]:
-    """Create the lean-gate caller, bump existing callers to ``qzp_pin``, or flag an in-repo gate."""
-    actions: List[FileAction] = []
-    workflows = sorted(
-        p for p in facts.paths if posixpath.dirname(p) == ".github/workflows" and p.endswith((".yml", ".yaml"))
-    )
-    for workflow in workflows:
-        text = read(workflow) or ""
-        refs = {match.group(2) for match in REUSABLE_QUALITY_RE.finditer(text)}
-        if not refs:
-            continue
-        if refs == {qzp_pin}:
-            actions.append(FileAction(workflow, "keep", "lean gate already pinned to the target commit"))
-            continue
-        bumped = REUSABLE_QUALITY_RE.sub(lambda match: match.group(1) + qzp_pin, text)
-        actions.append(FileAction(workflow, "bump", f"pin {', '.join(sorted(refs))} -> {qzp_pin}", bumped))
-    if actions:
-        return actions
-    if QUALITY_CALLER in facts.paths:
-        return [FileAction(QUALITY_CALLER, "gap", "in-repo quality gate; migrate it to the QZP caller by hand")]
-    return [FileAction(QUALITY_CALLER, "create", "no QZP lean-gate caller", render_template("quality.yml", context))]
-
-
-def plan_baseline(facts: RepoFacts, read: Callable[[str], Optional[str]], qzp_pin: str) -> List[FileAction]:
+def plan_baseline(facts: RepoFacts, read: Reader, qzp_pin: str, deps_floor: str = "t0") -> List[FileAction]:
     """Return every baseline decision for one repository checkout."""
-    context = template_context(facts, read, qzp_pin)
+    context = template_context(facts, read, qzp_pin, deps_floor)
     caller = _plan_quality_caller(facts, read, context, qzp_pin)
     planned = [action.path for action in caller if action.action == "create"]
     actions = [
@@ -728,37 +830,51 @@ def plan_baseline(facts: RepoFacts, read: Callable[[str], Optional[str]], qzp_pi
         _plan_simple(facts, CONTRIBUTING_LOCATIONS, "CONTRIBUTING.md", "CONTRIBUTING.md", context),
         _plan_simple(facts, CONDUCT_LOCATIONS, "CODE_OF_CONDUCT.md", "CODE_OF_CONDUCT.md", context),
         _plan_simple(facts, PR_TEMPLATE_LOCATIONS, PR_TEMPLATE_LOCATIONS[0], "PULL_REQUEST_TEMPLATE.md", context),
+        _plan_simple(facts, AGENTS_LOCATIONS, "AGENTS.md", "AGENTS.md", context),
         _plan_dependabot(facts, read, planned),
     ]
     actions.extend(_plan_issue_forms(facts, context))
     actions.extend(_plan_gate_configs(facts, context))
+    actions.append(_plan_simple(facts, (VERIFY_SCRIPT,), VERIFY_SCRIPT, "verify", context, executable=True))
     actions.extend(caller)
     actions.extend(_plan_outside_languages(facts))
     return actions
 
 
 def apply_actions(repo_dir: Path, actions: Iterable[FileAction]) -> List[str]:
-    """Write every create/replace/bump action into the checkout; return the written paths."""
+    """Write every create/replace/bump action into the checkout; return the written paths.
+
+    A ``create`` never overwrites: if the target already exists on disk (an untracked or
+    ignored file the listing could not see, or a case variant on a case-insensitive file
+    system) the run stops with ``FileExistsError`` before anything is lost.
+    """
+    pending = [action for action in actions if action.writes and action.content is not None]
+    for action in pending:
+        if action.action == "create" and (repo_dir / action.path).exists():
+            raise FileExistsError(f"refusing to overwrite existing {action.path}")
     written: List[str] = []
-    for action in actions:
-        if not action.writes or action.content is None:
-            continue
+    for action in pending:
         target = repo_dir / action.path
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(action.content, encoding="utf-8", newline="\n")
+        target.write_text(action.content or "", encoding="utf-8", newline="\n")
+        if action.executable:
+            target.chmod(target.stat().st_mode | 0o111)
         written.append(action.path)
     return written
 
 
-def list_tracked_files(repo_dir: Path, *, runner: ProcessRunner = subprocess.run) -> Tuple[str, ...]:
-    """Return ``git ls-files`` for the checkout (raises CalledProcessError on failure)."""
+def list_checkout_files(repo_dir: Path, *, runner: ProcessRunner = subprocess.run) -> Tuple[str, ...]:
+    """Return tracked plus untracked, non-ignored files (raises CalledProcessError on failure)."""
     completed = runner(  # nosec S603 — argv array, controlled inputs
-        ["git", "-C", str(repo_dir), "ls-files", "-z"], capture_output=True, text=True, check=True
+        ["git", "-C", str(repo_dir), "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        capture_output=True,
+        text=True,
+        check=True,
     )
-    return tuple(path for path in completed.stdout.split("\0") if path)
+    return tuple(dict.fromkeys(path for path in completed.stdout.split("\0") if path))
 
 
-def _reader(repo_dir: Path) -> Callable[[str], Optional[str]]:
+def _reader(repo_dir: Path) -> Reader:
     """Return a reader for repo-relative paths (None when the file is absent or unreadable)."""
 
     def read(relative: str) -> Optional[str]:
@@ -786,6 +902,13 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--default-branch", default="main")
     parser.add_argument("--private", action="store_true", help="The repository is private (no PVR / CodeQL).")
     parser.add_argument("--qzp-pin", required=True, help="40-hex quality-zero-platform commit for the caller.")
+    parser.add_argument(
+        "--deps-severity-floor",
+        choices=DEPS_FLOORS,
+        default="t0",
+        help="Gate-6 floor for a NEW caller: 'any' (zero tolerance) needs a pin whose reusable-quality.yml "
+        "declares the deps-severity-floor input.",
+    )
     parser.add_argument("--write", action="store_true", help="Apply create/replace/bump actions to the checkout.")
     parser.add_argument("--json-out", default="", help="Also write the plan as JSON to this path.")
     return parser
@@ -798,8 +921,9 @@ def main(argv: Optional[List[str]] = None, *, runner: ProcessRunner = subprocess
         print(f"ERROR: --qzp-pin must be a full 40-hex commit SHA, got {args.qzp_pin!r}", file=sys.stderr)
         return 2
     repo_dir = Path(args.repo_dir).resolve()
-    facts = RepoFacts(args.slug, args.default_branch, bool(args.private), list_tracked_files(repo_dir, runner=runner))
-    actions = plan_baseline(facts, _reader(repo_dir), args.qzp_pin)
+    paths = list_checkout_files(repo_dir, runner=runner)
+    facts = RepoFacts(args.slug, args.default_branch, bool(args.private), paths)
+    actions = plan_baseline(facts, _reader(repo_dir), args.qzp_pin, args.deps_severity_floor)
     print(render_plan(args.slug, actions))
     if args.json_out:
         payload = [{"path": a.path, "action": a.action, "reason": a.reason} for a in actions]

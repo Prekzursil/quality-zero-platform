@@ -33,17 +33,22 @@ Dependabot rails and the zero-tolerance dependency gate come from the
 | `CONTRIBUTING.md` | `CONTRIBUTING.md.tmpl` | Created when missing from the root, `.github/` and `docs/`. Lists the lean gates for the languages actually present, plus local commands. |
 | `CODE_OF_CONDUCT.md` | `CODE_OF_CONDUCT.md.tmpl` | Contributor Covenant 2.1, with the repository's private contact channel. |
 | `.github/PULL_REQUEST_TEMPLATE.md` | `PULL_REQUEST_TEMPLATE.md.tmpl` | A gate checklist that maps 1:1 to CI. |
+| `AGENTS.md` | `AGENTS.md.tmpl` | The rules for every contributor, human or automated: verify before claiming completion, never weaken a gate, tests ship with the change, never push to the default branch. |
 | `.github/ISSUE_TEMPLATE/*.yml` | `ISSUE_TEMPLATE/*.yml.tmpl` | Bug and feature forms. `config.yml` links security reports to the private channel. Created only when the repository has no `ISSUE_TEMPLATE/` of its own. |
 | `.github/dependabot.yml` | rendered | Created when missing. A config carrying the managed header is regenerated whenever the manifests change. A config the repository wrote itself is kept and audited: any manifest tree without an update rail is reported as a gap. A caller created in the same run counts, so the first workflow arrives with its `github-actions` rail. |
 | `.quality/opengrep/*.yaml` | QZP's own `.quality/opengrep/` | Seeded when the repository has no ruleset. `general-security.yaml` always, plus the Python and JS/TS rules when those languages are present. The lean gate skips gate 4 without this directory. |
 | `.semgrepignore` | `docs/lean-gate/semgrepignore.template` | Seeded when missing. Without it, opengrep silently drops `test/`, `tests/` and every `*_test.go`. |
 | `osv-scanner.toml` | `osv-scanner.toml.tmpl` | Seeded when missing, with no ignores. The lean gate skips gate 6 without it. Any ignore needs a written reason and an `ignoreUntil` date. |
+| `scripts/verify` | `verify.tmpl` | The canonical local entry point. It runs QZP's preflight at the exact commit the caller pins, in a dedicated clone, so a local pass means what a CI pass means. A repository's own `scripts/verify` is kept. |
 | `.github/workflows/quality.yml` | `quality.yml.tmpl` | The lean-gate caller, pinned to a full 40-hex QZP commit. Existing callers get a pin bump. A repository with its own in-repo `quality.yml` is reported as a gap to migrate by hand. |
-| (CI coverage) | — | Java, Kotlin, C#, Rust and Swift are not tested by the lean gate. A repository with such source and no workflow of its own is reported as a gap. |
+| (CI coverage) | — | C, Java, Kotlin, C#, Rust and Swift are not tested by the lean gate. A repository with such source and no workflow of its own is reported as a gap. |
 
-Files are never overwritten unless they are known boilerplate. Nothing is
-committed or pushed by the tool. Every change reaches a fleet repository
-through a pull request, never a push to its default branch.
+Files are never overwritten unless they are known boilerplate. Discovery
+covers tracked and untracked files and is case-insensitive (`security.md`
+counts as a `SECURITY.md`), and `--write` refuses to create a file that
+already exists on disk. Nothing is committed or pushed by the tool. Every
+change reaches a fleet repository through a pull request, never a push to its
+default branch.
 
 ## Zero tolerance
 
@@ -57,8 +62,11 @@ floor.
   - opengrep SAST, gitleaks and osv-scanner.
 
   Fleet callers opt gate 6 out of the T0 severity floor with
-  `deps-severity-floor: any`. Unscored and `UNKNOWN`-severity advisories fail
-  too.
+  `deps-severity-floor: any`, so unscored and `UNKNOWN`-severity advisories
+  fail too. The tool renders that input only with `--deps-severity-floor any`,
+  and only for a pin whose `reusable-quality.yml` declares the input. Until
+  then the generated docs state the T0 floor the pinned gate actually
+  enforces.
 - **CodeQL** (public repositories): GitHub default setup with the
   **extended** query suite (`security-extended`) and the `remote_and_local`
   threat model. Once a repository is green, its ruleset adds code-scanning
@@ -124,7 +132,7 @@ by a check that pull requests can't turn green.
 python -m scripts.quality.fleet_baseline \
     --repo-dir ../consumer --slug Prekzursil/<name> \
     --qzp-pin <40-hex quality-zero-platform commit> \
-    [--default-branch main] [--private] [--write] [--json-out plan.json]
+    [--default-branch main] [--private] [--deps-severity-floor t0|any] \n    [--write] [--json-out plan.json]
 ```
 
 The tool prints one line per baseline file: `create`, `replace`, `bump`,

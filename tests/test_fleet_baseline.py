@@ -4,6 +4,8 @@ from __future__ import absolute_import
 
 import io
 import json
+import os
+import stat
 import subprocess
 import tempfile
 import tomllib
@@ -18,7 +20,7 @@ from scripts.quality import fleet_baseline as fb
 from scripts.quality.render_repo_baseline import render_security_policy
 
 PIN = "a" * 40
-OTHER_PIN = "b" * 40
+CALLER_PREFIX = "Prekzursil/quality-zero-platform/.github/workflows/reusable-quality.yml@"
 
 
 def _reader(files: Dict[str, str]):
@@ -42,7 +44,7 @@ def _by_path(actions: List[fb.FileAction]) -> Dict[str, fb.FileAction]:
 
 
 class PathHelperTests(unittest.TestCase):
-    """Path normalisation and exclusion."""
+    """Path normalisation, exclusion and case-insensitive discovery."""
 
     def test_clean_strips_dot_slash_and_backslashes(self) -> None:
         self.assertEqual(fb._clean("./a/b.txt"), "a/b.txt")
@@ -57,6 +59,12 @@ class PathHelperTests(unittest.TestCase):
     def test_repo_facts_name(self) -> None:
         self.assertEqual(_facts([]).name, "demo")
 
+    def test_first_present_is_case_insensitive_and_keeps_the_checkout_spelling(self) -> None:
+        paths = ["docs/Security.md", "security.md", "SECURITY.MD"]
+        self.assertEqual(fb._first_present(paths, fb.SECURITY_LOCATIONS), "security.md")
+        self.assertEqual(fb._first_present(["docs/Security.md"], fb.SECURITY_LOCATIONS), "docs/Security.md")
+        self.assertIsNone(fb._first_present(["README.md"], fb.SECURITY_LOCATIONS))
+
 
 class EcosystemTests(unittest.TestCase):
     """Manifest -> Dependabot ecosystem mapping."""
@@ -70,6 +78,8 @@ class EcosystemTests(unittest.TestCase):
             "pyproject.toml": "pip",
             "requirements-dev.txt": "pip",
             "requirements.in": "pip",
+            "requirements/base.txt": "pip",
+            "svc/requirements/dev.in": "pip",
             "build.gradle.kts": "gradle",
             "src/App.csproj": "nuget",
             "packages.config": "nuget",
@@ -92,7 +102,13 @@ class EcosystemTests(unittest.TestCase):
                 self.assertEqual(fb._ecosystem_for(path), ecosystem)
 
     def test_non_manifests(self) -> None:
-        for path in (".github/workflows/README.md", "requirements.lock", "README.md", "sub/.gitmodules"):
+        for path in (
+            ".github/workflows/README.md",
+            "requirements.lock",
+            "requirements/README.md",
+            "README.md",
+            "sub/.gitmodules",
+        ):
             with self.subTest(path=path):
                 self.assertIsNone(fb._ecosystem_for(path))
 
@@ -102,20 +118,20 @@ class EcosystemTests(unittest.TestCase):
         self.assertEqual(fb._rail_dir("github-actions", "action.yml"), "/")
         self.assertEqual(fb._rail_dir("devcontainers", ".devcontainer/devcontainer.json"), "/")
         self.assertEqual(fb._rail_dir("npm", "web/package.json"), "/web")
+        self.assertEqual(fb._rail_dir("pip", "requirements/base.txt"), "/")
+        self.assertEqual(fb._rail_dir("pip", "svc/requirements/dev.in"), "/svc")
 
     def test_ancestry(self) -> None:
         self.assertFalse(fb._is_ancestor("/a", "/a"))
         self.assertTrue(fb._is_ancestor("/", "/a"))
         self.assertTrue(fb._is_ancestor("/a", "/a/b"))
         self.assertFalse(fb._is_ancestor("/a", "/ab"))
-        self.assertEqual(fb._topmost({"/", "/a", "/b/c"}), {"/"})
-        self.assertEqual(fb._topmost({"/a", "/a/b", "/c"}), {"/a", "/c"})
 
 
 class DetectRailsTests(unittest.TestCase):
     """Rail detection over a whole checkout."""
 
-    def test_detects_supersedes_and_collapses(self) -> None:
+    def test_detects_supersedes_and_keeps_nested_builds_without_a_reader(self) -> None:
         paths = [
             "",
             ".github/workflows/ci.yml",
@@ -130,18 +146,50 @@ class DetectRailsTests(unittest.TestCase):
             "app/build.gradle",
             "README.md",
         ]
-        rails = fb.detect_rails(paths)
         self.assertEqual(
-            rails,
+            fb.detect_rails(paths),
             {
                 "bun": ["/"],
                 "github-actions": ["/"],
-                "gradle": ["/"],
+                "gradle": ["/", "/app"],
                 "npm": ["/web"],
                 "pip": ["/tools"],
                 "uv": ["/api"],
             },
         )
+
+    def test_nested_builds_collapse_only_when_declared(self) -> None:
+        files = {
+            "settings.gradle.kts": 'rootProject.name = "x"\ninclude(":app", ":libs:core")\n',
+            "pom.xml": "<modules><module>svc</module></modules>",
+            "App.sln": 'Project("{FAE}") = "Lib", "lib\\Lib.csproj", "{1}"\n',
+        }
+        paths = list(files) + [
+            "build.gradle.kts",
+            "app/build.gradle.kts",
+            "libs/core/build.gradle.kts",
+            "tools/build.gradle.kts",
+            "application/build.gradle.kts",
+            "svc/pom.xml",
+            "standalone/pom.xml",
+            "lib/Lib.csproj",
+            "other/Other.csproj",
+            "nested/App.sln",
+            "package.json",
+            "web/package.json",
+        ]
+        rails = fb.detect_rails(paths, _reader(files))
+        self.assertEqual(rails["gradle"], ["/", "/application", "/tools"])
+        self.assertEqual(rails["maven"], ["/", "/standalone"])
+        self.assertEqual(rails["nuget"], ["/", "/nested", "/other"])
+        self.assertEqual(rails["npm"], ["/", "/web"])
+
+    def test_declares_respects_word_boundaries(self) -> None:
+        self.assertTrue(fb._declares('include(":app")', "app"))
+        self.assertTrue(fb._declares('include(":libs:core")', "libs/core"))
+        self.assertTrue(fb._declares('"src\\lib\\Lib.csproj"', "src/lib"))
+        self.assertFalse(fb._declares('include(":application")', "app"))
+        self.assertFalse(fb._declares("", "app"))
 
     def test_superseded_ecosystem_disappears_entirely(self) -> None:
         self.assertEqual(fb.detect_rails(["package.json", "bun.lockb"]), {"bun": ["/"]})
@@ -197,6 +245,10 @@ class UncoveredRailsTests(unittest.TestCase):
         )
         self.assertEqual(fb.uncovered_rails(self.RAILS, config), [("github-actions", "/")])
 
+    def test_invalid_shapes_cover_nothing(self) -> None:
+        config = yaml.safe_dump({"updates": [{"package-ecosystem": "pip", "directories": "/"}]})
+        self.assertIn(("pip", "/"), fb.uncovered_rails(self.RAILS, config))
+
     def test_unparseable_and_odd_documents_cover_nothing(self) -> None:
         everything = [("npm", "/"), ("npm", "/web/app"), ("pip", "/"), ("github-actions", "/")]
         for text in ("version: [unclosed", "- a list", "version: 2\nupdates: nope\n", ""):
@@ -210,6 +262,8 @@ class LanguageAndGateTests(unittest.TestCase):
     def test_detect_languages(self) -> None:
         paths = ["", "a.py", "web/x.TSX", "b.mjs", "node_modules/z.go", "main.go", "x.kt", "y.cs", "README.md"]
         self.assertEqual(fb.detect_languages(paths), ("python", "ts", "js", "go", "kotlin", "csharp"))
+        self.assertEqual(fb.detect_languages(["a.c", "a.h", "b.hpp"]), ("cpp", "c"))
+        self.assertEqual(fb.detect_languages(["only.h"]), ())
 
     def test_gate_rows_full_and_empty(self) -> None:
         rows = fb.gate_rows(("python", "ts", "go"))
@@ -224,7 +278,10 @@ class LanguageAndGateTests(unittest.TestCase):
         js_only = fb.gate_rows(("js", "cpp"))
         self.assertTrue(js_only[1][1].startswith("n/a"))
         self.assertIn("coverage-gate.sh", js_only[2][1])
-        self.assertEqual(rows[5][2], "zero known advisories, any severity")
+
+    def test_gate_six_states_the_floor_it_actually_enforces(self) -> None:
+        self.assertIn("T0 floor", fb.gate_rows(("python",))[5][2])
+        self.assertEqual(fb.gate_rows(("python",), "any")[5][2], "zero known advisories, any severity")
 
 
 class LocalCommandsTests(unittest.TestCase):
@@ -251,11 +308,9 @@ class LocalCommandsTests(unittest.TestCase):
         self.assertEqual(fb._coverage_scripts(_reader(files), paths), [".", "ui"])
 
     def test_local_commands_variants(self) -> None:
-        pytest_files = {"pyproject.toml": "pytest"}
-        text = fb.local_commands(("python",), _reader(pytest_files), ["pyproject.toml"])
+        text = fb.local_commands(("python",), _reader({"pyproject.toml": "pytest"}), ["pyproject.toml"])
         self.assertIn("python -m pytest --cov --cov-branch", text)
-        unittest_text = fb.local_commands(("python",), _reader({}), [])
-        self.assertIn("coverage run --branch -m unittest discover", unittest_text)
+        self.assertIn("coverage run --branch -m unittest discover", fb.local_commands(("python",), _reader({}), []))
         js_files = {"package.json": json.dumps({"scripts": {"test:coverage": "c8 node --test"}})}
         self.assertIn(
             "(`.`): `npm ci && npm run test:coverage`", fb.local_commands(("js",), _reader(js_files), ["package.json"])
@@ -275,29 +330,46 @@ class TemplateTests(unittest.TestCase):
         self.assertIn("*extended* query suite", context["security_controls"])
         self.assertIn("push protection", context["security_controls"])
         self.assertIn("**Java**", context["extra_controls"])
+        self.assertEqual(context["security_policy_path"], "SECURITY.md")
         self.assertEqual(tomllib.loads(fb.render_template("osv-scanner.toml", context)), {})
         for name in (
             "SECURITY.md",
             "CONTRIBUTING.md",
             "CODE_OF_CONDUCT.md",
             "PULL_REQUEST_TEMPLATE.md",
+            "AGENTS.md",
             "opengrep-README.md",
+            "verify",
         ):
             with self.subTest(name=name):
                 rendered = fb.render_template(name, context)
-                self.assertNotIn("${", rendered)
+                self.assertNotIn("${", rendered.replace("${QZP_DIR", "").replace("${XDG_CACHE_HOME", ""))
                 self.assertNotIn("\n\n\n", rendered)
                 self.assertTrue(rendered.endswith("\n") and not rendered.endswith("\n\n"))
+        verify = fb.render_template("verify", context)
+        self.assertIn('root="$(git rev-parse --show-toplevel)"', verify)
+        self.assertIn("${QZP_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/qzp-verify/quality-zero-platform}", verify)
+        self.assertIn('exec bash "$qzp/scripts/quality/preflight.sh" "$@"', verify)
         for form in fb.ISSUE_FORMS:
             with self.subTest(form=form):
                 self.assertIsInstance(yaml.safe_load(fb.render_template("ISSUE_TEMPLATE/" + form, context)), dict)
         caller = yaml.safe_load(fb.render_template("quality.yml", context))
-        self.assertEqual(
-            caller["jobs"]["quality"]["uses"],
-            f"Prekzursil/quality-zero-platform/.github/workflows/reusable-quality.yml@{PIN}",
-        )
+        self.assertEqual(caller["jobs"]["quality"], {"uses": CALLER_PREFIX + PIN})
         self.assertEqual(caller["concurrency"]["group"], "quality-${{ github.ref }}")
         self.assertEqual(caller[True]["merge_group"], {"types": ["checks_requested"]})
+
+    def test_zero_tolerance_caller_passes_the_floor(self) -> None:
+        context = fb.template_context(_facts(["app.py"]), _reader({}), PIN, "any")
+        caller = yaml.safe_load(fb.render_template("quality.yml", context))
+        self.assertEqual(caller["jobs"]["quality"]["with"], {"deps-severity-floor": "any"})
+        self.assertIn("zero known advisories, any severity", context["gate_rows"])
+
+    def test_links_follow_the_retained_security_policy(self) -> None:
+        context = fb.template_context(_facts([".github/SECURITY.md"]), _reader({}), PIN)
+        self.assertEqual(context["security_policy_path"], ".github/SECURITY.md")
+        self.assertIn("[SECURITY.md](.github/SECURITY.md)", fb.render_template("CONTRIBUTING.md", context))
+        bug = yaml.safe_load(fb.render_template("ISSUE_TEMPLATE/bug_report.yml", context))
+        self.assertIn("/blob/main/.github/SECURITY.md", bug["body"][0]["attributes"]["value"])
 
     def test_private_context(self) -> None:
         context = fb.template_context(_facts(["a.py"], private=True), _reader({}), PIN)
@@ -341,6 +413,44 @@ class SecurityPolicyTests(unittest.TestCase):
         self.assertEqual(kept.action, "keep")
         nested = fb._plan_security(_facts([".github/SECURITY.md"]), _reader({".github/SECURITY.md": legacy}), context)
         self.assertEqual((nested.path, nested.action), (".github/SECURITY.md", "keep"))
+        lower = fb._plan_security(_facts(["security.md"]), _reader({"security.md": legacy}), context)
+        self.assertEqual((lower.path, lower.action), ("security.md", "keep"))
+
+
+class CallerTests(unittest.TestCase):
+    """Finding and re-pinning the lean-gate caller."""
+
+    def test_caller_refs_reads_jobs_not_comments(self) -> None:
+        text = (
+            f"# example: uses: {CALLER_PREFIX}v0\n"
+            "jobs:\n"
+            f"  quality:\n    uses: {CALLER_PREFIX}v1\n"
+            "  lint:\n    runs-on: ubuntu-latest\n"
+            "  other:\n    uses: someone/else/.github/workflows/x.yml@v2\n"
+            "  odd: 3\n"
+        )
+        self.assertEqual(fb.caller_refs(text), {"v1"})
+        self.assertEqual(fb.caller_refs(f"# uses: {CALLER_PREFIX}v1\non: push\n"), set())
+        self.assertEqual(fb.caller_refs("jobs: [1, 2]\n"), set())
+        self.assertEqual(fb.caller_refs("- a list\n"), set())
+        self.assertEqual(fb.caller_refs("jobs: [unclosed\n"), set())
+
+    def test_bump_caller_leaves_comments_alone(self) -> None:
+        text = f"# was: uses: {CALLER_PREFIX}v0\njobs:\n  q:\n    uses: {CALLER_PREFIX}v1 # pinned\n"
+        bumped = fb.bump_caller(text, PIN)
+        self.assertIn(f"# was: uses: {CALLER_PREFIX}v0\n", bumped)
+        self.assertIn(f"    uses: {CALLER_PREFIX}{PIN} # pinned\n", bumped)
+
+    def test_caller_variants(self) -> None:
+        context = fb.template_context(_facts([]), _reader({}), PIN)
+        pinned = {".github/workflows/q.yaml": f"jobs:\n  q:\n    uses: {CALLER_PREFIX}{PIN}\n"}
+        kept = fb._plan_quality_caller(_facts(list(pinned)), _reader(pinned), context, PIN)
+        self.assertEqual([(a.path, a.action) for a in kept], [(".github/workflows/q.yaml", "keep")])
+        in_repo = fb._plan_quality_caller(_facts([fb.QUALITY_CALLER]), _reader({}), context, PIN)
+        self.assertEqual([(a.path, a.action) for a in in_repo], [(fb.QUALITY_CALLER, "gap")])
+        commented = {".github/workflows/ci.yml": f"# uses: {CALLER_PREFIX}v1\njobs: {{}}\n"}
+        created = fb._plan_quality_caller(_facts(list(commented)), _reader(commented), context, PIN)
+        self.assertEqual([(a.path, a.action) for a in created], [(fb.QUALITY_CALLER, "create")])
 
 
 class PlanTests(unittest.TestCase):
@@ -354,6 +464,7 @@ class PlanTests(unittest.TestCase):
             "CONTRIBUTING.md",
             "CODE_OF_CONDUCT.md",
             ".github/PULL_REQUEST_TEMPLATE.md",
+            "AGENTS.md",
             ".github/dependabot.yml",
             ".github/ISSUE_TEMPLATE/config.yml",
             ".github/ISSUE_TEMPLATE/bug_report.yml",
@@ -362,11 +473,14 @@ class PlanTests(unittest.TestCase):
             ".quality/opengrep/general-security.yaml",
             ".semgrepignore",
             "osv-scanner.toml",
+            "scripts/verify",
             fb.QUALITY_CALLER,
         ):
             with self.subTest(path=path):
                 self.assertEqual(index[path].action, "create")
                 self.assertTrue(index[path].writes)
+        self.assertTrue(index["scripts/verify"].executable)
+        self.assertFalse(index["AGENTS.md"].executable)
         self.assertNotIn(".quality/opengrep/python-security.yaml", index)
         self.assertNotIn(".quality/opengrep/javascript-security.yaml", index)
         self.assertEqual(index[".semgrepignore"].content, fb.SEMGREPIGNORE_SOURCE.read_text(encoding="utf-8"))
@@ -386,9 +500,7 @@ class PlanTests(unittest.TestCase):
                 )
 
     def test_governed_repository_is_kept_bumped_and_audited(self) -> None:
-        caller = (
-            "jobs:\n  quality:\n    uses: Prekzursil/quality-zero-platform/.github/workflows/reusable-quality.yml@v1\n"
-        )
+        caller = f"jobs:\n  quality:\n    uses: {CALLER_PREFIX}v1\n"
         files = {
             ".github/dependabot.yml": "version: 2\nupdates:\n  - package-ecosystem: npm\n    directory: /\n",
             ".github/workflows/quality.yml": caller,
@@ -399,40 +511,36 @@ class PlanTests(unittest.TestCase):
             "docs/CONTRIBUTING.md",
             ".github/CODE_OF_CONDUCT.md",
             ".github/pull_request_template.md",
+            "agents.md",
             ".github/ISSUE_TEMPLATE/bug.md",
             ".github/workflows/notes.txt",
             ".quality/opengrep/custom.yaml",
             ".semgrepignore",
             "osv-scanner.toml",
+            "scripts/verify",
             "package.json",
         ]
-        actions = fb.plan_baseline(_facts(paths), _reader(files), PIN)
-        index = _by_path(actions)
-        self.assertEqual(index[".quality/opengrep/"].action, "keep")
-        self.assertEqual(index[".semgrepignore"].action, "keep")
-        self.assertEqual(index["osv-scanner.toml"].action, "keep")
-        self.assertEqual(index["SECURITY.md"].action, "keep")
-        self.assertEqual(index["docs/CONTRIBUTING.md"].action, "keep")
-        self.assertEqual(index[".github/CODE_OF_CONDUCT.md"].action, "keep")
-        self.assertEqual(index[".github/pull_request_template.md"].action, "keep")
-        self.assertEqual(index[".github/ISSUE_TEMPLATE/"].action, "keep")
+        index = _by_path(fb.plan_baseline(_facts(paths), _reader(files), PIN))
+        for path in (
+            ".quality/opengrep/",
+            ".semgrepignore",
+            "osv-scanner.toml",
+            "SECURITY.md",
+            "docs/CONTRIBUTING.md",
+            ".github/CODE_OF_CONDUCT.md",
+            ".github/pull_request_template.md",
+            "agents.md",
+            ".github/ISSUE_TEMPLATE/",
+            "scripts/verify",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(index[path].action, "keep")
         self.assertEqual(index[".github/dependabot.yml"].action, "gap")
         self.assertIn("github-actions /", index[".github/dependabot.yml"].reason)
         bump = index[".github/workflows/quality.yml"]
         self.assertEqual(bump.action, "bump")
         self.assertIn(f"reusable-quality.yml@{PIN}", bump.content or "")
         self.assertEqual(bump.reason, f"pin v1 -> {PIN}")
-
-    def test_caller_variants(self) -> None:
-        context = fb.template_context(_facts([]), _reader({}), PIN)
-        pinned = {
-            ".github/workflows/q.yaml": f"uses: Prekzursil/quality-zero-platform/.github/workflows/"
-            f"reusable-quality.yml@{PIN}\n",
-        }
-        kept = fb._plan_quality_caller(_facts(list(pinned)), _reader(pinned), context, PIN)
-        self.assertEqual([(a.path, a.action) for a in kept], [(".github/workflows/q.yaml", "keep")])
-        in_repo = fb._plan_quality_caller(_facts([fb.QUALITY_CALLER]), _reader({}), context, PIN)
-        self.assertEqual([(a.path, a.action) for a in in_repo], [(fb.QUALITY_CALLER, "gap")])
 
     def test_managed_dependabot_is_regenerated(self) -> None:
         managed = fb.render_dependabot({"github-actions": ["/"]})
@@ -444,10 +552,10 @@ class PlanTests(unittest.TestCase):
         self.assertIn("gomod", grown.content or "")
 
     def test_outside_languages_need_their_own_ci(self) -> None:
-        bare = fb.plan_baseline(_facts(["src/Main.java", "src/App.kt"]), _reader({}), PIN)
+        bare = fb.plan_baseline(_facts(["src/Main.java", "src/App.kt", "src/lib.c"]), _reader({}), PIN)
         gap = _by_path(bare)[".github/workflows/"]
         self.assertEqual(gap.action, "gap")
-        self.assertIn("Java, Kotlin source has no CI lane", gap.reason)
+        self.assertIn("C, Java, Kotlin source has no CI lane", gap.reason)
         caller_only = fb._plan_outside_languages(_facts(["Main.java", fb.QUALITY_CALLER, "notes/ci.yml"]))
         self.assertEqual([a.action for a in caller_only], ["gap"])
         own_ci = fb._plan_outside_languages(_facts(["Main.java", ".github/workflows/gradle.yaml"]))
@@ -466,33 +574,53 @@ class PlanTests(unittest.TestCase):
 
 
 class ApplyAndIoTests(unittest.TestCase):
-    """Writing, git listing and reading."""
+    """Writing, file listing and reading."""
 
-    def test_apply_actions_writes_lf_and_skips_non_writes(self) -> None:
+    def test_apply_actions_writes_lf_marks_executables_and_skips_non_writes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             written = fb.apply_actions(
                 root,
                 [
                     fb.FileAction("a/b.md", "create", "missing", "one\ntwo\n"),
+                    fb.FileAction("scripts/verify", "create", "missing", "#!/bin/sh\n", executable=True),
                     fb.FileAction("keep.md", "keep", "repository-authored file"),
                     fb.FileAction("odd.md", "create", "no content"),
                 ],
             )
-            self.assertEqual(written, ["a/b.md"])
+            self.assertEqual(written, ["a/b.md", "scripts/verify"])
             self.assertEqual((root / "a" / "b.md").read_bytes(), b"one\ntwo\n")
             self.assertFalse((root / "odd.md").exists())
+            if os.name == "posix":
+                self.assertTrue((root / "scripts" / "verify").stat().st_mode & stat.S_IXUSR)
 
-    def test_list_tracked_files_uses_runner(self) -> None:
+    def test_apply_actions_never_creates_over_an_existing_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "SECURITY.md").write_text("ours\n", encoding="utf-8")
+            with self.assertRaises(FileExistsError):
+                fb.apply_actions(
+                    root,
+                    [
+                        fb.FileAction("CONTRIBUTING.md", "create", "missing", "new\n"),
+                        fb.FileAction("SECURITY.md", "create", "missing", "theirs\n"),
+                    ],
+                )
+            self.assertEqual((root / "SECURITY.md").read_text(encoding="utf-8"), "ours\n")
+            self.assertFalse((root / "CONTRIBUTING.md").exists())
+            fb.apply_actions(root, [fb.FileAction("SECURITY.md", "replace", "boilerplate", "fleet\n")])
+            self.assertEqual((root / "SECURITY.md").read_text(encoding="utf-8"), "fleet\n")
+
+    def test_list_checkout_files_includes_untracked(self) -> None:
         calls = []
 
         def runner(argv, **kwargs):
             calls.append((argv, kwargs))
-            return subprocess.CompletedProcess(argv, 0, stdout="a.py\0b/c.md\0", stderr="")
+            return subprocess.CompletedProcess(argv, 0, stdout="a.py\0b/c.md\0a.py\0", stderr="")
 
-        self.assertEqual(fb.list_tracked_files(Path("repo"), runner=runner), ("a.py", "b/c.md"))
+        self.assertEqual(fb.list_checkout_files(Path("repo"), runner=runner), ("a.py", "b/c.md"))
         self.assertEqual(calls[0][0][:2], ["git", "-C"])
-        self.assertEqual(calls[0][0][-2:], ["ls-files", "-z"])
+        self.assertEqual(calls[0][0][-5:], ["ls-files", "-z", "--cached", "--others", "--exclude-standard"])
         self.assertTrue(calls[0][1]["check"])
 
     def test_reader(self) -> None:
@@ -542,28 +670,31 @@ class MainTests(unittest.TestCase):
             self.assertIn(
                 {"path": "SECURITY.md", "action": "create", "reason": "no security policy in the repository"}, payload
             )
-            code, out, _err = self._run(base + ["--write", "--private", "--default-branch", "trunk"], ["app.py"])
+            write = ["--write", "--private", "--default-branch", "trunk", "--deps-severity-floor", "any"]
+            code, out, _err = self._run(base + write, ["app.py"])
             self.assertEqual(code, 0)
             self.assertIn("wrote SECURITY.md", out)
             self.assertIn("`trunk`", (root / "SECURITY.md").read_text(encoding="utf-8"))
+            caller = yaml.safe_load((root / fb.QUALITY_CALLER).read_text(encoding="utf-8"))
+            self.assertEqual(caller["jobs"]["quality"]["with"], {"deps-severity-floor": "any"})
             tracked = [
                 "app.py",
                 "SECURITY.md",
                 "CONTRIBUTING.md",
                 "CODE_OF_CONDUCT.md",
+                "AGENTS.md",
                 ".github/PULL_REQUEST_TEMPLATE.md",
                 ".github/ISSUE_TEMPLATE/config.yml",
                 ".github/dependabot.yml",
                 ".quality/opengrep/README.md",
                 ".semgrepignore",
                 "osv-scanner.toml",
+                "scripts/verify",
                 fb.QUALITY_CALLER,
             ]
-            dependabot = root / ".github" / "dependabot.yml"
-            dependabot.write_text(fb.render_dependabot({"github-actions": ["/"]}), encoding="utf-8")
             code, out, _err = self._run(base, tracked)
             self.assertEqual(code, 0, out)
-            dependabot.write_text("version: 2\nupdates: []\n", encoding="utf-8")
+            (root / ".github" / "dependabot.yml").write_text("version: 2\nupdates: []\n", encoding="utf-8")
             code, out, _err = self._run(base + ["--write"], tracked)
             self.assertEqual(code, 1)
             self.assertIn("gap     .github/dependabot.yml", out)

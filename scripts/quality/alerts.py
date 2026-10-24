@@ -219,13 +219,22 @@ def find_existing_alert_issue(
     return None
 
 
+#: Open alert issues fetched per type. One more than this means the list may be
+#: truncated: reconciling it could leave a resolved alert open forever.
+OPEN_ALERT_LIMIT = 1000
+
+
 def list_open_alert_issues(
     platform_slug: str,
     *,
     alert_type: AlertType,
     runner: ProcessRunner = subprocess.run,
 ) -> List[Mapping[str, Any]]:
-    """Every open issue carrying ``alert_type``'s label (number + title); raise when ``gh`` fails."""
+    """Every open issue carrying ``alert_type``'s label (number + title).
+
+    Raises when ``gh`` fails, or when more than ``OPEN_ALERT_LIMIT`` come back
+    (the caller asked for one more): a truncated list is never reconciled.
+    """
     completed = _checked(
         _run_gh(
             [
@@ -240,13 +249,18 @@ def list_open_alert_issues(
                 "--json",
                 "number,title",
                 "--limit",
-                "200",
+                str(OPEN_ALERT_LIMIT + 1),
             ],
             runner=runner,
         ),
         what="issue list",
     )
     payload = json.loads(completed.stdout) if completed.stdout else []
+    if isinstance(payload, list) and len(payload) > OPEN_ALERT_LIMIT:
+        raise AlertCommandError(
+            f"more than {OPEN_ALERT_LIMIT} open {alert_type.label} issues: "
+            "the list may be truncated, so none is reconciled"
+        )
     return [issue for issue in payload if isinstance(issue, Mapping)] if isinstance(payload, list) else []
 
 

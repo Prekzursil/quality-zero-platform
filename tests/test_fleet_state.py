@@ -156,7 +156,8 @@ class DriftSyncPrTests(unittest.TestCase):
         for bare in ({}, {fleet_state.FLEET_READ_PAT_ENV: "  "}):
             with self.subTest(environ=bare):
                 runner = _gh([_pr(12)])
-                _records, unread = fleet_state.drift_sync_prs(["o/r", PRIVATE], runner=runner, environ=bare)
+                records, unread = fleet_state.drift_sync_prs(["o/r", PRIVATE], runner=runner, environ=bare)
+                self.assertEqual([r["pr_number"] for r in records], [12])
                 self.assertNotIn("env", runner.call_args.kwargs)
                 self.assertEqual(runner.call_count, 1)  # the private member is not read without the PAT...
                 self.assertEqual(unread, {fleet_state.public_slug(PRIVATE): "private, and no fleet-read token"})
@@ -167,7 +168,8 @@ class DriftSyncPrTests(unittest.TestCase):
         """Dashboard rows, public alert subjects and failure reasons get a stable tag, never the private slug."""
         environ = {fleet_state.FLEET_READ_PAT_ENV: "pat"}
         runner = _listings([_pr(12)], [_pr(3, repo=PRIVATE)])
-        (public, private), _unread = fleet_state.drift_sync_prs(["o/r", PRIVATE], runner=runner, environ=environ)
+        (public, private), unread = fleet_state.drift_sync_prs(["o/r", PRIVATE], runner=runner, environ=environ)
+        self.assertEqual(unread, {})  # with the PAT, the private member is read
         self.assertEqual((public["slug"], public["visibility"]), ("o/r", "public"))
         self.assertTrue(private["slug"].startswith(fleet_state.PRIVATE_SUBJECT_PREFIX))
         self.assertEqual(private["slug"], fleet_state.public_slug(PRIVATE))  # stable: alerts dedupe
@@ -182,7 +184,8 @@ class DriftSyncPrTests(unittest.TestCase):
 
     def test_jsonl_carries_iso_timestamps_for_the_drift_page(self) -> None:
         """The dashboard page reads the same records from a JSONL file."""
-        (record,), _unread = fleet_state.drift_sync_prs(["o/r"], runner=_gh([_pr(12)]), environ={})
+        (record,), unread = fleet_state.drift_sync_prs(["o/r"], runner=_gh([_pr(12)]), environ={})
+        self.assertEqual(unread, {})
         (line,) = fleet_state.to_jsonl([record]).splitlines()
         self.assertEqual(json.loads(line)["opened_at"], "2026-10-10T00:00:00+00:00")
         self.assertEqual(json.loads(line)["status"], "open")

@@ -440,6 +440,19 @@ class ListOpenAlertIssuesTests(unittest.TestCase):
         with self.assertRaisesRegex(alerts.AlertCommandError, "gh issue list"):
             alerts.list_open_alert_issues("o/r", alert_type=alerts.AlertType.REGRESSION, runner=failed)
 
+    def test_a_list_past_the_limit_is_never_reconciled(self) -> None:
+        """Review finding: with more open alerts than one listing returns, resolved ones past it stayed open."""
+        issue = {"number": 1, "title": "[alert:drift-stuck] o/r#1"}
+        full = MagicMock(return_value=_fake_completed(json.dumps([issue] * alerts.OPEN_ALERT_LIMIT)))
+        self.assertEqual(
+            len(alerts.list_open_alert_issues("o/r", alert_type=alerts.AlertType.DRIFT_STUCK, runner=full)),
+            alerts.OPEN_ALERT_LIMIT,
+        )
+        self.assertEqual(full.call_args.args[0][-1], str(alerts.OPEN_ALERT_LIMIT + 1))
+        over = MagicMock(return_value=_fake_completed(json.dumps([issue] * (alerts.OPEN_ALERT_LIMIT + 1))))
+        with self.assertRaisesRegex(alerts.AlertCommandError, "may be truncated, so none is reconciled"):
+            alerts.list_open_alert_issues("o/r", alert_type=alerts.AlertType.DRIFT_STUCK, runner=over)
+
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

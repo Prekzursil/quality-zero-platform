@@ -25,7 +25,18 @@ from pathlib import Path
 from typing import Callable, Optional, Sequence, Tuple
 
 ProcessRunner = Callable[..., "subprocess.CompletedProcess[str]"]
-RETRYABLE = ("409", "422", "does not match", "wasn't supplied")
+
+
+def _is_stale_sha(stderr: str) -> bool:
+    """A conflict from a concurrent writer, and nothing else.
+
+    409 is always a conflict. A 422 only counts when it is about the blob
+    ``sha`` (another writer created the file between our read and our write);
+    any other 422 is a real validation error that a retry cannot fix.
+    """
+    if "409" in stderr:
+        return True
+    return "422" in stderr and "sha" in stderr.lower()
 
 
 class AuditAppendError(RuntimeError):
@@ -33,16 +44,34 @@ class AuditAppendError(RuntimeError):
 
 
 def _read(repo: str, path: str, branch: str, *, runner: ProcessRunner) -> Tuple[str, Optional[str]]:
-    """``(text, sha)`` of the file on ``branch``; ``("", None)`` when it does not exist yet."""
-    done = runner(
-        ["gh", "api", f"repos/{repo}/contents/{path}?ref={branch}"], capture_output=True, text=True, check=False
-    )  # nosec B603 — fixed argv
+    """``(text, sha)`` of the file on ``branch``; ``("", None)`` when it does not exist yet.
+
+    Above 1 MB the JSON form carries no content (``encoding: none``); the
+    text is then read through the raw media type. The bytes read must match
+    the reported ``size``: appending to a truncated copy would ERASE the log.
+    """
+    url = f"repos/{repo}/contents/{path}?ref={branch}"
+    done = runner(["gh", "api", url], capture_output=True, text=True, check=False)  # nosec B603 — fixed argv
     if done.returncode != 0:
         if "404" in done.stderr or "Not Found" in done.stderr:
             return "", None
         raise AuditAppendError(f"reading {path} failed: {done.stderr.strip()}")
     payload = json.loads(done.stdout)
-    return base64.b64decode(payload["content"]).decode("utf-8"), str(payload["sha"])
+    if payload.get("encoding") == "base64":
+        text = base64.b64decode(payload["content"]).decode("utf-8")
+    else:
+        raw = runner(
+            ["gh", "api", "-H", "Accept: application/vnd.github.raw+json", url],
+            capture_output=True,
+            text=True,
+            check=False,
+        )  # nosec B603 — fixed argv
+        if raw.returncode != 0:
+            raise AuditAppendError(f"reading {path} raw failed: {raw.stderr.strip()}")
+        text = raw.stdout
+    if len(text.encode("utf-8")) != int(payload.get("size", -1)):
+        raise AuditAppendError(f"read {path} incompletely (size {payload.get('size')}); refusing to overwrite it")
+    return text, str(payload["sha"])
 
 
 def append_record(
@@ -58,6 +87,7 @@ def append_record(
     """Append ``record`` as one line; return the attempt that succeeded. Raise if none did."""
     line = record.strip()
     json.loads(line)  # a malformed record never reaches the log
+    last_error = ""
     for attempt in range(1, attempts + 1):
         text, sha = _read(repo, path, branch, runner=runner)
         if text and not text.endswith("\n"):
@@ -78,12 +108,15 @@ def append_record(
         )  # nosec B603 — fixed argv
         if done.returncode == 0:
             return attempt
-        # 409: the file moved under us. 422 "sha wasn't supplied": another
-        # writer CREATED it between our 404 read and this PUT. Both mean
-        # start again from the current content.
-        if not any(marker in done.stderr for marker in RETRYABLE):
-            raise AuditAppendError(f"writing {path} failed: {done.stderr.strip()}")
-    raise AuditAppendError(f"{path} kept changing underneath; the record was not written after {attempts} attempts")
+        last_error = done.stderr.strip()
+        # A stale sha means start again from the current content; anything
+        # else is a real failure, reported as-is.
+        if not _is_stale_sha(done.stderr):
+            raise AuditAppendError(f"writing {path} failed: {last_error}")
+    raise AuditAppendError(
+        f"{path} kept changing underneath; the record was not written after {attempts} attempts "
+        f"(last error: {last_error})"
+    )
 
 
 def main(argv: Optional[Sequence[str]] = None, *, runner: ProcessRunner = subprocess.run) -> int:

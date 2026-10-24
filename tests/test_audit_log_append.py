@@ -21,7 +21,20 @@ WINNER = '{"winner": true}\n'
 class FakeGitHub:
     """A Contents API that can lose a race: ``conflicts`` PUTs are answered with a 409 first."""
 
-    def __init__(self, content: Optional[str], *, conflicts: int = 0, read_error: str = "", write_error: str = ""):
+    def __init__(
+        self,
+        content: Optional[str],
+        *,
+        conflicts: int = 0,
+        read_error: str = "",
+        write_error: str = "",
+        large: bool = False,
+        raw_error: str = "",
+        raw_text: Optional[str] = None,
+    ):
+        self.large = large
+        self.raw_error = raw_error
+        self.raw_text = raw_text
         self.content = content
         self.sha = 1
         self.conflicts = conflicts
@@ -50,7 +63,16 @@ class FakeGitHub:
             return subprocess.CompletedProcess(argv, 1, "", self.read_error)
         if self.content is None:
             return subprocess.CompletedProcess(argv, 1, "", "gh: Not Found (HTTP 404)")
-        payload = {"content": base64.b64encode(self.content.encode("utf-8")).decode("ascii"), "sha": str(self.sha)}
+        if "-H" in argv:  # the raw media type: the file's bytes as-is
+            if self.raw_error:
+                return subprocess.CompletedProcess(argv, 1, "", self.raw_error)
+            return subprocess.CompletedProcess(argv, 0, self.content if self.raw_text is None else self.raw_text, "")
+        size = len(self.content.encode("utf-8"))
+        if self.large:  # > 1 MB: the JSON form omits the content
+            payload = {"content": "", "encoding": "none", "sha": str(self.sha), "size": size}
+        else:
+            encoded = base64.b64encode(self.content.encode("utf-8")).decode("ascii")
+            payload = {"content": encoded, "encoding": "base64", "sha": str(self.sha), "size": size}
         return subprocess.CompletedProcess(argv, 0, json.dumps(payload), "")
 
 
@@ -96,9 +118,35 @@ class AppendRecordTests(unittest.TestCase):
         self.assertEqual(_append(creator_wins_first), 2)
         self.assertEqual(github.content, WINNER + RECORD + "\n")
 
+    def test_a_log_above_one_megabyte_is_read_raw_and_kept_whole(self) -> None:
+        """The JSON form carries no content above 1 MB: appending to that empty string would erase the log."""
+        github = FakeGitHub('{"old": 1}\n', large=True)
+        _append(github)
+        self.assertEqual(github.content, '{"old": 1}\n' + RECORD + "\n")
+
+    def test_a_truncated_or_failed_raw_read_never_overwrites_the_log(self) -> None:
+        """A size mismatch or a failed raw read raises before any write."""
+        truncated = FakeGitHub('{"old": 1}\n', large=True, raw_text="")
+        with self.assertRaisesRegex(audit.AuditAppendError, "refusing to overwrite it"):
+            _append(truncated)
+        self.assertEqual(truncated.puts, [])
+        failed = FakeGitHub('{"old": 1}\n', large=True, raw_error="boom (HTTP 502)")
+        with self.assertRaisesRegex(audit.AuditAppendError, "raw failed: boom"):
+            _append(failed)
+        self.assertEqual(failed.puts, [])
+
     def test_a_log_that_keeps_moving_is_an_error_not_a_dropped_record(self) -> None:
         """Three lost races in a row fail loudly."""
         with self.assertRaisesRegex(audit.AuditAppendError, "kept changing underneath"):
+            _append(FakeGitHub("", conflicts=3))
+
+    def test_only_a_stale_sha_is_retried_and_the_last_error_is_kept(self) -> None:
+        """A validation 422 fails at once with its message; exhausted retries name the last error."""
+        github = FakeGitHub("", write_error="Invalid request. content is not valid Base64 (HTTP 422)")
+        with self.assertRaisesRegex(audit.AuditAppendError, "writing audit/skip.jsonl failed: Invalid request"):
+            _append(github)
+        self.assertEqual(len(github.puts), 1)
+        with self.assertRaisesRegex(audit.AuditAppendError, r"last error: .*HTTP 409"):
             _append(FakeGitHub("", conflicts=3))
 
     def test_read_and_write_failures_raise(self) -> None:

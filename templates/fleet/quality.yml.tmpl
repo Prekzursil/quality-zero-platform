@@ -6,9 +6,9 @@ name: quality
 
 on:
   push:
-    branches: [${default_branch}]
+    branches: [${default_branch_yaml}]
   pull_request:
-    branches: [${default_branch}]
+    branches: [${default_branch_yaml}]
   # a merge queue's synthetic commit must report the required check too
   merge_group:
     types: [checks_requested]

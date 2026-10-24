@@ -42,6 +42,7 @@ import argparse
 import fnmatch
 import hashlib
 import json
+import os
 import posixpath
 import re
 import string
@@ -68,13 +69,14 @@ OPENGREP_SOURCE = PLATFORM_ROOT / ".quality" / "opengrep"
 SEMGREPIGNORE_SOURCE = PLATFORM_ROOT / "docs" / "lean-gate" / "semgrepignore.template"
 MAINTAINER_URL = "https://github.com/Prekzursil"
 REUSABLE_QUALITY_RE = re.compile(
-    r"(uses:\s*Prekzursil/quality-zero-platform/\.github/workflows/reusable-quality\.yml@)([^\s#'\"]+)"
+    r"(uses:\s*[\"']?Prekzursil/quality-zero-platform/\.github/workflows/reusable-quality\.yml@)([^\s#'\"]+)"
 )
 REUSABLE_QUALITY_PREFIX = "Prekzursil/quality-zero-platform/.github/workflows/reusable-quality.yml@"
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 DEPS_FLOORS = ("t0", "any")
 
-#: Path components whose manifests are vendored, generated or test data — never a rail.
+#: Path components holding third-party or installed code — never a rail. Everything else the
+#: dependency gate scans (osv-scanner --recursive) gets a rail, build/ and fixtures/ included.
 EXCLUDED_DIRS = frozenset(
     {
         ".git",
@@ -83,15 +85,9 @@ EXCLUDED_DIRS = frozenset(
         "node_modules",
         "vendor",
         "third_party",
-        "dist",
-        "build",
-        "out",
         "__pycache__",
         "site-packages",
         ".tox",
-        "fixtures",
-        "__fixtures__",
-        "testdata",
     }
 )
 _PIP_NAMES = frozenset({"pyproject.toml", "setup.py", "setup.cfg", "Pipfile"})
@@ -163,6 +159,7 @@ DEPENDABOT_LOCATIONS = (".github/dependabot.yml", ".github/dependabot.yaml")
 AGENTS_LOCATIONS = ("AGENTS.md",)
 VERIFY_SCRIPT = "scripts/verify"
 ISSUE_TEMPLATE_DIR = ".github/ISSUE_TEMPLATE/"
+LEGACY_ISSUE_TEMPLATES = (".github/ISSUE_TEMPLATE.md", "ISSUE_TEMPLATE.md", "docs/ISSUE_TEMPLATE.md")
 ISSUE_FORMS = ("config.yml", "bug_report.yml", "feature_request.yml")
 QUALITY_CALLER = ".github/workflows/quality.yml"
 #: The lean gate runs gate 4 only when this directory exists and gate 6 only when OSV_CONFIG
@@ -289,8 +286,15 @@ def _is_ancestor(ancestor: str, directory: str) -> bool:
     return ancestor == "/" or directory.startswith(ancestor.rstrip("/") + "/")
 
 
+_BUILD_COMMENT_RE = re.compile(r"<!--.*?-->|/\*.*?\*/|//[^\n]*", re.DOTALL)
+
+
 def _declares(text: str, relative: str) -> bool:
-    """Whether a build file's text names ``relative`` as a module (path, gradle or .sln spelling)."""
+    """Whether a build file's text names ``relative`` as a module (path, gradle or .sln spelling).
+
+    XML, block and line comments are stripped first: a commented-out ``include`` declares nothing.
+    """
+    text = _BUILD_COMMENT_RE.sub("", text)
     for spelling in {relative, relative.replace("/", ":"), relative.replace("/", "\\")}:
         if re.search(r"(?<![\w.-])" + re.escape(spelling) + r"(?![\w.-])", text):
             return True
@@ -485,15 +489,9 @@ def gate_rows(languages: Sequence[str], deps_floor: str = "t0") -> List[Tuple[st
     ]
 
 
-def _python_uses_pytest(read: Reader, paths: Sequence[str]) -> bool:
-    """Whether the Python suite runs under pytest (else unittest)."""
-    if "pytest.ini" in paths or "conftest.py" in paths or any(p.endswith("/conftest.py") for p in paths):
-        return True
-    for candidate in ("pyproject.toml", "setup.cfg", "tox.ini", "requirements-dev.txt", "requirements.txt"):
-        text = read(candidate)
-        if text and "pytest" in text:
-            return True
-    return False
+def _python_uses_pytest(read: Reader) -> bool:
+    """Whether the lean gate runs pytest (else unittest): its exact rule, 'pytest' in a root config file."""
+    return any("pytest" in (read(name) or "") for name in ("pyproject.toml", "setup.cfg", "tox.ini", "pytest.ini"))
 
 
 def _coverage_scripts(read: Reader, paths: Sequence[str]) -> List[str]:
@@ -516,7 +514,7 @@ def local_commands(languages: Sequence[str], read: Reader, paths: Sequence[str])
     """Render the language-specific 'run the tests yourself' bullets for CONTRIBUTING.md."""
     lines: List[str] = []
     if "python" in languages:
-        if _python_uses_pytest(read, paths):
+        if _python_uses_pytest(read):
             lines.append("- Python: `python -m pytest --cov --cov-branch --cov-report=term-missing`")
         else:
             lines.append(
@@ -537,9 +535,13 @@ def local_commands(languages: Sequence[str], read: Reader, paths: Sequence[str])
 
 
 def _private_reporting(facts: RepoFacts) -> str:
-    """The private reporting URL: PVR for public repos, the maintainer for private ones."""
+    """The private reporting URL: PVR for public repos; for private ones their own issues.
+
+    A private repository's issues are visible only to people with access to it, so they are
+    an actionable private channel there (a GitHub profile has no reporting form).
+    """
     if facts.private:
-        return MAINTAINER_URL
+        return f"https://github.com/{facts.slug}/issues/new?labels=security"
     return f"https://github.com/{facts.slug}/security/advisories/new"
 
 
@@ -562,15 +564,18 @@ def template_context(facts: RepoFacts, read: Reader, qzp_pin: str, deps_floor: s
     report_url = _private_reporting(facts)
     if facts.private:
         reporting = (
-            "This repository is private. Report privately to the maintainer through their "
-            f"[GitHub profile]({MAINTAINER_URL}) and keep the details out of issues and pull requests."
+            "This repository is private, so its issues are visible only to people with access to it: "
+            f"report through a [new issue labelled `security`]({report_url}). If a finding must not reach "
+            "every collaborator, say so in that issue without the details and the maintainer will arrange a "
+            "direct channel."
         )
         codeql = (
             "- **Code scanning** — CodeQL needs GitHub Advanced Security on private repositories; until it is "
             "available the opengrep SAST gate is the code-scanning control here."
         )
         conduct = (
-            f"Report conduct violations privately to the maintainer through their [GitHub profile]({MAINTAINER_URL})."
+            "Report conduct violations to the maintainer; this repository is private, so its issues reach only "
+            "people with access to it, and the maintainer will arrange a direct channel on request."
         )
     else:
         reporting = (
@@ -608,6 +613,7 @@ def template_context(facts: RepoFacts, read: Reader, qzp_pin: str, deps_floor: s
         "repo_slug": facts.slug,
         "display_name": facts.name,
         "default_branch": facts.default_branch,
+        "default_branch_yaml": json.dumps(facts.default_branch),
         "reporting_channel": reporting,
         "security_controls": "\n".join(controls),
         "security_contact_url": report_url,
@@ -671,9 +677,12 @@ def _plan_simple(
 
 
 def _plan_issue_forms(facts: RepoFacts, context: Dict[str, str]) -> List[FileAction]:
-    """Create the issue forms unless the repository already ships an ISSUE_TEMPLATE directory."""
+    """Create the issue forms unless the repository already ships issue templates of its own."""
     if any(path.lower().startswith(ISSUE_TEMPLATE_DIR.lower()) for path in facts.paths):
         return [FileAction(ISSUE_TEMPLATE_DIR, "keep", "repository-authored issue templates")]
+    legacy = _first_present(facts.paths, LEGACY_ISSUE_TEMPLATES)
+    if legacy is not None:
+        return [FileAction(legacy, "keep", "repository-authored issue template")]
     return [
         FileAction(ISSUE_TEMPLATE_DIR + form, "create", "missing", render_template("ISSUE_TEMPLATE/" + form, context))
         for form in ISSUE_FORMS
@@ -684,17 +693,18 @@ def _plan_gate_configs(facts: RepoFacts, context: Dict[str, str]) -> List[FileAc
     """Seed the gate-4 ruleset + scope file and the gate-6 config so neither gate silently skips."""
     languages = set(detect_languages(facts.paths))
     actions: List[FileAction] = []
-    if any(path.startswith(OPENGREP_DIR) for path in facts.paths):
+    if any(path.startswith(OPENGREP_DIR) and path.endswith((".yml", ".yaml")) for path in facts.paths):
         actions.append(FileAction(OPENGREP_DIR, "keep", "repository-curated SAST ruleset"))
     else:
-        actions.append(
-            FileAction(
-                OPENGREP_DIR + "README.md",
-                "create",
-                "gate 4 has no ruleset",
-                render_template("opengrep-README.md", context),
+        if _first_present(facts.paths, (OPENGREP_DIR + "README.md",)) is None:
+            actions.append(
+                FileAction(
+                    OPENGREP_DIR + "README.md",
+                    "create",
+                    "gate 4 has no ruleset",
+                    render_template("opengrep-README.md", context),
+                )
             )
-        )
         actions.extend(
             FileAction(
                 OPENGREP_DIR + name,
@@ -743,11 +753,32 @@ def _plan_dependabot(facts: RepoFacts, read: Reader, planned: Sequence[str] = ()
         if text == rendered:
             return FileAction(existing, "keep", "managed config is current")
         return FileAction(existing, "replace", "managed config regenerated for the current manifests", rendered)
+    problems = []
     missing = uncovered_rails(rails, text)
-    if not missing:
+    if missing:
+        listed = ", ".join(f"{ecosystem} {directory}" for ecosystem, directory in missing)
+        problems.append(f"manifest trees without a Dependabot rail: {listed}")
+    if ignores_majors(text):
+        problems.append("semver-major updates are ignored, so a fix that only ships in a new major never arrives")
+    if not problems:
         return FileAction(existing, "keep", "every manifest tree has a rail")
-    listed = ", ".join(f"{ecosystem} {directory}" for ecosystem, directory in missing)
-    return FileAction(existing, "gap", f"manifest trees without a Dependabot rail: {listed}")
+    return FileAction(existing, "gap", "; ".join(problems))
+
+
+def ignores_majors(config_text: str) -> bool:
+    """Whether any update entry of a dependabot.yml ignores semver-major updates."""
+    try:
+        document = yaml.safe_load(config_text)
+    except yaml.YAMLError:
+        return False
+    updates = document.get("updates") if isinstance(document, dict) else None
+    for update in updates if isinstance(updates, list) else []:
+        ignores = update.get("ignore") if isinstance(update, dict) else None
+        for rule in ignores if isinstance(ignores, list) else []:
+            types = rule.get("update-types") if isinstance(rule, dict) else None
+            if isinstance(types, list) and "version-update:semver-major" in types:
+                return True
+    return False
 
 
 def caller_refs(text: str) -> Set[str]:
@@ -798,6 +829,20 @@ def _plan_quality_caller(facts: RepoFacts, read: Reader, context: Dict[str, str]
     return [FileAction(QUALITY_CALLER, "create", "no QZP lean-gate caller", render_template("quality.yml", context))]
 
 
+#: Workflow file names that never test code (scanning, housekeeping, delivery).
+_NON_TEST_WORKFLOW_WORDS = (
+    "codeql",
+    "dependabot",
+    "pages",
+    "release",
+    "labeler",
+    "stale",
+    "scorecard",
+    "deploy",
+    "publish",
+)
+
+
 def _plan_outside_languages(facts: RepoFacts) -> List[FileAction]:
     """Flag languages the lean gate cannot test when the repository has no CI of its own for them."""
     outside = [label for key, label in _OUTSIDE_LEAN_GATE.items() if key in detect_languages(facts.paths)]
@@ -807,6 +852,7 @@ def _plan_outside_languages(facts: RepoFacts) -> List[FileAction]:
         if posixpath.dirname(path) == ".github/workflows"
         and path.endswith((".yml", ".yaml"))
         and path != QUALITY_CALLER
+        and not any(word in posixpath.basename(path).lower() for word in _NON_TEST_WORKFLOW_WORDS)
     ]
     if not outside or own_ci:
         return []
@@ -846,11 +892,16 @@ def apply_actions(repo_dir: Path, actions: Iterable[FileAction]) -> List[str]:
 
     A ``create`` never overwrites: if the target already exists on disk (an untracked or
     ignored file the listing could not see, or a case variant on a case-insensitive file
-    system) the run stops with ``FileExistsError`` before anything is lost.
+    system) the run stops with ``FileExistsError`` before anything is lost. No action ever
+    writes through a symlink or to a path that resolves outside the checkout.
     """
     pending = [action for action in actions if action.writes and action.content is not None]
+    root = repo_dir.resolve()
     for action in pending:
-        if action.action == "create" and (repo_dir / action.path).exists():
+        target = repo_dir / action.path
+        if target.is_symlink() or not target.resolve().is_relative_to(root):
+            raise ValueError(f"refusing to write {action.path} through a symlink or outside the checkout")
+        if action.action == "create" and target.exists():
             raise FileExistsError(f"refusing to overwrite existing {action.path}")
     written: List[str] = []
     for action in pending:
@@ -864,14 +915,19 @@ def apply_actions(repo_dir: Path, actions: Iterable[FileAction]) -> List[str]:
 
 
 def list_checkout_files(repo_dir: Path, *, runner: ProcessRunner = subprocess.run) -> Tuple[str, ...]:
-    """Return tracked plus untracked, non-ignored files (raises CalledProcessError on failure)."""
+    """Return tracked plus untracked, non-ignored files that exist on disk.
+
+    Index entries deleted from the worktree are dropped, so a missing baseline file is planned
+    again instead of being reported as kept. Raises CalledProcessError when git fails.
+    """
     completed = runner(  # nosec S603 — argv array, controlled inputs
         ["git", "-C", str(repo_dir), "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
         capture_output=True,
         text=True,
         check=True,
     )
-    return tuple(dict.fromkeys(path for path in completed.stdout.split("\0") if path))
+    listed = dict.fromkeys(path for path in completed.stdout.split("\0") if path)
+    return tuple(path for path in listed if os.path.lexists(repo_dir / path))
 
 
 def _reader(repo_dir: Path) -> Reader:

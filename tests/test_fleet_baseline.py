@@ -184,6 +184,21 @@ class DetectRailsTests(unittest.TestCase):
         self.assertEqual(rails["nuget"], ["/", "/nested", "/other"])
         self.assertEqual(rails["npm"], ["/", "/web"])
 
+    def test_commented_declarations_do_not_collapse(self) -> None:
+        files = {
+            "settings.gradle": '// include(":tools")\n/* include(":old") */\ninclude(":app")\n',
+            "pom.xml": "<!-- <module>legacy</module> -->",
+        }
+        paths = list(files) + [
+            "tools/build.gradle",
+            "old/build.gradle",
+            "app/build.gradle",
+            "legacy/pom.xml",
+        ]
+        rails = fb.detect_rails(paths, _reader(files))
+        self.assertEqual(rails["gradle"], ["/", "/old", "/tools"])
+        self.assertEqual(rails["maven"], ["/", "/legacy"])
+
     def test_declares_respects_word_boundaries(self) -> None:
         self.assertTrue(fb._declares('include(":app")', "app"))
         self.assertTrue(fb._declares('include(":libs:core")', "libs/core"))
@@ -287,12 +302,12 @@ class LanguageAndGateTests(unittest.TestCase):
 class LocalCommandsTests(unittest.TestCase):
     """CONTRIBUTING.md's language-specific commands."""
 
-    def test_pytest_markers(self) -> None:
-        for paths in (["pytest.ini"], ["conftest.py"], ["tests/conftest.py"]):
-            with self.subTest(paths=paths):
-                self.assertTrue(fb._python_uses_pytest(_reader({}), paths))
-        self.assertTrue(fb._python_uses_pytest(_reader({"setup.cfg": "[tool:pytest]"}), []))
-        self.assertFalse(fb._python_uses_pytest(_reader({"pyproject.toml": "[project]"}), []))
+    def test_pytest_detection_mirrors_the_lean_gate(self) -> None:
+        for name in ("pyproject.toml", "setup.cfg", "tox.ini", "pytest.ini"):
+            with self.subTest(name=name):
+                self.assertTrue(fb._python_uses_pytest(_reader({name: "[tool:pytest]"})))
+        self.assertFalse(fb._python_uses_pytest(_reader({"pyproject.toml": "[project]"})))
+        self.assertFalse(fb._python_uses_pytest(_reader({"requirements-dev.txt": "pytest"})))
 
     def test_coverage_scripts(self) -> None:
         files = {
@@ -348,6 +363,7 @@ class TemplateTests(unittest.TestCase):
                 self.assertTrue(rendered.endswith("\n") and not rendered.endswith("\n\n"))
         verify = fb.render_template("verify", context)
         self.assertIn('root="$(git rev-parse --show-toplevel)"', verify)
+        self.assertIn("grep -rhoE 'reusable-quality\\.yml@[0-9a-f]{40}' \"$root/.github/workflows\"", verify)
         self.assertIn("${QZP_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/qzp-verify/quality-zero-platform}", verify)
         self.assertIn('exec bash "$qzp/scripts/quality/preflight.sh" "$@"', verify)
         for form in fb.ISSUE_FORMS:
@@ -357,6 +373,12 @@ class TemplateTests(unittest.TestCase):
         self.assertEqual(caller["jobs"]["quality"], {"uses": CALLER_PREFIX + PIN})
         self.assertEqual(caller["concurrency"]["group"], "quality-${{ github.ref }}")
         self.assertEqual(caller[True]["merge_group"], {"types": ["checks_requested"]})
+
+    def test_default_branch_is_a_quoted_yaml_scalar(self) -> None:
+        facts = fb.RepoFacts("Prekzursil/demo", "release,prod", False, ("a.py",))
+        caller = yaml.safe_load(fb.render_template("quality.yml", fb.template_context(facts, _reader({}), PIN)))
+        self.assertEqual(caller[True]["push"]["branches"], ["release,prod"])
+        self.assertEqual(caller[True]["pull_request"]["branches"], ["release,prod"])
 
     def test_zero_tolerance_caller_passes_the_floor(self) -> None:
         context = fb.template_context(_facts(["app.py"]), _reader({}), PIN, "any")
@@ -373,7 +395,11 @@ class TemplateTests(unittest.TestCase):
 
     def test_private_context(self) -> None:
         context = fb.template_context(_facts(["a.py"], private=True), _reader({}), PIN)
-        self.assertEqual(context["security_contact_url"], fb.MAINTAINER_URL)
+        self.assertEqual(
+            context["security_contact_url"], "https://github.com/Prekzursil/demo/issues/new?labels=security"
+        )
+        self.assertIn("visible only to people with access", context["reporting_channel"])
+        self.assertIn("this repository is private", context["conduct_contact"])
         self.assertIn("This repository is private", context["reporting_channel"])
         self.assertIn("GitHub Advanced Security", context["security_controls"])
         self.assertNotIn("push protection", context["security_controls"])
@@ -434,6 +460,12 @@ class CallerTests(unittest.TestCase):
         self.assertEqual(fb.caller_refs("jobs: [1, 2]\n"), set())
         self.assertEqual(fb.caller_refs("- a list\n"), set())
         self.assertEqual(fb.caller_refs("jobs: [unclosed\n"), set())
+
+    def test_bump_caller_handles_quoted_values(self) -> None:
+        text = f"jobs:\n  q:\n    uses: \"{CALLER_PREFIX}v1\"\n  r:\n    uses: '{CALLER_PREFIX}v1'\n"
+        self.assertEqual(fb.caller_refs(text), {"v1"})
+        bumped = fb.bump_caller(text, PIN)
+        self.assertEqual(fb.caller_refs(bumped), {PIN})
 
     def test_bump_caller_leaves_comments_alone(self) -> None:
         text = f"# was: uses: {CALLER_PREFIX}v0\njobs:\n  q:\n    uses: {CALLER_PREFIX}v1 # pinned\n"
@@ -542,6 +574,37 @@ class PlanTests(unittest.TestCase):
         self.assertIn(f"reusable-quality.yml@{PIN}", bump.content or "")
         self.assertEqual(bump.reason, f"pin v1 -> {PIN}")
 
+    def test_legacy_issue_template_is_kept(self) -> None:
+        context = fb.template_context(_facts([]), _reader({}), PIN)
+        actions = fb._plan_issue_forms(_facts([".github/issue_template.md"]), context)
+        self.assertEqual([(a.path, a.action) for a in actions], [(".github/issue_template.md", "keep")])
+
+    def test_readme_only_opengrep_dir_gets_rules_but_keeps_its_readme(self) -> None:
+        context = fb.template_context(_facts([]), _reader({}), PIN)
+        actions = fb._plan_gate_configs(_facts([".quality/opengrep/README.md", "a.py"]), context)
+        written = [a.path for a in actions if a.action == "create"]
+        self.assertNotIn(".quality/opengrep/README.md", written)
+        self.assertIn(".quality/opengrep/general-security.yaml", written)
+        self.assertIn(".quality/opengrep/python-security.yaml", written)
+
+    def test_dependabot_that_ignores_majors_is_a_gap(self) -> None:
+        config = (
+            "version: 2\nupdates:\n  - package-ecosystem: github-actions\n    directory: /\n"
+            "    ignore:\n      - dependency-name: '*'\n        update-types: ['version-update:semver-major']\n"
+        )
+        files = {".github/dependabot.yml": config}
+        action = fb._plan_dependabot(_facts(list(files) + [".github/workflows/ci.yml"]), _reader(files))
+        self.assertEqual(action.action, "gap")
+        self.assertIn("semver-major updates are ignored", action.reason)
+        self.assertNotIn("without a Dependabot rail", action.reason)
+
+    def test_ignores_majors_shapes(self) -> None:
+        self.assertFalse(fb.ignores_majors("version: [unclosed"))
+        self.assertFalse(fb.ignores_majors("- a list"))
+        self.assertFalse(fb.ignores_majors("updates: [1, {ignore: 3}, {ignore: [1, {update-types: x}]}]"))
+        self.assertFalse(fb.ignores_majors("updates: [{ignore: [{update-types: [version-update:semver-minor]}]}]"))
+        self.assertTrue(fb.ignores_majors("updates: [{ignore: [{update-types: [version-update:semver-major]}]}]"))
+
     def test_managed_dependabot_is_regenerated(self) -> None:
         managed = fb.render_dependabot({"github-actions": ["/"]})
         files = {".github/dependabot.yml": managed.replace("\n", "\r\n")}
@@ -558,6 +621,10 @@ class PlanTests(unittest.TestCase):
         self.assertIn("C, Java, Kotlin source has no CI lane", gap.reason)
         caller_only = fb._plan_outside_languages(_facts(["Main.java", fb.QUALITY_CALLER, "notes/ci.yml"]))
         self.assertEqual([a.action for a in caller_only], ["gap"])
+        scanning_only = fb._plan_outside_languages(
+            _facts(["Main.java", ".github/workflows/codeql.yml", ".github/workflows/pages.yml"])
+        )
+        self.assertEqual([a.action for a in scanning_only], ["gap"])
         own_ci = fb._plan_outside_languages(_facts(["Main.java", ".github/workflows/gradle.yaml"]))
         self.assertEqual(own_ci, [])
         self.assertEqual(fb._plan_outside_languages(_facts(["app.py"])), [])
@@ -611,14 +678,35 @@ class ApplyAndIoTests(unittest.TestCase):
             fb.apply_actions(root, [fb.FileAction("SECURITY.md", "replace", "boilerplate", "fleet\n")])
             self.assertEqual((root / "SECURITY.md").read_text(encoding="utf-8"), "fleet\n")
 
-    def test_list_checkout_files_includes_untracked(self) -> None:
+    def test_apply_actions_never_writes_outside_the_checkout(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "repo"
+            root.mkdir()
+            with self.assertRaises(ValueError):
+                fb.apply_actions(root, [fb.FileAction("../escape.md", "replace", "x", "x\n")])
+            self.assertFalse((Path(tmp) / "escape.md").exists())
+            link = root / "linked.md"
+            try:
+                link.symlink_to(Path(tmp) / "elsewhere.md")
+            except OSError:  # symlinks need privileges on some Windows hosts
+                return
+            with self.assertRaises(ValueError):
+                fb.apply_actions(root, [fb.FileAction("linked.md", "create", "missing", "x\n")])
+            self.assertFalse((Path(tmp) / "elsewhere.md").exists())
+
+    def test_list_checkout_files_includes_untracked_and_drops_deleted(self) -> None:
         calls = []
 
         def runner(argv, **kwargs):
             calls.append((argv, kwargs))
-            return subprocess.CompletedProcess(argv, 0, stdout="a.py\0b/c.md\0a.py\0", stderr="")
+            return subprocess.CompletedProcess(argv, 0, stdout="a.py\0b/c.md\0a.py\0gone.md\0", stderr="")
 
-        self.assertEqual(fb.list_checkout_files(Path("repo"), runner=runner), ("a.py", "b/c.md"))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "a.py").write_text("", encoding="utf-8")
+            (root / "b").mkdir()
+            (root / "b" / "c.md").write_text("", encoding="utf-8")
+            self.assertEqual(fb.list_checkout_files(root, runner=runner), ("a.py", "b/c.md"))
         self.assertEqual(calls[0][0][:2], ["git", "-C"])
         self.assertEqual(calls[0][0][-5:], ["ls-files", "-z", "--cached", "--others", "--exclude-standard"])
         self.assertTrue(calls[0][1]["check"])
@@ -687,6 +775,8 @@ class MainTests(unittest.TestCase):
                 ".github/ISSUE_TEMPLATE/config.yml",
                 ".github/dependabot.yml",
                 ".quality/opengrep/README.md",
+                ".quality/opengrep/general-security.yaml",
+                ".quality/opengrep/python-security.yaml",
                 ".semgrepignore",
                 "osv-scanner.toml",
                 "scripts/verify",

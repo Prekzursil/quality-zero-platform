@@ -46,7 +46,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/checkout@v4
+      - name: Check out the platform at this workflow's own commit
+        uses: actions/checkout@v4
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}

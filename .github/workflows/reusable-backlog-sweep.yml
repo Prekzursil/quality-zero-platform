@@ -37,7 +37,8 @@ jobs:
       codex_auth_file: ${{ steps.profile.outputs.codex_auth_file }}
       codex_runner_labels_json: ${{ steps.profile.outputs.codex_runner_labels_json }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out the platform at this workflow's own commit
+        uses: actions/checkout@v4
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
@@ -72,7 +73,8 @@ jobs:
         with:
           path: repo
           persist-credentials: false
-      - uses: actions/checkout@v4
+      - name: Check out the platform at this workflow's own commit
+        uses: actions/checkout@v4
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}

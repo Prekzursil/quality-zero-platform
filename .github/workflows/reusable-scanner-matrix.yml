@@ -110,7 +110,8 @@ jobs:
           path: repo
           ref: ${{ inputs.sha != '' && inputs.sha || github.sha }}
           persist-credentials: false
-      - uses: actions/checkout@v4
+      - name: Check out the platform at this workflow's own commit
+        uses: actions/checkout@v4
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
@@ -667,7 +668,8 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out the platform at this workflow's own commit
+        uses: actions/checkout@v4
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}

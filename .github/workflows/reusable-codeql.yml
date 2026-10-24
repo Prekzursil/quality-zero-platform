@@ -52,7 +52,8 @@ jobs:
       java_distribution: ${{ steps.plan.outputs.codeql_java_distribution }}
       java_version: ${{ steps.plan.outputs.codeql_java_version }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Check out the platform at this workflow's own commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}

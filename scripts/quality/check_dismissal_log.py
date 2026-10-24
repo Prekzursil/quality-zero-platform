@@ -59,6 +59,11 @@ ALERT_LINK = re.compile(r"^\[#[0-9]+\]\(")
 DECISION_COLUMNS = ("Query", "Decided", "Decision")
 #: A decision's date, or ``before YYYY-MM-DD`` for one inherited from before the rule.
 DECIDED = re.compile(r"^(?:before )?(\d{4}-\d{2}-\d{2})$")
+#: Only a decision that starts with this marker AUTHORIZES excluding its
+#: queries; "**Fixed in the code ..., not excluded.**" documents the opposite.
+EXCLUDED = "**Excluded"
+#: The document's marker for "no value" (Owner, Review by); never a rationale or verdict.
+MISSING = ("", "-")
 #: One backtick pair around a non-blank id with no padding inside it.
 RULE_ID = re.compile(r"^`[^`\s](?:[^`]*[^`\s])?`$")
 QUERY_ID = re.compile(r"`([^`\s](?:[^`]*[^`\s])?)`")
@@ -172,17 +177,17 @@ def _row_problems(cells: Sequence[str], seen: set, *, repo: str, today: str, lat
         problems.append(f"dismissed date {dismissed!r} is not a real YYYY-MM-DD date")
     elif dismissed > latest:
         problems.append(f"dismissed date {dismissed} is in the future")
-    if not rationale:
+    if rationale in MISSING:
         problems.append("rationale is empty")
-    if not verdict:
+    if verdict in MISSING:
         problems.append("verdict is empty")
     pending = verdict.startswith(PENDING) and _is_date(dismissed) and dismissed < POLICY_DATE
     if reason == "won't fix" and not pending:
-        if owner in ("", "-"):
+        if owner in MISSING:
             problems.append("an accepted `won't fix` names no owner")
         if not _is_date(review_by):
             problems.append(f"an accepted `won't fix` has no real review-by date (got {review_by!r})")
-    elif review_by not in ("", "-") and not _is_date(review_by):
+    elif review_by not in MISSING and not _is_date(review_by):
         problems.append(f"review-by {review_by!r} is neither '-' nor a real date")
     if _is_date(review_by):
         if _is_date(dismissed) and review_by <= dismissed:
@@ -192,19 +197,39 @@ def _row_problems(cells: Sequence[str], seen: set, *, repo: str, today: str, lat
     return problems
 
 
-def validate(text: str, *, repo: str, today: Optional[dt.date] = None) -> List[str]:
-    """Return every problem with the log in ``text`` for ``repo`` (empty when well-formed)."""
+def _today(today: Optional[dt.date]) -> dt.date:
+    return today or dt.datetime.now(dt.UTC).date()
+
+
+def _latest(day: dt.date) -> str:
+    """The newest plausible record date: one day of slack, since a record logged east of UTC can carry tomorrow."""
+    return (day + dt.timedelta(days=1)).isoformat()
+
+
+def _log_rows(text: str) -> Tuple[List[List[str]], List[str]]:
+    """The log table's rows, or the problem that stops reading it."""
     sections = _sections(text.splitlines(), LOG_HEADING)
     if not sections:
-        return ["no '## Log' or '## Log (<repo>)' section"]
+        return [], ["no '## Log' or '## Log (<repo>)' section"]
     if len(sections) > 1:
-        return [f"{len(sections)} '## Log' sections: keep one, or the rows under the others skip every check"]
-    rows, problems = _table(sections[0], COLUMNS, "log")
+        return [], [f"{len(sections)} '## Log' sections: keep one, or the rows under the others skip every check"]
+    return _table(sections[0], COLUMNS, "log")
+
+
+def logged_alerts(text: str) -> List[str]:
+    """The alert numbers in the VALIDATED log table only (none when it cannot be read)."""
+    rows, problems = _log_rows(text)
+    links = (re.match(r"^\[#([1-9][0-9]*)\]\(", cells[0]) for cells in rows if not problems and cells)
+    return [link.group(1) for link in links if link]
+
+
+def validate(text: str, *, repo: str, today: Optional[dt.date] = None) -> List[str]:
+    """Return every problem with the log in ``text`` for ``repo`` (empty when well-formed)."""
+    rows, problems = _log_rows(text)
     if problems:
         return problems
-    day = today or dt.datetime.now(dt.UTC).date()
-    # One day of slack: a dismissal logged east of UTC can carry tomorrow's UTC date.
-    latest = (day + dt.timedelta(days=1)).isoformat()
+    day = _today(today)
+    latest = _latest(day)
     seen: set = set()
     for number, cells in enumerate(rows, start=1):
         if len(cells) != len(COLUMNS):
@@ -215,7 +240,7 @@ def validate(text: str, *, repo: str, today: Optional[dt.date] = None) -> List[s
     return problems
 
 
-def _decision_row_problems(cells: Sequence[str]) -> List[str]:
+def _decision_row_problems(cells: Sequence[str], *, latest: str) -> List[str]:
     """Every contract violation of one query configuration decision."""
     if len(cells) != len(DECISION_COLUMNS):
         return [f"{len(cells)} cells, expected {len(DECISION_COLUMNS)}"]
@@ -226,7 +251,9 @@ def _decision_row_problems(cells: Sequence[str]) -> List[str]:
     match = DECIDED.match(decided)
     if not match or not _is_date(match.group(1)):
         problems.append(f"decided {decided!r} is neither a real YYYY-MM-DD date nor 'before YYYY-MM-DD'")
-    if not decision:
+    elif match.group(1) > latest:
+        problems.append(f"decided {decided!r} is in the future")
+    if decision in MISSING:
         problems.append("decision is empty")
     return problems
 
@@ -239,25 +266,36 @@ def _decision_rows(text: str) -> Tuple[List[List[str]], List[str]]:
     return _table(sections[0], DECISION_COLUMNS, "decisions") if sections else ([], [])
 
 
-def decision_problems(text: str) -> List[str]:
+def decision_problems(text: str, *, today: Optional[dt.date] = None) -> List[str]:
     """Every problem with the query configuration decisions table (none when there is no such section)."""
     rows, problems = _decision_rows(text)
+    latest = _latest(_today(today))
     for number, cells in enumerate(rows, start=1):
-        problems.extend(f"decision {number}: {problem}" for problem in _decision_row_problems(cells))
+        problems.extend(f"decision {number}: {problem}" for problem in _decision_row_problems(cells, latest=latest))
     return problems
 
 
-def documented_queries(text: str) -> set:
-    """The query ids of every WELL-FORMED decision: a malformed row documents nothing."""
+def documented_queries(text: str, *, today: Optional[dt.date] = None) -> set:
+    """The query ids of every well-formed decision that AUTHORIZES the exclusion (starts ``**Excluded``).
+
+    A malformed row documents nothing, and neither does a decision NOT to
+    exclude ("**Fixed in the code ..., not excluded.**").
+    """
     rows, problems = _decision_rows(text)
     if problems:
         return set()
-    return {query for cells in rows if not _decision_row_problems(cells) for query in QUERY_ID.findall(cells[0])}
+    latest = _latest(_today(today))
+    return {
+        query
+        for cells in rows
+        if not _decision_row_problems(cells, latest=latest) and cells[2].startswith(EXCLUDED)
+        for query in QUERY_ID.findall(cells[0])
+    }
 
 
-def undocumented_exclusions(config: Any, text: str) -> List[str]:
-    """Every CodeQL query filter in ``config`` that the decisions table in ``text`` does not list (rule 4)."""
-    documented = documented_queries(text)
+def undocumented_exclusions(config: Any, text: str, *, today: Optional[dt.date] = None) -> List[str]:
+    """Every CodeQL query filter in ``config`` that no exclusion decision in ``text`` authorizes (rule 4)."""
+    documented = documented_queries(text, today=today)
     filters = config.get("query-filters") if isinstance(config, Mapping) else None
     problems: List[str] = []
     for entry in filters or []:
@@ -270,7 +308,9 @@ def undocumented_exclusions(config: Any, text: str) -> List[str]:
                 continue
             for query in value if isinstance(value, list) else [value]:
                 if str(query) not in documented:
-                    problems.append(f"excluded query {query!r} has no row under '{DECISIONS_TITLE}'")
+                    problems.append(
+                        f"excluded query {query!r} has no '{EXCLUDED}...' decision under '{DECISIONS_TITLE}'"
+                    )
     return problems
 
 

@@ -56,24 +56,38 @@ GitHub caps the dismissal comment at 280 characters. The command below
 appends a 42-character log pointer, so keep the rationale core at **238
 characters or fewer**.
 
+The validator needs only Python and PyYAML. In QZP it is
+`scripts/quality/check_dismissal_log.py`. A governed repository fetches it at
+the platform commit its callers pin, with no QZP checkout:
+
 ```bash
+# The validator (in QZP itself: qzp_validator=scripts/quality/check_dismissal_log.py).
+sha="<the QZP commit your caller workflows pin>"
+qzp_validator="$(mktemp -d)/check_dismissal_log.py"
+curl -fsSL -o "$qzp_validator" \
+  "https://raw.githubusercontent.com/Prekzursil/quality-zero-platform/$sha/scripts/quality/check_dismissal_log.py"
+python -m pip install --quiet pyyaml
+
 # 0. Which rationale does rule 2 require? Prints "security" or "correctness".
-gh api repos/OWNER/REPO/code-scanning/alerts/NUMBER \
-  | python scripts/quality/check_dismissal_log.py --classify
+gh api repos/OWNER/REPO/code-scanning/alerts/NUMBER | python "$qzp_validator" --classify
 # 1. Add the log row first (docs/CODE-SCANNING-DISMISSALS.md).
 # 2. Dismiss with the rationale's core (<= 238 chars) and the log pointer.
 gh api -X PATCH repos/OWNER/REPO/code-scanning/alerts/NUMBER \
   -f state=dismissed \
   -f dismissed_reason="<false positive | won't fix | used in tests>" \
   -f dismissed_comment="<rationale core>. Logged: docs/CODE-SCANNING-DISMISSALS.md"
+# 3. Check the log.
+python "$qzp_validator" --repo OWNER/REPO
 ```
 
 Reviewers reject a dismissal PR that has no log row. They also reject a log
 row that breaks rule 2, or a `won't fix` row without an owner and a
-review-by date. `scripts/quality/check_dismissal_log.py --repo OWNER/NAME` checks the log's
-shape. QZP's own CI runs it on every change, through
-`tests/test_dismissal_log.py`. A governed repo runs the same command against its
-receipt; wiring it into the fleet's reusable gate is a follow-up. It checks:
+review-by date. The validator (step 3) checks the log's shape. QZP's own CI
+runs it on every change, through `tests/test_dismissal_log.py`, and
+`dismissal-log.yml` runs it every day, so a review-by date that passes fails
+CI without waiting for an unrelated commit. A governed repo runs step 3
+against its receipt; wiring it into the fleet's reusable gate is a follow-up.
+It checks:
 - one log section, with the columns and a real separator row, and one
   unbroken table: a row that lost its leading pipe, or that sits outside the
   table (before it, or cut off by a blank line), is reported rather than
@@ -81,7 +95,8 @@ receipt; wiring it into the fleet's reusable gate is a follow-up. It checks:
 - an alert link into *this* repository that matches its own number;
 - a backticked rule and a backticked `path:line`;
 - a GitHub reason and a real calendar date that is not in the future;
-- a non-empty rationale and verdict, and no duplicate alerts;
+- a rationale and a verdict (`-`, the missing-value marker, is neither), and
+  no duplicate alerts;
 - an owner plus a real review-by date on every `won't fix`. Only a row
   dismissed before this rule (2026-10-24) and marked **Re-review.** or
   **Fix.** may defer them until that review;
@@ -91,24 +106,14 @@ receipt; wiring it into the fleet's reusable gate is a follow-up. It checks:
   on a tool limitation carries one, so the dismissal cannot become permanent
   by accident;
 - the decisions table below, when present: its columns, backticked query
-  ids, a real date (or `before YYYY-MM-DD`) and a non-empty decision;
+  ids, a real date (or `before YYYY-MM-DD`) that is not in the future, and a
+  decision;
 - with `--codeql-config` (default `.github/codeql/codeql-config.yml`, skipped
-  when absent): a well-formed row in the decisions table for every query the
-  configuration excludes. A malformed row documents nothing. A filter that
-  excludes by anything other than a query id is rejected, since it could not
-  be listed one decision at a time.
-
-The script needs only Python and PyYAML, so a governed repository runs it at
-the platform commit its callers pin, without a QZP checkout:
-
-```bash
-sha="<the QZP commit your caller workflows pin>"
-tmp="$(mktemp -d)"
-curl -fsSL -o "$tmp/check_dismissal_log.py" \
-  "https://raw.githubusercontent.com/Prekzursil/quality-zero-platform/$sha/scripts/quality/check_dismissal_log.py"
-python -m pip install --quiet pyyaml
-python "$tmp/check_dismissal_log.py" --repo OWNER/NAME
-```
+  when absent): for every query the configuration excludes, a well-formed
+  decision that starts with **Excluded**. A malformed row documents nothing,
+  and neither does a decision not to exclude. A filter that excludes by
+  anything other than a query id is rejected, since it could not be listed
+  one decision at a time.
 
 ## Query configuration decisions
 
@@ -120,7 +125,7 @@ the check above fails while an excluded query id has no row.
 | Query | Decided | Decision |
 | --- | --- | --- |
 | `actions/untrusted-checkout/medium`, `actions/cache-poisoning/poisonable-step` | 2026-10-24 | **Fixed in the code by #336, not excluded.** Each reusable workflow checked out QZP's scripts at a caller-supplied `platform_ref`. Every action-pin bump re-fingerprinted those alerts, and in QZP's own `pull_request` flow the ref is the PR head. The platform is now checked out at the workflow file's own commit (`job.workflow_repository` / `job.workflow_sha`), and every alert on in-repo-called workflows, including all 7 high, is gone from main. CodeQL does not model `job.workflow_sha` yet, so 6 own-commit checkouts in externally-called reusables are still flagged. They are dismissed below as demonstrable false positives, and the steps are named so the fingerprint survives Dependabot SHA bumps. **These dismissals expire.** They rest only on CodeQL not modelling `job.workflow_sha`. Each row carries review-by 2027-01-24, and the check fails from the day after it. Once CodeQL models the property the alerts should close on their own; one that stays open is a real finding to fix. Excluding the query was considered and rejected. |
-| `py/clear-text-storage-sensitive-data`, `py/clear-text-logging-sensitive-data` | before 2026-10-24 | **Re-review (pre-policy).** One verified false positive in `scripts/quality/secrets_sync.py` (its records pass `_sanitise_audit_record`'s allow-list) led to a GLOBAL exclusion. That silences both queries for all code, not just the verified call site. |
+| `py/clear-text-storage-sensitive-data`, `py/clear-text-logging-sensitive-data` | before 2026-10-24 | **Excluded (pre-policy); under re-review.** One verified false positive in `scripts/quality/secrets_sync.py` (its records pass `_sanitise_audit_record`'s allow-list) led to a GLOBAL exclusion. That silences both queries for all code, not just the verified call site. |
 
 ## Log (quality-zero-platform)
 

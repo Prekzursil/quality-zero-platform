@@ -6,7 +6,6 @@ import ast
 import datetime as dt
 import io
 import json
-import re
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -67,8 +66,8 @@ class DismissalLogTests(unittest.TestCase):
         self.assertEqual(log.validate(DOC.read_text(encoding="utf-8"), repo=REPO), [])
 
     def test_no_logged_dismissal_can_disappear(self) -> None:
-        """The receipt only grows: every alert logged so far must stay logged."""
-        logged = set(re.findall(r"^\| \[#(\d+)\]", DOC.read_text(encoding="utf-8"), flags=re.MULTILINE))
+        """The receipt only grows: every alert logged so far must stay in the VALIDATED log table."""
+        logged = set(log.logged_alerts(DOC.read_text(encoding="utf-8")))
         recorded = {
             "25", "26", "27", "28", "29", "30", "31", "32", "57", "82", "100", "109", "110", "111", "112",
             "113", "114", "126", "127", "128", "129", "138", "139", "166", "167", "168", "169", "173",
@@ -102,7 +101,9 @@ class DismissalLogTests(unittest.TestCase):
             _row(dismissed="2026-99-99"): "is not a real YYYY-MM-DD date",
             _row(dismissed="2099-01-01"): "is in the future",
             _row(rationale=""): "rationale is empty",
+            _row(rationale="-"): "rationale is empty",
             _row(verdict=""): "verdict is empty",
+            _row(verdict="-"): "verdict is empty",
             _row(reason="won't fix", review_by="2027-01-01"): "names no owner",
             _row(reason="won't fix", owner="@owner"): "has no real review-by date",
             _row(reason="won't fix", owner="@owner", review_by="2027-02-30"): "has no real review-by date",
@@ -218,8 +219,16 @@ class DismissalLogTests(unittest.TestCase):
                 with self.assertRaises(SystemExit):
                     log.main([str(DOC)])
         self.assertIn("reason 'nope' is not one of", err.getvalue())
-        self.assertIn("excluded query 'py/undocumented' has no row", err.getvalue())
+        self.assertIn("excluded query 'py/undocumented' has no '**Excluded...' decision", err.getvalue())
         self.assertIn("--repo is required", err.getvalue())
+
+    def test_preserved_alerts_are_read_from_the_validated_log_only(self) -> None:
+        """Review finding: an '| [#25]' line under a later '## Archive' section still counted as logged."""
+        archived = _doc(_row()) + "\n## Archive\n\n| [#25](x) | moved here |\n"
+        self.assertEqual(log.logged_alerts(archived), ["7"])
+        self.assertEqual(log.logged_alerts(_doc(_row(), _row("8"))), ["7", "8"])
+        self.assertEqual(log.logged_alerts("# Doc\n\nno log\n"), [])
+        self.assertEqual(log.logged_alerts(_doc(_row(), header="| Alert | Rule |")), [])
 
     def test_the_decisions_table_is_validated_before_its_ids_count(self) -> None:
         """Review finding: a one-cell pipe row under the heading 'documented' an exclusion."""
@@ -231,8 +240,12 @@ class DismissalLogTests(unittest.TestCase):
         def decisions(*rows: str, header: str = "| Query | Decided | Decision |") -> str:
             return "\n".join(["## Query configuration decisions", "", header, "| --- | --- | --- |", *rows, ""])
 
-        good = "| `py/a`, `py/b` | before 2026-10-24 | Re-review. |"
+        good = "| `py/a`, `py/b` | before 2026-10-24 | **Excluded (pre-policy).** Re-review. |"
         self.assertEqual(log.documented_queries(decisions(good)), {"py/a", "py/b"})
+        # Review finding: a decision NOT to exclude must not authorize a later exclusion.
+        refused = "| `py/c` | 2026-10-24 | **Fixed in the code by #1, not excluded.** |"
+        self.assertEqual(log.decision_problems(decisions(good, refused)), [])
+        self.assertEqual(log.documented_queries(decisions(good, refused)), {"py/a", "py/b"})
         cases = {
             "| `py/x` |": "1 cells, expected 3",
             "| py/x | 2026-10-24 | why |": "is not a comma-separated list of backticked query ids",
@@ -240,6 +253,9 @@ class DismissalLogTests(unittest.TestCase):
             "| `py/x` | soon | why |": "is neither a real YYYY-MM-DD date nor 'before YYYY-MM-DD'",
             "| `py/x` | 2026-02-30 | why |": "is neither a real YYYY-MM-DD date nor 'before YYYY-MM-DD'",
             "| `py/x` | 2026-10-24 |  |": "decision is empty",
+            "| `py/x` | 2026-10-24 | - |": "decision is empty",
+            "| `py/x` | 2099-01-01 | **Excluded.** |": "is in the future",
+            "| `py/x` | before 2099-01-01 | **Excluded.** |": "is in the future",
         }
         for row, expected in cases.items():
             with self.subTest(row=row):
@@ -269,7 +285,20 @@ class DismissalLogTests(unittest.TestCase):
         text = DOC.read_text(encoding="utf-8")
         raw = "https://raw.githubusercontent.com/Prekzursil/quality-zero-platform/$sha/scripts/quality/check_dismissal_log.py"
         self.assertIn(raw, text)
-        self.assertIn('python "$tmp/check_dismissal_log.py" --repo OWNER/NAME', text)
+        # Review finding: the classifier step must use the fetched validator too, not a repo-local path.
+        self.assertIn('| python "$qzp_validator" --classify', text)
+        self.assertIn('python "$qzp_validator" --repo OWNER/REPO', text)
+        self.assertNotIn("| python scripts/quality/check_dismissal_log.py --classify", text)
+
+    def test_a_scheduled_run_makes_an_expired_review_by_date_fail_without_a_commit(self) -> None:
+        """Review finding: push/PR-only CI never ran the expiry check on a quiet repository."""
+        workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "dismissal-log.yml").read_text(encoding="utf-8"))
+        self.assertIn("schedule", workflow[True])
+        (job,) = workflow["jobs"].values()
+        self.assertEqual(job["permissions"], {"contents": "read"})
+        run = job["steps"][-1]
+        self.assertEqual(run["run"], 'python scripts/quality/check_dismissal_log.py --repo "$QZ_REPO"')
+        self.assertEqual(run["env"]["QZ_REPO"], "${{ github.repository }}")
 
     def test_every_query_exclusion_is_a_documented_decision(self) -> None:
         """Rule 4: a global query filter cannot land without its row in the decisions table."""
@@ -278,7 +307,9 @@ class DismissalLogTests(unittest.TestCase):
         self.assertTrue(config["query-filters"])  # the reconciliation below is not vacuous
         self.assertEqual(log.undocumented_exclusions(config, text), [])
         decisions = "## Query configuration decisions\n\n| Query | Decided | Decision |\n| --- | --- | --- |\n"
-        decisions += "| `py/kept`, `py/also` | 2026-10-24 | reason |\n\n## Log\n\n| `py/not-a-decision` |\n"
+        decisions += (
+            "| `py/kept`, `py/also` | 2026-10-24 | **Excluded.** reason |\n\n## Log\n\n| `py/not-a-decision` |\n"
+        )
         added = {
             "query-filters": [
                 {"exclude": {"id": ["py/kept", "py/new"]}},
@@ -292,8 +323,8 @@ class DismissalLogTests(unittest.TestCase):
         self.assertEqual(
             log.undocumented_exclusions(added, decisions),
             [
-                "excluded query 'py/new' has no row under '## Query configuration decisions'",
-                "excluded query 'py/not-a-decision' has no row under '## Query configuration decisions'",
+                "excluded query 'py/new' has no '**Excluded...' decision under '## Query configuration decisions'",
+                "excluded query 'py/not-a-decision' has no '**Excluded...' decision under '## Query configuration decisions'",
                 "a query filter excludes by 'tags'; exclude by query id so each decision is listed",
             ],
         )

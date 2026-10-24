@@ -36,6 +36,8 @@ jobs:
       - name: Read live drift-sync PRs
         env:
           GH_TOKEN: ${{ github.token }}
+          # Optional: lets the search see private members' drift PRs too.
+          QZ_FLEET_READ_TOKEN: ${{ secrets.CODEX_FLEET_READ_PAT }}
           QZ_OWNER: ${{ github.repository_owner }}
         run: |
           python scripts/quality/fleet_state.py --owner "$QZ_OWNER" --drift-jsonl audit/drift-sync.jsonl \

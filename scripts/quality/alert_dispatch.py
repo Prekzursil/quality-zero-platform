@@ -331,6 +331,47 @@ def close_recovered_workflow_alerts(
     return results
 
 
+def close_resolved_alerts(
+    *,
+    platform_slug: str,
+    alert_type: alerts.AlertType,
+    live_subjects: Collection[str],
+    close_comment: str,
+    unverifiable: Callable[[str], bool] = lambda _subject: False,
+    closer: Callable[..., Mapping[str, Any]] = alerts.close_alert_issue,
+    lister: Callable[..., Sequence[Mapping[str, Any]]] = alerts.list_open_alert_issues,
+    dry_run: bool = False,
+) -> List[Dict[str, Any]]:
+    """Close every open ``alert_type`` issue whose subject is no longer live.
+
+    The bypass-stale and drift-stuck detectors only OPEN alerts. Once a
+    follow-up issue closes or a drift PR merges, its subject simply leaves the
+    live set, so without this the alert stayed open forever. A subject the
+    live read could not see at all (``unverifiable``, e.g. a private member
+    without the fleet-read token) is left alone rather than closed on missing
+    evidence. ``close_comment`` may use ``{subject}``.
+    """
+    prefix = alerts.alert_issue_title(alert_type, "")
+    results: List[Dict[str, Any]] = []
+    for issue in lister(platform_slug, alert_type=alert_type):
+        title = str(issue.get("title", ""))
+        subject = title[len(prefix) :]
+        if not title.startswith(prefix) or subject in live_subjects or unverifiable(subject):
+            continue
+        results.append(
+            dict(
+                closer(
+                    platform_slug,
+                    alert_type=alert_type,
+                    subject=subject,
+                    dry_run=dry_run,
+                    close_comment=close_comment.format(subject=subject),
+                )
+            )
+        )
+    return results
+
+
 def build_triggers_from_fleet_state(
     state: Mapping[str, Any],
 ) -> List[at.AlertTrigger]:

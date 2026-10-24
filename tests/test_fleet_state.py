@@ -11,7 +11,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from typing import Any, List
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from scripts.quality import alert_dispatch, fleet_state
 
@@ -77,6 +77,22 @@ class DriftSyncPrTests(unittest.TestCase):
         triggers = alert_dispatch._drift_pr_triggers([record], now=NOW)
         self.assertEqual([t.subject for t in triggers], ["o/r#12"])
 
+    def test_the_fleet_read_pat_widens_the_search_and_is_named_in_the_scope(self) -> None:
+        """Private members' drift PRs are only visible to the fleet-read PAT; GH_TOKEN is swapped for this call alone."""
+        runner = _gh(self._prs())
+        environ = {"GH_TOKEN": "workflow", fleet_state.FLEET_READ_PAT_ENV: " pat ", "PATH": "/bin"}
+        fleet_state.drift_sync_prs("o", runner=runner, environ=environ)
+        self.assertEqual(runner.call_args.kwargs["env"]["GH_TOKEN"], "pat")
+        self.assertEqual(environ["GH_TOKEN"], "workflow")
+        self.assertEqual(fleet_state.drift_search_scope(environ), "fleet-wide (fleet-read token)")
+        for bare in ({}, {fleet_state.FLEET_READ_PAT_ENV: "  "}):
+            with self.subTest(environ=bare):
+                runner = _gh(self._prs())
+                fleet_state.drift_sync_prs("o", runner=runner, environ=bare)
+                self.assertNotIn("env", runner.call_args.kwargs)
+                self.assertIn("public repositories only", fleet_state.drift_search_scope(bare))
+        self.assertIn("Prekzursil/PrimariRo", fleet_state.PRIVATE_SLUGS)
+
     def test_a_pr_without_repository_data_keeps_an_empty_slug(self) -> None:
         """Malformed search rows degrade one field, not the whole state."""
         runner = _gh([{"number": 1, "createdAt": "2026-10-23T00:00:00Z"}])
@@ -99,13 +115,14 @@ class CliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp) / "audit" / "drift-sync.jsonl"
             stdout = io.StringIO()
-            with redirect_stdout(stdout):
+            with redirect_stdout(stdout), patch.dict(fleet_state.os.environ, {fleet_state.FLEET_READ_PAT_ENV: ""}):
                 code = fleet_state.main(
                     ["--owner", "o", "--drift-jsonl", str(out)], runner=_gh(DriftSyncPrTests()._prs())
                 )
             self.assertEqual(code, 0)
             self.assertEqual(len(out.read_text(encoding="utf-8").splitlines()), 1)
         self.assertIn("1 open drift-sync PR(s)", stdout.getvalue())
+        self.assertIn("scope: public repositories only", stdout.getvalue())
 
     def test_an_unreadable_source_exits_1_and_writes_nothing(self) -> None:
         """No file means the drift page says "No data", never "No drift entries"."""

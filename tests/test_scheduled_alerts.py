@@ -103,6 +103,19 @@ class ScheduledAlertsWorkflowTests(unittest.TestCase):
         self.assertIn('"quality-rollup/coverage-trend.json": "regression / deadline / escalation / flag"', self.text)
         self.assertIn('"audit/bump-staging-results.jsonl": "fleet-bump-fail"', self.text)
 
+    def test_resolved_bypass_and_drift_alerts_are_closed(self) -> None:
+        """A closed follow-up or merged drift PR leaves the live set; its alert must close."""
+        self.assertIn("alert_type=alerts.AlertType.BYPASS_STALE", self.text)
+        self.assertIn("alert_type=alerts.AlertType.DRIFT_STUCK", self.text)
+        self.assertIn("alert_dispatch.close_resolved_alerts(", self.text)
+        self.assertIn('unverifiable=lambda subject: drift_scope.startswith("public")', self.text)
+
+    def test_the_drift_search_may_use_the_fleet_read_pat_but_writes_keep_the_workflow_token(self) -> None:
+        """Private members' drift PRs are only visible to the fleet-read PAT."""
+        (step,) = [s for s in self.doc["jobs"]["dispatch"]["steps"] if "fleet_state" in str(s.get("run", ""))]
+        self.assertEqual(step["env"]["GH_TOKEN"], "${{ github.token }}")
+        self.assertEqual(step["env"]["QZ_FLEET_READ_TOKEN"], "${{ secrets.CODEX_FLEET_READ_PAT }}")
+
     def test_checkout_does_not_persist_credentials(self) -> None:
         """``persist-credentials: false`` — CodeQL safety."""
         steps = self.doc["jobs"]["dispatch"]["steps"]

@@ -23,6 +23,7 @@ from __future__ import absolute_import
 import argparse
 import datetime as dt
 import json
+import os
 import subprocess  # nosec B404 # noqa: S404 — gh CLI wrapper; args are controlled
 import sys
 from pathlib import Path
@@ -32,20 +33,30 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:  # pragma: no cover
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.quality.apply_drift_pr import _BRANCH_PREFIX as DRIFT_BRANCH_PREFIX  # noqa: E402
+from scripts.quality.fleet_inventory import PRIVATE_INCLUDE_SLUGS  # noqa: E402
 
 ProcessRunner = Callable[..., "subprocess.CompletedProcess[str]"]
 
 BYPASS_FOLLOWUP_LABEL = "quality-zero:break-glass-followup"
 SEARCH_LIMIT = 200
+#: The fleet-read PAT arrives here, never in GH_TOKEN: the workflow token
+#: keeps every platform write, and private members' PRs are only visible to
+#: the PAT (the same contract as the CVE sweep).
+FLEET_READ_PAT_ENV = "QZ_FLEET_READ_TOKEN"
+#: The fleet's private members: invisible to a public-only search, never "gone".
+PRIVATE_SLUGS = frozenset(PRIVATE_INCLUDE_SLUGS)
 
 
 class FleetStateError(RuntimeError):
     """A live source could not be read; the state is unknown, not empty."""
 
 
-def _gh_json(args: Sequence[str], *, runner: ProcessRunner) -> List[Mapping[str, Any]]:
-    """Run one ``gh`` listing and return its JSON array of objects; raise when it fails."""
-    completed = runner(["gh", *args], capture_output=True, text=True, check=False)  # nosec B603 — fixed argv
+def _gh_json(
+    args: Sequence[str], *, runner: ProcessRunner, env: Optional[Mapping[str, str]] = None
+) -> List[Mapping[str, Any]]:
+    """Run one ``gh`` listing (in ``env`` when given) and return its JSON array of objects; raise when it fails."""
+    extra = {} if env is None else {"env": dict(env)}
+    completed = runner(["gh", *args], capture_output=True, text=True, check=False, **extra)  # nosec B603
     if completed.returncode != 0:
         raise FleetStateError(f"`gh {' '.join(args[:2])}` exited {completed.returncode}: {completed.stderr.strip()}")
     try:
@@ -93,11 +104,30 @@ def bypass_followups(platform_slug: str, *, runner: ProcessRunner = subprocess.r
     ]
 
 
-def drift_sync_prs(owner: str, *, runner: ProcessRunner = subprocess.run) -> List[Dict[str, Any]]:
+def fleet_read_env(environ: Mapping[str, str]) -> Optional[Dict[str, str]]:
+    """``GH_TOKEN`` swapped for the fleet-read PAT when one is set, else ``None`` (public repos only)."""
+    token = str(environ.get(FLEET_READ_PAT_ENV, "")).strip()
+    return {**environ, "GH_TOKEN": token} if token else None
+
+
+def drift_search_scope(environ: Mapping[str, str]) -> str:
+    """What the drift search can see: say so wherever its result is reported."""
+    if fleet_read_env(environ) is not None:
+        return "fleet-wide (fleet-read token)"
+    return "public repositories only (no CODEX_FLEET_READ_PAT: private members' drift PRs are not visible)"
+
+
+def drift_sync_prs(
+    owner: str,
+    *,
+    runner: ProcessRunner = subprocess.run,
+    environ: Optional[Mapping[str, str]] = None,
+) -> List[Dict[str, Any]]:
     """Every OPEN drift-sync pull request across ``owner``'s repositories, as detector input.
 
     GitHub search's ``head:`` qualifier matches branch names that START with
-    the value, which is exactly the drift-sync branch prefix.
+    the value, which is exactly the drift-sync branch prefix. With the
+    fleet-read PAT the search also sees private members.
     """
     prs = _gh_json(
         [
@@ -115,6 +145,7 @@ def drift_sync_prs(owner: str, *, runner: ProcessRunner = subprocess.run) -> Lis
             f"head:{DRIFT_BRANCH_PREFIX}",
         ],
         runner=runner,
+        env=fleet_read_env(os.environ if environ is None else environ),
     )
     return [
         {
@@ -151,7 +182,7 @@ def main(argv: Optional[Sequence[str]] = None, *, runner: ProcessRunner = subpro
     out = Path(args.drift_jsonl)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(to_jsonl(records), encoding="utf-8", newline="\n")
-    print(f"fleet_state: {len(records)} open drift-sync PR(s) -> {out}")
+    print(f"fleet_state: {len(records)} open drift-sync PR(s) -> {out}; scope: {drift_search_scope(os.environ)}")
     return 0
 
 

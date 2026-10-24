@@ -69,6 +69,9 @@ jobs:
           # (which defaults to a dry run).
           QZ_DRY_RUN: ${{ github.event_name == 'schedule' && 'false' || inputs.dry_run }}
           GH_TOKEN: ${{ github.token }}
+          # The optional fleet-read PAT, ONLY for the cross-repository drift
+          # search; every issue write keeps the workflow token.
+          QZ_FLEET_READ_TOKEN: ${{ secrets.CODEX_FLEET_READ_PAT }}
         run: |
           python - <<'PY'
           import datetime as dt
@@ -116,6 +119,7 @@ jobs:
           # read raises and fails the run - never a silent all-clear.
           bypass_issues = fleet_state.bypass_followups(PLATFORM)
           drift_prs = fleet_state.drift_sync_prs(PLATFORM.split("/", 1)[0])
+          drift_scope = fleet_state.drift_search_scope(os.environ)
 
           active = alert_dispatch.fetch_active_workflows(PLATFORM)
           state = {
@@ -146,6 +150,25 @@ jobs:
               active_workflows={str(workflow.get("name", "")) for workflow in active},
               dry_run=dry_run,
           )
+          # A closed follow-up / merged drift PR leaves the live set: close its alert.
+          private = {slug + "#" for slug in fleet_state.PRIVATE_SLUGS}
+          resolved = alert_dispatch.close_resolved_alerts(
+              platform_slug=PLATFORM,
+              alert_type=alerts.AlertType.BYPASS_STALE,
+              live_subjects={f"{i['slug']}#{i['issue_number']}" for i in bypass_issues},
+              close_comment="The break-glass follow-up `{subject}` is no longer open; closing.",
+              dry_run=dry_run,
+          ) + alert_dispatch.close_resolved_alerts(
+              platform_slug=PLATFORM,
+              alert_type=alerts.AlertType.DRIFT_STUCK,
+              live_subjects={f"{p['slug']}#{p['pr_number']}" for p in drift_prs},
+              close_comment="The drift-sync PR `{subject}` is no longer open; closing.",
+              # Without the fleet-read PAT a private member's PR is invisible, not gone.
+              unverifiable=lambda subject: drift_scope.startswith("public") and any(
+                  subject.startswith(prefix) for prefix in private
+              ),
+              dry_run=dry_run,
+          )
 
           summary = os.environ.get("GITHUB_STEP_SUMMARY")
           if summary:
@@ -156,7 +179,8 @@ jobs:
                   fh.write(f"- Issues opened/reused: {len(results)}\n")
                   fh.write(f"- QZP workflows watched: {len(state['workflow_runs'])}\n")
                   fh.write(f"- Open break-glass follow-ups (live): {len(bypass_issues)}\n")
-                  fh.write(f"- Open drift-sync PRs (live): {len(drift_prs)}\n")
+                  fh.write(f"- Open drift-sync PRs (live, {drift_scope}): {len(drift_prs)}\n")
+                  fh.write(f"- Resolved bypass/drift alerts closed: {sum(1 for c in resolved if c.get('closed'))}\n")
                   for path, detectors in missing.items():
                       fh.write(f"- NOT evaluated ({detectors}): no `{path}` - nothing produces it yet\n")
                   fh.write(f"- Recovered workflow alerts closed: {sum(1 for c in closed if c.get('closed'))}\n")

@@ -62,6 +62,25 @@ class WorkflowContractTests(unittest.TestCase):
                             if settings.get("path") != "audit-store":
                                 self.assertEqual(settings["ref"], "${{ job.workflow_sha }}")
 
+    def test_codecov_skips_dependabot_prs_visibly_instead_of_failing(self) -> None:
+        """A Dependabot PR has no CODECOV_TOKEN; a tokenless upload never lands, so the flag check failed them all."""
+        doc = yaml.safe_load(
+            (ROOT / ".github" / "workflows" / "reusable-codecov-analytics.yml").read_text(encoding="utf-8")
+        )
+        job = doc["jobs"]["codecov-analytics"]
+        self.assertEqual(
+            job["env"]["CODECOV_UPLOADABLE"],
+            "${{ secrets.CODECOV_TOKEN != '' || github.event.pull_request.user.login != 'dependabot[bot]' }}",
+        )
+        steps = {step.get("name"): step for step in job["steps"]}
+        self.assertEqual(
+            steps["Upload coverage to Codecov (per-flag split)"]["if"], "${{ env.CODECOV_UPLOADABLE == 'true' }}"
+        )
+        self.assertEqual(steps["Validate Codecov flags"]["if"], "${{ always() && env.CODECOV_UPLOADABLE == 'true' }}")
+        notice = steps["Codecov upload skipped (Dependabot PR, no token)"]
+        self.assertEqual(notice["if"], "${{ env.CODECOV_UPLOADABLE != 'true' }}")
+        self.assertIn("::notice title=Codecov upload skipped::", notice["run"])
+
     def test_no_step_gates_on_its_own_env(self) -> None:
         """A step's own env does not exist yet when its `if:` is evaluated.
 

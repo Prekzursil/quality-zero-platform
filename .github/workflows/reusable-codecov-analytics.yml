@@ -38,6 +38,14 @@ jobs:
   codecov-analytics:
     name: Codecov Analytics
     runs-on: ${{ inputs.runner }}
+    # A Dependabot PR gets no Actions secrets, so CODECOV_TOKEN is empty, and
+    # Codecov rejects a tokenless upload from a non-fork branch: the flags
+    # never land and the flag check failed every Dependabot PR fleet-wide.
+    # There the upload and its check are skipped VISIBLY. Coverage itself is
+    # still enforced by the lean gate, and analytics resume on the merge push.
+    # (Job env: a step's own env is invisible to its `if:`.)
+    env:
+      CODECOV_UPLOADABLE: ${{ secrets.CODECOV_TOKEN != '' || github.event.pull_request.user.login != 'dependabot[bot]' }}
     permissions:
       contents: read
       id-token: write
@@ -134,7 +142,12 @@ jobs:
               cmd = ["bash", "-lc", command]
           subprocess.run(cmd, check=True)
           PY
+      - name: Codecov upload skipped (Dependabot PR, no token)
+        if: ${{ env.CODECOV_UPLOADABLE != 'true' }}
+        run: |
+          echo "::notice title=Codecov upload skipped::Dependabot PRs receive no Actions secrets, so CODECOV_TOKEN is empty and Codecov rejects tokenless uploads from non-fork branches. Coverage is still enforced by the lean gate; Codecov analytics resume on the merge push."
       - name: Upload coverage to Codecov (per-flag split)
+        if: ${{ env.CODECOV_UPLOADABLE == 'true' }}
         # QZP v2 Phase 2: loop once per ``coverage.inputs[]`` entry so
         # Codecov records each file under its own flag instead of
         # merging them into a single Python-only blob. See docs/QZP-V2-
@@ -229,7 +242,7 @@ jobs:
         # the run: script) to avoid the script-injection class Semgrep
         # flags. ``profile.json`` carries the declared ``coverage.inputs``
         # that the validator cross-checks against Codecov's API report.
-        if: always()
+        if: ${{ always() && env.CODECOV_UPLOADABLE == 'true' }}
         shell: bash
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

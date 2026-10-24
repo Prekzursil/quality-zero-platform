@@ -12,10 +12,14 @@ SARIF producer that feeds GitHub code scanning (opengrep, zizmor, ...).
    as a way to reach a green badge or an "always green" target.
 2. **Every dismissal carries a written rationale** that is specific to the
    finding:
-   - **Security findings** (anything with a `security-severity`): name *why
-     the alert cannot be exploited in that repository's context*, that is,
-     which input the finding is about, who controls it, and what it can
-     reach. "Not exploitable" or "by design" alone is not a rationale.
+   - **Security findings**: name *why the alert cannot be exploited in that
+     repository's context*, that is, which input the finding is about, who
+     controls it, and what it can reach. "Not exploitable" or "by design"
+     alone is not a rationale. Whichever tool raised it, a finding is a
+     security finding when it has a security severity, a `security`, CWE or
+     OWASP tag, or comes from a security-only scanner (Bandit, gitleaks,
+     Grype, OSV-Scanner, Trivy, zizmor). A Semgrep result tagged only
+     `security` and `CWE-95` counts. When in doubt, treat it as one.
    - **Correctness and maintainability findings** (unused code, import
      style, ...): name why the flagged construct is intended. For example,
      "fixture of the anti-pattern `<generator>` rewrites; its test asserts
@@ -48,6 +52,9 @@ appends a 42-character log pointer, so keep the rationale core at **238
 characters or fewer**.
 
 ```bash
+# 0. Which rationale does rule 2 require? Prints "security" or "correctness".
+gh api repos/OWNER/REPO/code-scanning/alerts/NUMBER \
+  | python scripts/quality/check_dismissal_log.py --classify
 # 1. Add the log row first (docs/CODE-SCANNING-DISMISSALS.md).
 # 2. Dismiss with the rationale's core (<= 238 chars) and the log pointer.
 gh api -X PATCH repos/OWNER/REPO/code-scanning/alerts/NUMBER \
@@ -67,17 +74,22 @@ receipt; wiring it into the fleet's reusable gate is a follow-up. It checks:
   than skipped;
 - an alert link into *this* repository that matches its own number;
 - a backticked rule and a backticked `path:line`;
-- a GitHub reason and a real calendar date;
+- a GitHub reason and a real calendar date that is not in the future;
 - a non-empty rationale and verdict, and no duplicate alerts;
 - an owner plus a real review-by date on every `won't fix`. Only a row
   dismissed before this rule (2026-10-24) and marked **Re-review.** or
-  **Fix.** may defer them until that review.
+  **Fix.** may defer them until that review;
+- with `--codeql-config` (default `.github/codeql/codeql-config.yml`, skipped
+  when absent): a row in the decisions table below for every query the
+  configuration excludes. A filter that excludes by anything other than a
+  query id is rejected, since it could not be listed one decision at a time.
 
 ## Query configuration decisions
 
 Rule 4 also covers a dismissal that recurs over *time*: fix it once in the
 query configuration (`.github/codeql/codeql-config.yml`, with the reason next
-to the filter) or, better, in the code. Every decision is listed here.
+to the filter) or, better, in the code. Every decision is listed here, and
+the check above fails while an excluded query id has no row.
 
 | Query | Decided | Decision |
 | --- | --- | --- |

@@ -50,13 +50,13 @@ jobs:
       short_sha: ${{ steps.naming.outputs.short_sha }}
     steps:
       - name: Check out the platform at this workflow's own commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
           path: platform
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
       - name: Install platform dependencies
@@ -112,18 +112,18 @@ jobs:
         run: |
           echo "Retry budget exhausted on run attempt ${GITHUB_RUN_ATTEMPT} (max ${MAX_ATTEMPTS})." >&2
           exit 1
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           path: repo
           persist-credentials: false
       - name: Check out the platform at this workflow's own commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
           path: platform
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
       - name: Install platform dependencies
@@ -148,7 +148,7 @@ jobs:
             --bootstrap-env-var CODEX_AUTH_JSON \
             --out-json "$RUNNER_TEMP/codex-auth.json"
       - name: Download quality-rollup artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: quality-rollup
           path: "${{ runner.temp }}/quality-rollup"
@@ -178,9 +178,9 @@ jobs:
           TARGET_SHA: ${{ inputs.sha || github.sha }}
           ACTIONS_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          CANONICAL_ARG=""
+          canonical_args=()
           if [ -f "$RUNNER_TEMP/quality-rollup/canonical.json" ]; then
-            CANONICAL_ARG="--canonical-json $RUNNER_TEMP/quality-rollup/canonical.json"
+            canonical_args=(--canonical-json "$RUNNER_TEMP/quality-rollup/canonical.json")
           fi
           python platform/scripts/quality/render_codex_prompt.py \
             --repo-slug "$REPO_SLUG" \
@@ -189,7 +189,7 @@ jobs:
             --failure-context "$FAILURE_CONTEXT" \
             --artifact "Actions run: $ACTIONS_RUN_URL" \
             --artifact "Target SHA: $TARGET_SHA" \
-            $CANONICAL_ARG \
+            "${canonical_args[@]}" \
             --output "$RUNNER_TEMP/remediation-prompt.md"
       - name: Run Codex on the trusted private runner
         run: |
@@ -239,7 +239,7 @@ jobs:
           echo "Post-remediation blocked-paths check passed."
       - name: Upload Codex execution artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: codex-remediation-artifacts
           path: |

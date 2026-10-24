@@ -22,7 +22,7 @@ jobs:
       actions: read
       contents: read
       security-events: write
-    uses: ./.github/workflows/reusable-codeql.yml
+    uses: ./.github/workflows/reusable-codeql.yml # zizmor: ignore[self-repository]
     with:
       repo_slug: ${{ github.repository }}
       event_name: ${{ github.event_name }}

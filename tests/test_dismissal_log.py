@@ -282,6 +282,10 @@ class DismissalLogTests(unittest.TestCase):
         self.assertLessEqual(
             imported, {"__future__", "argparse", "datetime", "json", "re", "sys", "pathlib", "typing", "yaml"}
         )
+        # Review finding: governed repos run it on Python 3.9/3.10 - no 3.11+ syntax or datetime.UTC.
+        source = (ROOT / "scripts" / "quality" / "check_dismissal_log.py").read_text(encoding="utf-8")
+        ast.parse(source, feature_version=(3, 9))
+        self.assertNotIn("dt.UTC", source)
         text = DOC.read_text(encoding="utf-8")
         raw = "https://raw.githubusercontent.com/Prekzursil/quality-zero-platform/$sha/scripts/quality/check_dismissal_log.py"
         self.assertIn(raw, text)
@@ -291,14 +295,59 @@ class DismissalLogTests(unittest.TestCase):
         self.assertNotIn("| python scripts/quality/check_dismissal_log.py --classify", text)
 
     def test_a_scheduled_run_makes_an_expired_review_by_date_fail_without_a_commit(self) -> None:
-        """Review finding: push/PR-only CI never ran the expiry check on a quiet repository."""
+        """Review findings: push/PR-only CI never ran the expiry check, nor saw a UI dismissal without a row."""
         workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "dismissal-log.yml").read_text(encoding="utf-8"))
         self.assertIn("schedule", workflow[True])
         (job,) = workflow["jobs"].values()
-        self.assertEqual(job["permissions"], {"contents": "read"})
-        run = job["steps"][-1]
-        self.assertEqual(run["run"], 'python scripts/quality/check_dismissal_log.py --repo "$QZ_REPO"')
-        self.assertEqual(run["env"]["QZ_REPO"], "${{ github.repository }}")
+        self.assertEqual(job["permissions"], {"contents": "read", "security-events": "read"})
+        listing, check = job["steps"][-2:]
+        self.assertIn("code-scanning/alerts?state=dismissed", listing["run"])
+        self.assertIn("--paginate", listing["run"])
+        self.assertIn('> "$RUNNER_TEMP/dismissed.jsonl"', listing["run"])
+        self.assertEqual(
+            check["run"],
+            'python scripts/quality/check_dismissal_log.py --repo "$QZ_REPO" --dismissed-jsonl "$RUNNER_TEMP/dismissed.jsonl"',
+        )
+        self.assertEqual(check["env"]["QZ_REPO"], "${{ github.repository }}")
+
+    def test_every_dismissal_on_github_has_a_log_row_with_its_reason(self) -> None:
+        """Review finding: a dismissal made in the UI without a row is the event the policy exists to prevent."""
+        text = _doc(_row(), _row("8", reason="won't fix", owner="@o", review_by="2027-01-01"))
+        dismissed = [
+            {"number": 7, "dismissed_reason": "false positive"},
+            {"number": 8, "dismissed_reason": "false positive"},
+            {"number": 9, "dismissed_reason": "used in tests"},
+        ]
+        self.assertEqual(
+            log.unlogged_dismissals(text, dismissed),
+            [
+                "alert #8 is dismissed on GitHub as 'false positive' but logged as \"won't fix\"",
+                "alert #9 is dismissed on GitHub (used in tests) but has no log row",
+            ],
+        )
+        self.assertEqual(log.unlogged_dismissals("# Doc\n", dismissed), [])  # validate() reports the log itself
+        self.assertEqual(
+            log.unlogged_dismissals(_doc("| [#7](x) | too | few |"), dismissed[:1]),
+            ["alert #7 is dismissed on GitHub (false positive) but has no log row"],
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            listing = Path(tmp) / "dismissed.jsonl"
+            listing.write_text('{"number": 99, "dismissed_reason": "false positive"}\n\n', encoding="utf-8")
+            err = io.StringIO()
+            with redirect_stderr(err):
+                code = log.main(
+                    [str(DOC), "--repo", REPO, "--codeql-config", str(CONFIG), "--dismissed-jsonl", str(listing)]
+                )
+        self.assertEqual(code, 1)
+        self.assertIn("alert #99 is dismissed on GitHub (false positive) but has no log row", err.getvalue())
+
+    def test_a_row_without_its_closing_pipe_is_rejected_not_truncated(self) -> None:
+        """Review finding: '[1:-1]' turned a verdict '**Re-review.**X' into the exact pending marker."""
+        open_row = _row("8", reason="won't fix", dismissed="2026-04-27", verdict="**Re-review.**X").rstrip("|").rstrip()
+        (problem,) = _check(_doc(_row(), open_row))
+        self.assertIn("without its closing '|'", problem)
+        self.assertEqual(log._cells("| a | b"), ["a", "b"])  # the last character survives
+        self.assertEqual(log._cells("| a | b \\|"), ["a", "b |"])  # an escaped pipe is content, not a delimiter
 
     def test_every_query_exclusion_is_a_documented_decision(self) -> None:
         """Rule 4: a global query filter cannot land without its row in the decisions table."""
@@ -369,7 +418,7 @@ class DismissalLogTests(unittest.TestCase):
             with patch("sys.stdin", io.StringIO(alert)), redirect_stdout(out):
                 self.assertEqual(log.main(["--classify"]), 0)
             self.assertEqual(out.getvalue(), expected)
-        for broken in ("not json", "[]"):
+        for broken in ("not json", "[]", '{"message": "Not Found"}'):
             with patch("sys.stdin", io.StringIO(broken)), redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
                 log.main(["--classify"])
 

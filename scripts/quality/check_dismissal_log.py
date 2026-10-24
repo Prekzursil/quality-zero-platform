@@ -15,7 +15,13 @@ itself well-formed so the audit trail cannot drift silently:
 * a review-by date, on any row, is after the dismissal and has not passed:
   a dismissal whose justification can expire fails until it is re-reviewed;
 * the "Query configuration decisions" table (when present) is well-formed,
-  and every query the CodeQL configuration excludes has a well-formed row.
+  and every query the CodeQL configuration excludes has a well-formed row;
+* with ``--dismissed-jsonl`` (GitHub's dismissed alerts), every alert
+  dismissed on GitHub has a log row with the same reason: a dismissal made
+  in the UI without a row fails.
+
+It runs standalone (Python 3.9+ and PyYAML), so a governed repository can
+fetch it at a pinned platform commit.
 
 ``--classify`` reads one code-scanning alert (``gh api .../alerts/N``) on stdin
 and prints which rationale rule 2 requires for it: ``security`` or
@@ -30,7 +36,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import yaml
 
@@ -56,6 +62,8 @@ SEPARATOR = re.compile(r"^:?-{3,}:?$")
 UNESCAPED_PIPE = re.compile(r"(?<!\\)\|")
 #: An alert link opening a line: a log row that lost its leading pipe.
 ALERT_LINK = re.compile(r"^\[#[0-9]+\]\(")
+#: The alert number an Alert cell links.
+ALERT_NUMBER = re.compile(r"^\[#([1-9][0-9]*)\]\(")
 DECISION_COLUMNS = ("Query", "Decided", "Decision")
 #: A decision's date, or ``before YYYY-MM-DD`` for one inherited from before the rule.
 DECIDED = re.compile(r"^(?:before )?(\d{4}-\d{2}-\d{2})$")
@@ -83,9 +91,21 @@ SECURITY_TAG = re.compile(r"^(?:security$|external/cwe/|cwe-|owasp)", re.IGNOREC
 SECURITY_TOOLS = frozenset({"bandit", "gitleaks", "grype", "osv-scanner", "trivy", "zizmor"})
 
 
+def _closed(line: str) -> bool:
+    """A table row that ends with its own (unescaped) closing pipe."""
+    stripped = line.strip()
+    return stripped.endswith("|") and not stripped.endswith("\\|")
+
+
 def _cells(line: str) -> List[str]:
-    """Split one markdown table row into stripped cells (escaped pipes stay inside a cell)."""
-    body = line.strip()[1:-1]
+    """Split one markdown table row into stripped cells (escaped pipes stay inside a cell).
+
+    Only real delimiters are removed: a row without its closing pipe keeps
+    its last character (``_table`` rejects such a row anyway).
+    """
+    body = line.strip()
+    body = body[1:] if body.startswith("|") else body
+    body = body[:-1] if _closed(body) else body
     return [cell.replace("\\|", "|").strip() for cell in re.split(r"(?<!\\)\|", body)]
 
 
@@ -144,6 +164,9 @@ def _table(section: Sequence[str], columns: Sequence[str], name: str) -> Tuple[L
     stray = next((line for line in block if not line.strip().startswith("|")), None)
     if stray is not None:
         return [], [f"the {name} table has a row that is not a |-delimited table row: {stray.strip()[:60]!r}"]
+    open_row = next((line for line in table if not _closed(line)), None)
+    if open_row is not None:
+        return [], [f"the {name} table has a row without its closing '|': {open_row[-60:]!r}"]
     outside = next((line for line in [*section[:first], *section[first + len(block) :]] if _row_like(line)), None)
     if outside is not None:
         return [], [f"a row outside the {name} table (a blank line ends a table): {outside.strip()[:60]!r}"]
@@ -198,7 +221,8 @@ def _row_problems(cells: Sequence[str], seen: set, *, repo: str, today: str, lat
 
 
 def _today(today: Optional[dt.date]) -> dt.date:
-    return today or dt.datetime.now(dt.UTC).date()
+    # timezone.utc, not datetime.UTC (3.11+): governed repos run this on 3.9 and 3.10.
+    return today or dt.datetime.now(dt.timezone.utc).date()  # noqa: UP017
 
 
 def _latest(day: dt.date) -> str:
@@ -219,8 +243,32 @@ def _log_rows(text: str) -> Tuple[List[List[str]], List[str]]:
 def logged_alerts(text: str) -> List[str]:
     """The alert numbers in the VALIDATED log table only (none when it cannot be read)."""
     rows, problems = _log_rows(text)
-    links = (re.match(r"^\[#([1-9][0-9]*)\]\(", cells[0]) for cells in rows if not problems and cells)
+    links = (ALERT_NUMBER.match(cells[0]) for cells in rows if not problems and cells)
     return [link.group(1) for link in links if link]
+
+
+def unlogged_dismissals(text: str, dismissed: Sequence[Mapping[str, Any]]) -> List[str]:
+    """Every alert GitHub reports dismissed that the log does not record, or records with another reason.
+
+    ``dismissed``: GitHub's dismissed alerts (``number``, ``dismissed_reason``).
+    A log that cannot be read reconciles nothing; ``validate`` says why.
+    """
+    rows, problems = _log_rows(text)
+    if problems:
+        return []
+    logged: Dict[str, str] = {}
+    for cells in rows:
+        match = ALERT_NUMBER.match(cells[0]) if len(cells) == len(COLUMNS) else None
+        if match:
+            logged[match.group(1)] = cells[3]
+    found: List[str] = []
+    for alert in dismissed:
+        number, reason = str(alert.get("number", "")), str(alert.get("dismissed_reason") or "")
+        if number not in logged:
+            found.append(f"alert #{number} is dismissed on GitHub ({reason}) but has no log row")
+        elif logged[number] != reason:
+            found.append(f"alert #{number} is dismissed on GitHub as {reason!r} but logged as {logged[number]!r}")
+    return found
 
 
 def validate(text: str, *, repo: str, today: Optional[dt.date] = None) -> List[str]:
@@ -344,6 +392,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         default=".github/codeql/codeql-config.yml",
         help="CodeQL config whose every query exclusion must be a listed decision (skipped when absent)",
     )
+    parser.add_argument(
+        "--dismissed-jsonl",
+        default="",
+        help="GitHub's dismissed alerts, one {number, dismissed_reason} per line: each must have a log row",
+    )
     parser.add_argument("--classify", action="store_true", help="classify the code-scanning alert JSON on stdin")
     args = parser.parse_args(argv)
     if args.classify:
@@ -351,14 +404,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             alert = json.load(sys.stdin)
         except json.JSONDecodeError:
             alert = None
-        if not isinstance(alert, Mapping):
-            parser.error("--classify reads one code-scanning alert as JSON on stdin")
+        # An API error body ({"message": "Not Found"}) is no alert: never classify it.
+        if not isinstance(alert, Mapping) or not isinstance(alert.get("rule"), Mapping):
+            parser.error("--classify reads one code-scanning alert (with its rule) as JSON on stdin")
         print("security" if is_security_finding(alert) else "correctness")
         return 0
     if not args.repo:
         parser.error("--repo is required to validate a log")
     text = Path(args.path).read_text(encoding="utf-8")
     problems = [f"{args.path}: {problem}" for problem in validate(text, repo=args.repo) + decision_problems(text)]
+    if args.dismissed_jsonl:
+        lines = Path(args.dismissed_jsonl).read_text(encoding="utf-8").splitlines()
+        dismissed = [json.loads(line) for line in lines if line.strip()]
+        problems += [f"{args.path}: {problem}" for problem in unlogged_dismissals(text, dismissed)]
     config = Path(args.codeql_config)
     if config.is_file():
         loaded = yaml.safe_load(config.read_text(encoding="utf-8"))

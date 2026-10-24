@@ -56,7 +56,7 @@ GitHub caps the dismissal comment at 280 characters. The command below
 appends a 42-character log pointer, so keep the rationale core at **238
 characters or fewer**.
 
-The validator needs only Python and PyYAML. In QZP it is
+The validator needs only Python (3.9 or later) and PyYAML. In QZP it is
 `scripts/quality/check_dismissal_log.py`. A governed repository fetches it at
 the platform commit its callers pin, with no QZP checkout:
 
@@ -85,7 +85,9 @@ row that breaks rule 2, or a `won't fix` row without an owner and a
 review-by date. The validator (step 3) checks the log's shape. QZP's own CI
 runs it on every change, through `tests/test_dismissal_log.py`, and
 `dismissal-log.yml` runs it every day, so a review-by date that passes fails
-CI without waiting for an unrelated commit. A governed repo runs step 3
+CI without waiting for an unrelated commit. That daily run also reconciles
+the log with GitHub (`--dismissed-jsonl`): an alert dismissed in the UI
+without a log row, or with another reason, fails it. A governed repo runs step 3
 against its receipt; wiring it into the fleet's reusable gate is a follow-up.
 It checks:
 - one log section, with the columns and a real separator row, and one

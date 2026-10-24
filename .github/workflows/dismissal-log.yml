@@ -3,8 +3,9 @@ name: Dismissal Log
 # The dismissal log's review-by dates are CI triggers: a dismissal whose
 # justification can expire fails the check from the day after its date. A
 # date passes without a commit, so this runs the validator every day too.
-# Three red runs in a row open an alert:workflow-failing issue
-# (scheduled-alerts.yml).
+# It also reconciles the log with GitHub: an alert dismissed in the UI
+# without a log row (or with another reason) fails. Three red runs in a row
+# open an alert:workflow-failing issue (scheduled-alerts.yml).
 
 permissions: {}
 
@@ -19,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      security-events: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -28,7 +30,14 @@ jobs:
           python-version: "3.12"
       - name: Install the validator's one dependency
         run: python -m pip install -r requirements-dev.txt
+      - name: List the alerts dismissed on GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+          QZ_REPO: ${{ github.repository }}
+        run: |
+          gh api --paginate "repos/$QZ_REPO/code-scanning/alerts?state=dismissed&per_page=100" \
+            --jq '.[] | {number, dismissed_reason}' > "$RUNNER_TEMP/dismissed.jsonl"
       - name: Check the dismissal log
         env:
           QZ_REPO: ${{ github.repository }}
-        run: python scripts/quality/check_dismissal_log.py --repo "$QZ_REPO"
+        run: python scripts/quality/check_dismissal_log.py --repo "$QZ_REPO" --dismissed-jsonl "$RUNNER_TEMP/dismissed.jsonl"

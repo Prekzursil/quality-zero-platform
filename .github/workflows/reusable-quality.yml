@@ -1116,11 +1116,14 @@ jobs:
 
           This module turns ``git ls-files`` output into the full project plan:
 
-          * every ``package.json`` outside vendored / build trees is a project;
+          * every ``package.json`` outside vendored / build trees and outside fixture /
+            test-data trees (``fixtures/``, ``__fixtures__/``, ``testdata/``,
+            ``__mocks__/``...: a manifest there is test INPUT, not a runnable package) is
+            a project;
           * every JS/TS test file is attributed to its DEEPEST enclosing project. A test
-            file is a ``*.test.*`` / ``*.spec.*`` file, anything under ``__tests__/``, or
-            (Mocha-style layouts) a JS/TS file under a ``test/`` or ``tests/`` directory
-            inside a project;
+            file is a ``*.test.*`` / ``*.spec.*`` / ``*.cy.*`` (Cypress) file, anything
+            under ``__tests__/``, or (Mocha-style layouts) a JS/TS file under a ``test/``
+            or ``tests/`` directory inside a project - never a file in a fixture tree;
           * a project that the root ``package.json`` ``workspaces`` (or a root
             ``pnpm-workspace.yaml``) declares is marked as a workspace member, so the
             lane can say why a root workspace run does not count for it.
@@ -1130,16 +1133,20 @@ jobs:
 
               <dir>\t<has_tests: yes|no>\t<workspace_member: yes|no>
 
-          ``has_tests`` is the project's OWN test files. Every project with tests is
-          measured by its OWN coverage lane, workspace members included: a root
-          workspace run can show that a member's code was covered, never that the
-          member's own tests ran (a root ``jest src --coverage`` that merely imports the
-          member covers its code and runs none of its tests), and a coverage report on
-          disk may predate the run. A member therefore needs its own ``test:coverage``.
+          ``has_tests`` is the project's OWN test files. The lane runs every project
+          that DECLARES a coverage lane, whatever this says (no file-name heuristic may
+          decide that a declared runner has nothing to run); ``has_tests`` decides only
+          what a project WITHOUT a lane is: unmeasured (it has tests) or nothing to
+          measure. Every project with tests needs its OWN lane, workspace members
+          included: a root workspace run can show that a member's code was covered,
+          never that the member's own tests ran (a root ``jest src --coverage`` that
+          merely imports the member covers its code and runs none of its tests), and a
+          coverage report on disk may predate the run. A member therefore needs its own
+          ``test:coverage``.
 
-          ``*.test.*`` / ``*.spec.*`` / ``__tests__`` files that belong to no project at
-          all are reported on stderr and, with ``--orphans-out``, written to a file so the
-          lane can fail on them: no coverage lane ever runs them. A file under a
+          ``*.test.*`` / ``*.spec.*`` / ``*.cy.*`` / ``__tests__`` files that belong to
+          no project at all are reported on stderr and, with ``--orphans-out``, written to
+          a file so the lane can fail on them: no coverage lane ever runs them. A file under a
           ``test/`` directory outside every project is not an orphan: outside a JS/TS
           project that name says nothing about JavaScript tests.
 
@@ -1160,11 +1167,14 @@ jobs:
           VENDORED = re.compile(r"(^|/)(node_modules|dist|out|build|\.venv|vendor)/")
           """Trees that are never first-party projects or first-party tests."""
 
-          JSTS_TEST = re.compile(r"(\.(test|spec)\.([cm]?[jt]s|[jt]sx)$)|((^|/)__tests__/.+\.([cm]?[jt]s|[jt]sx)$)")
-          """A JS/TS test file by name: ``*.test.*`` / ``*.spec.*`` or anything under ``__tests__/``."""
+          JSTS_TEST = re.compile(r"(\.(test|spec|cy)\.([cm]?[jt]s|[jt]sx)$)|((^|/)__tests__/.+\.([cm]?[jt]s|[jt]sx)$)")
+          """A JS/TS test file by name: ``*.test.*`` / ``*.spec.*`` / ``*.cy.*`` or anything under ``__tests__/``."""
 
           JSTS_TEST_DIR = re.compile(r"(^|/)tests?/.+\.([cm]?[jt]s|[jt]sx)$")
           """A JS/TS file under a ``test/`` or ``tests/`` directory: Mocha-style layouts (``test/smoke.js``)."""
+
+          FIXTURES = re.compile(r"(^|/)(fixtures?|__fixtures__|testdata|test-data|__mocks__)/")
+          """Test-data trees: their files are inputs, never tests, and their package.json files are never projects."""
 
           ROOT = "."
 
@@ -1172,10 +1182,10 @@ jobs:
 
 
           def project_dirs(paths: Iterable[str]) -> List[str]:
-              """Return every project directory: the directory of each first-party package.json."""
+              """Return every project directory: the directory of each first-party, non-fixture package.json."""
               dirs = set()
               for path in paths:
-                  if VENDORED.search(path):
+                  if VENDORED.search(path) or FIXTURES.search(path):
                       continue
                   if path == "package.json":
                       dirs.add(ROOT)
@@ -1288,7 +1298,7 @@ jobs:
               orphans: List[str] = []
               for path in paths:
                   named = JSTS_TEST.search(path)
-                  if VENDORED.search(path) or not (named or JSTS_TEST_DIR.search(path)):
+                  if VENDORED.search(path) or FIXTURES.search(path) or not (named or JSTS_TEST_DIR.search(path)):
                       continue
                   owner = owning_project(path, dirs)
                   if owner is not None:
@@ -2035,18 +2045,19 @@ jobs:
           for row in "${plan[@]}"; do
             # tolerate a CRLF plan (python3 on a Windows runner writes one)
             IFS=$'\t' read -r d has_tests member <<< "${row%$'\r'}"
-            if [ "$has_tests" != "yes" ]; then
-              # A coverage script with no tests to run would fail on "no tests
-              # found" or print no summary, and an aggregator root's members
-              # are measured by their own lanes: a project's OWN test files
-              # are what make it a test surface.
-              echo "project $d: no JS/TS test files of its own - nothing to measure."
-              continue
-            fi
             lane="$(has_cov_lane "$d")"
             if [ -n "$lane" ]; then
+              # A DECLARED coverage lane always runs: the owner asked for this
+              # project to be measured, and no file-name heuristic may decide
+              # that a runner has nothing to run (Cypress `*.cy.ts`, Mocha
+              # `test/`, node:test... all have their own conventions). A
+              # declared script that cannot run is a red the owner can fix.
               run_cov_in_dir "$d" "$lane"
               measured=$(( measured + 1 ))
+            elif [ "$has_tests" != "yes" ]; then
+              # No lane and no test files of its own (an aggregator root, a
+              # tooling package): nothing to measure here.
+              echo "project $d: no coverage lane and no JS/TS test files of its own - nothing to measure."
             elif [ "$member" = "yes" ]; then
               # A root workspace run can cover a member's code without ever
               # running the member's tests (a root `jest src --coverage` that

@@ -196,17 +196,19 @@ hard-fail *before* a gate can run:
   was "root OR nested": with a root `package.json`, nested projects were never
   measured and a nested project with tests but no coverage runner passed
   silently. Every project is now planned (`scripts/quality/jsts_projects.py`,
-  embedded in the workflow): each JS/TS test file (`*.test.*`, `*.spec.*`,
-  `__tests__/`, or a file under a `test/` / `tests/` directory of a project)
-  belongs to its deepest enclosing project, and every project with test files
-  of its OWN is measured by its OWN coverage lane. A project with test files but
-  no lane FAILS, workspace members included: a root workspace run can cover a
-  member's code without running a single member test, so it never stands in
-  for the member's `test:coverage`. A root without tests of its own (an
-  aggregator) has nothing to measure; a named test file outside every project
-  FAILS (no lane ever runs it); a project with a coverage script but zero test
-  files is not run; and each lane clears its project's `coverage/` first, so a
-  committed or cached report can never stand in for the run.
+  embedded in the workflow). Every project that DECLARES a coverage lane
+  (`test:coverage`, or a vitest/jest `--coverage` test script) runs it: no
+  file-name heuristic may decide that a declared runner has nothing to run.
+  A project WITHOUT a lane FAILS when it has test files of its own (`*.test.*`,
+  `*.spec.*`, `*.cy.*`, `__tests__/`, or a file under a `test/` / `tests/`
+  directory of the project), workspace members included: a root workspace run
+  can cover a member's code without running a single member test, so it never
+  stands in for the member's `test:coverage`. A lane-less project without tests
+  (an aggregator root, a tooling package) has nothing to measure; fixture and
+  test-data trees (`fixtures/`, `__fixtures__/`, `testdata/`, `__mocks__/`) are
+  inputs, never projects or tests; a named test file outside every project
+  FAILS (no lane ever runs it); and each lane clears its project's `coverage/`
+  first, so a committed or cached report can never stand in for the run.
 - **Tests that import a runtime dependency** — gate 3 installs the caller's
   Python **runtime** deps before `pytest`/`coverage`, in priority order:
   `requirements.txt` / `requirements/*.txt` / `requirements*.txt`

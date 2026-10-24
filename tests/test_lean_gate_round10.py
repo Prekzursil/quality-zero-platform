@@ -530,10 +530,12 @@ npm() { echo "npm $* in $PWD" >> npm-calls.txt; }
         result = self._run()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self._measured_dirs(), ["packages/api", "packages/ui"])
-        self.assertIn("project .: no JS/TS test files of its own - nothing to measure.", result.stdout)
+        self.assertIn(
+            "project .: no coverage lane and no JS/TS test files of its own - nothing to measure.", result.stdout
+        )
 
-    def test_a_root_lane_without_root_tests_is_skipped_when_members_have_lanes(self) -> None:
-        """A root with no tests of its own has nothing to measure; its members run their own lanes."""
+    def test_a_declared_root_lane_runs_even_without_root_test_files(self) -> None:
+        """A declared lane always runs (a workspace runner may own every test); members run theirs too."""
         self.write(
             "package.json",
             '{"workspaces": ["packages/*"], "scripts": {"test:coverage": "vitest run --coverage"}}',
@@ -542,7 +544,26 @@ npm() { echo "npm $* in $PWD" >> npm-calls.txt; }
         self.write("packages/ui/a.test.ts")
         result = self._run()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self._measured_dirs(), ["packages/ui"])
+        self.assertEqual(self._measured_dirs(), [".", "packages/ui"])
+
+    def test_a_cypress_only_project_with_a_lane_runs(self) -> None:
+        """THE review finding: `cypress/e2e/login.cy.ts` must not read as "no tests"."""
+        self.write("web/package.json", '{"scripts": {"test:coverage": "cypress run --env coverage=true"}}')
+        self.write("web/cypress/e2e/login.cy.ts")
+        result = self._run()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self._measured_dirs(), ["web"])
+
+    def test_fixture_package_manifests_are_test_data_not_projects(self) -> None:
+        """THE review finding: tests/fixtures/sample/package.json is an input, not a lane-less project."""
+        self.write("package.json", '{"scripts": {"test:coverage": "vitest run --coverage"}}')
+        self.write("src/a.test.ts")
+        self.write("tests/fixtures/sample/package.json", '{"name": "sample"}')
+        self.write("tests/fixtures/sample/index.js")
+        self.write("test/__mocks__/fs.js")
+        result = self._run()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self._measured_dirs(), ["."])
 
     def test_a_lane_less_member_without_a_root_lane_is_unmeasured(self) -> None:
         """A member with tests and no lane of its own fails by name."""
@@ -553,16 +574,26 @@ npm() { echo "npm $* in $PWD" >> npm-calls.txt; }
         self.assertEqual(result.returncode, 1)
         self.assertIn("never measured: packages/ui", result.stderr)
 
-    def test_project_with_a_script_but_no_tests_is_not_run(self) -> None:
-        """A template coverage script with nothing to test must not fail the gate."""
+    def test_a_declared_lane_runs_without_recognised_test_files(self) -> None:
+        """No file-name heuristic decides that a declared runner has nothing to run."""
         self.write("package.json", '{"scripts": {"test:coverage": "vitest run --coverage"}}')
         self.write("src/a.test.ts")
-        self.write("tools/package.json", '{"scripts": {"test:coverage": "vitest run --coverage"}}')
+        self.write("tools/package.json", '{"scripts": {"test:coverage": "node --test --experimental-test-coverage"}}')
+        self.write("tools/build.mjs")
+        result = self._run()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self._measured_dirs(), [".", "tools"])
+
+    def test_a_lane_less_project_without_tests_is_nothing_to_measure(self) -> None:
+        """A tooling package with neither a lane nor tests is reported, not failed."""
+        self.write("package.json", '{"scripts": {"test:coverage": "vitest run --coverage"}}')
+        self.write("src/a.test.ts")
+        self.write("tools/package.json", '{"name": "tools"}')
         self.write("tools/build.mjs")
         result = self._run()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self._measured_dirs(), ["."])
-        self.assertIn("project tools: no JS/TS test files of its own - nothing to measure.", result.stdout)
+        self.assertIn("project tools: no coverage lane and no JS/TS test files of its own", result.stdout)
 
     def test_orphan_tests_fail_even_when_another_project_passes(self) -> None:
         """A test outside every project is run by no coverage lane."""

@@ -221,6 +221,27 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(rows, [(".", True, False), ("api", True, False), ("web", False, False)])
         self.assertEqual(orphans, [])
 
+    def test_cypress_specs_are_tests_and_can_be_orphans(self) -> None:
+        """`*.cy.*` is the Cypress convention: a project test inside one, an orphan outside all."""
+        rows, orphans = planner.plan(["web/package.json", "web/cypress/e2e/login.cy.ts", "e2e/flow.cy.tsx"])
+        self.assertEqual(rows, [("web", True, False)])
+        self.assertEqual(orphans, ["e2e/flow.cy.tsx"])
+
+    def test_fixture_trees_are_neither_projects_nor_tests(self) -> None:
+        """A package.json or a `*.test.*` under fixtures/ / __mocks__ / testdata is test input."""
+        paths = [
+            "package.json",
+            "tests/fixtures/sample/package.json",
+            "tests/fixtures/sample/index.js",
+            "test/__fixtures__/x.test.js",
+            "src/__mocks__/fs.js",
+            "testdata/pkg/package.json",
+        ]
+        self.assertEqual(planner.project_dirs(paths), ["."])
+        rows, orphans = planner.plan(paths)
+        self.assertEqual(rows, [(".", False, False)])
+        self.assertEqual(orphans, [])
+
     def test_a_test_directory_outside_every_project_is_not_an_orphan(self) -> None:
         """Outside a JS/TS project, `tests/` says nothing about JavaScript tests; named tests still orphan."""
         rows, orphans = planner.plan(["web/package.json", "tests/fixtures/data.js", "e2e/flow.spec.ts"])

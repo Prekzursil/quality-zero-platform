@@ -356,12 +356,12 @@ if [ "$DETECT_JSTS" = "true" ]; then
     echo ""; return 0
   }
   # Same planner and rules as CI: every project (root AND nested), each test
-  # file attributed to its deepest project; orphans fail; a project without
-  # tests of its own is not run; every project WITH tests needs its own
-  # coverage lane, workspace members included (a root workspace run can cover a
-  # member's code without running its tests). `-z` keeps non-ASCII paths
-  # unquoted. Each lane clears <dir>/coverage first, so the number assertion
-  # reads only this run's reports.
+  # file attributed to its deepest project; orphans fail; every project with a
+  # DECLARED coverage lane runs it; a project without one fails when it has
+  # tests of its own, workspace members included (a root workspace run can
+  # cover a member's code without running its tests). `-z` keeps non-ASCII
+  # paths unquoted. Each lane clears <dir>/coverage first, so the number
+  # assertion reads only this run's reports.
   git ls-files -z > "$WORK_DIR/jsts-files.txt"
   plan_args=(--files "$WORK_DIR/jsts-files.txt" --orphans-out "$WORK_DIR/jsts-orphans.txt")
   if [ -f package.json ]; then plan_args+=(--root-package-json package.json); fi
@@ -374,10 +374,11 @@ if [ "$DETECT_JSTS" = "true" ]; then
   rc=0
   for row in "${plan[@]}"; do
     IFS=$'\t' read -r d has_tests member <<< "${row%$'\r'}"
-    if [ "$has_tests" != "yes" ]; then continue; fi
     lane_kind="$(has_cov_lane "$d")"
     if [ -z "$lane_kind" ]; then
-      if [ "$member" = "yes" ]; then unmeasured+=("$d (workspace member)"); else unmeasured+=("$d"); fi
+      if [ "$has_tests" = "yes" ]; then
+        if [ "$member" = "yes" ]; then unmeasured+=("$d (workspace member)"); else unmeasured+=("$d"); fi
+      fi
       continue
     fi
     slug="$(printf '%s' "$d" | tr -c 'A-Za-z0-9' '_')"

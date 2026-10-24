@@ -53,12 +53,16 @@ required_contexts:
   - Control Plane Verify
   - gate-lint-format (ruff)
   - gate-sast (opengrep)
+  - gate-workflows (actionlint + zizmor)
+  - gate-secrets (gitleaks)
   - CodeQL
   pull_request_only: []
   target:
   - Control Plane Verify
   - gate-lint-format (ruff)
   - gate-sast (opengrep)
+  - gate-workflows (actionlint + zizmor)
+  - gate-secrets (gitleaks)
   - CodeQL
 enabled_scanners:
   # LEAN GATE MIGRATION (2026-06-27): retire the retired-tier SaaS coverage

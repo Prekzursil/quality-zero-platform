@@ -87,11 +87,22 @@ class RulesetPayloadTests(unittest.TestCase):
                 self.assertEqual(_contexts(_payload(slug)), ["quality / quality", "CodeQL"])
 
     def test_quality_zero_platform_holds_itself_to_its_own_gates(self) -> None:
-        """Verify, its own ruff + opengrep lanes, and the live `CodeQL` aggregate."""
+        """Verify, its own ruff / opengrep / workflow / secret lanes, and the live `CodeQL` aggregate."""
         self.assertEqual(
             _contexts(_payload("Prekzursil/quality-zero-platform")),
-            ["Control Plane Verify", "gate-lint-format (ruff)", "gate-sast (opengrep)", "CodeQL"],
+            [
+                "Control Plane Verify",
+                "gate-lint-format (ruff)",
+                "gate-sast (opengrep)",
+                "gate-workflows (actionlint + zizmor)",
+                "gate-secrets (gitleaks)",
+                "CodeQL",
+            ],
         )
+        # Each required context is a job QZP's own self-CI actually runs (a missing one blocks every PR).
+        workflow = (ROOT / ".github" / "workflows" / "quality-zero-platform.yml").read_text(encoding="utf-8")
+        for context in ("gate-workflows (actionlint + zizmor)", "gate-secrets (gitleaks)"):
+            self.assertIn(f"    name: {context}\n", workflow)
 
     def test_every_ruleset_blocks_codeql_alerts_of_any_severity(self) -> None:
         """Owner directive: CodeQL breaks a PR on any alert, not only high/medium."""

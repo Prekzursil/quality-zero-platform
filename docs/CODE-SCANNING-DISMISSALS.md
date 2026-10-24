@@ -71,7 +71,7 @@ to the filter) or, better, in the code. Every decision is listed here.
 
 | Query | Decided | Decision |
 | --- | --- | --- |
-| `actions/untrusted-checkout/medium`, `actions/cache-poisoning/poisonable-step` | 2026-10-24 | **Fixed in the code, not excluded.** Each reusable workflow checked out QZP's scripts at a caller-supplied `platform_ref`. Every action-pin bump re-fingerprinted those alerts, and in QZP's own `pull_request` flow the ref is the PR head. The platform is now checked out at the workflow file's own commit (`job.workflow_repository` / `job.workflow_sha`). Excluding the medium query was considered and rejected. |
+| `actions/untrusted-checkout/medium`, `actions/cache-poisoning/poisonable-step` | 2026-10-24 | **Fixed in the code by #336, not excluded.** Each reusable workflow checked out QZP's scripts at a caller-supplied `platform_ref`. Every action-pin bump re-fingerprinted those alerts, and in QZP's own `pull_request` flow the ref is the PR head. The platform is now checked out at the workflow file's own commit (`job.workflow_repository` / `job.workflow_sha`). Excluding the medium query was considered and rejected. |
 | `py/clear-text-storage-sensitive-data`, `py/clear-text-logging-sensitive-data` | before 2026-10-24 | **Re-review (pre-policy).** One verified false positive in `scripts/quality/secrets_sync.py` (its records pass `_sanitise_audit_record`'s allow-list) led to a GLOBAL exclusion. That silences both queries for all code, not just the verified call site. |
 
 ## Log (quality-zero-platform)

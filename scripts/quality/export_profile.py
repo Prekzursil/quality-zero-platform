@@ -164,11 +164,12 @@ def _coverage_output_lines(
         f"codecov_enabled={codecov_enabled}",
         f"codacy_enabled={str(bool(enabled_scanners.get('codacy', False))).lower()}",
         (f"deepsource_enabled={str(bool(enabled_scanners.get('deepsource_visible', False))).lower()}"),
-        # SonarCloud's coverage-lane scan ran historically whenever
-        # ``SONAR_TOKEN`` was set (no profile gate), so default to True to keep
-        # the enrolled fleet unaffected. A profile opting out (e.g. the
-        # platform's own lean self-CI) sets ``sonar_coverage: false``.
-        (f"sonar_coverage_enabled={str(bool(enabled_scanners.get('sonar_coverage', True))).lower()}"),
+        # OPT-IN. The scanner-matrix "SonarCloud scan" step gated on its own
+        # step-level env, which a step's `if:` cannot see, so it never ran.
+        # Defaulting it on now would start CI analyses that SonarCloud rejects
+        # wherever Automatic Analysis is enabled. A profile that wants the
+        # scan sets ``sonar_coverage: true``.
+        (f"sonar_coverage_enabled={str(bool(enabled_scanners.get('sonar_coverage', False))).lower()}"),
         f"coverage_input_files={coverage_input_files}",
         _json_output("coverage_inputs_json", coverage_inputs_payload),
         f"qlty_enabled={qlty_enabled}",

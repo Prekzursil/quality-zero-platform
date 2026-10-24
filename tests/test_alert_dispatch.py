@@ -247,25 +247,42 @@ class WorkflowRunTests(unittest.TestCase):
         self.assertTrue(call.kwargs["dry_run"])
         self.assertIn("succeeded", call.kwargs["close_comment"])
 
-    def _completed(self, stdout: str, returncode: int = 0) -> "subprocess.CompletedProcess[str]":
+    @staticmethod
+    def _completed(stdout: str, returncode: int = 0) -> "subprocess.CompletedProcess[str]":
         return subprocess.CompletedProcess(["gh"], returncode, stdout, "boom\n")
 
-    def test_runs_are_fetched_from_the_default_branch(self) -> None:
-        """gh run list over main; a non-list payload is empty; a failure raises."""
-        runner = MagicMock(return_value=self._completed(json.dumps(self.RUNS)))
+    def _runner(self, *, workflows: str, runs: str = "[]", runs_rc: int = 0, workflows_rc: int = 0) -> MagicMock:
+        """A fake gh answering `workflow list` and `run list` separately."""
+
+        def answer(argv, **_kwargs):
+            if argv[1:3] == ["workflow", "list"]:
+                return self._completed(workflows, workflows_rc)
+            return self._completed(runs, runs_rc)
+
+        return MagicMock(side_effect=answer)
+
+    def test_history_is_fetched_per_active_workflow(self) -> None:
+        """THE review finding: one shared --limit let hourly runs crowd out a weekly workflow."""
+        workflows = json.dumps([{"id": 11, "state": "active"}, {"id": 12, "state": "disabled_manually"}, "junk"])
+        runner = self._runner(workflows=workflows, runs=json.dumps(self.RUNS))
         runs = alert_dispatch.fetch_workflow_runs("o/r", runner=runner)
         self.assertEqual(len(runs), 7)
-        argv = runner.call_args.args[0]
-        self.assertEqual(argv[:3], ["gh", "run", "list"])
+        run_lists = [call.args[0] for call in runner.call_args_list if call.args[0][1:3] == ["run", "list"]]
+        self.assertEqual(len(run_lists), 1)
+        argv = run_lists[0]
+        self.assertEqual(argv[argv.index("--workflow") + 1], "11")
         self.assertEqual(argv[argv.index("--branch") + 1], "main")
-        self.assertEqual(
-            alert_dispatch.fetch_workflow_runs("o/r", runner=MagicMock(return_value=self._completed("{}"))), []
-        )
-        self.assertEqual(
-            alert_dispatch.fetch_workflow_runs("o/r", runner=MagicMock(return_value=self._completed(""))), []
-        )
-        with self.assertRaisesRegex(RuntimeError, "gh run list"):
-            alert_dispatch.fetch_workflow_runs("o/r", runner=MagicMock(return_value=self._completed("", 1)))
+        self.assertEqual(argv[argv.index("--limit") + 1], "10")
+
+    def test_non_list_payloads_are_empty_and_failures_raise(self) -> None:
+        """No workflows means no runs; a failed listing is never read as "all green"."""
+        self.assertEqual(alert_dispatch.fetch_workflow_runs("o/r", runner=self._runner(workflows="{}")), [])
+        self.assertEqual(alert_dispatch.fetch_workflow_runs("o/r", runner=self._runner(workflows="")), [])
+        with self.assertRaisesRegex(alerts.AlertCommandError, "gh workflow list"):
+            alert_dispatch.fetch_workflow_runs("o/r", runner=self._runner(workflows="", workflows_rc=1))
+        active = json.dumps([{"id": 1, "state": "active"}])
+        with self.assertRaisesRegex(alerts.AlertCommandError, "gh run list"):
+            alert_dispatch.fetch_workflow_runs("o/r", runner=self._runner(workflows=active, runs_rc=1))
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -194,9 +194,12 @@ Runs every 6 hours; aggregates fleet state and dispatches via
 gh workflow run scheduled-alerts.yml --ref main -f dry_run=false
 ```
 
-Default `dry_run=true` is the safe default for the cron schedule
-(no surprise `alert:*` issue creation from a cron firing on
-incomplete fleet state).
+The cron schedule is LIVE: it opens and closes `alert:*` issues (see "Scheduled
+Alerts and the platform's own workflows" below). Only a manual dispatch defaults
+to `dry_run=true`. A detector whose input file does not exist is NOT evaluated,
+and the run summary lists each one as such - the fleet-state files are not
+produced by anything yet, so today only `alert:workflow-failing` has live input.
+Any failed `gh` call fails the run rather than reading as "no issue" or "done".
 
 ### `scheduled-cve-scan.yml` (cron)
 

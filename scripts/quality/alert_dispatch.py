@@ -183,36 +183,56 @@ def workflow_conclusions(runs: Iterable[Mapping[str, Any]]) -> Dict[str, List[st
     return grouped
 
 
+def _gh_list(args: Sequence[str], *, runner: Callable[..., "subprocess.CompletedProcess[str]"]) -> List[Any]:
+    """Run one ``gh`` listing and return its JSON array; raise when ``gh`` fails."""
+    completed = runner(["gh", *args], capture_output=True, text=True, check=False)  # nosec B603 — fixed argv
+    if completed.returncode != 0:
+        raise alerts.AlertCommandError(
+            f"`gh {' '.join(args[:2])}` exited {completed.returncode}: {completed.stderr.strip()}"
+        )
+    payload = json.loads(completed.stdout or "[]")
+    return payload if isinstance(payload, list) else []
+
+
 def fetch_workflow_runs(
     platform_slug: str,
     *,
     branch: str = "main",
-    limit: int = 300,
+    per_workflow: int = 10,
     runner: Callable[..., "subprocess.CompletedProcess[str]"] = subprocess.run,
 ) -> List[Mapping[str, Any]]:
-    """Read the platform's recent default-branch workflow runs through ``gh``; raise if it cannot."""
-    completed = runner(
-        [
-            "gh",
-            "run",
-            "list",
-            "--repo",
-            platform_slug,
-            "--branch",
-            branch,
-            "--limit",
-            str(limit),
-            "--json",
-            "workflowName,status,conclusion,createdAt",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )  # nosec B603 — fixed argv
-    if completed.returncode != 0:
-        raise RuntimeError(f"`gh run list` exited {completed.returncode}: {completed.stderr.strip()}")
-    payload = json.loads(completed.stdout or "[]")
-    return [run for run in payload if isinstance(run, Mapping)] if isinstance(payload, list) else []
+    """Read every active workflow's newest default-branch runs through ``gh``; raise if it cannot.
+
+    Per workflow, because ``gh run list --limit`` caps the COMBINED result: the
+    hourly dashboard alone would push a weekly workflow's last three runs out
+    of any shared window, so it could fail forever below the threshold.
+    """
+    workflows = _gh_list(
+        ["workflow", "list", "--repo", platform_slug, "--json", "id,state", "--limit", "200"], runner=runner
+    )
+    runs: List[Mapping[str, Any]] = []
+    for workflow in workflows:
+        if not isinstance(workflow, Mapping) or workflow.get("state") != "active":
+            continue
+        listed = _gh_list(
+            [
+                "run",
+                "list",
+                "--repo",
+                platform_slug,
+                "--workflow",
+                str(workflow.get("id")),
+                "--branch",
+                branch,
+                "--limit",
+                str(per_workflow),
+                "--json",
+                "workflowName,status,conclusion,createdAt",
+            ],
+            runner=runner,
+        )
+        runs.extend(run for run in listed if isinstance(run, Mapping))
+    return runs
 
 
 def close_recovered_workflow_alerts(

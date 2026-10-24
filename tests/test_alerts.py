@@ -370,11 +370,49 @@ class EnsureAlertLabelsTests(unittest.TestCase):
         self.assertIn(alerts.ALERT_LABEL_COLOR, create)
         self.assertIn(alerts.ALERT_LABEL_DESCRIPTION, create)
 
+    def test_a_failed_label_create_raises(self) -> None:
+        """A label that could not be created is not "provisioned"."""
+        present = [member.label for member in alerts.AlertType if member is not alerts.AlertType.WORKFLOW_FAILING]
+        failed = subprocess.CompletedProcess(["gh"], 1, "", "HTTP 403\n")
+        runner = MagicMock(side_effect=[self._listing(*present), failed])
+        with self.assertRaisesRegex(alerts.AlertCommandError, "gh label create"):
+            alerts.ensure_alert_labels("o/r", runner=runner)
+
     def test_an_unreadable_label_list_raises(self) -> None:
         """Guessing would spam creates or skip the one that is missing."""
         runner = MagicMock(return_value=subprocess.CompletedProcess(["gh"], 1, "", "HTTP 403\n"))
         with self.assertRaisesRegex(RuntimeError, "gh label list"):
             alerts.ensure_alert_labels("o/r", runner=runner)
+
+
+class GhFailurePropagationTests(unittest.TestCase):
+    """A failed gh call fails the run: never "no issue", never "done"."""
+
+    FAILED = subprocess.CompletedProcess(["gh"], 1, "", "rate limited\n")
+
+    def test_a_failed_lookup_is_not_read_as_no_issue(self) -> None:
+        """Reading it as "no match" would open a duplicate issue."""
+        with self.assertRaisesRegex(alerts.AlertCommandError, "gh issue list. exited 1: rate limited"):
+            alerts.open_alert_issue(
+                "o/r",
+                alert_type=alerts.AlertType.REGRESSION,
+                subject="x",
+                body="b",
+                runner=MagicMock(return_value=self.FAILED),
+            )
+
+    def test_a_failed_create_is_not_reported_as_created(self) -> None:
+        """Reading it as success would lose the alert."""
+        runner = MagicMock(side_effect=[_fake_completed("[]"), self.FAILED])
+        with self.assertRaisesRegex(alerts.AlertCommandError, "gh issue create"):
+            alerts.open_alert_issue("o/r", alert_type=alerts.AlertType.REGRESSION, subject="x", body="b", runner=runner)
+
+    def test_a_failed_close_is_not_reported_as_closed(self) -> None:
+        """An alert that stayed open must not be counted as closed."""
+        listed = _fake_completed(json.dumps([{"number": 7, "title": "[alert:regression] x", "state": "open"}]))
+        runner = MagicMock(side_effect=[listed, self.FAILED])
+        with self.assertRaisesRegex(alerts.AlertCommandError, "gh issue close"):
+            alerts.close_alert_issue("o/r", alert_type=alerts.AlertType.REGRESSION, subject="x", runner=runner)
 
 
 if __name__ == "__main__":  # pragma: no cover

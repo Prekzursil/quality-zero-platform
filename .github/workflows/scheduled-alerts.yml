@@ -100,6 +100,16 @@ jobs:
               parsed = json.loads(path.read_text(encoding="utf-8"))
               return parsed if isinstance(parsed, dict) else {}
 
+          # Inputs the fleet detectors read. None has a producer in this repo
+          # yet, so the summary below says which detectors had NO input and
+          # were therefore not evaluated: a green run must not imply they were.
+          SOURCES = {
+              "quality-rollup/coverage-trend.json": "regression / deadline / escalation / flag",
+              "audit/bypass-tracking.jsonl": "bypass-stale",
+              "audit/drift-sync.jsonl": "drift-stuck",
+              "audit/bump-staging-results.jsonl": "fleet-bump-fail",
+          }
+          missing = {path: detectors for path, detectors in SOURCES.items() if not Path(path).is_file()}
           cov = _safe_json("quality-rollup/coverage-trend.json")
           bypass_issues = _safe_jsonl("audit/bypass-tracking.jsonl")
           drift_prs = _safe_jsonl("audit/drift-sync.jsonl")
@@ -141,6 +151,8 @@ jobs:
                   fh.write(f"- Triggers: {len(triggers)}\n")
                   fh.write(f"- Issues opened/reused: {len(results)}\n")
                   fh.write(f"- QZP workflows watched: {len(state['workflow_runs'])}\n")
+                  for path, detectors in missing.items():
+                      fh.write(f"- NOT evaluated ({detectors}): no `{path}` - nothing produces it yet\n")
                   fh.write(f"- Recovered workflow alerts closed: {sum(1 for c in closed if c.get('closed'))}\n")
                   per_type = {}
                   for t in triggers:

@@ -105,31 +105,35 @@ def ensure_alert_labels(platform_slug: str, *, runner: ProcessRunner = subproces
     an issue. Existing labels are left untouched. A label list that cannot be
     read raises: guessing would either spam creates or skip the one missing.
     """
-    listed = _run_gh(
-        ["label", "list", "--repo", platform_slug, "--search", "alert:", "--limit", "200", "--json", "name"],
-        runner=runner,
+    listed = _checked(
+        _run_gh(
+            ["label", "list", "--repo", platform_slug, "--search", "alert:", "--limit", "200", "--json", "name"],
+            runner=runner,
+        ),
+        what="label list",
     )
-    if listed.returncode != 0:
-        raise RuntimeError(f"`gh label list` exited {listed.returncode}: {listed.stderr.strip()}")
     payload = json.loads(listed.stdout or "[]")
     present = {str(item.get("name")) for item in payload if isinstance(item, Mapping)}
     created: List[str] = []
     for member in AlertType:
         if member.label in present:
             continue
-        _run_gh(
-            [
-                "label",
-                "create",
-                member.label,
-                "--repo",
-                platform_slug,
-                "--color",
-                ALERT_LABEL_COLOR,
-                "--description",
-                ALERT_LABEL_DESCRIPTION,
-            ],
-            runner=runner,
+        _checked(
+            _run_gh(
+                [
+                    "label",
+                    "create",
+                    member.label,
+                    "--repo",
+                    platform_slug,
+                    "--color",
+                    ALERT_LABEL_COLOR,
+                    "--description",
+                    ALERT_LABEL_DESCRIPTION,
+                ],
+                runner=runner,
+            ),
+            what="label create",
         )
         created.append(member.label)
     return created
@@ -165,6 +169,21 @@ def _run_gh(
     )  # nosec B603 — gh args are controlled by call site
 
 
+class AlertCommandError(RuntimeError):
+    """A ``gh`` call failed: the alert state is unknown, never "no issue" or "done".
+
+    A failed lookup read as "no match" opens a duplicate; a failed create or
+    close read as success loses the alert. Both must fail the run instead.
+    """
+
+
+def _checked(completed: "subprocess.CompletedProcess[str]", *, what: str) -> "subprocess.CompletedProcess[str]":
+    """Return ``completed`` when ``gh`` succeeded; raise ``AlertCommandError`` otherwise."""
+    if completed.returncode != 0:
+        raise AlertCommandError(f"`gh {what}` exited {completed.returncode}: {str(completed.stderr or '').strip()}")
+    return completed
+
+
 def find_existing_alert_issue(
     platform_slug: str,
     *,
@@ -189,7 +208,7 @@ def find_existing_alert_issue(
         "--limit",
         "100",
     ]
-    completed = _run_gh(args, runner=runner)
+    completed = _checked(_run_gh(args, runner=runner), what="issue list")
     payload = json.loads(completed.stdout) if completed.stdout else []
     if not isinstance(payload, list):
         return None
@@ -233,7 +252,7 @@ def _create_alert_issue(
         "--body",
         body,
     ]
-    completed = _run_gh(args, runner=runner)
+    completed = _checked(_run_gh(args, runner=runner), what="issue create")
     return {
         "number": _issue_number_from_create_output(completed.stdout),
         "title": title,
@@ -305,7 +324,7 @@ def close_alert_issue(
     ]
     if close_comment:
         args.extend(["--comment", close_comment])
-    _run_gh(args, runner=runner)
+    _checked(_run_gh(args, runner=runner), what="issue close")
     return {"number": issue_number, "closed": True}
 
 

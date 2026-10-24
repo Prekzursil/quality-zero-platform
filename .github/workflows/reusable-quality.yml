@@ -393,28 +393,45 @@ jobs:
         if: steps.detect.outputs.python == 'true'
         run: pip install basedpyright==1.39.8
 
+      # Every tool download below is the pinned release ASSET itself, fetched
+      # with curl -f (an HTTP error fails the step instead of saving an error
+      # page) and checked against the SHA-256 in .quality/tool-pins.yml
+      # (asset_sha256) BEFORE it is installed: a tampered or truncated download
+      # can never reach PATH. No remote install script is executed.
       - name: Install opengrep
         if: steps.detect.outputs.opengrep == 'true'
         run: |
-          curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh | bash -s -- -v v1.22.0
-          echo "$HOME/.opengrep/cli/latest" >> "$GITHUB_PATH"
+          set -euo pipefail
+          # the asset opengrep's install.sh selects on a glibc x86-64 runner
+          dir="$HOME/.opengrep/cli/latest"
+          mkdir -p "$dir"
+          curl -fsSL --retry 3 -o "$dir/opengrep.download" \
+            https://github.com/opengrep/opengrep/releases/download/v1.22.0/opengrep_manylinux_x86
+          echo "45bcd58440e397ed52c50e953ccf5948909ea77087c9186fc7d277216f62e319  $dir/opengrep.download" | sha256sum -c -
+          mv "$dir/opengrep.download" "$dir/opengrep"
+          chmod +x "$dir/opengrep"
+          echo "$dir" >> "$GITHUB_PATH"
 
       # Unconditional: gate 5 is T0 absolute-zero and always runs, so the binary
       # is always needed. It is NOT gated on the .gitleaks.toml allowlist —
       # that inversion is the bug this restores.
       - name: Install gitleaks
         run: |
-          curl -sSL -o /tmp/gitleaks.tar.gz \
+          set -euo pipefail
+          curl -fsSL --retry 3 -o /tmp/gitleaks.tar.gz \
             https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks.tar.gz" | sha256sum -c -
           tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
           chmod +x /usr/local/bin/gitleaks
 
       - name: Install osv-scanner
         if: steps.detect.outputs.osv == 'true'
         run: |
-          curl -sSL -o /usr/local/bin/osv-scanner \
+          set -euo pipefail
+          curl -fsSL --retry 3 -o /tmp/osv-scanner \
             https://github.com/google/osv-scanner/releases/download/v2.3.8/osv-scanner_linux_amd64
-          chmod +x /usr/local/bin/osv-scanner
+          echo "bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc  /tmp/osv-scanner" | sha256sum -c -
+          install -m 0755 /tmp/osv-scanner /usr/local/bin/osv-scanner
 
       # ── Lean-gate helper scripts (EMBEDDED VERBATIM) ─────────────────────
       # This reusable workflow runs inside the CALLER's checkout and has NO
@@ -1589,7 +1606,9 @@ jobs:
           set -euo pipefail
           # --redact is non-negotiable: a finding must never echo the secret
           # itself into a job log that may be public.
-          args=(detect --no-banner --redact)
+          # --verbose prints each finding's rule, file and line (the secret
+          # itself stays REDACTED), so a red gate says what to triage.
+          args=(detect --no-banner --redact --verbose)
           if [ "$GITLEAKS_ALLOWLIST" = "true" ]; then
             echo "Honoring the caller's .gitleaks.toml allowlist."
             args+=(--config .gitleaks.toml)

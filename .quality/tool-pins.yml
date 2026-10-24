@@ -33,3 +33,13 @@ pins:
   gitleaks: "8.30.1"
   # gate 6: osv-scanner scan source
   osv-scanner: "v2.3.8"
+
+# SHA-256 of the exact linux x86-64 release ASSET each pinned download fetches
+# (GitHub's published release-asset digests). The workflows verify every
+# download with `sha256sum -c` before installing it. When bumping a pin above,
+# replace its digest here AND in the workflow: tests/test_tool_download_integrity.py
+# and the fleet-health pin-drift check fail on any mismatch.
+asset_sha256:
+  opengrep_manylinux_x86: "45bcd58440e397ed52c50e953ccf5948909ea77087c9186fc7d277216f62e319"
+  gitleaks_linux_x64: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+  osv-scanner_linux_amd64: "bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc"

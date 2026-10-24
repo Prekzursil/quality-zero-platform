@@ -29,7 +29,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    uses: ./.github/workflows/reusable-backlog-sweep.yml
+    uses: ./.github/workflows/reusable-backlog-sweep.yml # zizmor: ignore[self-repository]
     with:
       repo_slug: Prekzursil/quality-zero-platform
       lane: quality

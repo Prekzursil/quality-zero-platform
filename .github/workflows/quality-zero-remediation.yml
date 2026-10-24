@@ -32,7 +32,7 @@ jobs:
       contents: write
       pull-requests: write
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'failure' }}
-    uses: ./.github/workflows/reusable-remediation-loop.yml
+    uses: ./.github/workflows/reusable-remediation-loop.yml # zizmor: ignore[self-repository]
     with:
       repo_slug: Prekzursil/quality-zero-platform
       failure_context: Quality Zero Gate

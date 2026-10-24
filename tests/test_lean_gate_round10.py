@@ -167,7 +167,7 @@ class InputValidationTests(_StepHarness):
 
 
 class Gate6DepsTests(_StepHarness):
-    """Gate 6 runs whenever there is something to scan; the toml is optional."""
+    """Gate 6 always runs; osv-scanner decides what is scannable; the toml is optional."""
 
     # Records every call; answers --format json with $FAKE_OSV_JSON / rc
     # $FAKE_OSV_JSON_RC, every other call with rc $FAKE_OSV_RC.
@@ -190,27 +190,32 @@ class Gate6DepsTests(_StepHarness):
         path.write_text(json.dumps(document), encoding="utf-8")
         return "./report.json"
 
-    def _run(self, *, floor: str = "t0", config: bool = False, sources: bool = True, **fake: str):
-        env = {
-            "OSVSOURCES": "true" if sources else "false",
-            "OSVCONFIG": "true" if config else "false",
-            "DEPS_SEVERITY_FLOOR": floor,
-        }
+    def _run(self, *, floor: str = "t0", config: bool = False, **fake: str):
+        env = {"OSVCONFIG": "true" if config else "false", "DEPS_SEVERITY_FLOOR": floor}
         env.update(fake)
         return self.run_step("gate-deps osv-scanner", env, FAKE_PYTHON3 + NO_SLEEP + self.FAKE_OSV)
 
-    def test_step_is_unconditional(self) -> None:
-        """The old guard was ``osv-scanner.toml exists``: the inverted trigger."""
+    def test_scan_and_install_are_unconditional(self) -> None:
+        """The old guards were ``osv-scanner.toml exists``, then a glob list of sources."""
         self.assertNotIn("if", step_named("gate-deps osv-scanner"))
-        install = step_named("Install osv-scanner")
-        self.assertEqual(install.get("if"), "steps.detect.outputs.osvsources == 'true'")
+        self.assertNotIn("if", step_named("Install osv-scanner"))
+        text = WORKFLOW.read_text(encoding="utf-8")
+        self.assertNotIn("steps.detect.outputs.osvsources", text)
+        self.assertNotIn('echo "osvsources=', text)
 
-    def test_nothing_to_scan_passes_without_running_the_scanner(self) -> None:
-        """No manifests at all is a pass, said out loud."""
-        result = self._run(sources=False)
+    def test_a_source_only_osv_scanner_knows_is_scanned(self) -> None:
+        """THE review finding: bun.lock / uv.lock / NuGet matched no glob, so they were never scanned."""
+        self.write("bun.lock", "{}")
+        result = self._run(FAKE_OSV_RC="0")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("nothing for osv-scanner to scan", result.stdout)
-        self.assertEqual(self.calls("osv-calls.txt"), [])
+        self.assertEqual(self.calls("osv-calls.txt"), ["scan source --recursive ."])
+
+    def test_nothing_to_scan_is_the_scanners_own_verdict(self) -> None:
+        """Exit 128 (no package sources) passes, said out loud and reported to the summary."""
+        result = self._run(FAKE_OSV_RC="128")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("osv-scanner exited 128 (no package sources found) - nothing to scan", result.stdout)
+        self.assertEqual(self.calls("osv-calls.txt"), ["scan source --recursive ."])
         self.assertIn("result=nothing-to-scan", (self.workdir / "github-output.txt").read_text(encoding="utf-8"))
 
     def test_without_a_toml_the_scan_still_runs_without_config(self) -> None:
@@ -481,18 +486,66 @@ npm() { echo "npm $* in $PWD" >> npm-calls.txt; }
         self.assertIn("never measured: admin", result.stderr)
 
     def test_workspace_member_is_measured_when_the_root_reports_its_files(self) -> None:
-        """A member with no script of its own passes only on report evidence."""
+        """A member with no script of its own passes only on report evidence, relative or absolute."""
         self.write(
             "package.json",
             '{"workspaces": ["packages/*"], "scripts": {"test:coverage": "vitest run --coverage"}}',
         )
         self.write("packages/ui/package.json", '{"name": "ui"}')
         self.write("packages/ui/button.test.ts")
-        self._root_report("/home/runner/work/r/r/packages/ui/button.ts")
+        for reported in ("packages/ui/button.ts", str(self.workdir.resolve() / "packages" / "ui" / "button.ts")):
+            with self.subTest(reported=reported):
+                self._root_report(reported)
+                (self.workdir / "assert-calls.txt").unlink(missing_ok=True)
+                result = self._run()
+                self.assertEqual(result.returncode, 0, result.stderr)
+                # The root has no tests of its own; it runs because the member relies on it.
+                self.assertEqual(self._measured_dirs(), ["."])
+                self.assertIn("running its workspace coverage for the members without a lane", result.stdout)
+                self.assertIn("the root coverage reports name its files", result.stdout)
+
+    def test_a_colliding_directory_name_is_no_evidence(self) -> None:
+        """`lib` is not measured because the root report names `src/lib/util.ts`."""
+        self.write("package.json", '{"workspaces": ["lib"], "scripts": {"test:coverage": "jest src --coverage"}}')
+        self.write("src/a.test.ts")
+        self.write("lib/package.json", '{"name": "lib"}')
+        self.write("lib/b.test.ts")
+        self._root_report("src/lib/util.ts", "src/a.ts")
+        result = self._run()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("never measured: lib", result.stderr)
+
+    def test_an_aggregator_root_is_not_required_when_members_measure_themselves(self) -> None:
+        """THE review finding: a root with no tests and no lane used to be flagged unmeasured."""
+        self.write("package.json", '{"private": true, "workspaces": ["packages/*"]}')
+        for name in ("api", "ui"):
+            self.write(f"packages/{name}/package.json", '{"scripts": {"test:coverage": "vitest run --coverage"}}')
+            self.write(f"packages/{name}/a.test.ts")
         result = self._run()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self._measured_dirs(), ["."])
-        self.assertIn("the root coverage reports cover its files", result.stdout)
+        self.assertEqual(self._measured_dirs(), ["packages/api", "packages/ui"])
+        self.assertIn("project .: no JS/TS test files of its own - nothing to measure.", result.stdout)
+
+    def test_a_root_lane_without_root_tests_is_skipped_when_members_have_lanes(self) -> None:
+        """Nothing relies on the root run, and it has no tests of its own to run."""
+        self.write(
+            "package.json",
+            '{"workspaces": ["packages/*"], "scripts": {"test:coverage": "vitest run --coverage"}}',
+        )
+        self.write("packages/ui/package.json", '{"scripts": {"test:coverage": "vitest run --coverage"}}')
+        self.write("packages/ui/a.test.ts")
+        result = self._run()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self._measured_dirs(), ["packages/ui"])
+
+    def test_a_lane_less_member_without_a_root_lane_is_unmeasured(self) -> None:
+        """No root run exists to measure it, so the member fails by name."""
+        self.write("package.json", '{"workspaces": ["packages/*"]}')
+        self.write("packages/ui/package.json", '{"name": "ui"}')
+        self.write("packages/ui/a.test.ts")
+        result = self._run()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("never measured: packages/ui", result.stderr)
 
     def test_workspace_member_without_report_evidence_fails(self) -> None:
         """A `workspaces` entry alone does not prove the root run measured the member."""
@@ -517,7 +570,7 @@ npm() { echo "npm $* in $PWD" >> npm-calls.txt; }
         result = self._run()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self._measured_dirs(), ["."])
-        self.assertIn("project tools: no JS/TS test files - nothing to measure.", result.stdout)
+        self.assertIn("project tools: no JS/TS test files of its own - nothing to measure.", result.stdout)
 
     def test_orphan_tests_fail_even_when_another_project_passes(self) -> None:
         """A test outside every project is run by no coverage lane."""
@@ -621,7 +674,7 @@ class SummaryStepTests(_StepHarness):
         self.assertIn(
             "| 3 tests+coverage | Python | skipped - source present but zero test files (no test surface) |", table
         )
-        self.assertIn("| 6 deps | osv-scanner | ran - nothing to scan (no manifests or lockfiles) |", table)
+        self.assertIn("| 6 deps | osv-scanner | ran - nothing to scan (osv-scanner found no package sources) |", table)
 
     def test_compiled_row_applies_to_go_or_cpp(self) -> None:
         """Either compiled language makes the compiled lane applicable."""

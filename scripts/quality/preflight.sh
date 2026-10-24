@@ -114,14 +114,6 @@ set +o pipefail
 has() { [ -n "$(git ls-files "$@" 2>/dev/null | head -1)" ] && echo true || echo false; }
 any() { [ -n "${1:-}" ] && echo true || echo false; }
 file_exists() { [ -f "$1" ] && echo true || echo false; }
-osv_sources="$(git ls-files \
-  '**/requirements*.txt' requirements*.txt \
-  '**/package-lock.json' package-lock.json '**/yarn.lock' yarn.lock \
-  '**/pnpm-lock.yaml' pnpm-lock.yaml '**/Cargo.lock' Cargo.lock \
-  '**/go.mod' go.mod '**/go.sum' go.sum '**/Gemfile.lock' Gemfile.lock \
-  '**/poetry.lock' poetry.lock '**/Pipfile.lock' Pipfile.lock \
-  '**/pyproject.toml' pyproject.toml '**/composer.lock' composer.lock \
-  '**/pom.xml' pom.xml '**/gradle.lockfile' gradle.lockfile 2>/dev/null | head -1)"
 py_cov_cfg="$(git ls-files pyproject.toml setup.cfg tox.ini '.coveragerc' 'pytest.ini' 2>/dev/null | head -1)"
 py_pyright_cfg="$(git ls-files pyrightconfig.json basedpyrightconfig.json 2>/dev/null | head -1)"
 if [ -z "$py_pyright_cfg" ] && [ -f pyproject.toml ] \
@@ -130,10 +122,6 @@ if [ -z "$py_pyright_cfg" ] && [ -f pyproject.toml ] \
 fi
 py_tests="$(git ls-files 'test_*.py' '*_test.py' '**/test_*.py' '**/*_test.py' \
   'tests/**' '**/tests/**' conftest.py '**/conftest.py' 2>/dev/null | head -1)"
-jsts_tests="$(git ls-files \
-  '*.test.ts' '*.test.tsx' '*.test.js' '*.test.jsx' '*.test.mjs' '*.test.cjs' \
-  '*.spec.ts' '*.spec.tsx' '*.spec.js' '*.spec.jsx' '*.spec.mjs' '*.spec.cjs' \
-  '**/*.test.*' '**/*.spec.*' '__tests__/**' '**/__tests__/**' 2>/dev/null | head -1)"
 go_tests="$(git ls-files '*_test.go' '**/*_test.go' 2>/dev/null | head -1)"
 cpp_tests="$(git ls-files \
   '*_test.cpp' '**/*_test.cpp' '*_test.cc' '**/*_test.cc' \
@@ -146,10 +134,8 @@ DETECT_JSTS="$(has '*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs' '*.cjs')"
 DETECT_PYRIGHTCFG="$(any "$py_pyright_cfg")"
 DETECT_OPENGREP="$([ -d .quality/opengrep ] && echo true || echo false)"
 DETECT_GITLEAKS_ALLOWLIST="$(file_exists .gitleaks.toml)"
-DETECT_OSVSOURCES="$(any "$osv_sources")"
 DETECT_PYCOVCFG="$(any "$py_cov_cfg")"
 DETECT_PYTESTS="$(any "$py_tests")"
-DETECT_JSTSTESTS="$(any "$jsts_tests")"
 DETECT_GO="$(has '*.go')"
 DETECT_GOMOD="$(file_exists go.mod)"
 DETECT_GOTESTS="$(any "$go_tests")"
@@ -158,7 +144,7 @@ DETECT_CPPTESTS="$(any "$cpp_tests")"
 DETECT_CHARTER="$([ -f .quality/charter.yml ] && echo true || echo false)"
 set -o pipefail
 echo "Detected: python=$DETECT_PYTHON ts=$DETECT_TS jsts=$DETECT_JSTS go=$DETECT_GO cpp=$DETECT_CPP \
-opengrep=$DETECT_OPENGREP osvsources=$DETECT_OSVSOURCES charter=$DETECT_CHARTER"
+opengrep=$DETECT_OPENGREP charter=$DETECT_CHARTER"
 
 declare -a LANES=()
 declare -a RESULTS=()
@@ -326,12 +312,31 @@ if [ "$DETECT_PYTHON" = "true" ]; then
       python -m pytest --cov --cov-branch --cov-fail-under=100 || rc=$?
     else
       pip install "coverage==$PIN_COVERAGE" >/dev/null 2>&1
-      # Same as CI: branch coverage, and a tests/ dir without __init__.py is
-      # discovered from inside (a root discover never enters it).
-      start_dir=.
-      if [ -d tests ] && [ ! -f tests/__init__.py ]; then start_dir=tests; fi
-      python -m coverage run --branch -m unittest discover -s "$start_dir" || rc=$?
-      python -m coverage report --fail-under=100 --show-missing || rc=$?
+      # Same as CI: branch coverage over BOTH trees - the root (packages and
+      # root-level test modules) and a tests/ dir without __init__.py, which a
+      # root discover never enters - each in a parallel run, then combined.
+      # Exit 5 (no tests) is fine for one pass, never for all of them.
+      starts=(.)
+      if [ -d tests ] && [ ! -f tests/__init__.py ]; then starts+=(tests); fi
+      rm -f .coverage .coverage.*
+      ran_tests=false
+      for start in "${starts[@]}"; do
+        prc=0
+        python -m coverage run --branch --parallel-mode -m unittest discover -s "$start" || prc=$?
+        case "$prc" in
+          0) ran_tests=true ;;
+          5) echo "unittest discover -s $start: no tests there." ;;
+          *) rc=$prc ;;
+        esac
+      done
+      if [ "$ran_tests" != "true" ] && [ "$rc" -eq 0 ]; then
+        echo "unittest discovered and ran NONE of the test files (searched: ${starts[*]})." >&2
+        rc=1
+      fi
+      if [ "$rc" -eq 0 ]; then
+        python -m coverage combine >/dev/null || rc=$?
+        python -m coverage report --fail-under=100 --show-missing || rc=$?
+      fi
     fi
     if [ "$rc" -ne 0 ]; then
       lane_fail gate-tests-coverage-py "tests failed OR coverage below STRICT 100% line+branch (line-only 100% is ~99.x once branches count and still FAILs; CI enforces --cov-branch identically)"
@@ -350,47 +355,64 @@ if [ "$DETECT_JSTS" = "true" ]; then
     if node -e "const s=(require('$d/package.json').scripts||{}).test||'';process.exit(/(vitest|jest).*--coverage|--coverage.*(vitest|jest)/.test(s)?0:1)" 2>/dev/null; then echo "runner"; return 0; fi
     echo ""; return 0
   }
-  # Same planner as CI: every project (root AND nested), each test file
-  # attributed to its deepest project, workspace members of a measured root
-  # counted as measured.
-  git ls-files > "$WORK_DIR/jsts-files.txt"
-  plan_args=(--files "$WORK_DIR/jsts-files.txt")
+  # Same planner and rules as CI: every project (root AND nested), each test
+  # file attributed to its deepest project; orphans fail; a project without
+  # tests of its own is not run, except an aggregator root that a lane-less
+  # workspace member relies on; a member without a lane counts only when the
+  # root's coverage reports name a file inside it. `-z` keeps non-ASCII paths
+  # unquoted.
+  git ls-files -z > "$WORK_DIR/jsts-files.txt"
+  plan_args=(--files "$WORK_DIR/jsts-files.txt" --orphans-out "$WORK_DIR/jsts-orphans.txt")
   if [ -f package.json ]; then plan_args+=(--root-package-json package.json); fi
   if [ -f pnpm-workspace.yaml ]; then plan_args+=(--pnpm-workspace pnpm-workspace.yaml); fi
   python "$QZP_ROOT/scripts/quality/jsts_projects.py" "${plan_args[@]}" > "$WORK_DIR/jsts-plan.tsv"
   mapfile -t plan < "$WORK_DIR/jsts-plan.tsv"
-  ran_any=false
-  root_measured=false
-  declare -a unmeasured=()
-  rc=0
+  mapfile -t orphans < "$WORK_DIR/jsts-orphans.txt"
+  declare -a dirs=() tests=() members=() lanes=()
+  root_run_needed=false
   for row in "${plan[@]}"; do
     IFS=$'\t' read -r d has_tests member <<< "${row%$'\r'}"
     lane_kind="$(has_cov_lane "$d")"
+    dirs+=("$d"); tests+=("$has_tests"); members+=("$member"); lanes+=("$lane_kind")
+    if [ "$member" = "yes" ] && [ "$has_tests" = "yes" ] && [ -z "$lane_kind" ]; then root_run_needed=true; fi
+  done
+  run_jsts_lane() { # $1 dir, $2 lane-kind
+    local slug log
+    slug="$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '_')"
+    log="$WORK_DIR/jsts-coverage-$slug.log"
+    ( cd "$1" && { npm ci || npm install; } >/dev/null 2>&1 \
+      && if [ "$2" = "script" ]; then npm run test:coverage; else npm test; fi ) 2>&1 | tee "$log" || rc=$?
+    python "$QZP_ROOT/scripts/quality/jsts_coverage_assert.py" \
+      --project-dir "$1" --log "$log" --min-percent 100 || rc=$?
+    ran_any=true
+  }
+  ran_any=false
+  declare -a unmeasured=()
+  rc=0
+  for i in "${!dirs[@]}"; do
+    d="${dirs[$i]}"; has_tests="${tests[$i]}"; member="${members[$i]}"; lane_kind="${lanes[$i]}"
+    if [ "$has_tests" != "yes" ]; then
+      if [ "$d" = "." ] && [ -n "$lane_kind" ] && [ "$root_run_needed" = "true" ]; then run_jsts_lane "$d" "$lane_kind"; fi
+      continue
+    fi
     if [ -n "$lane_kind" ]; then
-      slug="$(printf '%s' "$d" | tr -c 'A-Za-z0-9' '_')"
-      log="$WORK_DIR/jsts-coverage-$slug.log"
-      ( cd "$d" && { npm ci || npm install; } >/dev/null 2>&1 \
-        && if [ "$lane_kind" = "script" ]; then npm run test:coverage; else npm test; fi ) 2>&1 | tee "$log" || rc=$?
-      python "$QZP_ROOT/scripts/quality/jsts_coverage_assert.py" \
-        --project-dir "$d" --log "$log" --min-percent 100 || rc=$?
-      ran_any=true
-      if [ "$d" = "." ]; then root_measured=true; fi
-    elif [ "$has_tests" = "yes" ] && ! { [ "$member" = "yes" ] && [ "$root_measured" = "true" ]; }; then
+      run_jsts_lane "$d" "$lane_kind"
+    elif ! { [ "$member" = "yes" ] && python "$QZP_ROOT/scripts/quality/jsts_projects.py" --member-evidence "$d" --project-dir .; }; then
       unmeasured+=("$d")
     fi
   done
-  if [ "${#unmeasured[@]}" -gt 0 ]; then
-    lane_fail gate-tests-coverage-jsts "project dir(s) with JS/TS test files but no coverage lane, never measured: ${unmeasured[*]}"
+  if [ "${#orphans[@]}" -gt 0 ]; then
+    lane_fail gate-tests-coverage-jsts "JS/TS test file(s) outside every package.json project, run by no coverage lane: ${orphans[*]}"
+  elif [ "${#unmeasured[@]}" -gt 0 ]; then
+    lane_fail gate-tests-coverage-jsts "project dir(s) with JS/TS test files but no coverage lane (and, for workspace members, no root coverage report naming their files), never measured: ${unmeasured[*]}"
   elif [ "$ran_any" = "true" ]; then
     if [ "$rc" -ne 0 ]; then
       lane_fail gate-tests-coverage-jsts "a measured JS/TS coverage figure was below the 100% line+branch bar (or no figure could be parsed)"
     else
       lane_pass gate-tests-coverage-jsts "measured coverage met the 100% bar in every project dir"
     fi
-  elif [ "$DETECT_JSTSTESTS" != "true" ]; then
-    lane_skip gate-tests-coverage-jsts "ts/js source with NO test files and no coverage script - no test surface by design"
   else
-    lane_fail gate-tests-coverage-jsts "ts/js present (with test files) but no coverage script in any project dir - the 100% gate cannot pass unmeasured. Add a 'test:coverage' npm script."
+    lane_skip gate-tests-coverage-jsts "ts/js source with NO JS/TS test files - no test surface by design"
   fi
 fi
 
@@ -468,63 +490,61 @@ fi
 
 # ── GATE 6 — osv-scanner deps + T0 severity floor ─────────────────────────
 echo "== gate-deps osv-scanner@$PIN_OSV =="
-if [ "$DETECT_OSVSOURCES" != "true" ]; then
-  lane_pass gate-deps "no dependency manifests or lockfiles present - nothing to scan (CI passes identically)"
+# ALWAYS, like CI: osv-scanner itself decides what is scannable and exits 128
+# when there is nothing; a glob list here used to miss bun.lock, uv.lock, NuGet.
+osv="$(resolve_osv)" || osv=""
+if [ -z "$osv" ]; then
+  lane_skip gate-deps "osv-scanner@$PIN_OSV binary not on PATH and download unavailable. CI still runs this lane."
 else
-  osv="$(resolve_osv)" || osv=""
-  if [ -z "$osv" ]; then
-    lane_skip gate-deps "osv-scanner@$PIN_OSV binary not on PATH and download unavailable. CI still runs this lane."
-  else
-    # --config only when the file ships (osv-scanner rejects a missing config
-    # path with exit 130 — same shape scheduled_cve_scan.py uses).
-    osv_config_args=()
-    [ -f osv-scanner.toml ] && osv_config_args=(--config=osv-scanner.toml)
-    is_scan_error() { case "$1" in 127|129|130) return 0 ;; *) return 1 ;; esac; }
-    is_retryable() { case "$1" in 127|129) return 0 ;; *) return 1 ;; esac; }
-    attempt=1
-    max_attempts=3
+  # --config only when the file ships (osv-scanner rejects a missing config
+  # path with exit 130 — same shape scheduled_cve_scan.py uses).
+  osv_config_args=()
+  [ -f osv-scanner.toml ] && osv_config_args=(--config=osv-scanner.toml)
+  is_scan_error() { case "$1" in 127|129|130) return 0 ;; *) return 1 ;; esac; }
+  is_retryable() { case "$1" in 127|129) return 0 ;; *) return 1 ;; esac; }
+  attempt=1
+  max_attempts=3
+  rc=0
+  while : ; do
     rc=0
-    while : ; do
-      rc=0
-      "$osv" scan source "${osv_config_args[@]}" --recursive . || rc=$?
-      if ! is_retryable "$rc" || [ "$attempt" -ge "$max_attempts" ]; then break; fi
-      backoff=$(( attempt * 20 ))
-      echo "RETRY gate-deps: osv-scanner exited $rc without completing the scan (attempt ${attempt}/${max_attempts}); retrying in ${backoff}s." >&2
-      sleep "$backoff"
-      attempt=$(( attempt + 1 ))
-    done
-    if [ "$rc" -eq 0 ]; then
-      lane_pass gate-deps "osv-scanner@$PIN_OSV found 0 actionable CVEs"
-    elif [ "$rc" -eq 128 ]; then
-      lane_pass gate-deps "osv-scanner exited 128 (no package sources found) - nothing to scan"
-    elif [ "$rc" -eq 1 ]; then
-      jrc=0
-      "$osv" scan source "${osv_config_args[@]}" --recursive --format json . > "$WORK_DIR/osv-report.json" || jrc=$?
-      if [ "$DEPS_SEVERITY_FLOOR" = "any" ]; then
-        # Zero tolerance, like CI with `deps-severity-floor: any`: the table is
-        # printed for the reader, and any finding fails the lane.
-        if [ "$jrc" -eq 0 ] || [ "$jrc" -eq 1 ]; then
-          python "$QZP_ROOT/scripts/quality/osv_severity_gate.py" "$WORK_DIR/osv-report.json" || true
-        fi
-        lane_fail gate-deps "deps-severity-floor=any: osv-scanner reported at least one advisory and every finding blocks"
-      elif [ "$jrc" -ne 0 ] && [ "$jrc" -ne 1 ]; then
-        lane_fail gate-deps "the JSON re-scan needed to classify findings exited $jrc - NOT a vulnerability verdict; the gate blocks rather than passing silently"
-      else
-        grc=0
-        python "$QZP_ROOT/scripts/quality/osv_severity_gate.py" "$WORK_DIR/osv-report.json" || grc=$?
-        if [ "$grc" -eq 0 ]; then
-          lane_pass gate-deps "0 findings clear the T0 severity floor (T2 inventory non-blocking, same classifier as CI)"
-        elif [ "$grc" -eq 1 ]; then
-          lane_fail gate-deps "at least one PRODUCTION dependency has a CVSS >= 7.0 advisory WITH a published fix - bump it"
-        else
-          lane_fail gate-deps "the severity classifier exited $grc (expected 0 or 1) - NOT a vulnerability verdict; the gate blocks"
-        fi
+    "$osv" scan source "${osv_config_args[@]}" --recursive . || rc=$?
+    if ! is_retryable "$rc" || [ "$attempt" -ge "$max_attempts" ]; then break; fi
+    backoff=$(( attempt * 20 ))
+    echo "RETRY gate-deps: osv-scanner exited $rc without completing the scan (attempt ${attempt}/${max_attempts}); retrying in ${backoff}s." >&2
+    sleep "$backoff"
+    attempt=$(( attempt + 1 ))
+  done
+  if [ "$rc" -eq 0 ]; then
+    lane_pass gate-deps "osv-scanner@$PIN_OSV found 0 actionable CVEs"
+  elif [ "$rc" -eq 128 ]; then
+    lane_pass gate-deps "osv-scanner exited 128 (no package sources found) - nothing to scan"
+  elif [ "$rc" -eq 1 ]; then
+    jrc=0
+    "$osv" scan source "${osv_config_args[@]}" --recursive --format json . > "$WORK_DIR/osv-report.json" || jrc=$?
+    if [ "$DEPS_SEVERITY_FLOOR" = "any" ]; then
+      # Zero tolerance, like CI with `deps-severity-floor: any`: the table is
+      # printed for the reader, and any finding fails the lane.
+      if [ "$jrc" -eq 0 ] || [ "$jrc" -eq 1 ]; then
+        python "$QZP_ROOT/scripts/quality/osv_severity_gate.py" "$WORK_DIR/osv-report.json" || true
       fi
-    elif is_scan_error "$rc"; then
-      lane_fail gate-deps "osv-scanner could not complete the scan (exit $rc) - NOT a vulnerability finding; re-run once upstream recovers"
+      lane_fail gate-deps "deps-severity-floor=any: osv-scanner reported at least one advisory and every finding blocks"
+    elif [ "$jrc" -ne 0 ] && [ "$jrc" -ne 1 ]; then
+      lane_fail gate-deps "the JSON re-scan needed to classify findings exited $jrc - NOT a vulnerability verdict; the gate blocks rather than passing silently"
     else
-      lane_fail gate-deps "osv-scanner exited $rc, not a documented exit code for the pinned $PIN_OSV - treated as a scan failure, NOT a finding"
+      grc=0
+      python "$QZP_ROOT/scripts/quality/osv_severity_gate.py" "$WORK_DIR/osv-report.json" || grc=$?
+      if [ "$grc" -eq 0 ]; then
+        lane_pass gate-deps "0 findings clear the T0 severity floor (T2 inventory non-blocking, same classifier as CI)"
+      elif [ "$grc" -eq 1 ]; then
+        lane_fail gate-deps "at least one PRODUCTION dependency has a CVSS >= 7.0 advisory WITH a published fix - bump it"
+      else
+        lane_fail gate-deps "the severity classifier exited $grc (expected 0 or 1) - NOT a vulnerability verdict; the gate blocks"
+      fi
     fi
+  elif is_scan_error "$rc"; then
+    lane_fail gate-deps "osv-scanner could not complete the scan (exit $rc) - NOT a vulnerability finding; re-run once upstream recovers"
+  else
+    lane_fail gate-deps "osv-scanner exited $rc, not a documented exit code for the pinned $PIN_OSV - treated as a scan failure, NOT a finding"
   fi
 fi
 

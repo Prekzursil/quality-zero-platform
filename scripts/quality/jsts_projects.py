@@ -26,7 +26,8 @@ coverage lane ever runs a test that lives outside every project.
 
 ``--member-evidence <dir>`` answers the one question a plan cannot: did the
 root's coverage run actually measure that workspace member? Only a coverage
-report that names the member's files says so; a ``workspaces`` entry alone
+report that names a file INSIDE the member (its path, relative to the project
+root, starts with the member directory) says so; a ``workspaces`` entry alone
 does not.
 
 The module is pure standard library because the lane runs it with the runner's
@@ -37,6 +38,7 @@ from __future__ import absolute_import
 
 import argparse
 import fnmatch
+import html
 import json
 import re
 import sys
@@ -50,6 +52,9 @@ JSTS_TEST = re.compile(r"(\.(test|spec)\.([cm]?[jt]s|[jt]sx)$)|((^|/)__tests__/.
 """A JS/TS test file: ``*.test.*`` / ``*.spec.*`` or anything under ``__tests__/``."""
 
 ROOT = "."
+
+CLOVER_FILE_PATH = re.compile(r'<file\b[^>]*?\bpath="([^"]*)"')
+"""``<file ... path="...">`` in a clover report (istanbul writes the absolute path)."""
 
 PlanRow = Tuple[str, bool, bool]
 
@@ -162,9 +167,10 @@ def plan(
 ) -> Tuple[List[PlanRow], List[str]]:
     """Return ``(rows, orphan_tests)`` for the tracked file list ``paths``.
 
-    A workspace member's tests also count as tests of the ROOT project: a
-    root coverage run over a workspace is how they get measured, so a root
-    whose only tests live in its members still has a test surface.
+    ``has_tests`` is the project's OWN test files only. Whether an aggregator
+    root must still run (because a member without a coverage lane of its own
+    relies on the root's workspace run) depends on the members' lanes, which
+    the lane decides; a plan row never invents a test surface.
     """
     dirs = project_dirs(paths)
     with_tests = set()
@@ -178,10 +184,7 @@ def plan(
         else:
             with_tests.add(owner)
     globs = workspace_globs(root_package_json, pnpm_workspace)
-    members = {directory for directory in dirs if is_workspace_member(directory, globs)}
-    if with_tests & members:
-        with_tests.add(ROOT)
-    rows = [(directory, directory in with_tests, directory in members) for directory in dirs]
+    rows = [(directory, directory in with_tests, is_workspace_member(directory, globs)) for directory in dirs]
     return rows, orphans
 
 
@@ -196,9 +199,11 @@ def render(rows: Sequence[PlanRow]) -> str:
 def coverage_report_paths(project_dir: Path) -> List[str]:
     """Return every source path the project's machine-readable coverage reports name.
 
-    Read from ``coverage/**/lcov.info`` (``SF:`` records) and the istanbul
-    ``coverage-summary.json`` / ``coverage-final.json`` keys - the same
-    reporters the coverage-number assertion reads.
+    Read from ``coverage/**/lcov.info`` (``SF:`` records), ``coverage/**/clover.xml``
+    (``<file path=...>``) and the istanbul ``coverage-summary.json`` /
+    ``coverage-final.json`` keys: every reporter the coverage-number assertion
+    accepts, plus istanbul's per-file JSON. Clover is read with a regex, like
+    the assertion, so no XML parser touches the report.
     """
     paths = set()
     coverage_dir = Path(project_dir) / "coverage"
@@ -206,6 +211,9 @@ def coverage_report_paths(project_dir: Path) -> List[str]:
         for line in report.read_text(encoding="utf-8", errors="replace").splitlines():
             if line.startswith("SF:"):
                 paths.add(line[3:].strip().replace("\\", "/"))
+    for report in sorted(coverage_dir.glob("**/clover.xml")):
+        text = report.read_text(encoding="utf-8", errors="replace")
+        paths.update(html.unescape(found).replace("\\", "/") for found in CLOVER_FILE_PATH.findall(text))
     for name in ("coverage-summary.json", "coverage-final.json"):
         for report in sorted(coverage_dir.glob(f"**/{name}")):
             try:
@@ -217,15 +225,35 @@ def coverage_report_paths(project_dir: Path) -> List[str]:
     return sorted(paths)
 
 
-def measured_by(member: str, report_paths: Iterable[str]) -> bool:
+def project_relative(path: str, project_root: str = "") -> str:
+    """Return a report path relative to ``project_root``.
+
+    Reporters write project-relative paths (lcov) or absolute ones (clover,
+    istanbul JSON). An absolute path inside ``project_root`` loses that prefix;
+    a relative one loses only leading ``./`` segments, so a dot-named directory
+    (``.apps/web``) keeps its name. An absolute path elsewhere stays absolute
+    and therefore never matches a member.
+    """
+    normalized = path.replace("\\", "/")
+    root = project_root.replace("\\", "/").rstrip("/")
+    if root and normalized.startswith(root + "/"):
+        return normalized[len(root) + 1 :]
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    return normalized
+
+
+def measured_by(member: str, report_paths: Iterable[str], project_root: str = "") -> bool:
     """True when a coverage report names at least one file inside ``member``.
 
-    A workspace declaration alone does not prove the root's coverage run
-    measured a member (a root ``jest src --coverage`` never does); a report
-    that lists the member's files does.
+    The member directory must START the project-relative path: ``lib`` never
+    matches ``src/lib/util.ts``, and ``packages/ui`` never matches
+    ``packages/ui-kit/x.ts``. A workspace declaration alone does not prove the
+    root's coverage run measured a member (a root ``jest src --coverage``
+    never does); a report that lists the member's files does.
     """
-    needle = "/" + member.strip("/") + "/"
-    return any(needle in "/" + path.lstrip("./") for path in report_paths)
+    prefix = project_relative(member.strip("/")) + "/"
+    return any(project_relative(path, project_root).startswith(prefix) for path in report_paths)
 
 
 def _read_optional(path: str) -> str:
@@ -261,7 +289,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     """Print the project plan, or answer a workspace-member evidence question."""
     args = _build_parser().parse_args(argv)
     if args.member_evidence:
-        evidence = measured_by(args.member_evidence, coverage_report_paths(Path(args.project_dir)))
+        project_dir = Path(args.project_dir)
+        evidence = measured_by(
+            args.member_evidence, coverage_report_paths(project_dir), project_root=str(project_dir.resolve())
+        )
         return 0 if evidence else 1
     if not args.files:
         print("ERROR jsts-projects: --files is required to plan", file=sys.stderr)

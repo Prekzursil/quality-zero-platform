@@ -96,7 +96,7 @@ Model: **Prevent (auto-fix) - Binary green/red - Ratchet-retired (100% everywher
 3. **Tests + coverage**: STRICT **100% line+branch** (standing user policy; ratchet retired). Reasoned, greppable pragma only. **No silent-pass** — a language with source *and* test files but no coverage config/script **FAILS** (the 100% gate cannot pass unmeasured); the only skip is the narrow *no-test-surface-by-design* case (source present with **zero** test files).
 4. **SAST**: Opengrep (Semgrep CE acceptable). **Always runs** (round-10): the caller's curated `.quality/opengrep` ruleset when present, otherwise the platform's curated default ruleset, embedded in the workflow at the pinned ref.
 5. **Secrets**: gitleaks (pinned + allowlist) + push-protection. SELF-CONTAINED and **always runs** (round-7); a caller `.gitleaks.toml` is an optional allowlist, never the trigger.
-6. **Deps**: osv-scanner + Dependabot (**no** Renovate). **Runs whenever a manifest or lockfile exists** (round-10); `osv-scanner.toml` is optional and only adds the caller's reviewed ignores. Blocking policy: the `deps-severity-floor` input — `t0` (default: a production dependency with CVSS >= 7.0 and a published fix blocks; the rest is printed as T2 inventory) or `any` (zero tolerance: every finding blocks).
+6. **Deps**: osv-scanner + Dependabot (**no** Renovate). **Always runs** (round-10): osv-scanner itself decides what is scannable and exits `128` when nothing is, which passes as *nothing to scan*; `osv-scanner.toml` is optional and only adds the caller's reviewed ignores. Blocking policy: the `deps-severity-floor` input — `t0` (default: a production dependency with CVSS >= 7.0 and a published fix blocks; the rest is printed as T2 inventory) or `any` (zero tolerance: every finding blocks).
 
 **Deleted as gates** (must NOT reappear): Sonar, Codacy, DeepSource, DeepScan,
 qlty, Codecov-as-gate, Snyk, Applitools, Chromatic, Percy, Sentry-as-gate,
@@ -167,14 +167,15 @@ hard-fail *before* a gate can run:
   cached setup now passes `cache-dependency-path` set to the **actual detected
   manifest paths** (incl. `requirements-dev.txt` / `requirements/*.txt`), so the
   cache key always hashes a real file and `setup-python` never hard-fails.
-- **Zero-dependency repos (round-3 FIX 4)** — `osv-scanner` is invoked only when
-  at least one scannable manifest/lockfile is detected; **and** when it *is* run,
-  its own exit `128` ("no package sources found") is mapped to **PASS**. The
-  round-1 pre-check alone was insufficient: a repo can match a manifest glob yet
-  still have nothing osv recognizes as a scannable source, so the scanner exited
-  128 and red the gate (observed: `star-wars`, a zero-dependency repo). "Nothing
-  to scan" is not a failure; any **other** non-zero exit (e.g. vulnerabilities
-  found) still fails the gate.
+- **Zero-dependency repos (round-3 FIX 4, round-10)** — osv-scanner's own exit
+  `128` ("no package sources found") is mapped to **PASS** and reported as
+  *nothing to scan*. A repo can match a manifest glob yet still have nothing osv
+  recognizes as a scannable source (observed: `star-wars`, a zero-dependency
+  repo), so the scanner's verdict is the only one used: the glob pre-check that
+  used to decide whether to run at all is gone, because it also missed sources
+  osv-scanner supports (`bun.lock`, `uv.lock`, NuGet, `pubspec.lock`,
+  `mix.lock`...) and turned them into a silent pass. Any **other** non-zero exit
+  (e.g. vulnerabilities found) still fails the gate.
 - **Monorepo / nested TypeScript** — `tsc` runs per `tsconfig.json`: the root
   config if present, otherwise every discovered nested config (e.g. a `ui/`
   subproject). A repo with nested-only configs is checked, not hard-failed.
@@ -194,9 +195,15 @@ hard-fail *before* a gate can run:
   measured and a nested project with tests but no coverage runner passed
   silently. Every project is now planned (`scripts/quality/jsts_projects.py`,
   embedded in the workflow): each JS/TS test file belongs to its deepest
-  enclosing project, every project with a coverage lane is measured, and a
-  project with test files but no lane FAILS unless it is a workspace member
-  (`workspaces` / `pnpm-workspace.yaml`) of a measured root.
+  enclosing project, and every project with test files of its own is measured
+  by its own coverage lane. A project with test files but no lane FAILS, unless
+  it is a workspace member (`workspaces` / `pnpm-workspace.yaml`) AND the root's
+  coverage reports (lcov / clover / istanbul JSON) name a file inside it: a
+  `workspaces` entry alone proves nothing. A root without tests of its own runs
+  only when such a lane-less member relies on it, so an aggregator root whose
+  members measure themselves needs no script. A test file outside every
+  project FAILS (no lane ever runs it), and a project with a coverage script but
+  zero test files is not run.
 - **Tests that import a runtime dependency** — gate 3 installs the caller's
   Python **runtime** deps before `pytest`/`coverage`, in priority order:
   `requirements.txt` / `requirements/*.txt` / `requirements*.txt`

@@ -197,13 +197,13 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(rows, [("web", False, False)])
         self.assertEqual(orphans, ["scripts/x.test.mjs"])
 
-    def test_member_tests_give_the_root_a_test_surface(self) -> None:
-        """A workspace root whose tests all live in members still has tests to run."""
+    def test_member_tests_stay_with_the_member(self) -> None:
+        """An aggregator root does not inherit its members' tests; the lane decides if it must run."""
         rows, _ = planner.plan(
             ["package.json", "packages/ui/package.json", "packages/ui/a.test.ts"],
             root_package_json=json.dumps({"workspaces": ["packages/*"]}),
         )
-        self.assertEqual(rows, [(".", True, False), ("packages/ui", True, True)])
+        self.assertEqual(rows, [(".", False, False), ("packages/ui", True, True)])
 
     def test_render_is_tab_separated_yes_no(self) -> None:
         """The lane splits on tabs and compares to yes / no."""
@@ -225,16 +225,29 @@ class MemberEvidenceTests(unittest.TestCase):
         (self.project / "coverage" / relative).write_text(text, encoding="utf-8")
 
     def test_paths_from_every_supported_report(self) -> None:
-        """lcov SF records plus json-summary / coverage-final keys; totals and junk ignored."""
+        """lcov SF records, clover file paths, json-summary / coverage-final keys; totals and junk ignored."""
         self._report("lcov.info", "TN:\nSF:packages/ui/src/a.ts\nend_of_record\n")
         self._report("nested/coverage-summary.json", json.dumps({"total": {}, "C:\\w\\src\\b.ts": {}}))
         self._report("coverage-final.json", json.dumps({"/home/runner/r/packages/api/c.ts": {}}))
         self._report("nested/coverage-final.json", "{not json")
         (self.project / "coverage" / "list").mkdir()
         self._report("list/coverage-summary.json", json.dumps(["not", "a", "dict"]))
+        self._report(
+            "nested/clover.xml",
+            '<coverage><project><metrics statements="2"/>'
+            '<file name="d.ts" path="/home/runner/r/packages/web/d.ts"><metrics/></file>'
+            '<package name="x"><file path="/home/runner/r/a&amp;b/e.ts" name="e.ts"/></package>'
+            '<file name="no-path.ts"/></project></coverage>',
+        )
         self.assertEqual(
             planner.coverage_report_paths(self.project),
-            ["/home/runner/r/packages/api/c.ts", "C:/w/src/b.ts", "packages/ui/src/a.ts"],
+            [
+                "/home/runner/r/a&b/e.ts",
+                "/home/runner/r/packages/api/c.ts",
+                "/home/runner/r/packages/web/d.ts",
+                "C:/w/src/b.ts",
+                "packages/ui/src/a.ts",
+            ],
         )
 
     def test_no_coverage_directory_means_no_evidence(self) -> None:
@@ -242,12 +255,28 @@ class MemberEvidenceTests(unittest.TestCase):
         self.assertEqual(planner.coverage_report_paths(self.project / "absent"), [])
 
     def test_measured_by_matches_relative_and_absolute_paths(self) -> None:
-        """The member directory must appear as a whole path segment run."""
+        """Relative paths as given, absolute ones from inside the project root."""
         self.assertTrue(planner.measured_by("packages/ui", ["packages/ui/src/a.ts"]))
         self.assertTrue(planner.measured_by("packages/ui/", ["./packages/ui/a.ts"]))
-        self.assertTrue(planner.measured_by("packages/ui", ["/home/runner/r/packages/ui/a.ts"]))
-        self.assertFalse(planner.measured_by("packages/ui", ["packages/ui-kit/a.ts", "src/packages/uix.ts"]))
+        self.assertTrue(planner.measured_by("packages/ui", ["/home/runner/r/packages/ui/a.ts"], "/home/runner/r"))
+        self.assertTrue(planner.measured_by("packages/ui", ["/home/runner/r/packages/ui/a.ts"], "/home/runner/r/"))
+        self.assertTrue(planner.measured_by("packages/ui", ["C:\\w\\r\\packages\\ui\\a.ts"], "C:\\w\\r"))
         self.assertFalse(planner.measured_by("packages/ui", []))
+
+    def test_measured_by_is_anchored_at_the_project_root(self) -> None:
+        """THE review finding: a member name appearing deeper in a path is not evidence."""
+        self.assertFalse(planner.measured_by("lib", ["src/lib/util.ts"]))
+        self.assertFalse(planner.measured_by("packages/ui", ["packages/ui-kit/a.ts", "src/packages/uix.ts"]))
+        # An absolute path from another checkout is never read as this project's.
+        self.assertFalse(planner.measured_by("packages/ui", ["/elsewhere/packages/ui/a.ts"], "/home/runner/r"))
+        self.assertFalse(planner.measured_by("packages/ui", ["/home/runner/r/packages/ui/a.ts"]))
+
+    def test_dot_named_members_keep_their_name(self) -> None:
+        """Only leading `./` segments are dropped, never the dot of `.apps`."""
+        self.assertTrue(planner.measured_by(".apps/web", [".apps/web/a.ts"]))
+        self.assertTrue(planner.measured_by("./.apps/web", ["././.apps/web/a.ts"]))
+        self.assertFalse(planner.measured_by(".apps/web", ["apps/web/a.ts"]))
+        self.assertEqual(planner.project_relative("./.apps/web/a.ts"), ".apps/web/a.ts")
 
 
 class MainTests(unittest.TestCase):
@@ -315,6 +344,10 @@ class MainTests(unittest.TestCase):
         argv = ["--member-evidence", "packages/ui", "--project-dir", str(self.tmp)]
         self.assertEqual(planner.main(argv), 0)
         self.assertEqual(planner.main(["--member-evidence", "packages/api", "--project-dir", str(self.tmp)]), 1)
+        # An absolute report path counts when it lies inside the resolved project dir.
+        absolute = (self.tmp.resolve() / "packages" / "api" / "b.ts").as_posix()
+        (self.tmp / "coverage" / "lcov.info").write_text(f"SF:{absolute}\n", encoding="utf-8")
+        self.assertEqual(planner.main(["--member-evidence", "packages/api", "--project-dir", str(self.tmp)]), 0)
 
     def test_main_fails_closed_on_unreadable_input(self) -> None:
         """A missing file list is exit 2, never an empty (all-clear) plan."""

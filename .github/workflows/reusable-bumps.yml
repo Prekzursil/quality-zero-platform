@@ -135,7 +135,6 @@ jobs:
         slug: ${{ fromJson(needs.plan.outputs.staging) }}
     permissions:
       contents: read
-      id-token: write
       pull-requests: write
     uses: ./.github/workflows/reusable-bump-apply.yml
     with:
@@ -164,7 +163,6 @@ jobs:
         slug: ${{ fromJson(needs.plan.outputs.rollout) }}
     permissions:
       contents: read
-      id-token: write
       pull-requests: write
     uses: ./.github/workflows/reusable-bump-apply.yml
     with:

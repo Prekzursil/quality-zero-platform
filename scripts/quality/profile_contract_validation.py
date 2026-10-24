@@ -217,6 +217,24 @@ def _validate_deps_contract(profile: Dict[str, Any]) -> List[str]:
     return findings
 
 
+def _validate_codeql_contract(profile: Dict[str, Any]) -> List[str]:
+    """Require an enabled CodeQL profile to declare what it analyses.
+
+    The reusable CodeQL gate fails such a profile at run time (it analyses
+    nothing, and only ``codeql.enabled: false`` is an opt-out); reporting it
+    here catches it while rendering, before any repository runs it.
+    """
+    codeql = profile.get("codeql")
+    if not isinstance(codeql, dict) or codeql.get("enabled", True) is False:
+        return []
+    if any(str(item).strip() for item in codeql.get("languages") or []):
+        return []
+    return [
+        f"{profile['slug']}: codeql.languages is required while CodeQL is enabled "
+        "(set codeql.enabled: false to opt out)"
+    ]
+
+
 def _validate_visual_pair_contract(
     profile: Dict[str, Any],
     *,
@@ -319,6 +337,7 @@ def validate_profile(
         _validate_secret_contract,
         _validate_issue_policy_contract,
         _validate_deps_contract,
+        _validate_codeql_contract,
         lambda current: _validate_visual_pair_contract(
             current,
             active_required_contexts_fn=active_required_contexts_fn,

@@ -93,7 +93,6 @@ jobs:
         slug: ${{ fromJson(needs.resolve-fleet.outputs.slugs) }}
     permissions:
       contents: read
-      id-token: write
       pull-requests: write
     uses: ./.github/workflows/reusable-drift-sync.yml
     with:

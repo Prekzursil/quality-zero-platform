@@ -41,7 +41,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -144,7 +143,7 @@ jobs:
           set -euo pipefail
           # Run the applier + open a PR. Keeps the body of the step in
           # a Python here-doc so env-var indirection replaces every
-          # ``${{ github.* }}`` interpolation (Semgrep CWE-78).
+          # GitHub-context interpolation in this run block (Semgrep CWE-78).
           python "$GITHUB_WORKSPACE/platform/scripts/quality/apply_drift_pr.py" \
             --report "$DRIFT_REPORT_PATH" \
             --repo-slug "$REPO_SLUG" \

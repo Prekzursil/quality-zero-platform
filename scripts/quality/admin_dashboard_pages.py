@@ -22,7 +22,7 @@ import html
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Mapping
+from typing import Any, Callable, Collection, Dict, List, Mapping, Optional, Sequence
 
 # Newline constant used by the body builders so the duplicate "\n" literal
 # Sonar's python:S1192 rule flagged at line 93 stays at zero.
@@ -39,6 +39,7 @@ def _ensure_platform_on_syspath() -> None:
 
 _ensure_platform_on_syspath()
 
+from scripts.quality.fleet_inventory import PRIVATE_INCLUDE_SLUGS  # noqa: E402
 
 PRIVATE_SLUG_PLACEHOLDER = "<private>"
 
@@ -75,11 +76,43 @@ def _wrap_html(title: str, body: str) -> str:
     )
 
 
+def _no_source_body(source: str, subject: str) -> str:
+    """The body of a page whose data source does not exist: it knows nothing, and says so."""
+    where = f"<code>{html.escape(source)}</code>" if source else "Its data source"
+    return (
+        f'    <p class="no-source"><strong>No data.</strong> {where} does not exist, so this page '
+        f"knows nothing about {html.escape(subject)}. This is NOT an all-clear.</p>\n"
+    )
+
+
+def load_source(path_arg: str, loader: Callable[[Path], List[Dict[str, Any]]]) -> Optional[List[Dict[str, Any]]]:
+    """``None`` when no source file exists, so a page never reads "nothing" as "all clear"."""
+    if not path_arg or not Path(path_arg).is_file():
+        return None
+    return loader(Path(path_arg))
+
+
+def load_audit_sources(path_args: Sequence[str]) -> Optional[List[Dict[str, Any]]]:
+    """Every record of the bypass audit files that exist, oldest first (``None`` when none exists).
+
+    ``break-glass`` and ``skip`` bypasses are written to separate files
+    (``bypass_labels``); the feed reads both, so a skip is never missing.
+    """
+    loaded = [rows for rows in (load_source(path, load_audit_jsonl) for path in path_args) if rows is not None]
+    if not loaded:
+        return None
+    records = [record for rows in loaded for record in rows]
+    return sorted(records, key=lambda record: str(record.get("timestamp_utc", record.get("timestamp", ""))))
+
+
 def render_coverage_trend_page(
     *,
-    rows: List[Mapping[str, Any]],
+    rows: Optional[List[Mapping[str, Any]]],
+    source: str = "",
 ) -> str:
-    """Return the HTML for ``coverage.html``."""
+    """Return the HTML for ``coverage.html`` (``rows=None``: the source does not exist)."""
+    if rows is None:
+        return _wrap_html("Coverage trend", _no_source_body(source, "coverage"))
     if not rows:
         body = "    <p>No coverage data available yet.</p>\n"
         return _wrap_html("Coverage trend", body)
@@ -111,11 +144,14 @@ def render_coverage_trend_page(
 
 def render_drift_page(
     *,
-    entries: List[Mapping[str, Any]],
+    entries: Optional[List[Mapping[str, Any]]],
+    source: str = "",
 ) -> str:
-    """Return the HTML for ``drift.html``."""
+    """Return the HTML for ``drift.html`` (``entries=None``: the source does not exist)."""
+    if entries is None:
+        return _wrap_html("Drift-sync status", _no_source_body(source, "drift"))
     if not entries:
-        body = "    <p>No drift entries. Fleet is in sync.</p>\n"
+        body = "    <p>No drift entries recorded.</p>\n"
         return _wrap_html("Drift-sync status", body)
     rows = []
     for entry in entries:
@@ -136,20 +172,46 @@ def render_drift_page(
     return _wrap_html("Drift-sync status", body)
 
 
+#: Shown on every state of the audit page: an empty feed is easy to misread.
+#: Until #336 the workflow's "Commit audit log" step could never run (its
+#: ``if:`` read the step's own ``env:``), so nothing before then was recorded.
+AUDIT_SCOPE_NOTE = (
+    "    <p><strong>What this feed can show.</strong> It lists the label-driven bypasses that "
+    "<code>reusable-quality-zero-bypass.yml</code> records, and only when its caller provides "
+    "<code>BYPASS_AUDIT_PAT</code>. Before 2026-10-24 (#336) the recording step never ran at all, so that "
+    "period is <strong>unaudited, not clean</strong>: no entry means nothing was recorded, not that nothing "
+    "was bypassed. An admin's ruleset bypass is logged by GitHub (each repository's rule insights), "
+    "not here.</p>\n"
+)
+
+
 def render_audit_page(
     *,
-    entries: List[Mapping[str, Any]],
+    entries: Optional[List[Mapping[str, Any]]],
+    source: str = "",
+    private_slugs: Collection[str] = PRIVATE_INCLUDE_SLUGS,
 ) -> str:
-    """Return the HTML for ``audit.html`` (break-glass / skip feed)."""
+    """Return the HTML for ``audit.html`` (break-glass / skip feed; ``entries=None``: no source).
+
+    Audit records carry no ``visibility`` field, so a PR slug from one of the
+    fleet's private members (the code-reviewed ``PRIVATE_INCLUDE_SLUGS``) is
+    masked here: the page is published publicly.
+    """
+    if entries is None:
+        return _wrap_html("Bypass audit feed", AUDIT_SCOPE_NOTE + _no_source_body(source, "bypass events"))
     if not entries:
-        body = "    <p>No bypass events recorded.</p>\n"
+        body = AUDIT_SCOPE_NOTE + "    <p>No bypass events recorded since 2026-10-24.</p>\n"
         return _wrap_html("Bypass audit feed", body)
     rows = []
     for entry in entries:
-        ts = html.escape(str(entry.get("timestamp", "")))
+        # bypass_labels writes {"timestamp_utc", "pr": {"slug", "number"}}; the
+        # flat {"timestamp", "pr_slug", "pr_number"} shape is read as well.
+        pr = entry.get("pr") if isinstance(entry.get("pr"), Mapping) else {}
+        ts = html.escape(str(entry.get("timestamp_utc", entry.get("timestamp", ""))))
         label = html.escape(str(entry.get("label", "")))
-        slug = html.escape(str(entry.get("pr_slug", "")))
-        number = html.escape(str(entry.get("pr_number", "")))
+        raw_slug = str(pr.get("slug", entry.get("pr_slug", "")))
+        slug = html.escape(PRIVATE_SLUG_PLACEHOLDER if raw_slug in private_slugs else raw_slug)
+        number = html.escape(str(pr.get("number", entry.get("pr_number", ""))))
         actor = html.escape(str(entry.get("actor", "")))
         incident = html.escape(str(entry.get("incident", "")))
         rows.append(
@@ -162,7 +224,7 @@ def render_audit_page(
             "</tr>",
         )
     body = (
-        "    <table>\n"
+        AUDIT_SCOPE_NOTE + "    <table>\n"
         "      <thead><tr>"
         "<th>Time</th><th>Label</th><th>PR</th><th>Actor</th>"
         "<th>Incident</th></tr></thead>\n"
@@ -213,7 +275,7 @@ if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
     from scripts.quality.common import safe_output_path
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--audit-jsonl", default="")
+    parser.add_argument("--audit-jsonl", action="append", default=[], help="repeat: break-glass and skip files")
     parser.add_argument("--coverage-json", default="")
     parser.add_argument("--drift-jsonl", default="")
     parser.add_argument("--output-dir", required=True)
@@ -228,29 +290,33 @@ if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
     _out = safe_output_path(_args.output_dir, fallback="site")
     _out.mkdir(parents=True, exist_ok=True)
 
-    _cov_rows = redact_private_repos(load_coverage_rows(Path(_args.coverage_json)) if _args.coverage_json else [])
+    _cov_rows = load_source(_args.coverage_json, load_coverage_rows)
     _coverage_path = (_out / "coverage.html").resolve()
     _coverage_path.relative_to(_out.resolve())
     _coverage_path.write_text(
-        render_coverage_trend_page(rows=_cov_rows),
+        render_coverage_trend_page(
+            rows=None if _cov_rows is None else redact_private_repos(_cov_rows), source=_args.coverage_json
+        ),
         encoding="utf-8",
         newline="\n",
     )
 
-    _drift_rows = redact_private_repos(load_drift_entries(Path(_args.drift_jsonl)) if _args.drift_jsonl else [])
+    _drift_rows = load_source(_args.drift_jsonl, load_drift_entries)
     _drift_path = (_out / "drift.html").resolve()
     _drift_path.relative_to(_out.resolve())
     _drift_path.write_text(
-        render_drift_page(entries=_drift_rows),
+        render_drift_page(
+            entries=None if _drift_rows is None else redact_private_repos(_drift_rows), source=_args.drift_jsonl
+        ),
         encoding="utf-8",
         newline="\n",
     )
 
-    _audit_rows = load_audit_jsonl(Path(_args.audit_jsonl)) if _args.audit_jsonl else []
+    _audit_rows = load_audit_sources(_args.audit_jsonl)
     _audit_path = (_out / "audit.html").resolve()
     _audit_path.relative_to(_out.resolve())
     _audit_path.write_text(
-        render_audit_page(entries=_audit_rows),
+        render_audit_page(entries=_audit_rows, source=" / ".join(_args.audit_jsonl)),
         encoding="utf-8",
         newline="\n",
     )

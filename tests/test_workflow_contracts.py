@@ -94,6 +94,26 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("--format plain .github/workflows templates/repo/.github/workflows", zizmor)
         self.assertTrue(sorted((ROOT / "templates" / "repo" / ".github" / "workflows").glob("*.yml")))
 
+    def test_a_pin_bump_cannot_re_identify_an_own_commit_checkout_alert(self) -> None:
+        """CodeQL's alert fingerprint hashes the first 100 non-space/tab characters from the alert's first line.
+
+        The own-commit platform checkouts carry dismissed false positives
+        (CodeQL does not model job.workflow_sha). If that window reaches the
+        pinned SHA, every Dependabot bump re-identifies them as new alerts
+        (#306-#310). The comment line keeps the window inside name + comment.
+        """
+        name = "- name: Check out the platform at this workflow's own commit"
+        found = 0
+        for path in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+            lines = path.read_text(encoding="utf-8").split("\n")
+            for start in [i for i, line in enumerate(lines) if line.strip() == name]:
+                found += 1
+                tail = "".join(ch for ch in "\n".join(lines[start:]) if ch not in " \t")
+                with self.subTest(workflow=path.name, line=start + 1):
+                    self.assertNotIn("@", tail[:100], "the fingerprint window reaches the action pin")
+                    self.assertIn("uses:actions/checkout@", tail[:400])
+        self.assertGreaterEqual(found, 14)
+
     def test_no_step_gates_on_its_own_env(self) -> None:
         """A step's own env does not exist yet when its `if:` is evaluated.
 

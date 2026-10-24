@@ -124,6 +124,7 @@ jobs:
           path: repo
           persist-credentials: false
       - name: Check out the platform at this workflow's own commit
+        # job.workflow_sha is this file's own commit: no caller or PR head picks it.
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
@@ -684,6 +685,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Check out the platform at this workflow's own commit
+        # job.workflow_sha is this file's own commit: no caller or PR head picks it.
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}

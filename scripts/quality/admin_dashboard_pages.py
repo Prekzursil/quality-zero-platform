@@ -22,7 +22,7 @@ import html
 import json
 import sys
 from pathlib import Path
-from typing import Any, Callable, Collection, Dict, List, Mapping, Optional
+from typing import Any, Callable, Collection, Dict, List, Mapping, Optional, Sequence
 
 # Newline constant used by the body builders so the duplicate "\n" literal
 # Sonar's python:S1192 rule flagged at line 93 stays at zero.
@@ -90,6 +90,19 @@ def load_source(path_arg: str, loader: Callable[[Path], List[Dict[str, Any]]]) -
     if not path_arg or not Path(path_arg).is_file():
         return None
     return loader(Path(path_arg))
+
+
+def load_audit_sources(path_args: Sequence[str]) -> Optional[List[Dict[str, Any]]]:
+    """Every record of the bypass audit files that exist, oldest first (``None`` when none exists).
+
+    ``break-glass`` and ``skip`` bypasses are written to separate files
+    (``bypass_labels``); the feed reads both, so a skip is never missing.
+    """
+    loaded = [rows for rows in (load_source(path, load_audit_jsonl) for path in path_args) if rows is not None]
+    if not loaded:
+        return None
+    records = [record for rows in loaded for record in rows]
+    return sorted(records, key=lambda record: str(record.get("timestamp_utc", record.get("timestamp", ""))))
 
 
 def render_coverage_trend_page(
@@ -262,7 +275,7 @@ if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
     from scripts.quality.common import safe_output_path
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--audit-jsonl", default="")
+    parser.add_argument("--audit-jsonl", action="append", default=[], help="repeat: break-glass and skip files")
     parser.add_argument("--coverage-json", default="")
     parser.add_argument("--drift-jsonl", default="")
     parser.add_argument("--output-dir", required=True)
@@ -299,11 +312,11 @@ if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
         newline="\n",
     )
 
-    _audit_rows = load_source(_args.audit_jsonl, load_audit_jsonl)
+    _audit_rows = load_audit_sources(_args.audit_jsonl)
     _audit_path = (_out / "audit.html").resolve()
     _audit_path.relative_to(_out.resolve())
     _audit_path.write_text(
-        render_audit_page(entries=_audit_rows, source=_args.audit_jsonl),
+        render_audit_page(entries=_audit_rows, source=" / ".join(_args.audit_jsonl)),
         encoding="utf-8",
         newline="\n",
     )

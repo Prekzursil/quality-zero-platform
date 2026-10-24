@@ -287,8 +287,9 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
 
         self.assertEqual(verdict("failure", "success"), "unknown")  # was "success": PR 2's failure hidden
         self.assertEqual(verdict("success", "failure"), "partial")
-        self.assertEqual(verdict("cancelled", "success"), "success")  # nothing failed: nothing ambiguous
-        self.assertEqual(verdict("success", "success"), "success")
+        # Review finding: PR 2 may have no run at all - PR 1's green runs prove nothing about it.
+        self.assertEqual(verdict("cancelled", "success"), "unknown")
+        self.assertEqual(verdict("success", "success"), "unknown")
 
     def test_the_default_branch_window_is_filled_with_eligible_runs(self) -> None:
         """Review finding: 99 PR-triggered runs on page 1 pushed a real failure out of a 100-run window."""

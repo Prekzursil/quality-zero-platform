@@ -34,7 +34,7 @@ publish-admin-dashboard.yml · build job (ubuntu-latest)
         │       5. writes  site/data/dashboard.json
         │          copies   docs/admin/{index.html,styles.css,app.js} → site/
         │
-        ├─ admin_dashboard_pages.py --audit-jsonl audit/break-glass.jsonl
+        ├─ admin_dashboard_pages.py --audit-jsonl audit/break-glass.jsonl --audit-jsonl audit/skip.jsonl
         │                                --coverage-json quality-rollup/coverage-trend.json
         │                                --drift-jsonl  audit/drift-sync.jsonl
         │                                --output-dir  site
@@ -66,7 +66,7 @@ masked before the payload is serialised, so the public site cannot leak them.
 | Repo heatmap (main SPA) | `docs/admin/app.js` (client) | `site/data/dashboard.json` ← inventory + profiles + live REST queries | per-repo: profile, rollout, issue policy, scanners, branch-coverage min, deps policy, default-branch health, open-PR health, ruleset presence |
 | Coverage trend | `admin_dashboard_pages.py` (server) | `quality-rollup/coverage-trend.json` (build-time file) | No job produces it yet. Absent ⇒ "**No data.** … does not exist … NOT an all-clear." |
 | Drift-sync status | `admin_dashboard_pages.py` (server) | `audit/drift-sync.jsonl` (runtime artifact) | No job produces it yet. Absent ⇒ "**No data.** … does not exist … NOT an all-clear." Present but empty ⇒ "No drift entries recorded." |
-| Bypass audit feed | `admin_dashboard_pages.py` (server) | `audit/break-glass.jsonl` (runtime artifact, committed by `reusable-quality-zero-bypass.yml` only when the caller has `BYPASS_AUDIT_PAT`) | Every state first says what the feed can show. The recording step never ran before 2026-10-24 (#336), so that period is **unaudited, not clean**. No fleet repo calls the bypass workflow yet, and admin ruleset bypasses are logged by GitHub's rule insights, not here. Absent ⇒ "**No data.** … NOT an all-clear." Present but empty ⇒ "No bypass events recorded since 2026-10-24." |
+| Bypass audit feed | `admin_dashboard_pages.py` (server) | `audit/break-glass.jsonl` and `audit/skip.jsonl`, merged oldest first (runtime artifacts, committed by `reusable-quality-zero-bypass.yml` only when the caller has `BYPASS_AUDIT_PAT`) | Every state first says what the feed can show. The recording step never ran before 2026-10-24 (#336), so that period is **unaudited, not clean**. No fleet repo calls the bypass workflow yet, and admin ruleset bypasses are logged by GitHub's rule insights, not here. Neither file present ⇒ "**No data.** … NOT an all-clear." Present but empty ⇒ "No bypass events recorded since 2026-10-24." |
 | Sub-pages (e.g. codex fleet) | self-contained HTML under `docs/admin/<name>/` | none (static) | copied verbatim |
 
 ## Health semantics
@@ -83,8 +83,8 @@ masked before the payload is serialised, so the public site cannot leak them.
   concurrency cancelled, no longer paints a green branch red.
 - **Open PRs:** the same rule per open PR head commit, over the 100 newest `pull_request` runs.
   When two open PRs share a head commit (one branch, two bases), GitHub cannot say which PR a run
-  belongs to. That head then reads `unknown` if any of its runs failed, even one a later run
-  superseded, because the later run may be the other PR's.
+  belongs to. That head reads `unknown` unless a failure is already visible: green runs from one
+  PR prove nothing about the other, which may have no run at all.
   `none` means no PR is open. Until 2026-10 this field filtered the *default-branch* runs for
   `pull_request` events, and a PR run never carries the default branch, so all 19 repos read
   `unknown`.

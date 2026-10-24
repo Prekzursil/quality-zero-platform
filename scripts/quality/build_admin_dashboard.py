@@ -389,27 +389,21 @@ def _default_branch_health(token: str, repo_slug: str, default_branch: str) -> s
     return verdict
 
 
-def _failed(run: Mapping[str, Any]) -> bool:
-    """A completed run that decided against its commit (not a pass, not a neutral outcome)."""
-    conclusion = str(run.get("conclusion") or "")
-    return bool(conclusion) and conclusion != "success" and conclusion not in NEUTRAL_CONCLUSIONS
-
-
 def _head_health(runs: Sequence[Mapping[str, Any]], complete: bool, *, shared: bool) -> str:
     """One open head commit's verdict from its ``pull_request`` runs.
 
     GitHub lists on a run every open PR whose head matches it, "not
     necessarily" the one that triggered it, and none for a fork PR. So when
     two open PRs share a head (one branch, two bases), their runs cannot be
-    split per PR: a failure that a later run of the same workflow superseded
-    may be the OTHER PR's, and that head reads ``unknown``, never ``success``.
-    With an incomplete run list, only a failure already visible is reported;
-    anything else is unproven.
+    split per PR: one PR's green runs cannot prove the other PR reported CI
+    at all, and that head reads ``unknown``, never ``success``. Likewise with
+    an incomplete run list. In both cases only a failure already visible is
+    reported.
     """
     verdict = _compute_health(runs)
     if verdict == "partial":
         return verdict
-    if not complete or (shared and any(_failed(run) for run in runs)):
+    if shared or not complete:
         return "unknown"
     return verdict
 

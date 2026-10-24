@@ -19,6 +19,8 @@ from pathlib import Path
 
 from scripts.quality import admin_dashboard_pages as pages
 
+ROOT = Path(__file__).resolve().parents[1]
+
 
 class RedactPrivateRepoRowsTests(unittest.TestCase):
     """Private repo rows are masked in every page."""
@@ -178,6 +180,38 @@ class AuditRecordShapeTests(unittest.TestCase):
         self.assertIn(
             "o/public#3", pages.render_audit_page(entries=[{**entry, "pr": {"slug": "o/public", "number": 3}}])
         )
+
+
+class AuditSourcesTests(unittest.TestCase):
+    """The feed reads both bypass files: skip records used to be silently absent."""
+
+    def test_break_glass_and_skip_records_are_merged_oldest_first(self) -> None:
+        """None only when neither file exists; one present file is read alone."""
+        with tempfile.TemporaryDirectory() as tmp:
+            glass = Path(tmp) / "break-glass.jsonl"
+            skip = Path(tmp) / "skip.jsonl"
+            self.assertIsNone(pages.load_audit_sources([str(glass), str(skip)]))
+            skip.write_text(
+                '{"timestamp_utc": "2026-10-24T11:00:00Z", "label": "quality-zero:skip"}\n', encoding="utf-8"
+            )
+            self.assertEqual(len(pages.load_audit_sources([str(glass), str(skip)])), 1)
+            glass.write_text(
+                '{"timestamp_utc": "2026-10-24T12:00:00Z", "label": "quality-zero:break-glass"}\n'
+                '{"timestamp": "2026-10-24T10:00:00Z", "label": "quality-zero:break-glass"}\n',
+                encoding="utf-8",
+            )
+            merged = pages.load_audit_sources([str(glass), str(skip)])
+        self.assertEqual(
+            [record.get("timestamp_utc", record.get("timestamp")) for record in merged],
+            ["2026-10-24T10:00:00Z", "2026-10-24T11:00:00Z", "2026-10-24T12:00:00Z"],
+        )
+        self.assertIn("quality-zero:skip", pages.render_audit_page(entries=merged))
+
+    def test_the_publish_workflow_passes_both_bypass_files(self) -> None:
+        """reusable-quality-zero-bypass writes skips to audit/skip.jsonl; the page must be given it."""
+        workflow = (ROOT / ".github" / "workflows" / "publish-admin-dashboard.yml").read_text(encoding="utf-8")
+        self.assertIn("--audit-jsonl audit/break-glass.jsonl", workflow)
+        self.assertIn("--audit-jsonl audit/skip.jsonl", workflow)
 
 
 class NoSourceTests(unittest.TestCase):

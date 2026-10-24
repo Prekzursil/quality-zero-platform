@@ -8,6 +8,8 @@ trigger that fires. This is the last wiring step of Phase 5 inc-5.
 from __future__ import absolute_import
 
 import datetime as dt
+import json
+import subprocess
 import unittest
 from unittest.mock import MagicMock
 
@@ -199,6 +201,196 @@ class BuildTriggersFromFleetStateTests(unittest.TestCase):
         triggers = alert_dispatch.build_triggers_from_fleet_state(state)
         bump = [t for t in triggers if t.alert_type == alerts.AlertType.FLEET_BUMP_FAIL]
         self.assertEqual(len(bump), 1)
+
+
+class WorkflowRunTests(unittest.TestCase):
+    """The platform's own workflow history: fetched, grouped, alerted on, recovered."""
+
+    RUNS = [
+        {"workflowName": "Wave", "status": "completed", "conclusion": "failure", "createdAt": "2026-10-22T00:00:00Z"},
+        {"workflowName": "Wave", "status": "completed", "conclusion": "failure", "createdAt": "2026-10-24T00:00:00Z"},
+        {"workflowName": "Wave", "status": "completed", "conclusion": "cancelled", "createdAt": "2026-10-24T06:00:00Z"},
+        {"workflowName": "Wave", "status": "completed", "conclusion": "failure", "createdAt": "2026-10-23T00:00:00Z"},
+        {"workflowName": "Verify", "status": "in_progress", "conclusion": "", "createdAt": "2026-10-24T09:00:00Z"},
+        {"workflowName": "Verify", "status": "completed", "conclusion": "success", "createdAt": "2026-10-24T08:00:00Z"},
+        {"workflowName": "Verify", "status": "completed", "conclusion": None, "createdAt": "2026-10-24T07:00:00Z"},
+        "not-a-mapping",
+    ]
+
+    def test_conclusions_are_grouped_newest_first_without_neutral_or_running_runs(self) -> None:
+        """Cancelled / running / blank outcomes never break or end a streak."""
+        self.assertEqual(
+            alert_dispatch.workflow_conclusions(self.RUNS),
+            {"Wave": ["failure", "failure", "failure"], "Verify": ["success"]},
+        )
+
+    def test_the_failing_workflow_fires_from_fleet_state(self) -> None:
+        """build_triggers_from_fleet_state runs the detector per workflow."""
+        state = {"workflow_runs": alert_dispatch.workflow_conclusions(self.RUNS)}
+        triggers = alert_dispatch.build_triggers_from_fleet_state(state)
+        self.assertEqual([(t.alert_type, t.subject) for t in triggers], [(alerts.AlertType.WORKFLOW_FAILING, "Wave")])
+
+    def test_recovered_workflows_get_their_alert_closed(self) -> None:
+        """Only a workflow whose newest completed run succeeded is closed; dry-run is passed through."""
+        closer = MagicMock(return_value={"number": 9, "closed": True})
+        results = alert_dispatch.close_recovered_workflow_alerts(
+            platform_slug="o/r",
+            workflow_runs={"Wave": ["failure"], "Verify": ["success", "failure"], "Empty": []},
+            closer=closer,
+            dry_run=True,
+        )
+        self.assertEqual(results, [{"number": 9, "closed": True}])
+        (call,) = closer.call_args_list
+        self.assertEqual(call.args, ("o/r",))
+        self.assertEqual(call.kwargs["alert_type"], alerts.AlertType.WORKFLOW_FAILING)
+        self.assertEqual(call.kwargs["subject"], "Verify")
+        self.assertTrue(call.kwargs["dry_run"])
+        self.assertIn("succeeded", call.kwargs["close_comment"])
+
+    @staticmethod
+    def _completed(stdout: str, returncode: int = 0) -> "subprocess.CompletedProcess[str]":
+        return subprocess.CompletedProcess(["gh"], returncode, stdout, "boom\n")
+
+    def _runner(self, *, workflows: str, runs: str = "[]", runs_rc: int = 0, workflows_rc: int = 0) -> MagicMock:
+        """A fake gh answering `workflow list` and `run list` separately."""
+
+        def answer(argv, **_kwargs):
+            if argv[1:3] == ["workflow", "list"]:
+                return self._completed(workflows, workflows_rc)
+            return self._completed(runs, runs_rc)
+
+        return MagicMock(side_effect=answer)
+
+    def test_history_is_fetched_per_active_workflow(self) -> None:
+        """THE review finding: one shared --limit let hourly runs crowd out a weekly workflow."""
+        workflows = json.dumps([{"id": 11, "state": "active"}, {"id": 12, "state": "disabled_manually"}, "junk"])
+        runner = self._runner(workflows=workflows, runs=json.dumps(self.RUNS))
+        runs = alert_dispatch.fetch_workflow_runs("o/r", runner=runner)
+        self.assertEqual(len(runs), 7)
+        run_lists = [call.args[0] for call in runner.call_args_list if call.args[0][1:3] == ["run", "list"]]
+        self.assertEqual(len(run_lists), 1)
+        argv = run_lists[0]
+        self.assertEqual(argv[argv.index("--workflow") + 1], "11")
+        self.assertEqual(argv[argv.index("--branch") + 1], "main")
+        self.assertEqual(argv[argv.index("--limit") + 1], "10")
+
+    def test_non_list_payloads_are_empty_and_failures_raise(self) -> None:
+        """No workflows means no runs; a failed listing is never read as "all green"."""
+        self.assertEqual(alert_dispatch.fetch_workflow_runs("o/r", runner=self._runner(workflows="{}")), [])
+        self.assertEqual(alert_dispatch.fetch_workflow_runs("o/r", runner=self._runner(workflows="")), [])
+        with self.assertRaisesRegex(alerts.AlertCommandError, "gh workflow list"):
+            alert_dispatch.fetch_workflow_runs("o/r", runner=self._runner(workflows="", workflows_rc=1))
+        active = json.dumps([{"id": 1, "state": "active"}])
+        with self.assertRaisesRegex(alerts.AlertCommandError, "gh run list"):
+            alert_dispatch.fetch_workflow_runs("o/r", runner=self._runner(workflows=active, runs_rc=1))
+
+
+class DecisiveWindowTests(unittest.TestCase):
+    """Neutral runs neither break a failure streak nor hide the failure that completes one."""
+
+    @staticmethod
+    def _run(conclusion: str, minute: int) -> dict:
+        return {
+            "workflowName": "Verify",
+            "status": "completed",
+            "conclusion": conclusion,
+            "createdAt": f"2026-10-24T10:{minute:02d}:00Z",
+        }
+
+    def _runner(self, pages: dict) -> MagicMock:
+        """A fake gh answering `run list` by its --limit."""
+
+        def answer(argv, **_kwargs):
+            limit = int(argv[argv.index("--limit") + 1])
+            return subprocess.CompletedProcess(argv, 0, json.dumps(pages[limit]), "")
+
+        return MagicMock(side_effect=answer)
+
+    def test_a_window_of_cancelled_runs_is_read_again_wider(self) -> None:
+        """THE review finding: eight cancellations after two failures hid the third."""
+        newest = [self._run("cancelled", 59 - i) for i in range(8)] + [
+            self._run("failure", 50),
+            self._run("failure", 49),
+        ]
+        wider = newest + [self._run("failure", 48), self._run("success", 47)]
+        runner = self._runner({10: newest, 200: wider})
+        runs = alert_dispatch.fetch_workflow_runs("o/r", workflows=[{"id": 7}], runner=runner)
+        limits = [call.args[0][call.args[0].index("--limit") + 1] for call in runner.call_args_list]
+        self.assertEqual(limits, ["10", "200"])
+        conclusions = alert_dispatch.workflow_conclusions(runs)["Verify"]
+        self.assertEqual(conclusions, ["failure", "failure", "failure", "success"])
+        (trigger,) = at.detect_workflow_failing(workflow="Verify", conclusions=conclusions)
+        self.assertEqual(trigger.subject, "Verify")
+
+    def test_runs_are_filed_under_the_workflows_current_name(self) -> None:
+        """THE review finding: three old-name failures opened an alert for a name that no longer exists."""
+        renamed = [dict(self._run("failure", 50 - i), workflowName="Old name") for i in range(3)]
+        runner = self._runner({10: renamed})
+        runs = alert_dispatch.fetch_workflow_runs("o/r", workflows=[{"id": 7, "name": "New name"}], runner=runner)
+        conclusions = alert_dispatch.workflow_conclusions(runs)
+        self.assertEqual(conclusions, {"New name": ["failure", "failure", "failure"]})
+        (trigger,) = alert_dispatch.build_triggers_from_fleet_state({"workflow_runs": conclusions})
+        self.assertEqual(trigger.subject, "New name")
+
+    def test_a_decisive_or_complete_window_is_read_once(self) -> None:
+        """Three decisive runs, or the whole history, is already enough."""
+        decisive = [self._run("cancelled", 59 - i) for i in range(7)] + [
+            self._run("failure", 50),
+            self._run("success", 49),
+            self._run("failure", 48),
+        ]
+        short = [self._run("cancelled", 59), self._run("failure", 58)]
+        for page in (decisive, short):
+            with self.subTest(rows=len(page)):
+                runner = self._runner({10: page})
+                runs = alert_dispatch.fetch_workflow_runs("o/r", workflows=[{"id": 7}], runner=runner)
+                self.assertEqual(len(runs), len(page))
+                self.assertEqual(runner.call_count, 1)
+
+
+class VanishedWorkflowTests(unittest.TestCase):
+    """An alert for a workflow that no longer exists can never be closed by a success."""
+
+    def test_only_active_workflows_are_listed(self) -> None:
+        """Disabled workflows and junk rows are dropped."""
+        listed = json.dumps(
+            [{"id": 1, "name": "A", "state": "active"}, {"id": 2, "name": "B", "state": "disabled_fork"}, 3]
+        )
+        runner = MagicMock(return_value=subprocess.CompletedProcess(["gh"], 0, listed, ""))
+        self.assertEqual(
+            alert_dispatch.fetch_active_workflows("o/r", runner=runner), [{"id": 1, "name": "A", "state": "active"}]
+        )
+
+    def test_given_workflows_are_not_listed_again(self) -> None:
+        """The scheduled job lists the workflows once and reuses them."""
+        runner = MagicMock(return_value=subprocess.CompletedProcess(["gh"], 0, "[]", ""))
+        alert_dispatch.fetch_workflow_runs("o/r", workflows=[{"id": 5}], runner=runner)
+        (call,) = runner.call_args_list
+        self.assertEqual(call.args[0][1:3], ["run", "list"])
+        self.assertIn("5", call.args[0])
+
+    def test_alerts_of_vanished_workflows_close(self) -> None:
+        """THE review finding: deleted / renamed / disabled workflows left their alert open forever."""
+        lister = MagicMock(
+            return_value=[
+                {"number": 1, "title": "[alert:workflow-failing] Old Workflow"},
+                {"number": 2, "title": "[alert:workflow-failing] Wave"},
+                {"number": 3, "title": "[alert:regression] Old Workflow"},
+            ]
+        )
+        closer = MagicMock(return_value={"number": 1, "closed": True})
+        results = alert_dispatch.close_recovered_workflow_alerts(
+            platform_slug="o/r",
+            workflow_runs={"Wave": ["failure"]},
+            active_workflows={"Wave"},
+            closer=closer,
+            lister=lister,
+        )
+        self.assertEqual(results, [{"number": 1, "closed": True}])
+        (call,) = closer.call_args_list
+        self.assertEqual(call.kwargs["subject"], "Old Workflow")
+        self.assertIn("no longer an active workflow", call.kwargs["close_comment"])
+        self.assertEqual(lister.call_args.kwargs["alert_type"], alerts.AlertType.WORKFLOW_FAILING)
 
 
 if __name__ == "__main__":  # pragma: no cover

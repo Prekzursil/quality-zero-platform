@@ -42,10 +42,12 @@ on:
         type: string
         required: false
         default: Prekzursil/quality-zero-platform
+        description: "Deprecated and ignored. The platform is checked out at this workflow file's own commit (job.workflow_repository / job.workflow_sha), so a caller can no longer pick, or drift from, the scripts it runs. Still declared so existing callers that pass it keep working."
       platform_ref:
         type: string
         required: false
         default: main
+        description: "Deprecated and ignored. The platform is checked out at this workflow file's own commit (job.workflow_repository / job.workflow_sha), so a caller can no longer pick, or drift from, the scripts it runs. Still declared so existing callers that pass it keep working."
     secrets:
       BYPASS_AUDIT_PAT:
         required: false
@@ -58,11 +60,25 @@ jobs:
       contents: read
       issues: write
     steps:
+      # The platform CODE, at this workflow file's own commit: never a
+      # caller-chosen ref, and no credential left on disk.
       - uses: actions/checkout@v4
         with:
-          repository: ${{ inputs.platform_repository }}
-          ref: ${{ inputs.platform_ref }}
-          token: ${{ secrets.BYPASS_AUDIT_PAT || github.token }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          persist-credentials: false
+
+      # The audit STORE: the platform's default branch, checked out only to
+      # append the record and push it. Nothing in it is executed.
+      - name: Check out the audit store
+        if: ${{ env.HAS_AUDIT_PAT == 'true' }}
+        env:
+          HAS_AUDIT_PAT: ${{ secrets.BYPASS_AUDIT_PAT != '' }}
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: ${{ job.workflow_repository }}
+          path: audit-store
+          token: ${{ secrets.BYPASS_AUDIT_PAT }}
           persist-credentials: true
 
       - uses: actions/setup-python@v5
@@ -97,6 +113,10 @@ jobs:
           head_sha = os.environ["QZ_HEAD_SHA"].strip()
           actor = os.environ["QZ_ACTOR"].strip()
           audit_dir = Path(os.environ.get("QZ_AUDIT_DIR", "audit"))
+          if Path("audit-store/.git").is_dir():
+            # Append to the default branch's CURRENT log, not to the copy
+            # at this workflow's commit (that copy may be behind).
+            audit_dir = Path("audit-store") / audit_dir
 
           if label == bl.BREAK_GLASS_LABEL:
             try:
@@ -159,12 +179,22 @@ jobs:
           QZ_LABEL: ${{ inputs.label }}
           QZ_PR_SLUG: ${{ inputs.pr_slug }}
           QZ_PR_NUMBER: ${{ inputs.pr_number }}
+        working-directory: audit-store
         run: |
+          set -euo pipefail
           git config user.email "platform-bot@quality-zero.local"
           git config user.name "quality-zero-platform bypass"
-          git add "$QZ_AUDIT_PATH"
+          git add "${QZ_AUDIT_PATH#audit-store/}"
           git commit -m "chore(audit): record $QZ_LABEL for $QZ_PR_SLUG#$QZ_PR_NUMBER"
-          git push
+          # Two bypasses can race for the same branch: rebase and retry.
+          for _ in 1 2 3; do
+            if git push; then
+              exit 0
+            fi
+            git pull --rebase
+          done
+          echo "::error::Could not push the audit record after 3 attempts."
+          exit 1
 
       - name: Open post-merge tracking issue
         if: ${{ inputs.label == 'quality-zero:break-glass' && steps.evaluate.outputs.tracking_issue_title != '' }}
@@ -175,7 +205,7 @@ jobs:
           QZ_PR_NUMBER: ${{ inputs.pr_number }}
           QZ_ACTOR: ${{ inputs.actor }}
           QZ_INCIDENT: ${{ steps.evaluate.outputs.incident }}
-          QZ_PLATFORM_REPO: ${{ inputs.platform_repository }}
+          QZ_PLATFORM_REPO: ${{ job.workflow_repository }}
         run: |
           gh issue create \
             --repo "$QZ_PLATFORM_REPO" \

@@ -94,6 +94,25 @@ class ReusableBypassWorkflowTests(unittest.TestCase):
             self.text,
         )
 
+    def test_code_and_audit_store_are_separate_checkouts(self) -> None:
+        """The code runs from the workflow's own commit; only the store holds a credential."""
+        steps = self.doc["jobs"]["bypass"]["steps"]
+        code, store = [s for s in steps if str(s.get("uses", "")).startswith("actions/checkout@")]
+        self.assertEqual(code["with"]["repository"], "${{ job.workflow_repository }}")
+        self.assertEqual(code["with"]["ref"], "${{ job.workflow_sha }}")
+        self.assertIs(code["with"]["persist-credentials"], False)
+        self.assertNotIn("token", code["with"])
+        self.assertEqual(store["if"], "${{ env.HAS_AUDIT_PAT == 'true' }}")
+        self.assertEqual(store["with"]["path"], "audit-store")
+        self.assertNotIn("ref", store["with"])
+        self.assertEqual(store["with"]["token"], "${{ secrets.BYPASS_AUDIT_PAT }}")
+        (commit,) = [s for s in steps if s.get("name") == "Commit audit log"]
+        self.assertEqual(commit["working-directory"], "audit-store")
+        self.assertIn('git add "${QZ_AUDIT_PATH#audit-store/}"', commit["run"])
+        self.assertIn("git pull --rebase", commit["run"])
+        self.assertIn('audit_dir = Path("audit-store") / audit_dir', self.text)
+        self.assertIn("QZ_PLATFORM_REPO: ${{ job.workflow_repository }}", self.text)
+
     def test_tracking_issue_step_runs_only_for_break_glass(self) -> None:
         """Post-merge tracking issue is opened only for break-glass labels."""
         self.assertIn(

@@ -137,6 +137,102 @@ class CompareTests(unittest.TestCase):
         self.assertEqual(findings, ["bypass actors: live but not declared: [('RepositoryRole', '5', 'pull_request')]"])
 
 
+#: The shape generate_ruleset_payload.py emits (control_plane.build_ruleset_payload).
+GENERATED: Dict[str, Any] = {
+    "name": "quality-zero-platform / demo",
+    "target": "branch",
+    "enforcement": "active",
+    "conditions": {"ref_name": {"include": ["refs/heads/main"], "exclude": []}},
+    "bypass_actors": [],
+    "rules": [
+        {
+            "type": "pull_request",
+            "parameters": {"required_approving_review_count": 0, "required_review_thread_resolution": False},
+        },
+        {
+            "type": "required_status_checks",
+            "parameters": {
+                "strict_required_status_checks_policy": True,
+                "do_not_enforce_on_create": False,
+                "required_status_checks": [{"context": "quality / quality"}, {"context": "CodeQL"}],
+            },
+        },
+        {"type": "non_fast_forward"},
+        {"type": "deletion"},
+    ],
+}
+
+
+def _live_generated(**changes: Any) -> Dict[str, Any]:
+    """GENERATED as GitHub returns it: extra fields, extra default parameters, lists reordered."""
+    live = json.loads(json.dumps(GENERATED))
+    live.update({"id": 7, "source_type": "Repository", "current_user_can_bypass": "never"})
+    live["conditions"] = {"ref_name": {"exclude": [], "include": ["refs/heads/main"]}}
+    pull_request, checks, non_ff, deletion = live["rules"]
+    pull_request["parameters"]["allowed_merge_methods"] = ["squash", "merge", "rebase"]
+    checks["parameters"]["required_status_checks"].reverse()
+    live["rules"] = [deletion, checks, non_ff, pull_request]
+    live.update(changes)
+    return live
+
+
+class FullConfigurationTests(unittest.TestCase):
+    """A weaker live policy with the same contexts is still drift."""
+
+    def test_github_shape_of_the_generated_payload_is_in_sync(self) -> None:
+        """Extra API fields, undeclared default parameters and list order are not drift."""
+        self.assertEqual(drift.compare(GENERATED, _live_generated()), ([], []))
+
+    def test_a_weakened_rule_parameter_is_drift(self) -> None:
+        """THE review finding: strict policy off, same contexts, used to PASS."""
+        live = _live_generated()
+        live["rules"][1]["parameters"]["strict_required_status_checks_policy"] = False
+        del live["rules"][3]["parameters"]["required_review_thread_resolution"]
+        findings, _ = drift.compare(GENERATED, live)
+        self.assertEqual(
+            findings,
+            [
+                "rule pull_request: required_review_thread_resolution declared False, live None",
+                "rule required_status_checks: strict_required_status_checks_policy declared True, live False",
+            ],
+        )
+
+    def test_missing_and_extra_rule_types_are_drift(self) -> None:
+        """Dropping `deletion` / `non_fast_forward`, or adding an undeclared rule."""
+        live = _live_generated()
+        live["rules"] = [rule for rule in live["rules"] if rule["type"] not in {"deletion", "non_fast_forward"}]
+        live["rules"].append({"type": "required_linear_history"})
+        findings, _ = drift.compare(GENERATED, live)
+        self.assertEqual(
+            findings,
+            [
+                "rules: declared but not live: ['deletion', 'non_fast_forward']",
+                "rules: live but not declared: ['required_linear_history']",
+            ],
+        )
+
+    def test_target_and_conditions_are_compared(self) -> None:
+        """A ruleset moved to another ref, or to tags, enforces nothing on the default branch."""
+        live = _live_generated(target="tag", conditions={"ref_name": {"include": ["refs/heads/dev"], "exclude": []}})
+        findings, _ = drift.compare(GENERATED, live)
+        self.assertEqual(len(findings), 2)
+        self.assertTrue(findings[0].startswith("target: declared 'branch', live 'tag'"))
+        self.assertTrue(findings[1].startswith("conditions: declared"))
+        self.assertIn("refs/heads/dev", findings[1])
+
+    def test_duplicate_rules_of_one_type_merge_their_parameters(self) -> None:
+        """Parameters are read across every rule of a type, defensively."""
+        payload = {"rules": ["x", {"type": "t", "parameters": {"a": 1}}, {"type": "t", "parameters": {"b": 2}}, {}]}
+        self.assertEqual(drift.rule_types(payload), frozenset({"t"}))
+        self.assertEqual(drift.merged_parameters(payload, "t"), {"a": 1, "b": 2})
+
+    def test_canonical_ignores_key_and_list_order_only(self) -> None:
+        """Order-insensitive, but values still count."""
+        self.assertEqual(drift.canonical({"b": [2, 1], "a": None}), drift.canonical({"a": None, "b": [1, 2]}))
+        self.assertNotEqual(drift.canonical({"a": [1]}), drift.canonical({"a": [1, 1]}))
+        self.assertEqual(drift.canonical("x"), '"x"')
+
+
 class FetchTests(unittest.TestCase):
     """The full ruleset is fetched by id; every failure raises."""
 
@@ -167,10 +263,45 @@ class FetchTests(unittest.TestCase):
             with self.subTest(message=message), self.assertRaisesRegex(drift.LiveRulesetError, message):
                 drift.fetch_live_ruleset("o/r", EXPECTED["name"], runner=FakeGh(responses))
 
-    def test_empty_output_is_null(self) -> None:
-        """An empty body parses as null, which is then rejected as not a list."""
+    def test_empty_output_is_an_error(self) -> None:
+        """No JSON at all is never read as "no rulesets"."""
+        with self.assertRaisesRegex(drift.LiveRulesetError, "returned no JSON"):
+            drift.fetch_live_ruleset("o/r", "n", runner=FakeGh({"repos/o/r/rulesets": (0, " \n", "")}))
+
+    def test_every_page_of_the_listing_is_read(self) -> None:
+        """`gh api --paginate` prints one JSON array per page; the match may be on page 2."""
+        pages = json.dumps([{"id": 1, "name": "other"}]) + "\n" + json.dumps([{"id": 42, "name": EXPECTED["name"]}])
+        runner = FakeGh({"repos/o/r/rulesets": (0, pages, ""), "repos/o/r/rulesets/42": _live()})
+        self.assertEqual(drift.fetch_live_ruleset("o/r", EXPECTED["name"], runner=runner)["id"], 42)
+
+    def test_a_page_that_is_not_a_list_is_an_error(self) -> None:
+        """Every page must be an array, not only the first."""
+        pages = json.dumps([{"id": 1, "name": "other"}]) + json.dumps({"message": "boom"})
         with self.assertRaisesRegex(drift.LiveRulesetError, "is not a list"):
-            drift.fetch_live_ruleset("o/r", "n", runner=FakeGh({"repos/o/r/rulesets": (0, "", "")}))
+            drift.fetch_live_ruleset("o/r", "n", runner=FakeGh({"repos/o/r/rulesets": (0, pages, "")}))
+
+    def test_the_ruleset_itself_must_be_one_object(self) -> None:
+        """Two documents for a single ruleset are as unusable as none."""
+        twice = json.dumps(_live()) + json.dumps(_live())
+        runner = FakeGh(
+            {"repos/o/r/rulesets": [{"id": 42, "name": EXPECTED["name"]}], "repos/o/r/rulesets/42": (0, twice, "")}
+        )
+        with self.assertRaisesRegex(drift.LiveRulesetError, "is not an object"):
+            drift.fetch_live_ruleset("o/r", EXPECTED["name"], runner=runner)
+
+
+class DecodeTests(unittest.TestCase):
+    """Concatenated JSON documents, as `gh api --paginate` prints them."""
+
+    def test_documents_with_and_without_separators(self) -> None:
+        """Whitespace between documents is optional."""
+        self.assertEqual(drift.decode_documents(' [1] \n[2]{"a": 3}\n'), [[1], [2], {"a": 3}])
+        self.assertEqual(drift.decode_documents(""), [])
+
+    def test_garbage_raises(self) -> None:
+        """Trailing garbage is a ValueError, never silently dropped."""
+        with self.assertRaises(ValueError):
+            drift.decode_documents("[1] nope")
 
 
 class MainTests(unittest.TestCase):

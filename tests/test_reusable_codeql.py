@@ -18,13 +18,18 @@ configuration file ".github/codeql/codeql-config.yml" does not exist``).
 
 from __future__ import absolute_import
 
+import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict
 
 import yaml  # type: ignore[import-untyped]
 from tests.lean_gate_support import find_bash, run_step_script
+
+from scripts.quality import profile_contract_validation
+from scripts.quality.control_plane import load_inventory, load_repo_profile, validate_profile
 
 if TYPE_CHECKING:
     import subprocess
@@ -105,7 +110,14 @@ class CodeQLGateTests(unittest.TestCase):
         self.assertEqual(analysis["name"], "CodeQL analyze")
         self.assertEqual(analysis["if"], "${{ needs.resolve-profile.outputs.enabled == 'true' }}")
 
-    def _run(self, resolve: str, enabled: str, analyze: str) -> "subprocess.CompletedProcess[str]":
+    def test_gate_decides_on_the_plan_state(self) -> None:
+        """The gate reads the planner's explicit state, never the derived boolean."""
+        self.assertEqual(
+            self.reusable["jobs"]["resolve-profile"]["outputs"]["state"], "${{ steps.plan.outputs.codeql_state }}"
+        )
+        self.assertEqual(self.gate["steps"][0]["env"]["CODEQL_STATE"], "${{ needs.resolve-profile.outputs.state }}")
+
+    def _run(self, resolve: str, state: str, analyze: str) -> "subprocess.CompletedProcess[str]":
         bash = find_bash()
         if bash is None:  # pragma: no cover - environment guard
             self.skipTest("no real bash found")
@@ -115,7 +127,7 @@ class CodeQLGateTests(unittest.TestCase):
                 script,
                 workdir=Path(tmp),
                 bash=bash,
-                env_overrides={"RESOLVE_RESULT": resolve, "CODEQL_ENABLED": enabled, "ANALYZE_RESULT": analyze},
+                env_overrides={"RESOLVE_RESULT": resolve, "CODEQL_STATE": state, "ANALYZE_RESULT": analyze},
             )
 
     def test_a_failed_profile_resolution_fails_the_gate(self) -> None:
@@ -127,17 +139,117 @@ class CodeQLGateTests(unittest.TestCase):
                 self.assertIn("could not be resolved", result.stdout)
 
     def test_a_declared_opt_out_passes_and_says_so(self) -> None:
-        """A profile that disables CodeQL passes visibly, not silently."""
-        result = self._run("success", "false", "skipped")
+        """Only `codeql.enabled: false` passes without an analysis, and visibly."""
+        result = self._run("success", "opt-out", "skipped")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("::notice title=CodeQL gate::", result.stdout)
+        self.assertIn("codeql.enabled: false", result.stdout)
+
+    def test_enabled_without_languages_fails(self) -> None:
+        """An enabled profile that analyses nothing is broken, not opted out."""
+        result = self._run("success", "no-languages", "skipped")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("declares no codeql.languages", result.stdout)
+
+    def test_an_unknown_or_missing_state_fails(self) -> None:
+        """A planner that wrote no state (or a new one) never passes the gate."""
+        for state in ("", "maybe"):
+            with self.subTest(state=state):
+                result = self._run("success", state, "skipped")
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("Unknown CodeQL plan state", result.stdout)
 
     def test_the_analysis_must_succeed(self) -> None:
         """Enabled + anything but a successful analysis fails."""
         for analyze in ("failure", "cancelled", "skipped"):
             with self.subTest(analyze=analyze):
-                self.assertEqual(self._run("success", "true", analyze).returncode, 1)
-        self.assertEqual(self._run("success", "true", "success").returncode, 0)
+                self.assertEqual(self._run("success", "enabled", analyze).returncode, 1)
+        self.assertEqual(self._run("success", "enabled", "success").returncode, 0)
+
+
+class CodeQLPlanTests(unittest.TestCase):
+    """The planner tells an opt-out apart from a profile with nothing to analyse."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Extract the real plan step from the reusable workflow."""
+        reusable = yaml.safe_load(_REUSABLE.read_text(encoding="utf-8"))
+        steps = reusable["jobs"]["resolve-profile"]["steps"]
+        cls.script = str(next(step for step in steps if step.get("id") == "plan")["run"])
+
+    def _plan(self, codeql: Dict[str, Any]) -> Dict[str, str]:
+        bash = find_bash()
+        if bash is None:  # pragma: no cover - environment guard
+            self.skipTest("no real bash found")
+        python = sys.executable.replace("\\", "/")
+        with tempfile.TemporaryDirectory() as tmp:
+            workdir = Path(tmp)
+            (workdir / "profile.json").write_text(json.dumps({"codeql": codeql}), encoding="utf-8")
+            output = workdir / "github-output.txt"
+            result = run_step_script(
+                f'python() {{ "{python}" "$@"; }}\n' + self.script,
+                workdir=workdir,
+                bash=bash,
+                env_overrides={"RUNNER_TEMP": str(workdir), "GITHUB_OUTPUT": str(output)},
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = output.read_text(encoding="utf-8").splitlines()
+        outputs: Dict[str, str] = {}
+        for line in lines:
+            key, _, value = line.partition("=")
+            outputs[key] = value
+        return outputs
+
+    def test_declared_languages_are_enabled(self) -> None:
+        """Languages plus the default `enabled` run the analysis."""
+        outputs = self._plan({"languages": ["actions", "", "python"]})
+        self.assertEqual(outputs["codeql_state"], "enabled")
+        self.assertEqual(outputs["codeql_enabled"], "true")
+        self.assertEqual(outputs["codeql_languages_csv"], "actions,python")
+
+    def test_only_an_explicit_false_is_an_opt_out(self) -> None:
+        """`enabled: false` opts out even when languages are declared."""
+        outputs = self._plan({"enabled": False, "languages": ["python"]})
+        self.assertEqual(outputs["codeql_state"], "opt-out")
+        self.assertEqual(outputs["codeql_enabled"], "false")
+
+    def test_enabled_without_languages_is_not_an_opt_out(self) -> None:
+        """THE review finding: an empty language list used to read as an opt-out."""
+        for codeql in ({"enabled": True, "languages": []}, {}, {"languages": [""]}):
+            with self.subTest(codeql=codeql):
+                outputs = self._plan(codeql)
+                self.assertEqual(outputs["codeql_state"], "no-languages")
+                self.assertEqual(outputs["codeql_enabled"], "false")
+
+
+class CodeQLProfileContractTests(unittest.TestCase):
+    """The same broken profile is reported while rendering, before any run."""
+
+    def test_enabled_without_languages_is_a_finding(self) -> None:
+        """Blank or missing languages under an enabled CodeQL section."""
+        for codeql in ({"enabled": True, "languages": []}, {"languages": [" "]}, {"enabled": True}):
+            with self.subTest(codeql=codeql):
+                findings = profile_contract_validation._validate_codeql_contract({"slug": "o/r", "codeql": codeql})
+                self.assertEqual(len(findings), 1)
+                self.assertIn("o/r: codeql.languages is required while CodeQL is enabled", findings[0])
+
+    def test_opt_out_declared_languages_or_no_section_pass(self) -> None:
+        """Only an enabled section with nothing to analyse is reported."""
+        for profile in (
+            {"slug": "o/r", "codeql": {"enabled": False, "languages": []}},
+            {"slug": "o/r", "codeql": {"enabled": True, "languages": ["python"]}},
+            {"slug": "o/r", "codeql": "not-a-mapping"},
+            {"slug": "o/r"},
+        ):
+            with self.subTest(profile=profile):
+                self.assertEqual(profile_contract_validation._validate_codeql_contract(profile), [])
+
+    def test_validate_profile_runs_the_codeql_contract(self) -> None:
+        """Wired into the full profile validation every render runs."""
+        profile = load_repo_profile(load_inventory(), "Prekzursil/quality-zero-platform")
+        self.assertEqual([item for item in validate_profile(profile) if "codeql.languages" in item], [])
+        profile["codeql"]["languages"] = []
+        self.assertTrue(any("codeql.languages is required" in item for item in validate_profile(profile)))
 
 
 if __name__ == "__main__":  # pragma: no cover

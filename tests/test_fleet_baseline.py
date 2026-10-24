@@ -979,6 +979,8 @@ class ThinCallerTests(unittest.TestCase):
         self.assertEqual(fb.thin_caller(scalar), ({}, False))
         with_inputs = self.THIN + "    with:\n      opengrep-paths: src\n"
         self.assertEqual(fb.thin_caller(with_inputs), ({"opengrep-paths": "src"}, True))
+        job_scoped = self.THIN + "    permissions:\n      contents: read\n"
+        self.assertEqual(fb.thin_caller(job_scoped), ({}, True))
         for broken in (
             "jobs: [unclosed\n",
             "- a list\n",
@@ -988,6 +990,7 @@ class ThinCallerTests(unittest.TestCase):
             self.THIN + "    secrets: inherit\n",
             self.THIN + "    with: nope\n",
             self.THIN + "permissions:\n  contents: write\n",
+            self.THIN + "    permissions:\n      contents: write\n",
         ):
             with self.subTest(broken=broken):
                 self.assertIsNone(fb.thin_caller(broken))

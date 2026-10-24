@@ -64,5 +64,9 @@ codeql:
     - python
 dependabot:
   updates:
+    # requirements.txt pins only lower bounds (`>=`); `increase` makes
+    # Dependabot raise them explicitly instead of relying on `auto`'s
+    # app/library heuristic.
     - ecosystem: pip
       directory: /
+      versioning_strategy: increase

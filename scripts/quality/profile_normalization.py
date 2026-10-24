@@ -166,12 +166,15 @@ def normalize_dependabot(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
         directory = str(item.get("directory", "")).strip()
         if not ecosystem or not directory:
             continue
-        updates.append(
-            {
-                "ecosystem": ecosystem,
-                "directory": directory,
-            }
-        )
+        update = {
+            "ecosystem": ecosystem,
+            "directory": directory,
+        }
+        # Optional Dependabot `versioning-strategy`; validated when rendered.
+        strategy = str(item.get("versioning_strategy", "") or "").strip()
+        if strategy:
+            update["versioning_strategy"] = strategy
+        updates.append(update)
     return {
         "enabled": bool(payload.get("enabled", True)),
         "updates": updates,

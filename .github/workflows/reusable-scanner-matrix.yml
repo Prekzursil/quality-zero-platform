@@ -612,6 +612,12 @@ jobs:
           # against the release's published SHA-256 before it is unpacked. It
           # used to come from the deepsource.io/cli installer script piped
           # into a shell: whatever that URL served at run time, unverified.
+          # The pinned asset is the linux_amd64 build; any other runner fails
+          # here, loudly, instead of executing a binary it cannot run.
+          if [ "${RUNNER_OS:-}-${RUNNER_ARCH:-}" != "Linux-X64" ]; then
+            echo "::error::DeepSource coverage publishing runs the pinned linux_amd64 CLI, but this coverage lane runs on ${RUNNER_OS:-?}/${RUNNER_ARCH:-?}. Run the lane on a Linux x64 runner, or disable deepsource_visible for this repo."
+            exit 1
+          fi
           curl -fsSL --retry 3 -o /tmp/deepsource.tar.gz \
             https://github.com/DeepSourceCorp/cli/releases/download/v0.10.1/deepsource_0.10.1_linux_amd64.tar.gz
           echo "e415a6a53257457ef1dad900fdb39aeb991dd01c35c4be9cafa88a41f9e50b3b  /tmp/deepsource.tar.gz" | sha256sum -c -

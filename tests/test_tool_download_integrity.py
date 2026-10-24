@@ -144,6 +144,23 @@ class DownloadContractTests(unittest.TestCase):
         )
         self.assertNotIn("./bin/deepsource", script)
 
+    def test_the_deepsource_step_refuses_a_runner_it_cannot_serve(self) -> None:
+        """Only the linux_amd64 CLI is pinned: any other runner fails before downloading anything."""
+        bash = find_bash()
+        if bash is None:  # pragma: no cover - environment guard
+            self.skipTest("no real bash found")
+        (step,) = downloading_steps("reusable-scanner-matrix.yml")
+        with tempfile.TemporaryDirectory() as tmp:
+            result = run_step_script(
+                FAKE_CURL + str(step["run"]),
+                workdir=Path(tmp),
+                bash=bash,
+                env_overrides={"DEEPSOURCE_DSN": "dsn", "RUNNER_OS": "Windows", "RUNNER_ARCH": "X64"},
+            )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("::error::DeepSource coverage publishing runs the pinned linux_amd64 CLI", result.stdout)
+        self.assertIn("Windows/X64", result.stdout)
+
     def test_lean_gate_digests_and_versions_match_tool_pins(self) -> None:
         """``.quality/tool-pins.yml`` is the single source of truth for both."""
         pins = tool_pins()

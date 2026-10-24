@@ -92,10 +92,26 @@ jobs:
           READ_TOKEN: ${{ secrets.CODEX_FLEET_READ_PAT }}
           RUNNER_REPO: Prekzursil/agent-skills-toolchain
           RUNNER_WORKFLOW: codex-runner.yml
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -uo pipefail   # NOT -e: per-entry failures are recorded and the loop continues.
 
+          # No dispatch token = no runner lane is configured. The daily cron then
+          # has nothing to do: it skips, visibly (notice + summary), instead of
+          # failing every night - 105 straight red runs taught everyone to ignore
+          # this workflow. A MANUAL dispatch still fails loudly: someone asked
+          # for a wave that cannot run.
           if [ -z "${DISPATCH_TOKEN:-}" ]; then
+            if [ "${EVENT_NAME:-}" = "schedule" ]; then
+              echo "::notice title=Codex Fleet Wave skipped::CODEX_DISPATCH_PAT is not configured, so there is no runner lane to dispatch to. Scheduled sweeps skip until it is set (docs/codex-fleet-sweep-setup.md in the runner repo)."
+              {
+                echo "# Codex Fleet Wave -- skipped"
+                echo ""
+                echo "\`CODEX_DISPATCH_PAT\` is not configured, so no runner lane exists and nothing was dispatched."
+                echo "Scheduled sweeps skip until it is set; a manual dispatch fails."
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
             echo "::error::CODEX_DISPATCH_PAT is not set. See docs/codex-fleet-sweep-setup.md (runner repo)."
             exit 1
           fi

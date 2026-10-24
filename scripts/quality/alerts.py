@@ -84,11 +84,59 @@ class AlertType(enum.Enum):
     # alert issues. The inline ``noqa: S105`` + ``nosec`` markers on the
     # assignment below cover Ruff and Bandit.
     MISSING_SCANNER_AUTH = "alert:secret-missing"  # noqa: S105  # nosec
+    # One of the platform's OWN workflows keeps failing on its default branch.
+    WORKFLOW_FAILING = "alert:workflow-failing"
 
     @property
     def label(self) -> str:
         """Return the GitHub issue label string (e.g. ``alert:regression``)."""
         return str(self.value)
+
+
+ALERT_LABEL_COLOR = "d93f0b"
+ALERT_LABEL_DESCRIPTION = "Per-event alert (Phase 5 §3) — never digested"
+
+
+def ensure_alert_labels(platform_slug: str, *, runner: ProcessRunner = subprocess.run) -> List[str]:
+    """Create every ``alert:*`` label the repository lacks; return the ones created.
+
+    ``gh issue create --label`` rejects a label the repository does not have,
+    so an alert type added after the labels were made by hand would never open
+    an issue. Existing labels are left untouched. A label list that cannot be
+    read raises: guessing would either spam creates or skip the one missing.
+    """
+    listed = _checked(
+        _run_gh(
+            ["label", "list", "--repo", platform_slug, "--search", "alert:", "--limit", "200", "--json", "name"],
+            runner=runner,
+        ),
+        what="label list",
+    )
+    payload = json.loads(listed.stdout or "[]")
+    present = {str(item.get("name")) for item in payload if isinstance(item, Mapping)}
+    created: List[str] = []
+    for member in AlertType:
+        if member.label in present:
+            continue
+        _checked(
+            _run_gh(
+                [
+                    "label",
+                    "create",
+                    member.label,
+                    "--repo",
+                    platform_slug,
+                    "--color",
+                    ALERT_LABEL_COLOR,
+                    "--description",
+                    ALERT_LABEL_DESCRIPTION,
+                ],
+                runner=runner,
+            ),
+            what="label create",
+        )
+        created.append(member.label)
+    return created
 
 
 def alert_issue_title(alert_type: AlertType, subject: str) -> str:
@@ -121,6 +169,21 @@ def _run_gh(
     )  # nosec B603 — gh args are controlled by call site
 
 
+class AlertCommandError(RuntimeError):
+    """A ``gh`` call failed: the alert state is unknown, never "no issue" or "done".
+
+    A failed lookup read as "no match" opens a duplicate; a failed create or
+    close read as success loses the alert. Both must fail the run instead.
+    """
+
+
+def _checked(completed: "subprocess.CompletedProcess[str]", *, what: str) -> "subprocess.CompletedProcess[str]":
+    """Return ``completed`` when ``gh`` succeeded; raise ``AlertCommandError`` otherwise."""
+    if completed.returncode != 0:
+        raise AlertCommandError(f"`gh {what}` exited {completed.returncode}: {str(completed.stderr or '').strip()}")
+    return completed
+
+
 def find_existing_alert_issue(
     platform_slug: str,
     *,
@@ -145,7 +208,7 @@ def find_existing_alert_issue(
         "--limit",
         "100",
     ]
-    completed = _run_gh(args, runner=runner)
+    completed = _checked(_run_gh(args, runner=runner), what="issue list")
     payload = json.loads(completed.stdout) if completed.stdout else []
     if not isinstance(payload, list):
         return None
@@ -154,6 +217,37 @@ def find_existing_alert_issue(
         if isinstance(issue, Mapping) and issue.get("title") == expected_title:
             return issue
     return None
+
+
+def list_open_alert_issues(
+    platform_slug: str,
+    *,
+    alert_type: AlertType,
+    runner: ProcessRunner = subprocess.run,
+) -> List[Mapping[str, Any]]:
+    """Every open issue carrying ``alert_type``'s label (number + title); raise when ``gh`` fails."""
+    completed = _checked(
+        _run_gh(
+            [
+                "issue",
+                "list",
+                "--repo",
+                platform_slug,
+                "--label",
+                alert_type.label,
+                "--state",
+                "open",
+                "--json",
+                "number,title",
+                "--limit",
+                "200",
+            ],
+            runner=runner,
+        ),
+        what="issue list",
+    )
+    payload = json.loads(completed.stdout) if completed.stdout else []
+    return [issue for issue in payload if isinstance(issue, Mapping)] if isinstance(payload, list) else []
 
 
 def _issue_number_from_create_output(stdout: str) -> int:
@@ -189,7 +283,7 @@ def _create_alert_issue(
         "--body",
         body,
     ]
-    completed = _run_gh(args, runner=runner)
+    completed = _checked(_run_gh(args, runner=runner), what="issue create")
     return {
         "number": _issue_number_from_create_output(completed.stdout),
         "title": title,
@@ -261,7 +355,7 @@ def close_alert_issue(
     ]
     if close_comment:
         args.extend(["--comment", close_comment])
-    _run_gh(args, runner=runner)
+    _checked(_run_gh(args, runner=runner), what="issue close")
     return {"number": issue_number, "closed": True}
 
 

@@ -43,6 +43,7 @@ class AlertTypeRegistryTests(unittest.TestCase):
             "alert:repo-not-profiled",
             "alert:flag-missing",
             "alert:secret-missing",
+            "alert:workflow-failing",
         }
         actual_labels = {member.label for member in alerts.AlertType}
         self.assertEqual(actual_labels, expected_labels)
@@ -345,6 +346,99 @@ class ResolveAlertTypeTests(unittest.TestCase):
         """``alert:nonexistent`` raises ``ValueError``."""
         with self.assertRaises(ValueError):
             alerts.resolve_alert_type("alert:nope-does-not-exist")
+
+
+class EnsureAlertLabelsTests(unittest.TestCase):
+    """Every alert type gets its label before an issue can carry it."""
+
+    def _listing(self, *names: object) -> subprocess.CompletedProcess:
+        return _fake_completed(json.dumps([{"name": name} if isinstance(name, str) else name for name in names]))
+
+    def test_present_labels_are_left_untouched(self) -> None:
+        """Nothing is created when every label exists."""
+        runner = MagicMock(return_value=self._listing(*(member.label for member in alerts.AlertType)))
+        self.assertEqual(alerts.ensure_alert_labels("o/r", runner=runner), [])
+        self.assertEqual(runner.call_count, 1)
+
+    def test_a_missing_label_is_created_with_the_house_style(self) -> None:
+        """A type added after the hand-made labels (workflow-failing) gets one."""
+        present = [member.label for member in alerts.AlertType if member is not alerts.AlertType.WORKFLOW_FAILING]
+        runner = MagicMock(side_effect=[self._listing(*present, "not-a-mapping-entry", 7), _fake_completed("")])
+        self.assertEqual(alerts.ensure_alert_labels("o/r", runner=runner), ["alert:workflow-failing"])
+        create = runner.call_args_list[1].args[0]
+        self.assertEqual(create[:4], ["gh", "label", "create", "alert:workflow-failing"])
+        self.assertIn(alerts.ALERT_LABEL_COLOR, create)
+        self.assertIn(alerts.ALERT_LABEL_DESCRIPTION, create)
+
+    def test_a_failed_label_create_raises(self) -> None:
+        """A label that could not be created is not "provisioned"."""
+        present = [member.label for member in alerts.AlertType if member is not alerts.AlertType.WORKFLOW_FAILING]
+        failed = subprocess.CompletedProcess(["gh"], 1, "", "HTTP 403\n")
+        runner = MagicMock(side_effect=[self._listing(*present), failed])
+        with self.assertRaisesRegex(alerts.AlertCommandError, "gh label create"):
+            alerts.ensure_alert_labels("o/r", runner=runner)
+
+    def test_an_unreadable_label_list_raises(self) -> None:
+        """Guessing would spam creates or skip the one that is missing."""
+        runner = MagicMock(return_value=subprocess.CompletedProcess(["gh"], 1, "", "HTTP 403\n"))
+        with self.assertRaisesRegex(RuntimeError, "gh label list"):
+            alerts.ensure_alert_labels("o/r", runner=runner)
+
+
+class GhFailurePropagationTests(unittest.TestCase):
+    """A failed gh call fails the run: never "no issue", never "done"."""
+
+    FAILED = subprocess.CompletedProcess(["gh"], 1, "", "rate limited\n")
+
+    def test_a_failed_lookup_is_not_read_as_no_issue(self) -> None:
+        """Reading it as "no match" would open a duplicate issue."""
+        with self.assertRaisesRegex(alerts.AlertCommandError, "gh issue list. exited 1: rate limited"):
+            alerts.open_alert_issue(
+                "o/r",
+                alert_type=alerts.AlertType.REGRESSION,
+                subject="x",
+                body="b",
+                runner=MagicMock(return_value=self.FAILED),
+            )
+
+    def test_a_failed_create_is_not_reported_as_created(self) -> None:
+        """Reading it as success would lose the alert."""
+        runner = MagicMock(side_effect=[_fake_completed("[]"), self.FAILED])
+        with self.assertRaisesRegex(alerts.AlertCommandError, "gh issue create"):
+            alerts.open_alert_issue("o/r", alert_type=alerts.AlertType.REGRESSION, subject="x", body="b", runner=runner)
+
+    def test_a_failed_close_is_not_reported_as_closed(self) -> None:
+        """An alert that stayed open must not be counted as closed."""
+        listed = _fake_completed(json.dumps([{"number": 7, "title": "[alert:regression] x", "state": "open"}]))
+        runner = MagicMock(side_effect=[listed, self.FAILED])
+        with self.assertRaisesRegex(alerts.AlertCommandError, "gh issue close"):
+            alerts.close_alert_issue("o/r", alert_type=alerts.AlertType.REGRESSION, subject="x", runner=runner)
+
+
+class ListOpenAlertIssuesTests(unittest.TestCase):
+    """Every open issue of one alert type, for closing the ones that went stale."""
+
+    def test_open_issues_of_the_type_are_listed(self) -> None:
+        """The label filter and state are passed; junk entries are dropped."""
+        payload = json.dumps([{"number": 3, "title": "[alert:workflow-failing] Old"}, "junk"])
+        runner = MagicMock(return_value=_fake_completed(payload))
+        issues = alerts.list_open_alert_issues("o/r", alert_type=alerts.AlertType.WORKFLOW_FAILING, runner=runner)
+        self.assertEqual(issues, [{"number": 3, "title": "[alert:workflow-failing] Old"}])
+        argv = runner.call_args.args[0]
+        self.assertEqual(argv[argv.index("--label") + 1], "alert:workflow-failing")
+        self.assertEqual(argv[argv.index("--state") + 1], "open")
+
+    def test_non_list_or_empty_output_is_no_issue_and_failure_raises(self) -> None:
+        """A failed listing is never read as "nothing to close"."""
+        for stdout in ("{}", ""):
+            with self.subTest(stdout=stdout):
+                runner = MagicMock(return_value=_fake_completed(stdout))
+                self.assertEqual(
+                    alerts.list_open_alert_issues("o/r", alert_type=alerts.AlertType.REGRESSION, runner=runner), []
+                )
+        failed = MagicMock(return_value=subprocess.CompletedProcess(["gh"], 1, "", "boom\n"))
+        with self.assertRaisesRegex(alerts.AlertCommandError, "gh issue list"):
+            alerts.list_open_alert_issues("o/r", alert_type=alerts.AlertType.REGRESSION, runner=failed)
 
 
 if __name__ == "__main__":  # pragma: no cover

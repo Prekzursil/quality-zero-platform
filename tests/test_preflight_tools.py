@@ -397,12 +397,31 @@ class ProvisioningTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)  # pinned-only: the PATH tool is ignored, no digest -> refused
         self.assertIn("no pinned SHA-256", result.stderr)
 
+    def test_a_tool_on_path_at_exactly_the_pin_is_used(self) -> None:
+        """Real version-output shapes: a word of any line, with or without a leading v."""
+        cases = [
+            ("resolve_osv", "osv-scanner() { echo 'osv-scanner version: 2.3.8'; echo 'commit: abc'; }", "osv-scanner"),
+            ("resolve_gitleaks", "gitleaks() { echo v8.30.1; }; export -f gitleaks", "gitleaks"),
+        ]
+        for resolver, stub, expected in cases:
+            with self.subTest(resolver=resolver):
+                (self.workdir / "curl.log").unlink(missing_ok=True)
+                result = self._run(
+                    resolver, os_name="linux", arch="amd64", extra=stub, env={"QZP_PREFLIGHT_PINNED_ONLY": "0"}
+                )
+                self.assertEqual((result.returncode, result.stdout.strip(), self._urls()), (0, expected, []))
+
     def test_a_tool_on_path_at_another_version_is_not_used(self) -> None:
         """A previously pinned engine on PATH must not run under the new pin's name."""
         cases = [
             ("resolve_gitleaks", "gitleaks() { echo 8.29.0; }; export -f gitleaks", "gitleaks_linux_x64", True),
             ("resolve_osv", "osv-scanner() { echo 'osv-scanner version: 2.3.7'; }", "osv-scanner_linux_amd64", False),
-            ("resolve_opengrep", "opengrep() { echo 1.21.0; }; export -f opengrep", "opengrep_manylinux_x86", False),
+            (
+                "resolve_opengrep",
+                "opengrep() { echo 1.22.0-rc1; }; export -f opengrep",
+                "opengrep_manylinux_x86",
+                False,
+            ),
         ]
         for resolver, stub, asset, archived in cases:
             with self.subTest(resolver=resolver):

@@ -75,16 +75,24 @@ qzp_is_musl() {
 }
 
 # qzp_path_tool_is_pinned <cmd> <pin> <version-args...> -- true when <cmd> is
-# on PATH AND reports the pinned version. Any other installed version (the
-# previous pin, say) would run a different engine than CI under the pin's name,
-# so it falls through to the verified pinned asset instead. The output is
-# captured first: under pipefail, `cmd | grep -q` can lose a match to SIGPIPE.
+# on PATH AND reports EXACTLY the pinned version: one whitespace-separated word
+# of its version output, less a leading "v", must equal the pin (so 1.32.0-rc1
+# or 1.32.01 never pass for 1.32.0). Any other installed version (the previous
+# pin, say) would run a different engine than CI under the pin's name, so it
+# falls through to the verified pinned asset instead. The output is captured
+# first: under pipefail, `cmd | grep -q` can lose a match to SIGPIPE.
 qzp_path_tool_is_pinned() {
-  local cmd="$1" pin="${2#v}" out
+  local cmd="$1" pin="${2#v}" out line word
+  local -a words
   shift 2
   command -v "$cmd" >/dev/null 2>&1 || return 1
   out="$("$cmd" "$@" 2>/dev/null)" || true
-  case "$out" in *"$pin"*) return 0 ;; esac
+  while IFS= read -r line; do
+    read -ra words <<< "$line"
+    for word in "${words[@]}"; do
+      [ "${word#v}" = "$pin" ] && return 0
+    done
+  done <<< "$out"
   return 1
 }
 

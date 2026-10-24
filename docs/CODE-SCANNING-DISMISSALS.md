@@ -52,7 +52,7 @@ characters or fewer**.
 # 2. Dismiss with the rationale's core (<= 238 chars) and the log pointer.
 gh api -X PATCH repos/OWNER/REPO/code-scanning/alerts/NUMBER \
   -f state=dismissed \
-  -f dismissed_reason="false positive" \
+  -f dismissed_reason="<false positive | won't fix | used in tests>" \
   -f dismissed_comment="<rationale core>. Logged: docs/CODE-SCANNING-DISMISSALS.md"
 ```
 

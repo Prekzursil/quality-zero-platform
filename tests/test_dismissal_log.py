@@ -76,6 +76,8 @@ class DismissalLogTests(unittest.TestCase):
             _row(reason="won't fix", review_by="2027-01-01"): "names no owner",
             _row(reason="won't fix", owner="@owner"): "has no real review-by date",
             _row(reason="won't fix", owner="@owner", review_by="2027-02-30"): "has no real review-by date",
+            _row(reason="won't fix", owner="@owner", review_by="2020-01-01"): "is not after its dismissal",
+            _row(reason="won't fix", review_by="2027-01-01", verdict="**Fixed by design.** accepted"): "names no owner",
             "| [#7](x) | too | few |": "3 cells, expected 9",
         }
         for row, expected in cases.items():
@@ -111,11 +113,22 @@ class DismissalLogTests(unittest.TestCase):
                 self.assertEqual(log.main([str(bad), "--repo", REPO]), 1)
         self.assertIn("reason 'nope' is not one of", err.getvalue())
 
+    def test_a_fixed_in_code_decision_matches_the_workflows(self) -> None:
+        """The policy may only call the platform-checkout alerts fixed while no reusable workflow reads platform_ref."""
+        text = DOC.read_text(encoding="utf-8")
+        self.assertIn("**Fixed in the code by #336, not excluded.**", text)
+        for path in sorted((ROOT / ".github" / "workflows").glob("reusable-*.yml")):
+            with self.subTest(workflow=path.name):
+                self.assertNotIn("inputs.platform_ref", path.read_text(encoding="utf-8"))
+
     def test_the_documented_comment_budget_adds_up(self) -> None:
         """The 238-character core plus the log pointer is exactly GitHub's 280-character cap."""
         text = DOC.read_text(encoding="utf-8")
         suffix = ". Logged: docs/CODE-SCANNING-DISMISSALS.md"
         self.assertIn(f'dismissed_comment="<rationale core>{suffix}"', text)
+        # The copy-paste command must not pick the GitHub reason for the reader.
+        self.assertIn('-f dismissed_reason="<false positive | won\'t fix | used in tests>"', text)
+        self.assertNotIn('dismissed_reason="false positive"', text)
         self.assertIn("**238\ncharacters or fewer**", text)
         self.assertEqual(238 + len(suffix), 280)
 

@@ -36,7 +36,9 @@ COLUMNS = (
 REASONS = frozenset({"false positive", "won't fix", "used in tests"})
 SEPARATOR = re.compile(r"^:?-{3,}:?$")
 LOCATION = re.compile(r"^`[^`\s]+:[1-9][0-9]*`$")
-PENDING = ("**Re-review", "**Fix")
+# Exact markers: a verdict that merely starts with "**Fix" (e.g. "**Fixed by
+# design.**") is an accepted risk and must carry an owner and a date.
+PENDING = ("**Re-review.**", "**Fix.**")
 
 
 def _cells(line: str) -> List[str]:
@@ -85,6 +87,8 @@ def _row_problems(cells: Sequence[str], seen: set, *, repo: str) -> List[str]:
             problems.append("an accepted `won't fix` names no owner")
         if not _is_date(review_by):
             problems.append(f"an accepted `won't fix` has no real review-by date (got {review_by!r})")
+        elif _is_date(dismissed) and review_by <= dismissed:
+            problems.append(f"an accepted `won't fix` review-by {review_by} is not after its dismissal {dismissed}")
     return problems
 
 

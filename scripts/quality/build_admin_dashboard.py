@@ -389,8 +389,12 @@ def _default_branch_health(token: str, repo_slug: str, default_branch: str) -> s
     return verdict
 
 
-def _head_health(runs: Sequence[Mapping[str, Any]], complete: bool, *, shared: bool) -> str:
-    """One open head commit's verdict from its ``pull_request`` runs.
+def _head_health(runs: Sequence[Mapping[str, Any]], complete: bool, *, shared: bool, since: str = "") -> str:
+    """One open head commit's verdict from its ``pull_request`` runs created at or after ``since``.
+
+    A commit can be reused by a later PR (the same head against another
+    base, after the first PR closed): runs older than the open PR belong to
+    the old one, so they are not this PR's CI and are dropped.
 
     GitHub lists on a run every open PR whose head matches it, "not
     necessarily" the one that triggered it, and none for a fork PR. So when
@@ -400,7 +404,7 @@ def _head_health(runs: Sequence[Mapping[str, Any]], complete: bool, *, shared: b
     an incomplete run list. In both cases only a failure already visible is
     reported.
     """
-    verdict = _compute_health(runs)
+    verdict = _compute_health([run for run in runs if str(run.get("created_at", "")) >= since])
     if verdict == "partial":
         return verdict
     if shared or not complete:
@@ -430,9 +434,16 @@ def _open_pr_health(token: str, repo_slug: str) -> str:
     prs_per_head = Counter(sha for sha in map(_head_sha, pulls) if sha)
     if not prs_per_head:
         return "none"
+    # The oldest open PR's creation time per head: a run older than that is a
+    # closed PR's. A PR without the field keeps every run (no filtering).
+    opened: Dict[str, str] = {}
+    for pull in pulls:
+        if isinstance(pull, Mapping) and _head_sha(pull):
+            created = str(pull.get("created_at") or "")
+            opened[_head_sha(pull)] = min(opened.get(_head_sha(pull), created), created)
     heads = sorted(prs_per_head)
     verdicts = [
-        _head_health(*_head_runs(token, repo_slug, sha), shared=prs_per_head[sha] > 1)
+        _head_health(*_head_runs(token, repo_slug, sha), shared=prs_per_head[sha] > 1, since=opened.get(sha, ""))
         for sha in heads[:MAX_PR_HEAD_LOOKUPS]
     ]
     if "partial" in verdicts:

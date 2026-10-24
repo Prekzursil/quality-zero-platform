@@ -356,6 +356,38 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
             live = build_admin_dashboard._live_health("token", "Prekzursil/example", "main")
         self.assertEqual(live["default_branch_health"], "success")
 
+    def test_runs_older_than_the_open_pr_are_not_its_ci(self) -> None:
+        """Review finding: a commit reused by a new PR inherited the closed PR's green runs."""
+        pulls = [{"number": 9, "head": {"sha": "h"}, "created_at": "2026-10-24T12:00:00Z"}]
+
+        def verdict(*runs: tuple) -> str:
+            payload = {"workflow_runs": [{"name": n, "conclusion": c, "created_at": t} for n, c, t in runs]}
+            with patch.object(
+                build_admin_dashboard, "_github_fetch_degraded", side_effect=[(pulls, {}), (payload, {})]
+            ):
+                return build_admin_dashboard._open_pr_health("token", "o/r")
+
+        old_green = ("CI", "success", "2026-10-20T09:00:00Z")
+        self.assertEqual(verdict(old_green), "unknown")  # was "success": the new PR never ran CI
+        self.assertEqual(verdict(old_green, ("CI", "failure", "2026-10-24T12:05:00Z")), "partial")
+        self.assertEqual(
+            verdict(("CI", "failure", "2026-10-20T09:00:00Z"), ("CI", "success", "2026-10-24T12:00:00Z")), "success"
+        )
+
+    def test_a_shared_head_keeps_the_runs_of_its_oldest_open_pr(self) -> None:
+        """The filter uses the OLDEST open PR on a head, so a failure that PR saw is never dropped."""
+        pulls = [
+            {"number": 1, "head": {"sha": "h"}, "created_at": "2026-10-24T08:00:00Z"},
+            {"number": 2, "head": {"sha": "h"}, "created_at": "2026-10-24T12:00:00Z"},
+            {"number": 3, "head": {"sha": "g"}},
+        ]
+        failing = {"workflow_runs": [{"name": "CI", "conclusion": "failure", "created_at": "2026-10-24T09:00:00Z"}]}
+        green = {"workflow_runs": [{"name": "CI", "conclusion": "success", "created_at": "2026-10-01T00:00:00Z"}]}
+        with patch.object(
+            build_admin_dashboard, "_github_fetch_degraded", side_effect=[(pulls, {}), (green, {}), (failing, {})]
+        ):
+            self.assertEqual(build_admin_dashboard._open_pr_health("token", "o/r"), "partial")
+
     def test_per_head_lookups_are_capped(self) -> None:
         """A huge PR backlog cannot stall the hourly build; heads past the cap leave no verdict."""
         cap = build_admin_dashboard.MAX_PR_HEAD_LOOKUPS

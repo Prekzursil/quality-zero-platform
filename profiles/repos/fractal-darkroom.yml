@@ -13,43 +13,37 @@ issue_policy:
   main_behavior: absolute
 # Lean member (public repo, rollout: observe). Renamed from brot-farm on
 # 2026-10-21. The repo enforces its own quality floor in-repo (stronger than
-# the platform's): ci.yml runs an ubuntu+windows x py3.11-3.13 matrix with a
-# pytest-cov gate at STRICT 100% line+branch, and quality.yml is the lean
-# 6-gate caller (reusable-quality.yml@main) - green since adoption.
+# the platform's): ci.yml runs an ubuntu+windows x py3.11-3.14 matrix with a
+# pytest-cov gate at STRICT 100% line+branch, a Playwright site suite and the
+# research lab-notebook gate, aggregated by `ci-green`; quality.yml is the
+# lean 6-gate caller (reusable-quality.yml pinned by commit SHA).
 #
-# Required set measured on main@HEAD 2026-10-21 via commits/main/check-runs:
-# the six matrix-derived `test (<os>, <py>)` names + `quality / quality`.
+# Required set re-measured on main@792161c 2026-10-24 (commits/main/check-runs
+# + branch protection): `ci-green`, `quality / quality`, `CodeQL` - exactly the
+# repo's own classic branch protection. `ci-green` is FAIL-CLOSED since
+# fractal-darkroom#4 (`if: always()` + every needs.*.result == success), so it
+# stands for all eight `test (<os>, <py>)` cells plus `site` and `research`;
+# requiring it replaces the brittle matrix-derived names (adding a Python
+# version no longer renames a required context). Before #4 a failed cell left
+# ci-green *skipped*, which a required check counts as passing - which is why
+# the matrix names were required here instead.
 # CodeQL runs via GitHub DEFAULT setup (dynamic), which emits `Analyze
 # (python)` / `Analyze (actions)` but the reliably-PR-present aggregate is
 # the `CodeQL` context (fleet convention: DevExtreme classic protection and
 # env-inspector's active ruleset both require it; per-language Analyze (<lang>)
 # names are not reliably reported on pull_request events).
-#
-# CAVEAT (brittle matrix names): adding/dropping an OS or Python version in
-# ci.yml RENAMES these contexts - re-measure emitted names after any ci.yml
-# matrix edit before flipping rollout off observe (tracelines precedent).
 # Pages deploys, CodeQL dynamic runs, and Dependency-Graph jobs fire on push
 # only and are deliberately NOT required (nothing that cannot report on a
 # pull_request may be required).
 required_contexts:
   always:
+    - ci-green
     - quality / quality
-    - test (ubuntu-latest, 3.11)
-    - test (ubuntu-latest, 3.12)
-    - test (ubuntu-latest, 3.13)
-    - test (windows-latest, 3.11)
-    - test (windows-latest, 3.12)
-    - test (windows-latest, 3.13)
     - CodeQL
   pull_request_only: []
   target:
+    - ci-green
     - quality / quality
-    - test (ubuntu-latest, 3.11)
-    - test (ubuntu-latest, 3.12)
-    - test (ubuntu-latest, 3.13)
-    - test (windows-latest, 3.11)
-    - test (windows-latest, 3.12)
-    - test (windows-latest, 3.13)
     - CodeQL
 coverage:
   command: |

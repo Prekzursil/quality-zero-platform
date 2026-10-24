@@ -8,6 +8,8 @@ trigger that fires. This is the last wiring step of Phase 5 inc-5.
 from __future__ import absolute_import
 
 import datetime as dt
+import json
+import subprocess
 import unittest
 from unittest.mock import MagicMock
 
@@ -199,6 +201,71 @@ class BuildTriggersFromFleetStateTests(unittest.TestCase):
         triggers = alert_dispatch.build_triggers_from_fleet_state(state)
         bump = [t for t in triggers if t.alert_type == alerts.AlertType.FLEET_BUMP_FAIL]
         self.assertEqual(len(bump), 1)
+
+
+class WorkflowRunTests(unittest.TestCase):
+    """The platform's own workflow history: fetched, grouped, alerted on, recovered."""
+
+    RUNS = [
+        {"workflowName": "Wave", "status": "completed", "conclusion": "failure", "createdAt": "2026-10-22T00:00:00Z"},
+        {"workflowName": "Wave", "status": "completed", "conclusion": "failure", "createdAt": "2026-10-24T00:00:00Z"},
+        {"workflowName": "Wave", "status": "completed", "conclusion": "cancelled", "createdAt": "2026-10-24T06:00:00Z"},
+        {"workflowName": "Wave", "status": "completed", "conclusion": "failure", "createdAt": "2026-10-23T00:00:00Z"},
+        {"workflowName": "Verify", "status": "in_progress", "conclusion": "", "createdAt": "2026-10-24T09:00:00Z"},
+        {"workflowName": "Verify", "status": "completed", "conclusion": "success", "createdAt": "2026-10-24T08:00:00Z"},
+        {"workflowName": "Verify", "status": "completed", "conclusion": None, "createdAt": "2026-10-24T07:00:00Z"},
+        "not-a-mapping",
+    ]
+
+    def test_conclusions_are_grouped_newest_first_without_neutral_or_running_runs(self) -> None:
+        """Cancelled / running / blank outcomes never break or end a streak."""
+        self.assertEqual(
+            alert_dispatch.workflow_conclusions(self.RUNS),
+            {"Wave": ["failure", "failure", "failure"], "Verify": ["success"]},
+        )
+
+    def test_the_failing_workflow_fires_from_fleet_state(self) -> None:
+        """build_triggers_from_fleet_state runs the detector per workflow."""
+        state = {"workflow_runs": alert_dispatch.workflow_conclusions(self.RUNS)}
+        triggers = alert_dispatch.build_triggers_from_fleet_state(state)
+        self.assertEqual([(t.alert_type, t.subject) for t in triggers], [(alerts.AlertType.WORKFLOW_FAILING, "Wave")])
+
+    def test_recovered_workflows_get_their_alert_closed(self) -> None:
+        """Only a workflow whose newest completed run succeeded is closed; dry-run is passed through."""
+        closer = MagicMock(return_value={"number": 9, "closed": True})
+        results = alert_dispatch.close_recovered_workflow_alerts(
+            platform_slug="o/r",
+            workflow_runs={"Wave": ["failure"], "Verify": ["success", "failure"], "Empty": []},
+            closer=closer,
+            dry_run=True,
+        )
+        self.assertEqual(results, [{"number": 9, "closed": True}])
+        (call,) = closer.call_args_list
+        self.assertEqual(call.args, ("o/r",))
+        self.assertEqual(call.kwargs["alert_type"], alerts.AlertType.WORKFLOW_FAILING)
+        self.assertEqual(call.kwargs["subject"], "Verify")
+        self.assertTrue(call.kwargs["dry_run"])
+        self.assertIn("succeeded", call.kwargs["close_comment"])
+
+    def _completed(self, stdout: str, returncode: int = 0) -> "subprocess.CompletedProcess[str]":
+        return subprocess.CompletedProcess(["gh"], returncode, stdout, "boom\n")
+
+    def test_runs_are_fetched_from_the_default_branch(self) -> None:
+        """gh run list over main; a non-list payload is empty; a failure raises."""
+        runner = MagicMock(return_value=self._completed(json.dumps(self.RUNS)))
+        runs = alert_dispatch.fetch_workflow_runs("o/r", runner=runner)
+        self.assertEqual(len(runs), 7)
+        argv = runner.call_args.args[0]
+        self.assertEqual(argv[:3], ["gh", "run", "list"])
+        self.assertEqual(argv[argv.index("--branch") + 1], "main")
+        self.assertEqual(
+            alert_dispatch.fetch_workflow_runs("o/r", runner=MagicMock(return_value=self._completed("{}"))), []
+        )
+        self.assertEqual(
+            alert_dispatch.fetch_workflow_runs("o/r", runner=MagicMock(return_value=self._completed(""))), []
+        )
+        with self.assertRaisesRegex(RuntimeError, "gh run list"):
+            alert_dispatch.fetch_workflow_runs("o/r", runner=MagicMock(return_value=self._completed("", 1)))
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -43,6 +43,7 @@ class AlertTypeRegistryTests(unittest.TestCase):
             "alert:repo-not-profiled",
             "alert:flag-missing",
             "alert:secret-missing",
+            "alert:workflow-failing",
         }
         actual_labels = {member.label for member in alerts.AlertType}
         self.assertEqual(actual_labels, expected_labels)
@@ -345,6 +346,35 @@ class ResolveAlertTypeTests(unittest.TestCase):
         """``alert:nonexistent`` raises ``ValueError``."""
         with self.assertRaises(ValueError):
             alerts.resolve_alert_type("alert:nope-does-not-exist")
+
+
+class EnsureAlertLabelsTests(unittest.TestCase):
+    """Every alert type gets its label before an issue can carry it."""
+
+    def _listing(self, *names: object) -> subprocess.CompletedProcess:
+        return _fake_completed(json.dumps([{"name": name} if isinstance(name, str) else name for name in names]))
+
+    def test_present_labels_are_left_untouched(self) -> None:
+        """Nothing is created when every label exists."""
+        runner = MagicMock(return_value=self._listing(*(member.label for member in alerts.AlertType)))
+        self.assertEqual(alerts.ensure_alert_labels("o/r", runner=runner), [])
+        self.assertEqual(runner.call_count, 1)
+
+    def test_a_missing_label_is_created_with_the_house_style(self) -> None:
+        """A type added after the hand-made labels (workflow-failing) gets one."""
+        present = [member.label for member in alerts.AlertType if member is not alerts.AlertType.WORKFLOW_FAILING]
+        runner = MagicMock(side_effect=[self._listing(*present, "not-a-mapping-entry", 7), _fake_completed("")])
+        self.assertEqual(alerts.ensure_alert_labels("o/r", runner=runner), ["alert:workflow-failing"])
+        create = runner.call_args_list[1].args[0]
+        self.assertEqual(create[:4], ["gh", "label", "create", "alert:workflow-failing"])
+        self.assertIn(alerts.ALERT_LABEL_COLOR, create)
+        self.assertIn(alerts.ALERT_LABEL_DESCRIPTION, create)
+
+    def test_an_unreadable_label_list_raises(self) -> None:
+        """Guessing would spam creates or skip the one that is missing."""
+        runner = MagicMock(return_value=subprocess.CompletedProcess(["gh"], 1, "", "HTTP 403\n"))
+        with self.assertRaisesRegex(RuntimeError, "gh label list"):
+            alerts.ensure_alert_labels("o/r", runner=runner)
 
 
 if __name__ == "__main__":  # pragma: no cover

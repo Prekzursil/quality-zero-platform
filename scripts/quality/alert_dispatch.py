@@ -20,9 +20,11 @@ unit-testable without network / filesystem.
 from __future__ import absolute_import
 
 import datetime as dt
+import json
+import subprocess  # nosec B404 # noqa: S404 — gh CLI wrapper; args are controlled
 import sys
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Mapping
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Sequence
 
 from scripts.quality import alert_triggers as at
 from scripts.quality import alerts
@@ -156,6 +158,90 @@ def _drift_pr_triggers(
     return triggers
 
 
+#: Outcomes that neither fail nor pass a workflow: they never break a failure
+#: streak and never count as a recovery.
+NEUTRAL_CONCLUSIONS = frozenset({"cancelled", "skipped", "neutral", "action_required", "stale"})
+
+
+def workflow_conclusions(runs: Iterable[Mapping[str, Any]]) -> Dict[str, List[str]]:
+    """Group ``gh run list --json workflowName,status,conclusion,createdAt`` rows by workflow.
+
+    Each list is newest first and holds only COMPLETED runs whose conclusion
+    says something (success or a failure kind).
+    """
+    ordered = sorted(
+        (run for run in runs if isinstance(run, Mapping)),
+        key=lambda run: str(run.get("createdAt", "")),
+        reverse=True,
+    )
+    grouped: Dict[str, List[str]] = {}
+    for run in ordered:
+        conclusion = str(run.get("conclusion") or "")
+        if run.get("status") != "completed" or not conclusion or conclusion in NEUTRAL_CONCLUSIONS:
+            continue
+        grouped.setdefault(str(run.get("workflowName", "")), []).append(conclusion)
+    return grouped
+
+
+def fetch_workflow_runs(
+    platform_slug: str,
+    *,
+    branch: str = "main",
+    limit: int = 300,
+    runner: Callable[..., "subprocess.CompletedProcess[str]"] = subprocess.run,
+) -> List[Mapping[str, Any]]:
+    """Read the platform's recent default-branch workflow runs through ``gh``; raise if it cannot."""
+    completed = runner(
+        [
+            "gh",
+            "run",
+            "list",
+            "--repo",
+            platform_slug,
+            "--branch",
+            branch,
+            "--limit",
+            str(limit),
+            "--json",
+            "workflowName,status,conclusion,createdAt",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )  # nosec B603 — fixed argv
+    if completed.returncode != 0:
+        raise RuntimeError(f"`gh run list` exited {completed.returncode}: {completed.stderr.strip()}")
+    payload = json.loads(completed.stdout or "[]")
+    return [run for run in payload if isinstance(run, Mapping)] if isinstance(payload, list) else []
+
+
+def close_recovered_workflow_alerts(
+    *,
+    platform_slug: str,
+    workflow_runs: Mapping[str, Sequence[str]],
+    closer: Callable[..., Mapping[str, Any]] = alerts.close_alert_issue,
+    dry_run: bool = False,
+) -> List[Dict[str, Any]]:
+    """Close the failing-workflow alert of every workflow whose newest completed run succeeded."""
+    results: List[Dict[str, Any]] = []
+    for workflow in sorted(workflow_runs):
+        conclusions = list(workflow_runs[workflow])
+        if not conclusions or conclusions[0] != "success":
+            continue
+        results.append(
+            dict(
+                closer(
+                    platform_slug,
+                    alert_type=alerts.AlertType.WORKFLOW_FAILING,
+                    subject=workflow,
+                    dry_run=dry_run,
+                    close_comment=f"`{workflow}` succeeded on its newest completed run; closing.",
+                )
+            )
+        )
+    return results
+
+
 def build_triggers_from_fleet_state(
     state: Mapping[str, Any],
 ) -> List[at.AlertTrigger]:
@@ -178,6 +264,10 @@ def build_triggers_from_fleet_state(
             now=now,
         )
     )
+
+    workflow_runs: Mapping[str, Sequence[str]] = state.get("workflow_runs", {})
+    for workflow in sorted(workflow_runs):
+        triggers.extend(at.detect_workflow_failing(workflow=workflow, conclusions=list(workflow_runs[workflow])))
 
     recipe_name = str(state.get("recipe_name", ""))
     staging = list(state.get("staging_results", []))

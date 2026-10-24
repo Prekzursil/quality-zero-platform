@@ -84,11 +84,55 @@ class AlertType(enum.Enum):
     # alert issues. The inline ``noqa: S105`` + ``nosec`` markers on the
     # assignment below cover Ruff and Bandit.
     MISSING_SCANNER_AUTH = "alert:secret-missing"  # noqa: S105  # nosec
+    # One of the platform's OWN workflows keeps failing on its default branch.
+    WORKFLOW_FAILING = "alert:workflow-failing"
 
     @property
     def label(self) -> str:
         """Return the GitHub issue label string (e.g. ``alert:regression``)."""
         return str(self.value)
+
+
+ALERT_LABEL_COLOR = "d93f0b"
+ALERT_LABEL_DESCRIPTION = "Per-event alert (Phase 5 §3) — never digested"
+
+
+def ensure_alert_labels(platform_slug: str, *, runner: ProcessRunner = subprocess.run) -> List[str]:
+    """Create every ``alert:*`` label the repository lacks; return the ones created.
+
+    ``gh issue create --label`` rejects a label the repository does not have,
+    so an alert type added after the labels were made by hand would never open
+    an issue. Existing labels are left untouched. A label list that cannot be
+    read raises: guessing would either spam creates or skip the one missing.
+    """
+    listed = _run_gh(
+        ["label", "list", "--repo", platform_slug, "--search", "alert:", "--limit", "200", "--json", "name"],
+        runner=runner,
+    )
+    if listed.returncode != 0:
+        raise RuntimeError(f"`gh label list` exited {listed.returncode}: {listed.stderr.strip()}")
+    payload = json.loads(listed.stdout or "[]")
+    present = {str(item.get("name")) for item in payload if isinstance(item, Mapping)}
+    created: List[str] = []
+    for member in AlertType:
+        if member.label in present:
+            continue
+        _run_gh(
+            [
+                "label",
+                "create",
+                member.label,
+                "--repo",
+                platform_slug,
+                "--color",
+                ALERT_LABEL_COLOR,
+                "--description",
+                ALERT_LABEL_DESCRIPTION,
+            ],
+            runner=runner,
+        )
+        created.append(member.label)
+    return created
 
 
 def alert_issue_title(alert_type: AlertType, subject: str) -> str:

@@ -118,6 +118,8 @@ class FakeRunner:
         edit_returncode: int = 0,
         close_returncode: int = 0,
         config_repos: Sequence[str] = (),
+        inaccessible: Sequence[str] = (),
+        inaccessible_stderr: str = "GraphQL: Could not resolve to a Repository with the name '{slug}'. (repository)\n",
     ) -> None:
         """Script the fake ``gh`` / ``osv-scanner`` responses for one test."""
         self.calls: List[List[str]] = []
@@ -130,6 +132,8 @@ class FakeRunner:
         self.edit_returncode = edit_returncode
         self.close_returncode = close_returncode
         self.config_repos = set(config_repos)
+        self.inaccessible = set(inaccessible)
+        self.inaccessible_stderr = inaccessible_stderr
         self._osv_index = 0
 
     def __call__(self, args: Sequence[str], **_kwargs: Any) -> "subprocess.CompletedProcess[str]":
@@ -155,9 +159,11 @@ class FakeRunner:
 
     def _clone(self, argv: List[str]) -> "subprocess.CompletedProcess[str]":
         """Create the destination tree so the config probe has something to see."""
+        slug = argv[3]
+        if slug in self.inaccessible:
+            return _completed(argv, returncode=1, stderr=self.inaccessible_stderr.format(slug=slug))
         if self.clone_returncode != 0:
             return _completed(argv, returncode=self.clone_returncode, stderr="clone failed\n")
-        slug = argv[3]
         dest = Path(argv[4])
         dest.mkdir(parents=True, exist_ok=True)
         if slug in self.config_repos:
@@ -384,6 +390,22 @@ class ScanRepoTests(unittest.TestCase):
         self.assertIs(scan.status, sweep.ScanStatus.SCAN_ERROR)
         self.assertFalse(scan.status.is_clean_result)
         self.assertEqual(runner.argv_starting("osv-scanner"), [], "no scan should be attempted")
+
+    def test_a_repo_the_token_cannot_see_is_unscannable_not_a_scan_error(self) -> None:
+        """A private repo without a read token is a standing gap, not a transient failure."""
+        for stderr in (
+            "GraphQL: Could not resolve to a Repository with the name '{slug}'. (repository)\n",
+            "remote: Repository not found.\nfatal: repository '{slug}' not found\n",
+            "HTTP 404: Not Found (https://api.github.com/repos/{slug})\n",
+        ):
+            with self.subTest(stderr=stderr):
+                runner = FakeRunner(inaccessible=["Prekzursil/momentstudio"], inaccessible_stderr=stderr)
+                scan = self._scan(runner)
+                self.assertIs(scan.status, sweep.ScanStatus.UNSCANNABLE)
+                self.assertFalse(scan.status.is_clean_result)
+                self.assertIn("CODEX_FLEET_READ_PAT", scan.detail)
+                self.assertIn("NOT watched", scan.detail)
+                self.assertEqual(runner.argv_starting("osv-scanner"), [], "no scan should be attempted")
 
     def test_transient_exit_is_retried_then_succeeds(self) -> None:
         """127 retries with gate 6's ``attempt * 20`` backoff, then passes."""
@@ -1055,6 +1077,70 @@ class MainTests(unittest.TestCase):
         self.assertLessEqual(stamped, after)
 
 
+class UnscannableTests(unittest.TestCase):
+    """A repository the token cannot see is tracked as NOT WATCHED, never as clean or as a red run."""
+
+    def _reconcile(self, scan: sweep.RepoScan, runner: FakeRunner) -> sweep.RepoOutcome:
+        return sweep.reconcile(
+            scan,
+            platform_slug="Prekzursil/quality-zero-platform",
+            floor=severity.SEVERITY_FLOOR,
+            generated_at=FIXED_NOW,
+            runner=runner,
+        )
+
+    def test_the_issue_body_never_dates_a_scan_that_never_ran(self) -> None:
+        """ "Last attempted ... never scanned", the clone's exit, and the NOT WATCHED section."""
+        scan = _scan(sweep.ScanStatus.UNSCANNABLE, exit_code=1, detail="token cannot see it")
+        body = sweep.render_issue_body(scan, floor=severity.SEVERITY_FLOOR, generated_at=FIXED_NOW)
+        self.assertIn(f"- Last attempted (UTC): `{FIXED_NOW.isoformat()}` - never scanned", body)
+        self.assertIn("- Scan result: `unscannable` (`gh repo clone` exit `1`)", body)
+        self.assertIn("## NOT WATCHED - the sweep cannot see this repository", body)
+        self.assertIn("token cannot see it", body)
+        self.assertNotIn("Last scanned (UTC)", body)
+
+    def test_an_unwatched_repo_without_an_issue_gets_one(self) -> None:
+        """The standing signal is an open issue, not a daily red run."""
+        runner = FakeRunner()
+        outcome = self._reconcile(_scan(sweep.ScanStatus.UNSCANNABLE, exit_code=1), runner)
+        self.assertIs(outcome.action, sweep.IssueAction.CREATED)
+        (create,) = runner.argv_starting("gh", "issue", "create")
+        self.assertIn("NOT WATCHED", create[create.index("--body") + 1])
+
+    def test_an_existing_issue_keeps_its_last_real_scan(self) -> None:
+        """A repo that went private must not have its findings overwritten by "unknown"."""
+        runner = FakeRunner(issue_list=OPEN_ISSUE)
+        outcome = self._reconcile(_scan(sweep.ScanStatus.UNSCANNABLE, exit_code=1), runner)
+        self.assertIs(outcome.action, sweep.IssueAction.SKIPPED_UNSCANNABLE)
+        self.assertEqual(outcome.issue_number, 77)
+        for verb in ("edit", "close", "create"):
+            self.assertEqual(runner.argv_starting("gh", "issue", verb), [], verb)
+
+    def _main(self, runner: FakeRunner, *only: str) -> Tuple[int, str]:
+        argv = ["--inventory", str(INVENTORY)]
+        for name in only:
+            argv += ["--only", name]
+        out, err = io.StringIO(), io.StringIO()
+        with isolated_cwd() as tmp, redirect_stdout(out), redirect_stderr(err):
+            code = sweep.main(argv + ["--workdir", str(tmp)], runner=runner, sleeper=NoopSleeper(), now=FIXED_NOW)
+        return code, out.getvalue() + err.getvalue()
+
+    def test_a_sweep_complete_except_unwatched_repos_exits_3(self) -> None:
+        """Distinct from EXIT_OK: it must never read as "every governed repo was scanned"."""
+        runner = FakeRunner(inaccessible=["Prekzursil/PrimariRo"])
+        code, text = self._main(runner, "momentstudio", "PrimariRo")
+        self.assertEqual(code, sweep.EXIT_UNWATCHED)
+        self.assertIn("UNWATCHED scheduled-cve-scan: 1 repo(s)", text)
+        self.assertIn("Prekzursil/PrimariRo", text)
+        self.assertIn("| unscannable |", text)
+
+    def test_an_incomplete_sweep_still_exits_1(self) -> None:
+        """A real scan error outranks the standing unwatched gap."""
+        runner = FakeRunner(osv_results=[(130, "")], inaccessible=["Prekzursil/PrimariRo"])
+        code, _text = self._main(runner, "momentstudio", "PrimariRo")
+        self.assertEqual(code, sweep.EXIT_INCOMPLETE)
+
+
 class IssueNumberParsingTests(unittest.TestCase):
     """The two number parsers, including the shapes coverage cannot branch on."""
 
@@ -1126,6 +1212,15 @@ class ScheduledCveScanWorkflowTests(unittest.TestCase):
         checkouts = [step for step in steps if str(step.get("uses", "")).startswith("actions/checkout")]
         self.assertEqual(len(checkouts), 1)
         self.assertIs(checkouts[0]["with"]["persist-credentials"], False)
+
+    def test_unwatched_repos_warn_without_failing_or_passing(self) -> None:
+        """Exit 3 annotates the run; it neither fails it nor prints the all-scanned PASS."""
+        (step,) = [s for s in self.doc["jobs"]["sweep"]["steps"] if "scheduled_cve_scan" in str(s.get("run", ""))]
+        run = str(step["run"])
+        branch = run.split('elif [ "$rc" -eq 3 ]; then', 1)[1].split("elif", 1)[0]
+        self.assertIn("::warning title=scheduled-cve-scan: private repos NOT watched::", branch)
+        self.assertNotIn("exit", branch)
+        self.assertNotIn("PASS", branch)
 
     def test_osv_scanner_is_pinned_to_the_gate_version(self) -> None:
         """Same binary as gate 6 - a T0 prediction from another version is noise."""

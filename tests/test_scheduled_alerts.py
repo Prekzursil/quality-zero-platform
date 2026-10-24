@@ -74,6 +74,22 @@ class ScheduledAlertsWorkflowTests(unittest.TestCase):
         self.assertEqual(perms.get("contents"), "read")
         self.assertEqual(perms.get("issues"), "write")
 
+    def test_scheduled_runs_are_live(self) -> None:
+        """THE bug: every cron run was a dry run, so 470+ green runs opened nothing."""
+        steps = self.doc["jobs"]["dispatch"]["steps"]
+        (step,) = [s for s in steps if "QZ_DRY_RUN" in (s.get("env") or {})]
+        self.assertEqual(
+            step["env"]["QZ_DRY_RUN"], "${{ github.event_name == 'schedule' && 'false' || inputs.dry_run }}"
+        )
+
+    def test_it_watches_the_platforms_own_workflows(self) -> None:
+        """Run history needs actions:read; labels are provisioned only on a live run."""
+        perms = self.doc["jobs"]["dispatch"]["permissions"]
+        self.assertEqual(perms.get("actions"), "read")
+        self.assertIn("alert_dispatch.fetch_workflow_runs(PLATFORM)", self.text)
+        self.assertIn("close_recovered_workflow_alerts", self.text)
+        self.assertIn("if not dry_run:\n              # gh issue create rejects a label the repo lacks.", self.text)
+
     def test_checkout_does_not_persist_credentials(self) -> None:
         """``persist-credentials: false`` — CodeQL safety."""
         steps = self.doc["jobs"]["dispatch"]["steps"]

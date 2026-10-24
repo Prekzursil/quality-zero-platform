@@ -353,7 +353,7 @@ class TemplateTests(unittest.TestCase):
         self.assertIn("security/advisories/new", context["reporting_channel"])
         self.assertIn("If that form is unavailable to you", context["reporting_channel"])
         self.assertEqual(context["security_contact_url"], "https://github.com/Prekzursil/demo/security/advisories/new")
-        self.assertIn("on every pull request to and every push on `main`", context["security_controls"])
+        self.assertIn("- **SAST** — opengrep in the lean gate (`quality / quality`).", context["security_controls"])
         self.assertIn("*extended* query suite", context["security_controls"])
         self.assertIn("push protection", context["security_controls"])
         self.assertIn("**Java**", context["extra_controls"])
@@ -759,13 +759,19 @@ class PlanTests(unittest.TestCase):
         self.assertIn(".semgrepignore", written)
 
     def test_rails_gate_six_cannot_scan(self) -> None:
+        def gap(ecosystem: str, directory: str) -> str:
+            return f"{ecosystem} {directory} has no file osv-scanner reads ({' / '.join(fb._SCANNED_LOCKFILES[ecosystem])})"
+
         rails = {
             "swift": ["/"],
             "bun": ["/"],
             "nuget": ["/src", "/tools"],
-            "npm": ["/", "/web"],
+            "npm": ["/", "/web", "/web/sub"],
             "gradle": ["/", "/app"],
             "pip": ["/", "/svc", "/lib"],
+            "cargo": ["/", "/crates/a"],
+            "uv": ["/py"],
+            "composer": ["/"],
             "gomod": ["/"],
         }
         paths = [
@@ -774,26 +780,33 @@ class PlanTests(unittest.TestCase):
             "web/package.json",
             "web/sub/yarn.lock",
             "gradle/verification-metadata.xml",
+            "verification-metadata.xml",
             "src/App.deps.json",
             "requirements/requirements-dev.txt",
             "svc/requirements/base.txt",
             "lib/pyproject.toml",
             "lib/nested/requirements.txt",
+            "Cargo.lock",
+            "crates/a/Cargo.toml",
+            "other/uv.lock",
+            "vendor/x/composer.lock",
         ]
         self.assertEqual(
             fb.unscanned_rails(rails, paths),
             [
                 "Swift packages (/)",
-                "npm /web has no file osv-scanner reads (package-lock.json / pnpm-lock.yaml / yarn.lock)",
-                "pip /svc has no file osv-scanner reads (*requirements*.txt / requirements/*requirements*.txt"
-                " / Pipfile.lock / poetry.lock / pdm.lock / pylock.toml)",
-                "pip /lib has no file osv-scanner reads (*requirements*.txt / requirements/*requirements*.txt"
-                " / Pipfile.lock / poetry.lock / pdm.lock / pylock.toml)",
-                "gradle /app has no file osv-scanner reads (gradle.lockfile / buildscript-gradle.lockfile"
-                " / gradle/verification-metadata.xml)",
-                "nuget /tools has no file osv-scanner reads (packages.lock.json / packages.config / *.deps.json)",
+                gap("npm", "/web"),
+                gap("pip", "/svc"),
+                gap("uv", "/py"),
+                gap("composer", "/"),
+                gap("gradle", "/app"),
+                gap("nuget", "/tools"),
             ],
         )
+        self.assertTrue(fb._readable("app/gradle/verification-metadata.xml", fb._SCANNED_LOCKFILES["gradle"]))
+        self.assertFalse(fb._readable("svc/requirements/base.txt", fb._SCANNED_LOCKFILES["pip"]))
+        self.assertIsNone(fb._rail_of("other/uv.lock", ["/py"]))
+        self.assertEqual(fb._rail_of("web/sub/yarn.lock", ["/", "/web", "/web/sub"]), "/web/sub")
         plan = _by_path(fb.plan_baseline(_facts(["Package.swift", "a.swift"]), _reader({}), PIN))
         self.assertIn("Swift packages", plan[fb.GATE6_SCOPE].reason)
         self.assertNotIn(fb.GATE6_SCOPE, _by_path(fb.plan_baseline(_facts(["a.py"]), _reader({}), PIN)))
@@ -868,7 +881,13 @@ class TruthfulDocumentTests(unittest.TestCase):
 
     def test_codeql_suite_ignores_comments(self) -> None:
         self.assertEqual(fb._codeql_suite("# queries: security-extended\nsteps: []\n"), "default")
-        self.assertEqual(fb._codeql_suite("with:\n  queries: 'security-extended'\n"), "security-extended")
+        self.assertEqual(fb._codeql_suite("with:\n  queries: 'security-extended'  # pinned\n"), "security-extended")
+        self.assertEqual(
+            fb._codeql_suite("queries: security-extended,security-and-quality\n"),
+            "security-extended,security-and-quality",
+        )
+        self.assertEqual(fb._codeql_suite("queries:\n  - uses: security-extended\n"), "configured")
+        self.assertEqual(fb._codeql_suite("with:\n  config-file: ./.github/codeql.yml\n"), "configured")
 
     def test_codeql_workflow_detection(self) -> None:
         self.assertIsNone(fb.codeql_workflow(_facts(["a.py"]), _reader({})))
@@ -879,8 +898,7 @@ class TruthfulDocumentTests(unittest.TestCase):
             ".github/workflows/notes.md": "uses: github/codeql-action/init@v3\n",
         }
         found = fb.codeql_workflow(_facts(list(files)), _reader(files))
-        suite = fb._codeql_suite(fb.REUSABLE_CODEQL.read_text(encoding="utf-8"))
-        self.assertEqual(found, (".github/workflows/codeql.yml", suite, True))
+        self.assertEqual(found, (".github/workflows/codeql.yml", None, True))
         own = {
             ".github/workflows/scan.yaml": "# uses: x/reusable-codeql.yml@v1\nsteps:\n"
             "  - uses: github/codeql-action/init@v3\n    with:\n      queries: security-and-quality\n"
@@ -898,7 +916,11 @@ class TruthfulDocumentTests(unittest.TestCase):
         reusable = "Prekzursil/quality-zero-platform/.github/workflows/reusable-codeql.yml@v1"
         managed = {".github/workflows/codeql.yml": f"jobs:\n  codeql:\n    uses: {reusable}\n"}
         text = fb._codeql_control(_facts(list(managed)), _reader(managed))
-        self.assertIn("advanced setup: `.github/workflows/codeql.yml` calls quality-zero-platform's", text)
+        self.assertIn(
+            "advanced setup: `.github/workflows/codeql.yml` calls quality-zero-platform's `reusable-codeql.yml` at "
+            "the commit it pins",
+            text,
+        )
         self.assertIn("any severity cannot be merged", text)
         bare = {".github/workflows/codeql.yml": "steps:\n  - uses: github/codeql-action/init@v3\n"}
         self.assertIn(
@@ -908,7 +930,11 @@ class TruthfulDocumentTests(unittest.TestCase):
         named = {
             ".github/workflows/codeql.yml": bare[".github/workflows/codeql.yml"] + "      queries: security-extended\n"
         }
-        self.assertIn("the `security-extended` query suite", fb._codeql_control(_facts(list(named)), _reader(named)))
+        self.assertIn("runs the `security-extended` queries", fb._codeql_control(_facts(list(named)), _reader(named)))
+        listed = {".github/workflows/codeql.yml": bare[".github/workflows/codeql.yml"] + "      config-file: c.yml\n"}
+        self.assertIn(
+            "runs the queries its configuration lists", fb._codeql_control(_facts(list(listed)), _reader(listed))
+        )
 
     def test_repository_authored_files_are_described_as_such(self) -> None:
         own = {
@@ -953,7 +979,7 @@ class ThinCallerTests(unittest.TestCase):
     )
 
     def test_yaml_scalar_round_trips(self) -> None:
-        for value in ("any", "backend frontend", "3.12", "true", "-", True, 7, ["a", "b"], None):
+        for value in ("any", "backend frontend", "3.12", "true", "-", "on", "2026-01-01"):
             with self.subTest(value=value):
                 self.assertEqual(yaml.safe_load(f"k: {fb._yaml_scalar(value)}")["k"], value)
         self.assertEqual(fb._yaml_scalar("backend/api"), "backend/api")
@@ -981,6 +1007,8 @@ class ThinCallerTests(unittest.TestCase):
         self.assertEqual(fb.thin_caller(with_inputs), ({"opengrep-paths": "src"}, True))
         job_scoped = self.THIN + "    permissions:\n      contents: read\n"
         self.assertEqual(fb.thin_caller(job_scoped), ({}, True))
+        manual = self.THIN.replace("  workflow_dispatch:\n", "  workflow_dispatch: {}\n")
+        self.assertEqual(fb.thin_caller(manual), ({}, True))
         for broken in (
             "jobs: [unclosed\n",
             "- a list\n",
@@ -989,6 +1017,11 @@ class ThinCallerTests(unittest.TestCase):
             self.THIN + "  lint:\n    runs-on: ubuntu-latest\n",
             self.THIN + "    secrets: inherit\n",
             self.THIN + "    with: nope\n",
+            # YAML 1.1 reads `on` as a boolean; GitHub reads it as text, so the caller stays hand-written
+            self.THIN + "    with:\n      opengrep-paths: on\n",
+            self.THIN.replace(
+                "  workflow_dispatch:\n", "  workflow_dispatch:\n    inputs:\n      x:\n        type: string\n"
+            ),
             self.THIN + "permissions:\n  contents: write\n",
             self.THIN + "    permissions:\n      contents: write\n",
         ):
@@ -1015,6 +1048,40 @@ class ThinCallerTests(unittest.TestCase):
         current = {".github/workflows/quality.yml": (zero.content or "").replace("\n", "\r\n")}
         kept = fb._plan_quality_caller(_facts(list(current)), _reader(current), strict, PIN)[0]
         self.assertEqual((kept.action, kept.reason), ("keep", "lean-gate caller is current"))
+
+
+class VerifyAndFloorTests(unittest.TestCase):
+    """The managed verify wrapper is upgraded in place; the documented floor follows the caller."""
+
+    def test_plan_verify(self) -> None:
+        context = fb.template_context(_facts([]), _reader({}), PIN)
+        created = fb._plan_verify(_facts([]), _reader({}), context)
+        self.assertEqual((created.action, created.executable), ("create", True))
+        own = fb._plan_verify(_facts([fb.VERIFY_SCRIPT]), _reader({fb.VERIFY_SCRIPT: "make test\n"}), context)
+        self.assertEqual((own.action, own.reason), ("keep", "repository-authored file"))
+        current = {fb.VERIFY_SCRIPT: (created.content or "").replace("\n", "\r\n")}
+        kept = fb._plan_verify(_facts(list(current)), _reader(current), context)
+        self.assertEqual((kept.action, kept.reason), ("keep", "managed verify is current"))
+        outdated = {fb.VERIFY_SCRIPT: "# Managed by quality-zero-platform\ngit checkout --detach x\n"}
+        upgraded = fb._plan_verify(_facts(list(outdated)), _reader(outdated), context)
+        self.assertEqual((upgraded.action, upgraded.executable), ("replace", True))
+        self.assertEqual(upgraded.content, created.content)
+
+    def test_effective_floor_never_drops_an_existing_any(self) -> None:
+        strict = f"jobs:\n  quality:\n    uses: {CALLER_PREFIX}{PIN}\n    with:\n      deps-severity-floor: any\n"
+        files = {
+            ".github/workflows/a.yml": "jobs: [unclosed\n",
+            ".github/workflows/b.yml": "- a list\n",
+            ".github/workflows/c.yml": "jobs:\n  odd: 3\n  other:\n    uses: x/y/.github/workflows/z.yml@v1\n",
+            ".github/workflows/d.yml": f"jobs:\n  quality:\n    uses: {CALLER_PREFIX}v1\n    with: nope\n",
+            "notes/quality.yml": strict,
+        }
+        self.assertEqual(fb.effective_floor(_facts(list(files)), _reader(files), "t0"), "t0")
+        files[".github/workflows/quality.yml"] = strict
+        self.assertEqual(fb.effective_floor(_facts(list(files)), _reader(files), "t0"), "any")
+        self.assertEqual(fb.effective_floor(_facts([]), _reader({}), "any"), "any")
+        plan = _by_path(fb.plan_baseline(_facts(list(files)), _reader(files), PIN))
+        self.assertIn("zero known advisories, any severity", plan["CONTRIBUTING.md"].content or "")
 
 
 class ApplyAndIoTests(unittest.TestCase):

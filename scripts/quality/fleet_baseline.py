@@ -84,8 +84,8 @@ DEPS_FLOORS = ("t0", "any")
 #: An advanced CodeQL setup is a checked-in workflow that runs CodeQL itself or through QZP.
 _CODEQL_INIT_RE = re.compile(r"github/codeql-action/init@")
 _REUSABLE_CODEQL_RE = re.compile(r"Prekzursil/quality-zero-platform/\.github/workflows/reusable-codeql\.yml@")
-_CODEQL_QUERIES_RE = re.compile(r"^\s*queries:\s*[\"']?([A-Za-z0-9_./+-]+)", re.MULTILINE)
-REUSABLE_CODEQL = PLATFORM_ROOT / ".github" / "workflows" / "reusable-codeql.yml"
+_CODEQL_QUERIES_RE = re.compile(r"^[ \t]*queries:[ \t]*(.*)$", re.MULTILINE)
+_CODEQL_CONFIG_RE = re.compile(r"^[ \t]*config(-file)?:", re.MULTILINE)
 #: The managed scripts/verify carries this phrase; any other scripts/verify is the repository's own.
 MANAGED_VERIFY_MARKER = "Managed by quality-zero-platform"
 #: Top-level keys and caller-job keys a thin lean-gate caller may have; anything more is hand-written.
@@ -623,18 +623,25 @@ def _first_present(paths: Sequence[str], candidates: Sequence[str]) -> Optional[
 
 
 def _codeql_suite(text: str) -> str:
-    """The ``queries:`` suite a CodeQL workflow selects, ignoring comments (``default`` when none)."""
+    """What a CodeQL workflow's ``queries:`` selects, ignoring comments.
+
+    ``default`` when it selects nothing and has no config; ``configured`` when the queries
+    come from a list or a referenced config the planner cannot see; else the value itself.
+    """
     live = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
     match = _CODEQL_QUERIES_RE.search(live)
-    return match.group(1) if match else "default"
+    if match is None:
+        return "configured" if _CODEQL_CONFIG_RE.search(live) else "default"
+    value = match.group(1).split(" #", 1)[0].strip().strip("'\"")
+    return value or "configured"
 
 
-def codeql_workflow(facts: RepoFacts, read: Reader) -> Optional[Tuple[str, str, bool]]:
+def codeql_workflow(facts: RepoFacts, read: Reader) -> Optional[Tuple[str, Optional[str], bool]]:
     """The checked-in CodeQL workflow: ``(path, query suite, runs through QZP's reusable-codeql.yml)``.
 
     ``None`` means no workflow runs CodeQL, so the repository relies on GitHub default setup.
-    Comment lines never count. For a QZP caller the suite is the one the platform's own
-    ``reusable-codeql.yml`` selects, read from this checkout of the platform.
+    Comment lines never count. A QZP caller's suite is ``None``: it is whatever
+    ``reusable-codeql.yml`` selects at the commit the caller pins, which the planner cannot see.
     """
     workflows = sorted(
         p for p in facts.paths if posixpath.dirname(p) == ".github/workflows" and p.endswith((".yml", ".yaml"))
@@ -642,7 +649,7 @@ def codeql_workflow(facts: RepoFacts, read: Reader) -> Optional[Tuple[str, str, 
     for path in workflows:
         live = "\n".join(line for line in (read(path) or "").splitlines() if not line.lstrip().startswith("#"))
         if _REUSABLE_CODEQL_RE.search(live):
-            return path, _codeql_suite(REUSABLE_CODEQL.read_text(encoding="utf-8")), True
+            return path, None, True
         if _CODEQL_INIT_RE.search(live):
             return path, _codeql_suite(live), False
     return None
@@ -663,11 +670,15 @@ def _codeql_control(facts: RepoFacts, read: Reader) -> str:
             f"model, on every pull request and weekly; {merge}"
         )
     path, suite, through_qzp = found
-    runner = f"`{path}` runs"
     if through_qzp:
-        runner = f"`{path}` calls quality-zero-platform's `reusable-codeql.yml`, which runs"
-    queries = "the default query suite" if suite == "default" else f"the `{suite}` query suite"
-    return f"- **CodeQL** — advanced setup: {runner} {queries}; {merge}"
+        runner = f"`{path}` calls quality-zero-platform's `reusable-codeql.yml` at the commit it pins"
+    elif suite == "default":
+        runner = f"`{path}` runs the default query suite"
+    elif suite == "configured":
+        runner = f"`{path}` runs the queries its configuration lists"
+    else:
+        runner = f"`{path}` runs the `{suite}` queries"
+    return f"- **CodeQL** — advanced setup: {runner}; {merge}"
 
 
 def _verify_is_managed(facts: RepoFacts, read: Reader) -> bool:
@@ -762,15 +773,15 @@ def template_context(facts: RepoFacts, read: Reader, qzp_pin: str, deps_floor: s
             f"channel to the maintainer) or through the maintainer's [GitHub profile]({MAINTAINER_URL})."
         )
     codeql = _codeql_control(facts, read)
-    events = f"on every pull request to and every push on `{facts.default_branch}`"
-    secrets = f"- **Secrets** — gitleaks {events}" + (
+    gate = "in the lean gate (`quality / quality`)"
+    secrets = f"- **Secrets** — gitleaks {gate}" + (
         "." if facts.private else "; GitHub secret scanning with push protection is enabled."
     )
     own_dependabot = _dependabot_config(facts, read)
     dependencies = "- **Dependencies** — osv-scanner over every lockfile it can read, plus Dependabot alerts and " + (
         "security updates." if own_dependabot else "grouped security updates."
     )
-    controls = [codeql, f"- **SAST** — opengrep {events}.", secrets, dependencies]
+    controls = [codeql, f"- **SAST** — opengrep {gate}.", secrets, dependencies]
     outside = [label for key, label in _OUTSIDE_LEAN_GATE.items() if key in languages]
     if own_dependabot:
         dependabot = f"- **Dependabot** — `{own_dependabot}` (this repository's own configuration) proposes updates."
@@ -866,6 +877,19 @@ def _plan_simple(
     if existing is not None:
         return FileAction(existing, "keep", "repository-authored file")
     return FileAction(target, "create", "missing", render_template(template, context), executable)
+
+
+def _plan_verify(facts: RepoFacts, read: Reader, context: Dict[str, str]) -> FileAction:
+    """Create scripts/verify, upgrade an outdated managed one, or keep the repository's own."""
+    rendered = render_template("verify", context)
+    if VERIFY_SCRIPT not in facts.paths:
+        return FileAction(VERIFY_SCRIPT, "create", "missing", rendered, executable=True)
+    text = (read(VERIFY_SCRIPT) or "").replace("\r\n", "\n")
+    if MANAGED_VERIFY_MARKER not in text:
+        return FileAction(VERIFY_SCRIPT, "keep", "repository-authored file")
+    if text == rendered:
+        return FileAction(VERIFY_SCRIPT, "keep", "managed verify is current")
+    return FileAction(VERIFY_SCRIPT, "replace", "managed verify upgraded to the current template", rendered, True)
 
 
 def _plan_issue_forms(facts: RepoFacts, context: Dict[str, str]) -> List[FileAction]:
@@ -1024,7 +1048,6 @@ _SCANNED_LOCKFILES = {
     "bun": ("bun.lock",),
     "pip": (
         "*requirements*.txt",
-        "requirements/*requirements*.txt",
         "Pipfile.lock",
         "poetry.lock",
         "pdm.lock",
@@ -1041,22 +1064,44 @@ _SCANNED_LOCKFILES = {
 }
 #: Package ecosystems osv-scanner has no extractor for at all.
 _UNSCANNED_ECOSYSTEMS = {"swift": "Swift packages"}
+#: Workspace ecosystems: members share the lockfile at an enclosing workspace root.
+_WORKSPACE_LOCKFILES = frozenset({"cargo", "uv"})
+
+
+def _rail_of(path: str, directories: Sequence[str]) -> Optional[str]:
+    """The deepest rail directory that contains the file at ``path`` (``None`` when none does)."""
+    owners = [d for d in directories if d == "/" or path.startswith(d.strip("/") + "/")]
+    return max(owners, key=len) if owners else None
+
+
+def _readable(path: str, lockfiles: Sequence[str]) -> bool:
+    """Whether the file at ``path`` is one osv-scanner reads: its trailing components match a pattern."""
+    parts = path.split("/")
+    return any(
+        len(parts) > pattern.count("/") and fnmatch.fnmatchcase("/".join(parts[-(pattern.count("/") + 1) :]), pattern)
+        for pattern in lockfiles
+    )
 
 
 def unscanned_rails(rails: Dict[str, List[str]], paths: Sequence[str]) -> List[str]:
-    """Rails whose dependencies gate 6 (osv-scanner) cannot read, so it can never fail on them."""
+    """Rails whose dependencies gate 6 (osv-scanner) cannot read, so it can never fail on them.
+
+    A lockfile counts for the deepest rail of its ecosystem that contains it, so a nested
+    project's lockfile never hides a parent's blind spot, while a declared module that has
+    no rail of its own (folded into its root's rail) still counts. Cargo and uv workspace
+    members share the lockfile of an enclosing rail. Vendored trees never count.
+    """
     gaps = [f"{label} ({', '.join(rails[eco])})" for eco, label in _UNSCANNED_ECOSYSTEMS.items() if eco in rails]
     for ecosystem, lockfiles in _SCANNED_LOCKFILES.items():
-        for directory in rails.get(ecosystem, []):
-            prefix = "" if directory == "/" else directory.strip("/") + "/"
-            local = [path[len(prefix) :] for path in paths if path.startswith(prefix)]
-            # a pattern matches at its own depth only: a nested lockfile belongs to its own rail
-            found = any(
-                fnmatch.fnmatchcase(name, pattern) and name.count("/") == pattern.count("/")
-                for name in local
-                for pattern in lockfiles
+        directories = rails.get(ecosystem, [])
+        covered = {
+            _rail_of(path, directories) for path in paths if not _is_excluded(path) and _readable(path, lockfiles)
+        }
+        for directory in directories:
+            shared = ecosystem in _WORKSPACE_LOCKFILES and any(
+                owner is not None and _is_ancestor(owner, directory) for owner in covered
             )
-            if not found:
+            if directory not in covered and not shared:
                 gaps.append(f"{ecosystem} {directory} has no file osv-scanner reads ({' / '.join(lockfiles)})")
     return gaps
 
@@ -1128,14 +1173,14 @@ def bump_caller(text: str, qzp_pin: str) -> str:
     )
 
 
-def _yaml_scalar(value: object) -> str:
-    """Render one caller input so that YAML reads it back as exactly the same value."""
-    if isinstance(value, str) and _PLAIN_SCALAR_RE.fullmatch(value) and yaml.safe_load(value) == value:
+def _yaml_scalar(value: str) -> str:
+    """Render one string input so that YAML reads it back as exactly the same string."""
+    if _PLAIN_SCALAR_RE.fullmatch(value) and yaml.safe_load(value) == value:
         return value
     return json.dumps(value)
 
 
-def caller_with(inputs: Dict[str, object], deps_floor: str) -> str:
+def caller_with(inputs: Dict[str, str], deps_floor: str) -> str:
     """Render the caller job's ``with:`` block: the carried-over inputs plus the gate-6 floor.
 
     ``any`` is always set when asked for; otherwise an existing floor is carried over as is,
@@ -1151,15 +1196,17 @@ def caller_with(inputs: Dict[str, object], deps_floor: str) -> str:
     return "    with:\n" + "".join(f"      {key}: {_yaml_scalar(value)}\n" for key, value in merged.items())
 
 
-def thin_caller(text: str) -> Optional[Tuple[Dict[str, object], bool]]:
+def thin_caller(text: str) -> Optional[Tuple[Dict[str, str], bool]]:
     """``(inputs, runs on workflow_dispatch)`` when a workflow is a thin lean-gate caller, else ``None``.
 
     Thin means the managed shape and nothing else: top-level name / on / permissions /
     concurrency / jobs, one ``quality`` job that only ``uses`` the reusable workflow (with
     optional ``with`` inputs, ``name: quality`` and job-level permissions), runs on
-    pull_request, and read-only contents permissions at both levels. The baseline owns such
-    a caller and regenerates it from the template, carrying its inputs over; anything more
-    is hand-written and only re-pinned.
+    pull_request, and read-only contents permissions at both levels. Every input must be a
+    string (PyYAML's YAML 1.1 coerces ``on`` or a date, which GitHub reads as text), and a
+    ``workflow_dispatch`` may not declare inputs. The baseline owns such a caller and
+    regenerates it from the template, carrying its inputs over; anything more is
+    hand-written and only re-pinned.
     """
     try:
         document = yaml.safe_load(text)
@@ -1174,16 +1221,19 @@ def thin_caller(text: str) -> Optional[Tuple[Dict[str, object], bool]]:
         list(jobs) != ["quality"]
         or set(job) - _THIN_CALLER_JOB_KEYS
         or not isinstance(inputs, dict)
+        or not all(isinstance(value, str) for value in inputs.values())
         or document.get("permissions", READ_ONLY) != READ_ONLY
         or job.get("permissions", READ_ONLY) != READ_ONLY
     ):
         return None
     triggers = document.get("on", document.get(True))
+    if isinstance(triggers, dict) and triggers.get("workflow_dispatch"):
+        return None
     return dict(inputs), isinstance(triggers, (dict, list)) and "workflow_dispatch" in triggers
 
 
 def _regenerate_caller(
-    workflow: str, text: str, refs: Set[str], thin: Tuple[Dict[str, object], bool], context: Dict[str, str]
+    workflow: str, text: str, refs: Set[str], thin: Tuple[Dict[str, str], bool], context: Dict[str, str]
 ) -> FileAction:
     """Regenerate a thin caller from the template, keeping its inputs and a manual trigger."""
     inputs, dispatch = thin
@@ -1348,9 +1398,34 @@ def _test_script_has_coverage(read: Reader, paths: Sequence[str]) -> bool:
     return False
 
 
+def effective_floor(facts: RepoFacts, read: Reader, deps_floor: str) -> str:
+    """The gate-6 floor the planned callers enforce: an existing ``any`` is never dropped."""
+    if deps_floor == "any":
+        return deps_floor
+    for path in facts.paths:
+        if posixpath.dirname(path) != ".github/workflows" or not path.endswith((".yml", ".yaml")):
+            continue
+        try:
+            document = yaml.safe_load(read(path) or "")
+        except yaml.YAMLError:
+            continue
+        jobs = document.get("jobs") if isinstance(document, dict) else None
+        for job in jobs.values() if isinstance(jobs, dict) else []:
+            uses = job.get("uses") if isinstance(job, dict) else None
+            inputs = job.get("with") if isinstance(job, dict) else None
+            if (
+                isinstance(uses, str)
+                and uses.startswith(REUSABLE_QUALITY_PREFIX)
+                and isinstance(inputs, dict)
+                and inputs.get("deps-severity-floor") == "any"
+            ):
+                return "any"
+    return deps_floor
+
+
 def plan_baseline(facts: RepoFacts, read: Reader, qzp_pin: str, deps_floor: str = "t0") -> List[FileAction]:
     """Return every baseline decision for one repository checkout."""
-    context = template_context(facts, read, qzp_pin, deps_floor)
+    context = template_context(facts, read, qzp_pin, effective_floor(facts, read, deps_floor))
     caller = _plan_quality_caller(facts, read, context, qzp_pin)
     planned = [action.path for action in caller if action.action == "create"]
     actions = [
@@ -1363,7 +1438,7 @@ def plan_baseline(facts: RepoFacts, read: Reader, qzp_pin: str, deps_floor: str 
     ]
     actions.extend(_plan_issue_forms(facts, context))
     actions.extend(_plan_gate_configs(facts, read, context))
-    actions.append(_plan_simple(facts, (VERIFY_SCRIPT,), VERIFY_SCRIPT, "verify", context, executable=True))
+    actions.append(_plan_verify(facts, read, context))
     actions.extend(caller)
     actions.extend(_plan_compiled_lane(facts))
     actions.extend(_plan_jsts_lane(facts, read))

@@ -106,15 +106,22 @@ jobs:
           - job_name: Dependency Alerts
             lane: deps
     steps:
-      # Always the commit that triggered the CALLER (a push, the PR merge
-      # commit, the base under pull_request_target), never a caller-chosen
-      # ref: a privileged caller passing a PR head would run fork code with
-      # its secrets (CodeQL actions/untrusted-checkout).
+      # A fork's code never runs on a self-hosted runner: it could take over
+      # the machine, or poison what later jobs read there (CodeQL
+      # actions/untrusted-checkout). coverage_runner lets a caller choose one.
+      - name: Refuse a fork's code on a self-hosted runner
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && runner.environment == 'self-hosted'
+        run: |
+          echo "::error title=Fork PR on a self-hosted runner::This job would run a fork's code on a self-hosted runner. Run fork pull requests on a GitHub-hosted runner."
+          exit 1
+      # actions/checkout's default: the commit that triggered the CALLER (a
+      # push, the PR merge commit, the base under pull_request_target), never
+      # a caller-chosen ref, since a privileged caller passing a PR head would
+      # run fork code with its secrets.
       - name: Check out the code under test
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           path: repo
-          ref: ${{ github.sha }}
           persist-credentials: false
       - name: Check out the platform at this workflow's own commit
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0

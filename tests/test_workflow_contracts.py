@@ -398,9 +398,24 @@ class WorkflowContractTests(unittest.TestCase):
         )
 
     def test_scanner_matrix_checks_out_the_triggering_commit_never_a_caller_ref(self) -> None:
-        """A caller-chosen ref under a privileged trigger would run fork code with secrets (CodeQL alert #303)."""
+        """CodeQL alert #303: no caller-chosen ref, and a fork's code never reaches a self-hosted runner."""
+        workflow = yaml.safe_load(
+            (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
+        )
+        steps = workflow["jobs"]["scanner"]["steps"]
+        names = [step.get("name", "") for step in steps]
+        checkout = steps[names.index("Check out the code under test")]
+        self.assertEqual(checkout["with"], {"path": "repo", "persist-credentials": False})
+        guard = steps[names.index("Refuse a fork's code on a self-hosted runner")]
+        self.assertEqual(names.index(guard["name"]), 0)
+        for clause in (
+            "github.event_name == 'pull_request'",
+            "github.event.pull_request.head.repo.full_name != github.repository",
+            "runner.environment == 'self-hosted'",
+        ):
+            self.assertIn(clause, guard["if"])
+        self.assertIn("exit 1", guard["run"])
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
-        self.assertIn("          path: repo\n          ref: ${{ github.sha }}\n", text)
         self.assertNotIn("ref: ${{ inputs.sha", text)
         self.assertEqual(text.count("persist-credentials: false"), 3)
 

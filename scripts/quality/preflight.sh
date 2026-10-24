@@ -16,10 +16,10 @@
 #   gate 1 jsts  oxlint --deny-warnings + biome ci (formatter-only)
 #   gate 2 ts    tsc --noEmit (per tsconfig, like CI)
 #   gate 2 py    basedpyright (caller config honored, else --typecheckingmode standard)
-#   gate 3 py    pytest --cov --cov-branch --cov-fail-under=100 (or unittest+coverage)
+#   gate 3 py    pinned pytest --cov --cov-branch --cov-fail-under=100 (or unittest + coverage run --branch)
 #   gate 3 jsts  caller test:coverage script + jsts_coverage_assert --min-percent
 #   gate 3 go/c++ caller's own coverage-gate script (default scripts/coverage-gate.sh)
-#   gate 4       opengrep scan --config .quality/opengrep --error
+#   gate 4       opengrep scan --error with .quality/opengrep, else the platform default ruleset
 #   gate 5       gitleaks detect --redact (ALWAYS, like CI)
 #   gate 6       osv-scanner scan source + the T0 severity-floor classifier
 #   charter      .quality/charter_check.sh when the caller ships the charter
@@ -37,6 +37,10 @@
 # version. Set QZP_PREFLIGHT_NO_INSTALL=1 to skip downloads; the lane then
 # SKIPs (never silently passes — the skip is printed and listed in the summary).
 #
+# A repo whose quality.yml sets `deps-severity-floor: any` reproduces that
+# zero-tolerance gate 6 locally with QZP_PREFLIGHT_DEPS_SEVERITY_FLOOR=any
+# (default t0, the same default as CI).
+#
 # WINDOWS CONSUMERS: clone with core.autocrlf=false (or input). A default
 # autocrlf=true checkout rewrites LF files to CRLF, and the biome lane
 # (lineEnding: lf) then reports "File content differs from formatting output"
@@ -52,6 +56,11 @@ usage() {
 
 REPO_DIR="$(pwd)"
 QZP_NO_INSTALL="${QZP_PREFLIGHT_NO_INSTALL:-0}"
+DEPS_SEVERITY_FLOOR="${QZP_PREFLIGHT_DEPS_SEVERITY_FLOOR:-t0}"
+case "$DEPS_SEVERITY_FLOOR" in
+  t0|any) ;;
+  *) echo "preflight: QZP_PREFLIGHT_DEPS_SEVERITY_FLOOR must be t0 or any" >&2; exit 2 ;;
+esac
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --repo-dir) REPO_DIR="$2"; shift 2 ;;
@@ -82,6 +91,9 @@ pin() {
 
 PIN_RUFF="$(pin ruff)"
 PIN_BASEDPYRIGHT="$(pin basedpyright)"
+PIN_PYTEST="$(pin pytest)"
+PIN_PYTEST_COV="$(pin pytest-cov)"
+PIN_COVERAGE="$(pin coverage)"
 PIN_OXLINT="$(pin oxlint)"
 PIN_BIOME="$(pin biome)"
 PIN_OPENGREP="$(pin opengrep)"
@@ -89,6 +101,7 @@ PIN_GITLEAKS="$(pin gitleaks)"
 PIN_OSV="$(pin osv-scanner)"
 echo "QZP preflight — pins from $PINS_FILE:"
 echo "  ruff=$PIN_RUFF basedpyright=$PIN_BASEDPYRIGHT oxlint=$PIN_OXLINT biome=$PIN_BIOME"
+echo "  pytest=$PIN_PYTEST pytest-cov=$PIN_PYTEST_COV coverage=$PIN_COVERAGE"
 echo "  opengrep=$PIN_OPENGREP gitleaks=$PIN_GITLEAKS osv-scanner=$PIN_OSV"
 
 cd "$REPO_DIR" || fail preflight "cannot cd to --repo-dir $REPO_DIR"
@@ -101,14 +114,6 @@ set +o pipefail
 has() { [ -n "$(git ls-files "$@" 2>/dev/null | head -1)" ] && echo true || echo false; }
 any() { [ -n "${1:-}" ] && echo true || echo false; }
 file_exists() { [ -f "$1" ] && echo true || echo false; }
-osv_sources="$(git ls-files \
-  '**/requirements*.txt' requirements*.txt \
-  '**/package-lock.json' package-lock.json '**/yarn.lock' yarn.lock \
-  '**/pnpm-lock.yaml' pnpm-lock.yaml '**/Cargo.lock' Cargo.lock \
-  '**/go.mod' go.mod '**/go.sum' go.sum '**/Gemfile.lock' Gemfile.lock \
-  '**/poetry.lock' poetry.lock '**/Pipfile.lock' Pipfile.lock \
-  '**/pyproject.toml' pyproject.toml '**/composer.lock' composer.lock \
-  '**/pom.xml' pom.xml '**/gradle.lockfile' gradle.lockfile 2>/dev/null | head -1)"
 py_cov_cfg="$(git ls-files pyproject.toml setup.cfg tox.ini '.coveragerc' 'pytest.ini' 2>/dev/null | head -1)"
 py_pyright_cfg="$(git ls-files pyrightconfig.json basedpyrightconfig.json 2>/dev/null | head -1)"
 if [ -z "$py_pyright_cfg" ] && [ -f pyproject.toml ] \
@@ -117,10 +122,6 @@ if [ -z "$py_pyright_cfg" ] && [ -f pyproject.toml ] \
 fi
 py_tests="$(git ls-files 'test_*.py' '*_test.py' '**/test_*.py' '**/*_test.py' \
   'tests/**' '**/tests/**' conftest.py '**/conftest.py' 2>/dev/null | head -1)"
-jsts_tests="$(git ls-files \
-  '*.test.ts' '*.test.tsx' '*.test.js' '*.test.jsx' '*.test.mjs' '*.test.cjs' \
-  '*.spec.ts' '*.spec.tsx' '*.spec.js' '*.spec.jsx' '*.spec.mjs' '*.spec.cjs' \
-  '**/*.test.*' '**/*.spec.*' '__tests__/**' '**/__tests__/**' 2>/dev/null | head -1)"
 go_tests="$(git ls-files '*_test.go' '**/*_test.go' 2>/dev/null | head -1)"
 cpp_tests="$(git ls-files \
   '*_test.cpp' '**/*_test.cpp' '*_test.cc' '**/*_test.cc' \
@@ -133,10 +134,8 @@ DETECT_JSTS="$(has '*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs' '*.cjs')"
 DETECT_PYRIGHTCFG="$(any "$py_pyright_cfg")"
 DETECT_OPENGREP="$([ -d .quality/opengrep ] && echo true || echo false)"
 DETECT_GITLEAKS_ALLOWLIST="$(file_exists .gitleaks.toml)"
-DETECT_OSVSOURCES="$(any "$osv_sources")"
 DETECT_PYCOVCFG="$(any "$py_cov_cfg")"
 DETECT_PYTESTS="$(any "$py_tests")"
-DETECT_JSTSTESTS="$(any "$jsts_tests")"
 DETECT_GO="$(has '*.go')"
 DETECT_GOMOD="$(file_exists go.mod)"
 DETECT_GOTESTS="$(any "$go_tests")"
@@ -145,7 +144,7 @@ DETECT_CPPTESTS="$(any "$cpp_tests")"
 DETECT_CHARTER="$([ -f .quality/charter.yml ] && echo true || echo false)"
 set -o pipefail
 echo "Detected: python=$DETECT_PYTHON ts=$DETECT_TS jsts=$DETECT_JSTS go=$DETECT_GO cpp=$DETECT_CPP \
-opengrep=$DETECT_OPENGREP osvsources=$DETECT_OSVSOURCES charter=$DETECT_CHARTER"
+opengrep=$DETECT_OPENGREP charter=$DETECT_CHARTER"
 
 declare -a LANES=()
 declare -a RESULTS=()
@@ -195,7 +194,7 @@ if [ "$DETECT_JSTS" = "true" ]; then
     . || rc=$?
   biome_cfg_args=()
   if [ ! -f biome.json ] && [ ! -f biome.jsonc ]; then
-    printf '%s' '{"$schema":"https://biomejs.dev/schemas/2.5.0/schema.json","files":{"includes":["**/*.ts","**/*.tsx","**/*.js","**/*.jsx","**/*.mjs","**/*.cjs","!**/node_modules/**","!**/dist/**","!**/build/**","!**/out/**","!**/.venv/**","!**/vendor/**"]},"formatter":{"enabled":true,"indentStyle":"space","indentWidth":2,"lineWidth":100,"lineEnding":"lf"},"javascript":{"formatter":{"quoteStyle":"single","trailingCommas":"all","semicolons":"always"}},"linter":{"enabled":false},"assist":{"enabled":false}}' \
+    printf '%s' '{"$schema":"https://biomejs.dev/schemas/2.5.15/schema.json","files":{"includes":["**/*.ts","**/*.tsx","**/*.js","**/*.jsx","**/*.mjs","**/*.cjs","!**/node_modules/**","!**/dist/**","!**/build/**","!**/out/**","!**/.venv/**","!**/vendor/**"]},"formatter":{"enabled":true,"indentStyle":"space","indentWidth":2,"lineWidth":100,"lineEnding":"lf"},"javascript":{"formatter":{"quoteStyle":"single","trailingCommas":"all","semicolons":"always"}},"linter":{"enabled":false},"assist":{"enabled":false}}' \
       > "$WORK_DIR/biome.json"
     biome_cfg_args=(--config-path "$WORK_DIR")
     echo "No caller biome.json/biome.jsonc - using the lean template's bundled biome config."
@@ -309,12 +308,35 @@ if [ "$DETECT_PYTHON" = "true" ]; then
     fi
     rc=0
     if grep -rqs 'pytest' pyproject.toml setup.cfg tox.ini pytest.ini 2>/dev/null; then
-      pip install pytest pytest-cov >/dev/null 2>&1
+      pip install "pytest==$PIN_PYTEST" "pytest-cov==$PIN_PYTEST_COV" "coverage==$PIN_COVERAGE" >/dev/null 2>&1
       python -m pytest --cov --cov-branch --cov-fail-under=100 || rc=$?
     else
-      pip install coverage >/dev/null 2>&1
-      python -m coverage run -m unittest discover || rc=$?
-      python -m coverage report --fail-under=100 --show-missing || rc=$?
+      pip install "coverage==$PIN_COVERAGE" >/dev/null 2>&1
+      # Same as CI: branch coverage over BOTH trees - the root (packages and
+      # root-level test modules) and a tests/ dir without __init__.py, which a
+      # root discover never enters - each in a parallel run, then combined.
+      # Exit 5 (no tests) is fine for one pass, never for all of them.
+      starts=(.)
+      if [ -d tests ] && [ ! -f tests/__init__.py ]; then starts+=(tests); fi
+      rm -f .coverage .coverage.*
+      ran_tests=false
+      for start in "${starts[@]}"; do
+        prc=0
+        python -m coverage run --branch --parallel-mode -m unittest discover -s "$start" || prc=$?
+        case "$prc" in
+          0) ran_tests=true ;;
+          5) echo "unittest discover -s $start: no tests there." ;;
+          *) rc=$prc ;;
+        esac
+      done
+      if [ "$ran_tests" != "true" ] && [ "$rc" -eq 0 ]; then
+        echo "unittest discovered and ran NONE of the test files (searched: ${starts[*]})." >&2
+        rc=1
+      fi
+      if [ "$rc" -eq 0 ]; then
+        python -m coverage combine >/dev/null || rc=$?
+        python -m coverage report --fail-under=100 --show-missing || rc=$?
+      fi
     fi
     if [ "$rc" -ne 0 ]; then
       lane_fail gate-tests-coverage-py "tests failed OR coverage below STRICT 100% line+branch (line-only 100% is ~99.x once branches count and still FAILs; CI enforces --cov-branch identically)"
@@ -333,40 +355,53 @@ if [ "$DETECT_JSTS" = "true" ]; then
     if node -e "const s=(require('$d/package.json').scripts||{}).test||'';process.exit(/(vitest|jest).*--coverage|--coverage.*(vitest|jest)/.test(s)?0:1)" 2>/dev/null; then echo "runner"; return 0; fi
     echo ""; return 0
   }
-  declare -a proj_dirs=()
-  if [ -f package.json ]; then
-    proj_dirs=(.)
-  else
-    set +o pipefail
-    mapfile -t pkgs < <(git ls-files '**/package.json' \
-      | grep -Ev '(^|/)(node_modules|dist|out|build|\.venv|vendor)/' || true)
-    set -o pipefail
-    for p in "${pkgs[@]}"; do proj_dirs+=("$(dirname "$p")"); done
-  fi
+  # Same planner and rules as CI: every project (root AND nested), each test
+  # file attributed to its deepest project; orphans fail; every project with a
+  # DECLARED coverage lane runs it; a project without one fails when it has
+  # tests of its own, workspace members included (a root workspace run can
+  # cover a member's code without running its tests). `-z` keeps non-ASCII
+  # paths unquoted. Each lane clears <dir>/coverage first, so the number
+  # assertion reads only this run's reports.
+  git ls-files -z > "$WORK_DIR/jsts-files.txt"
+  plan_args=(--files "$WORK_DIR/jsts-files.txt" --orphans-out "$WORK_DIR/jsts-orphans.txt")
+  if [ -f package.json ]; then plan_args+=(--root-package-json package.json); fi
+  if [ -f pnpm-workspace.yaml ]; then plan_args+=(--pnpm-workspace pnpm-workspace.yaml); fi
+  python "$QZP_ROOT/scripts/quality/jsts_projects.py" "${plan_args[@]}" > "$WORK_DIR/jsts-plan.tsv"
+  mapfile -t plan < "$WORK_DIR/jsts-plan.tsv"
+  mapfile -t orphans < "$WORK_DIR/jsts-orphans.txt"
   ran_any=false
+  declare -a unmeasured=()
   rc=0
-  for d in "${proj_dirs[@]}"; do
+  for row in "${plan[@]}"; do
+    IFS=$'\t' read -r d has_tests member <<< "${row%$'\r'}"
     lane_kind="$(has_cov_lane "$d")"
-    if [ -n "$lane_kind" ]; then
-      slug="$(printf '%s' "$d" | tr -c 'A-Za-z0-9' '_')"
-      log="$WORK_DIR/jsts-coverage-$slug.log"
-      ( cd "$d" && { npm ci || npm install; } >/dev/null 2>&1 \
-        && if [ "$lane_kind" = "script" ]; then npm run test:coverage; else npm test; fi ) 2>&1 | tee "$log" || rc=$?
-      python "$QZP_ROOT/scripts/quality/jsts_coverage_assert.py" \
-        --project-dir "$d" --log "$log" --min-percent 100 || rc=$?
-      ran_any=true
+    if [ -z "$lane_kind" ]; then
+      if [ "$has_tests" = "yes" ]; then
+        if [ "$member" = "yes" ]; then unmeasured+=("$d (workspace member)"); else unmeasured+=("$d"); fi
+      fi
+      continue
     fi
+    slug="$(printf '%s' "$d" | tr -c 'A-Za-z0-9' '_')"
+    log="$WORK_DIR/jsts-coverage-$slug.log"
+    rm -rf -- "$d/coverage"
+    ( cd "$d" && { npm ci || npm install; } >/dev/null 2>&1 \
+      && if [ "$lane_kind" = "script" ]; then npm run test:coverage; else npm test; fi ) 2>&1 | tee "$log" || rc=$?
+    python "$QZP_ROOT/scripts/quality/jsts_coverage_assert.py" \
+      --project-dir "$d" --log "$log" --min-percent 100 || rc=$?
+    ran_any=true
   done
-  if [ "$ran_any" = "true" ]; then
+  if [ "${#orphans[@]}" -gt 0 ]; then
+    lane_fail gate-tests-coverage-jsts "JS/TS test file(s) outside every package.json project, run by no coverage lane: ${orphans[*]}"
+  elif [ "${#unmeasured[@]}" -gt 0 ]; then
+    lane_fail gate-tests-coverage-jsts "project dir(s) with JS/TS test files but no coverage lane of their own, never measured: ${unmeasured[*]} (a root workspace run does not count for a member)"
+  elif [ "$ran_any" = "true" ]; then
     if [ "$rc" -ne 0 ]; then
       lane_fail gate-tests-coverage-jsts "a measured JS/TS coverage figure was below the 100% line+branch bar (or no figure could be parsed)"
     else
       lane_pass gate-tests-coverage-jsts "measured coverage met the 100% bar in every project dir"
     fi
-  elif [ "$DETECT_JSTSTESTS" != "true" ]; then
-    lane_skip gate-tests-coverage-jsts "ts/js source with NO test files and no coverage script - no test surface by design"
   else
-    lane_fail gate-tests-coverage-jsts "ts/js present (with test files) but no coverage script in any project dir - the 100% gate cannot pass unmeasured. Add a 'test:coverage' npm script."
+    lane_skip gate-tests-coverage-jsts "ts/js source with NO JS/TS test files - no test surface by design"
   fi
 fi
 
@@ -393,25 +428,30 @@ elif [ "$DETECT_GO" = "true" ] || [ "$DETECT_CPP" = "true" ]; then
   lane_skip gate-tests-coverage-compiled "compiled source present with ZERO test files - no test surface by design"
 fi
 
-# ── GATE 4 — opengrep SAST ─────────────────────────────────────────────────
-if [ "$DETECT_OPENGREP" = "true" ]; then
-  echo "== gate-sast opengrep@$PIN_OPENGREP =="
-  if [ ! -f .semgrepignore ]; then
-    echo "WARN gate-sast: no .semgrepignore in the repo root - opengrep's built-in template silently skips *_test.go plus test/ and tests/ (same warning CI emits)."
-  fi
-  og="$(resolve_opengrep)" || og=""
-  if [ -z "$og" ]; then
-    lane_skip gate-sast "opengrep@$PIN_OPENGREP binary not on PATH and not installable here (set QZP_PREFLIGHT_NO_INSTALL=0 on linux/darwin, or install opengrep). CI still runs this lane."
+# ── GATE 4 — opengrep SAST (ALWAYS, like CI round-10) ──────────────────────
+# The repo's own .quality/opengrep when present, else the platform default
+# ruleset: the same curated rules CI embeds, read here from this QZP checkout.
+echo "== gate-sast opengrep@$PIN_OPENGREP =="
+ruleset_dir=.quality/opengrep
+if [ "$DETECT_OPENGREP" != "true" ]; then
+  ruleset_dir="$QZP_ROOT/.quality/opengrep"
+  echo "NOTE gate-sast: no .quality/opengrep in this repo - scanning with the platform default ruleset (same as CI)."
+fi
+if [ ! -f .semgrepignore ]; then
+  echo "WARN gate-sast: no .semgrepignore in the repo root - opengrep's built-in template silently skips *_test.go plus test/ and tests/ (same warning CI emits)."
+fi
+og="$(resolve_opengrep)" || og=""
+if [ -z "$og" ]; then
+  lane_skip gate-sast "opengrep@$PIN_OPENGREP binary not on PATH and not installable here (set QZP_PREFLIGHT_NO_INSTALL=0 on linux/darwin, or install opengrep). CI still runs this lane."
+else
+  rc=0
+  "$og" scan --config "$ruleset_dir" --error \
+    --exclude .venv --exclude node_modules --exclude dist --exclude out --exclude build \
+    . || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    lane_fail gate-sast "opengrep@$PIN_OPENGREP reported findings"
   else
-    rc=0
-    "$og" scan --config .quality/opengrep --error \
-      --exclude .venv --exclude node_modules --exclude dist --exclude out --exclude build \
-      . || rc=$?
-    if [ "$rc" -ne 0 ]; then
-      lane_fail gate-sast "opengrep@$PIN_OPENGREP reported findings"
-    else
-      lane_pass gate-sast "opengrep@$PIN_OPENGREP clean"
-    fi
+    lane_pass gate-sast "opengrep@$PIN_OPENGREP clean"
   fi
 fi
 
@@ -439,56 +479,61 @@ fi
 
 # ── GATE 6 — osv-scanner deps + T0 severity floor ─────────────────────────
 echo "== gate-deps osv-scanner@$PIN_OSV =="
-if [ "$DETECT_OSVSOURCES" != "true" ]; then
-  lane_pass gate-deps "no dependency manifests or lockfiles present - nothing to scan (CI passes identically)"
+# ALWAYS, like CI: osv-scanner itself decides what is scannable and exits 128
+# when there is nothing; a glob list here used to miss bun.lock, uv.lock, NuGet.
+osv="$(resolve_osv)" || osv=""
+if [ -z "$osv" ]; then
+  lane_skip gate-deps "osv-scanner@$PIN_OSV binary not on PATH and download unavailable. CI still runs this lane."
 else
-  osv="$(resolve_osv)" || osv=""
-  if [ -z "$osv" ]; then
-    lane_skip gate-deps "osv-scanner@$PIN_OSV binary not on PATH and download unavailable. CI still runs this lane."
-  else
-    # --config only when the file ships (osv-scanner rejects a missing config
-    # path with exit 130 — same shape scheduled_cve_scan.py uses).
-    osv_config_args=()
-    [ -f osv-scanner.toml ] && osv_config_args=(--config=osv-scanner.toml)
-    is_scan_error() { case "$1" in 127|129|130) return 0 ;; *) return 1 ;; esac; }
-    is_retryable() { case "$1" in 127|129) return 0 ;; *) return 1 ;; esac; }
-    attempt=1
-    max_attempts=3
+  # --config only when the file ships (osv-scanner rejects a missing config
+  # path with exit 130 — same shape scheduled_cve_scan.py uses).
+  osv_config_args=()
+  [ -f osv-scanner.toml ] && osv_config_args=(--config=osv-scanner.toml)
+  is_scan_error() { case "$1" in 127|129|130) return 0 ;; *) return 1 ;; esac; }
+  is_retryable() { case "$1" in 127|129) return 0 ;; *) return 1 ;; esac; }
+  attempt=1
+  max_attempts=3
+  rc=0
+  while : ; do
     rc=0
-    while : ; do
-      rc=0
-      "$osv" scan source "${osv_config_args[@]}" --recursive . || rc=$?
-      if ! is_retryable "$rc" || [ "$attempt" -ge "$max_attempts" ]; then break; fi
-      backoff=$(( attempt * 20 ))
-      echo "RETRY gate-deps: osv-scanner exited $rc without completing the scan (attempt ${attempt}/${max_attempts}); retrying in ${backoff}s." >&2
-      sleep "$backoff"
-      attempt=$(( attempt + 1 ))
-    done
-    if [ "$rc" -eq 0 ]; then
-      lane_pass gate-deps "osv-scanner@$PIN_OSV found 0 actionable CVEs"
-    elif [ "$rc" -eq 128 ]; then
-      lane_pass gate-deps "osv-scanner exited 128 (no package sources found) - nothing to scan"
-    elif [ "$rc" -eq 1 ]; then
-      jrc=0
-      "$osv" scan source "${osv_config_args[@]}" --recursive --format json . > "$WORK_DIR/osv-report.json" || jrc=$?
-      if [ "$jrc" -ne 0 ] && [ "$jrc" -ne 1 ]; then
-        lane_fail gate-deps "the JSON re-scan needed to classify findings exited $jrc - NOT a vulnerability verdict; the gate blocks rather than passing silently"
-      else
-        grc=0
-        python "$QZP_ROOT/scripts/quality/osv_severity_gate.py" "$WORK_DIR/osv-report.json" || grc=$?
-        if [ "$grc" -eq 0 ]; then
-          lane_pass gate-deps "0 findings clear the T0 severity floor (T2 inventory non-blocking, same classifier as CI)"
-        elif [ "$grc" -eq 1 ]; then
-          lane_fail gate-deps "at least one PRODUCTION dependency has a CVSS >= 7.0 advisory WITH a published fix - bump it"
-        else
-          lane_fail gate-deps "the severity classifier exited $grc (expected 0 or 1) - NOT a vulnerability verdict; the gate blocks"
-        fi
+    "$osv" scan source "${osv_config_args[@]}" --recursive . || rc=$?
+    if ! is_retryable "$rc" || [ "$attempt" -ge "$max_attempts" ]; then break; fi
+    backoff=$(( attempt * 20 ))
+    echo "RETRY gate-deps: osv-scanner exited $rc without completing the scan (attempt ${attempt}/${max_attempts}); retrying in ${backoff}s." >&2
+    sleep "$backoff"
+    attempt=$(( attempt + 1 ))
+  done
+  if [ "$rc" -eq 0 ]; then
+    lane_pass gate-deps "osv-scanner@$PIN_OSV found 0 actionable CVEs"
+  elif [ "$rc" -eq 128 ]; then
+    lane_pass gate-deps "osv-scanner exited 128 (no package sources found) - nothing to scan"
+  elif [ "$rc" -eq 1 ]; then
+    jrc=0
+    "$osv" scan source "${osv_config_args[@]}" --recursive --format json . > "$WORK_DIR/osv-report.json" || jrc=$?
+    if [ "$DEPS_SEVERITY_FLOOR" = "any" ]; then
+      # Zero tolerance, like CI with `deps-severity-floor: any`: the table is
+      # printed for the reader, and any finding fails the lane.
+      if [ "$jrc" -eq 0 ] || [ "$jrc" -eq 1 ]; then
+        python "$QZP_ROOT/scripts/quality/osv_severity_gate.py" "$WORK_DIR/osv-report.json" || true
       fi
-    elif is_scan_error "$rc"; then
-      lane_fail gate-deps "osv-scanner could not complete the scan (exit $rc) - NOT a vulnerability finding; re-run once upstream recovers"
+      lane_fail gate-deps "deps-severity-floor=any: osv-scanner reported at least one advisory and every finding blocks"
+    elif [ "$jrc" -ne 0 ] && [ "$jrc" -ne 1 ]; then
+      lane_fail gate-deps "the JSON re-scan needed to classify findings exited $jrc - NOT a vulnerability verdict; the gate blocks rather than passing silently"
     else
-      lane_fail gate-deps "osv-scanner exited $rc, not a documented exit code for the pinned $PIN_OSV - treated as a scan failure, NOT a finding"
+      grc=0
+      python "$QZP_ROOT/scripts/quality/osv_severity_gate.py" "$WORK_DIR/osv-report.json" || grc=$?
+      if [ "$grc" -eq 0 ]; then
+        lane_pass gate-deps "0 findings clear the T0 severity floor (T2 inventory non-blocking, same classifier as CI)"
+      elif [ "$grc" -eq 1 ]; then
+        lane_fail gate-deps "at least one PRODUCTION dependency has a CVSS >= 7.0 advisory WITH a published fix - bump it"
+      else
+        lane_fail gate-deps "the severity classifier exited $grc (expected 0 or 1) - NOT a vulnerability verdict; the gate blocks"
+      fi
     fi
+  elif is_scan_error "$rc"; then
+    lane_fail gate-deps "osv-scanner could not complete the scan (exit $rc) - NOT a vulnerability finding; re-run once upstream recovers"
+  else
+    lane_fail gate-deps "osv-scanner exited $rc, not a documented exit code for the pinned $PIN_OSV - treated as a scan failure, NOT a finding"
   fi
 fi
 

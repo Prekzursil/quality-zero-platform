@@ -42,59 +42,30 @@ jobs:
           python platform/scripts/quality/generate_ruleset_payload.py \
             --repo-slug "$REPO_SLUG" \
             --output-dir "$RUNNER_TEMP/generated"
-      - name: Compare committed ruleset payload
-        env:
-          GENERATED_DIR: ${{ runner.temp }}/generated
-        run: |
-          python - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          generated_dir = Path(os.environ["GENERATED_DIR"])
-          generated = next(generated_dir.glob("*.json"))
-          expected = json.loads(generated.read_text(encoding="utf-8"))
-          committed = Path("platform/generated/rulesets") / generated.name
-          if not committed.exists():
-            raise SystemExit(f"Missing committed ruleset payload: {committed}")
-          observed = json.loads(committed.read_text(encoding="utf-8"))
-          if expected != observed:
-            raise SystemExit(f"Committed ruleset payload drift detected for {generated.name}")
-          PY
-      - name: Compare live ruleset contexts
+      # Both comparisons run in scripts/quality/ruleset_live_drift.py (unit-
+      # tested to 100%) instead of inline Python. The old live step read
+      # `rules` from the ruleset LIST endpoint, which returns none, and
+      # assumed the required-checks rule was always rules[1]. Exit codes:
+      # 0 in sync, 1 drift, 2 the live state could not be established.
+      - name: Compare the committed and the LIVE ruleset
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO_SLUG: ${{ inputs.repo_slug }}
           GENERATED_DIR: ${{ runner.temp }}/generated
         run: |
-          python - <<'PY'
-          import json
-          import os
-          import subprocess
-          from pathlib import Path
-
-          generated_dir = Path(os.environ["GENERATED_DIR"])
-          generated = next(generated_dir.glob("*.json"))
-          expected = json.loads(generated.read_text(encoding="utf-8"))
-          response = subprocess.run(
-            ["gh", "api", f"repos/{os.environ['REPO_SLUG']}/rulesets"],
-            check=True,
-            capture_output=True,
-            text=True,
-          )
-          live_rulesets = json.loads(response.stdout or "[]")
-          target = next((item for item in live_rulesets if item.get("name") == expected["name"]), None)
-          if target is None:
-            raise SystemExit(f"Live ruleset not found: {expected['name']}")
-          expected_contexts = [item["context"] for item in expected["rules"][1]["parameters"]["required_status_checks"]]
-          live_required = next(
-            rule["parameters"]["required_status_checks"]
-            for rule in target["rules"]
-            if rule["type"] == "required_status_checks"
-          )
-          live_contexts = [item["context"] for item in live_required]
-          if expected_contexts != live_contexts:
-            raise SystemExit(
-              f"Live ruleset contexts drift detected. expected={expected_contexts} live={live_contexts}"
-            )
-          PY
+          set -euo pipefail
+          shopt -s nullglob
+          generated=("$GENERATED_DIR"/*.json)
+          if [ "${#generated[@]}" -ne 1 ]; then
+            echo "ERROR ruleset-sync: expected exactly one generated payload, found ${#generated[@]}." >&2
+            exit 2
+          fi
+          committed="platform/generated/rulesets/$(basename "${generated[0]}")"
+          if [ ! -f "$committed" ]; then
+            echo "ERROR ruleset-sync: missing committed ruleset payload: $committed" >&2
+            exit 2
+          fi
+          python platform/scripts/quality/ruleset_live_drift.py \
+            --expected "${generated[0]}" \
+            --committed "$committed" \
+            --repo-slug "$REPO_SLUG"

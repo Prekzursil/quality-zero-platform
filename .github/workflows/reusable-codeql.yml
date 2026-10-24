@@ -95,8 +95,12 @@ jobs:
               handle.write(f"codeql_java_version={java.get('version', '')}\n")
           PY
 
+  # The analysis itself. Its job id stays `codeql` (the code-scanning analysis
+  # key, so existing alerts keep their identity); only its display name moved,
+  # because the check name `<caller> / CodeQL` now belongs to the fail-closed
+  # gate below.
   codeql:
-    name: CodeQL
+    name: CodeQL analyze
     needs: resolve-profile
     if: ${{ needs.resolve-profile.outputs.enabled == 'true' }}
     runs-on: ${{ needs.resolve-profile.outputs.runner }}
@@ -142,3 +146,41 @@ jobs:
 
       - name: Analyze
         uses: github/codeql-action/analyze@v4
+
+  # ── Fail-closed gate: the check fleet branch protection requires ──────────
+  # `codeql / CodeQL` used to be the analysis job itself, guarded by
+  # `if: enabled == 'true'`. When resolve-profile FAILED (a bad platform merge,
+  # an offboarded slug, a PyPI outage) or produced no languages, that job was
+  # SKIPPED, and GitHub counts a skipped required check as passing: CodeQL
+  # gating silently switched itself off. This job always runs and decides:
+  #   resolve-profile did not succeed  -> FAIL (nothing was analysed)
+  #   profile disables CodeQL          -> PASS, saying so in the log
+  #   analysis did not succeed         -> FAIL
+  codeql-gate:
+    name: CodeQL
+    needs: [resolve-profile, codeql]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Require a completed CodeQL analysis or a declared opt-out
+        shell: bash
+        env:
+          RESOLVE_RESULT: ${{ needs.resolve-profile.result }}
+          CODEQL_ENABLED: ${{ needs.resolve-profile.outputs.enabled }}
+          ANALYZE_RESULT: ${{ needs.codeql.result }}
+        run: |
+          set -euo pipefail
+          if [ "$RESOLVE_RESULT" != "success" ]; then
+            echo "::error title=CodeQL gate::The CodeQL profile could not be resolved (resolve-profile: $RESOLVE_RESULT), so nothing was analysed. A skipped analysis must not satisfy the required check."
+            exit 1
+          fi
+          if [ "$CODEQL_ENABLED" != "true" ]; then
+            echo "::notice title=CodeQL gate::This repository's quality-zero-platform profile disables CodeQL (codeql.enabled is false or it declares no languages), so there is nothing to analyse."
+            exit 0
+          fi
+          if [ "$ANALYZE_RESULT" != "success" ]; then
+            echo "::error title=CodeQL gate::The CodeQL analysis did not succeed (CodeQL analyze: $ANALYZE_RESULT)."
+            exit 1
+          fi
+          echo "CodeQL analysis completed."

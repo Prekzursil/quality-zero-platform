@@ -237,6 +237,9 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          # No gate pushes or fetches with credentials: keep the token off disk.
+          persist-credentials: false
 
       # ── Language detection ────────────────────────────────────────────────
       # Sets boolean outputs consumed by the per-lane `if:` guards below.
@@ -1768,6 +1771,7 @@ jobs:
             # trees explicitly via files.includes negations instead. The config dir
             # is a mktemp dir OUTSIDE the scanned tree, so biome does not treat it
             # as a "nested root configuration".
+            # shellcheck disable=SC2016 # "$schema" is a literal JSON key, not a shell expansion
             printf '%s' '{"$schema":"https://biomejs.dev/schemas/2.5.15/schema.json","files":{"includes":["**/*.ts","**/*.tsx","**/*.js","**/*.jsx","**/*.mjs","**/*.cjs","!**/node_modules/**","!**/dist/**","!**/build/**","!**/out/**","!**/.venv/**","!**/vendor/**"]},"formatter":{"enabled":true,"indentStyle":"space","indentWidth":2,"lineWidth":100,"lineEnding":"lf"},"javascript":{"formatter":{"quoteStyle":"single","trailingCommas":"all","semicolons":"always"}},"linter":{"enabled":false},"assist":{"enabled":false}}' > "$tmp_biome_dir/biome.json"
             biome_cfg_args=(--config-path "$tmp_biome_dir")
             echo "No caller biome.json/biome.jsonc - using the lean template's bundled biome config."

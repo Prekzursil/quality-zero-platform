@@ -81,6 +81,19 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertEqual(notice["if"], "${{ env.CODECOV_UPLOADABLE != 'true' }}")
         self.assertIn("::notice title=Codecov upload skipped::", notice["run"])
 
+    def test_the_workflow_gate_lints_the_consumer_templates_too(self) -> None:
+        """Governed repos copy templates/repo/.github/workflows: a defect there must fail QZP's own gate."""
+        workflow = yaml.safe_load(
+            (ROOT / ".github" / "workflows" / "quality-zero-platform.yml").read_text(encoding="utf-8")
+        )
+        steps = {step.get("name", ""): step for step in workflow["jobs"]["workflows"]["steps"]}
+        actionlint = steps["gate-workflows actionlint"]["run"]
+        self.assertIn("templates/repo/.github/workflows/*.y*ml", actionlint)
+        self.assertIn('/tmp/actionlint -color "${workflows[@]}"', actionlint)
+        zizmor = steps["gate-workflows zizmor"]["run"]
+        self.assertIn("--format plain .github/workflows templates/repo/.github/workflows", zizmor)
+        self.assertTrue(sorted((ROOT / "templates" / "repo" / ".github" / "workflows").glob("*.yml")))
+
     def test_no_step_gates_on_its_own_env(self) -> None:
         """A step's own env does not exist yet when its `if:` is evaluated.
 
@@ -384,10 +397,26 @@ class WorkflowContractTests(unittest.TestCase):
             text,
         )
 
-    def test_scanner_matrix_checks_out_repo_at_requested_sha(self) -> None:
-        """Ensure scanner lanes analyze the exact requested commit without persisted credentials."""
+    def test_scanner_matrix_checks_out_the_triggering_commit_never_a_caller_ref(self) -> None:
+        """CodeQL alert #303: no caller-chosen ref, and a fork's code never reaches a self-hosted runner."""
+        workflow = yaml.safe_load(
+            (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
+        )
+        steps = workflow["jobs"]["scanner"]["steps"]
+        names = [step.get("name", "") for step in steps]
+        checkout = steps[names.index("Check out the code under test")]
+        self.assertEqual(checkout["with"], {"path": "repo", "persist-credentials": False})
+        guard = steps[names.index("Refuse a fork's code on a self-hosted runner")]
+        self.assertEqual(names.index(guard["name"]), 0)
+        for clause in (
+            "github.event_name == 'pull_request'",
+            "github.event.pull_request.head.repo.full_name != github.repository",
+            "runner.environment == 'self-hosted'",
+        ):
+            self.assertIn(clause, guard["if"])
+        self.assertIn("exit 1", guard["run"])
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
-        self.assertIn("ref: ${{ inputs.sha != '' && inputs.sha || github.sha }}", text)
+        self.assertNotIn("ref: ${{ inputs.sha", text)
         self.assertEqual(text.count("persist-credentials: false"), 3)
 
     def test_scanner_matrix_uses_configurable_runner_for_coverage_lane(self) -> None:
@@ -483,6 +512,16 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("run_quality_zero_gate.py", text)
         self.assertNotIn("python - <<'PY'", text)
 
+    def test_every_action_reference_is_pinned_to_a_commit(self) -> None:
+        """A tag can be moved under every caller; a commit SHA cannot (zizmor's unpinned-uses)."""
+        uses = re.compile(r"^\s*(?:-\s+)?uses:\s+(\S+)", re.MULTILINE)
+        for path in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+            for ref in uses.findall(path.read_text(encoding="utf-8")):
+                if ref.startswith("./"):
+                    continue
+                with self.subTest(workflow=path.name, ref=ref):
+                    self.assertRegex(ref, r"@[0-9a-f]{40}$")
+
     def test_all_flagged_checkout_steps_disable_persisted_credentials(self) -> None:
         """Require every checkout step in the flagged workflows to disable persisted credentials.
 
@@ -547,7 +586,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("quality-rollup", text)
         self.assertIn("build_quality_rollup.py", text)
         self.assertIn("post_pr_quality_comment.py", text)
-        self.assertIn("actions/download-artifact@v4", text)
+        self.assertRegex(text, r"uses: actions/download-artifact@[0-9a-f]{40} # v4\.\d+\.\d+")
         self.assertIn("job_name: Dependency Alerts", text)
         self.assertIn('lane == "deps"', text)
         self.assertIn("check_dependabot_alerts.py", text)

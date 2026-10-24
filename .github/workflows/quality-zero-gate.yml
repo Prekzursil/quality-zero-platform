@@ -16,7 +16,7 @@ jobs:
   shared-quality-zero-gate:
     permissions:
       contents: read
-    uses: ./.github/workflows/reusable-quality-zero-gate.yml
+    uses: ./.github/workflows/reusable-quality-zero-gate.yml # zizmor: ignore[self-repository]
     with:
       repo_slug: Prekzursil/quality-zero-platform
       event_name: ${{ github.event_name }}

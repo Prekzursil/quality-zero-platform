@@ -385,7 +385,7 @@ def main(
             return EXIT_ROSTER
     report = build_report(entries, profiles_dir, runner=runner)
     if args.out_json:
-        Path(args.out_json).write_text(json.dumps(report_json(report), indent=2) + "\n", encoding="utf-8")
+        Path(args.out_json).write_text(json.dumps(report_json(report), indent=2) + "\n", encoding="utf-8", newline="\n")
     print(render_text(report))
     return report.exit_code()
 

@@ -26,7 +26,7 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
 def _write_yaml(path: Path, payload: Dict[str, Any]) -> None:
     """Handle write yaml."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8", newline="\n")
 
 
 @dataclass(frozen=True)

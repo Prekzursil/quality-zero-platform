@@ -273,10 +273,10 @@ def main() -> int:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "ruleset-drift.json").write_text(
-        json.dumps(drift_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        json.dumps(drift_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n"
     )
     (output_dir / "rollup-gaps.json").write_text(
-        json.dumps(_redact_gaps_payload(gaps_payload), indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        json.dumps(_redact_gaps_payload(gaps_payload), indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n"
     )
     return 0
 

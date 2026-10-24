@@ -209,7 +209,7 @@ def main() -> int:
     summary = summarise(results)
     payload = json.dumps(summary, indent=2, sort_keys=True)
     if args.out_json:
-        Path(args.out_json).write_text(payload + "\n", encoding="utf-8")
+        Path(args.out_json).write_text(payload + "\n", encoding="utf-8", newline="\n")
     else:
         print(payload)
     if args.all and summary["missing_count"]:

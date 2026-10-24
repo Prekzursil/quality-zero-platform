@@ -132,6 +132,20 @@ class RenderAuditPageTests(unittest.TestCase):
         html = pages.render_audit_page(entries=[])
         self.assertIn("No bypass", html)
 
+    def test_every_state_says_the_earlier_period_is_unaudited_not_clean(self) -> None:
+        """The recording step never ran before #336: an empty feed must not read as "nothing was bypassed"."""
+        states = {
+            "absent": pages.render_audit_page(entries=None, source="audit/break-glass.jsonl"),
+            "empty": pages.render_audit_page(entries=[]),
+            "entries": pages.render_audit_page(entries=[{"label": "quality-zero:skip", "actor": "x"}]),
+        }
+        for state, html in states.items():
+            with self.subTest(state=state):
+                self.assertIn("<strong>unaudited, not clean</strong>", html)
+                self.assertIn("Before 2026-10-24 (#336)", html)
+                self.assertIn("<code>BYPASS_AUDIT_PAT</code>", html)
+                self.assertIn("rule insights", html)
+
 
 class AuditRecordShapeTests(unittest.TestCase):
     """The audit page reads the records the bypass workflow actually writes."""

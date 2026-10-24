@@ -159,6 +159,19 @@ def render_drift_page(
     return _wrap_html("Drift-sync status", body)
 
 
+#: Shown on every state of the audit page: an empty feed is easy to misread.
+#: Until #336 the workflow's "Commit audit log" step could never run (its
+#: ``if:`` read the step's own ``env:``), so nothing before then was recorded.
+AUDIT_SCOPE_NOTE = (
+    "    <p><strong>What this feed can show.</strong> It lists the label-driven bypasses that "
+    "<code>reusable-quality-zero-bypass.yml</code> records, and only when its caller provides "
+    "<code>BYPASS_AUDIT_PAT</code>. Before 2026-10-24 (#336) the recording step never ran at all, so that "
+    "period is <strong>unaudited, not clean</strong>: no entry means nothing was recorded, not that nothing "
+    "was bypassed. An admin's ruleset bypass is logged by GitHub (each repository's rule insights), "
+    "not here.</p>\n"
+)
+
+
 def render_audit_page(
     *,
     entries: Optional[List[Mapping[str, Any]]],
@@ -172,9 +185,9 @@ def render_audit_page(
     masked here: the page is published publicly.
     """
     if entries is None:
-        return _wrap_html("Bypass audit feed", _no_source_body(source, "bypass events"))
+        return _wrap_html("Bypass audit feed", AUDIT_SCOPE_NOTE + _no_source_body(source, "bypass events"))
     if not entries:
-        body = "    <p>No bypass events recorded.</p>\n"
+        body = AUDIT_SCOPE_NOTE + "    <p>No bypass events recorded since 2026-10-24.</p>\n"
         return _wrap_html("Bypass audit feed", body)
     rows = []
     for entry in entries:
@@ -198,7 +211,7 @@ def render_audit_page(
             "</tr>",
         )
     body = (
-        "    <table>\n"
+        AUDIT_SCOPE_NOTE + "    <table>\n"
         "      <thead><tr>"
         "<th>Time</th><th>Label</th><th>PR</th><th>Actor</th>"
         "<th>Incident</th></tr></thead>\n"

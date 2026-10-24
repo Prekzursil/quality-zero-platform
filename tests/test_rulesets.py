@@ -208,6 +208,7 @@ class NormalizeRulesetTests(unittest.TestCase):
             {
                 "bypass_actors": [
                     {"actor_type": "OrganizationAdmin", "actor_id": None},
+                    {"actor_type": "OrganizationAdmin", "bypass_mode": "exempt"},
                     {"actor_type": "User", "actor_id": 7, "bypass_mode": "pull_request"},
                     {"actor_type": "DeployKey", "actor_id": None, "bypass_mode": "exempt"},
                     {"actor_type": "Integration", "actor_id": 15368, "bypass_mode": "exempt"},
@@ -217,7 +218,9 @@ class NormalizeRulesetTests(unittest.TestCase):
         self.assertEqual(
             result["bypass_actors"],
             [
-                {"actor_id": None, "actor_type": "OrganizationAdmin", "bypass_mode": "always"},
+                # The API ignores this id now and required exactly 1 before: 1 is canonical.
+                {"actor_id": 1, "actor_type": "OrganizationAdmin", "bypass_mode": "always"},
+                {"actor_id": 1, "actor_type": "OrganizationAdmin", "bypass_mode": "exempt"},
                 {"actor_id": 7, "actor_type": "User", "bypass_mode": "pull_request"},
                 {"actor_id": None, "actor_type": "DeployKey", "bypass_mode": "exempt"},
                 {"actor_id": 15368, "actor_type": "Integration", "bypass_mode": "exempt"},
@@ -240,6 +243,10 @@ class NormalizeRulesetTests(unittest.TestCase):
             ({"bypass_actors": [{"actor_type": "RepositoryRole", "actor_id": "5"}]}, "actor_id"),
             ({"bypass_actors": [{"actor_type": "RepositoryRole", "actor_id": True}]}, "actor_id"),
             ({"bypass_actors": [{"actor_type": "Team"}]}, "actor_id is required for actor_type 'Team'"),
+            (
+                {"bypass_actors": [{"actor_type": "OrganizationAdmin", "actor_id": 5}]},
+                "actor_id for actor_type 'OrganizationAdmin' must be 1 or omitted",
+            ),
             (
                 {"bypass_actors": [{"actor_type": "DeployKey", "actor_id": 3}]},
                 "must be null for actor_type 'DeployKey'",

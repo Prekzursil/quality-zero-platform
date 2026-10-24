@@ -287,6 +287,12 @@ def _normalize_bypass_actor(item: Any) -> Dict[str, Any]:
         raise ValueError(f"ruleset bypass actor_id is required for actor_type {actor_type!r}")
     if raw_id is not None and actor_type == "DeployKey":
         raise ValueError("ruleset bypass actor_id must be null for actor_type 'DeployKey'")
+    if actor_type == "OrganizationAdmin":
+        # The API ignores the id today and required exactly 1 before; 1 is
+        # valid under both readings, so it is the one canonical value.
+        if raw_id not in (None, 1):
+            raise ValueError("ruleset bypass actor_id for actor_type 'OrganizationAdmin' must be 1 or omitted")
+        raw_id = 1
     bypass_mode = _require_member(_ruleset_text(item, "bypass_mode", "always"), RULESET_BYPASS_MODES, "bypass_mode")
     if bypass_mode == "pull_request" and actor_type == "DeployKey":
         raise ValueError("ruleset bypass_mode 'pull_request' is not applicable to actor_type 'DeployKey'")

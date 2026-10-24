@@ -268,7 +268,11 @@ def fetch_workflow_runs(
         listed = _workflow_runs(platform_slug, workflow_id, branch=branch, limit=per_workflow, runner=runner)
         if len(listed) >= per_workflow and _decisive_runs(listed) < decisive:
             listed = _workflow_runs(platform_slug, workflow_id, branch=branch, limit=max_per_workflow, runner=runner)
-        runs.extend(listed)
+        # A renamed workflow's older runs still carry the OLD name. File every
+        # run under the current one, so a rename never opens (and at once
+        # closes) an alert for a name that no longer exists.
+        name = str(workflow.get("name") or "")
+        runs.extend({**run, "workflowName": name} if name else run for run in listed)
     return runs
 
 

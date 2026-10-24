@@ -355,11 +355,18 @@ class FleetRosterTests(unittest.TestCase):
 class ScanRepoTests(unittest.TestCase):
     """One repo, end to end, against a scripted ``gh`` + ``osv-scanner``."""
 
-    def _scan(self, runner: FakeRunner, *, sleeper: Optional[NoopSleeper] = None, **kwargs: Any) -> sweep.RepoScan:
+    def _scan(
+        self,
+        runner: FakeRunner,
+        *,
+        sleeper: Optional[NoopSleeper] = None,
+        slug: str = "Prekzursil/momentstudio",
+        **kwargs: Any,
+    ) -> sweep.RepoScan:
         """Run ``scan_repo`` inside a throwaway workdir."""
         with isolated_cwd() as tmp:
             return sweep.scan_repo(
-                "Prekzursil/momentstudio",
+                slug,
                 workdir=tmp,
                 floor=severity.SEVERITY_FLOOR,
                 runner=runner,
@@ -402,20 +409,34 @@ class ScanRepoTests(unittest.TestCase):
             "HTTP 404: Not Found (https://api.github.com/repos/{slug})\n",
         ):
             with self.subTest(stderr=stderr):
-                runner = FakeRunner(inaccessible=["Prekzursil/momentstudio"], inaccessible_stderr=stderr)
-                scan = self._scan(runner)
+                runner = FakeRunner(inaccessible=["Prekzursil/PrimariRo"], inaccessible_stderr=stderr)
+                scan = self._scan(runner, slug="Prekzursil/PrimariRo")
                 self.assertIs(scan.status, sweep.ScanStatus.UNSCANNABLE)
                 self.assertFalse(scan.status.is_clean_result)
                 self.assertIn("CODEX_FLEET_READ_PAT", scan.detail)
                 self.assertIn("NOT watched", scan.detail)
                 self.assertEqual(runner.argv_starting("osv-scanner"), [], "no scan should be attempted")
 
+    def test_a_missing_public_repo_is_a_scan_error_not_an_unwatched_one(self) -> None:
+        """THE review finding: a deleted or misspelled roster entry must keep the run red."""
+        for stderr in (
+            "GraphQL: Could not resolve to a Repository with the name '{slug}'. (repository)\n",
+            "HTTP 404: Not Found (https://api.github.com/repos/{slug})\n",
+        ):
+            with self.subTest(stderr=stderr):
+                runner = FakeRunner(inaccessible=["Prekzursil/momentstudio"], inaccessible_stderr=stderr)
+                scan = self._scan(runner)
+                self.assertIs(scan.status, sweep.ScanStatus.SCAN_ERROR)
+                self.assertIn("fix `inventory/repos.yml`", scan.detail)
+                self.assertNotIn("CODEX_FLEET_READ_PAT", scan.detail)
+                self.assertEqual(runner.argv_starting("osv-scanner"), [])
+
     def test_an_unscannable_repo_names_the_configured_token_when_there_is_one(self) -> None:
         """A PAT that exists but lacks access needs a grant, not a new secret."""
-        runner = FakeRunner(inaccessible=["Prekzursil/momentstudio"])
+        runner = FakeRunner(inaccessible=["Prekzursil/PrimariRo"])
         with isolated_cwd() as tmp:
             scan = sweep.scan_repo(
-                "Prekzursil/momentstudio",
+                "Prekzursil/PrimariRo",
                 workdir=Path(tmp),
                 floor=severity.SEVERITY_FLOOR,
                 runner=runner,

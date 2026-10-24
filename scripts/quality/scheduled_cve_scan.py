@@ -422,7 +422,12 @@ def scan_repo(
     """
     dest = Path(workdir) / slug.replace("/", "__")
     clone = _run(clone_command(slug, dest), runner=runner, env=clone_env(os.environ if environ is None else environ))
-    if clone.returncode != 0 and INACCESSIBLE_CLONE.search(str(clone.stderr or "")):
+    unresolvable = clone.returncode != 0 and bool(INACCESSIBLE_CLONE.search(str(clone.stderr or "")))
+    # GitHub answers "not found" both for a private repo the token cannot see
+    # and for one that does not exist. Only a KNOWN private member (the
+    # fleet's code-reviewed list) is a token gap; any other unresolvable slug
+    # is a broken roster entry and stays a red scan error.
+    if unresolvable and slug in fleet_inventory.PRIVATE_INCLUDE_SLUGS:
         return RepoScan(
             slug=slug,
             status=ScanStatus.UNSCANNABLE,
@@ -440,6 +445,18 @@ def scan_repo(
                     f"Set the `{FLEET_READ_PAT_NAME}` secret (read access to the fleet) to scan it. "
                     f"{_tail(clone.stderr)}"
                 )
+            ),
+        )
+    if unresolvable:
+        return RepoScan(
+            slug=slug,
+            status=ScanStatus.SCAN_ERROR,
+            exit_code=clone.returncode,
+            detail=(
+                "`gh repo clone` cannot resolve this repository, and it is not one of the fleet's known "
+                "private members, so it was deleted, renamed, transferred or misspelled: fix "
+                f"`inventory/repos.yml`. It was never scanned - this is NOT a vulnerability verdict. "
+                f"{_tail(clone.stderr)}"
             ),
         )
     if clone.returncode != 0:

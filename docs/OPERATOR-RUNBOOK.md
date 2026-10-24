@@ -247,10 +247,13 @@ Two invariants worth knowing before you touch this workflow:
   non-zero. An incomplete scan is not evidence of a clean tree.
 
 Private fleet members (`PrimariRo`, `agent-skills-toolchain`, measured
-2026-10-24) are unreachable with the default `GITHUB_TOKEN`. A repository the
-token cannot see at all is reported as `unscannable` - NOT watched, never as
-clean - and gets one open "NOT WATCHED" tracking issue (an existing issue keeps
-its last real scan instead). Unlike a `scan-error`, that standing configuration
+2026-10-24) are unreachable with the default `GITHUB_TOKEN`. A KNOWN private
+member (`fleet_inventory.PRIVATE_INCLUDE_SLUGS`) the token cannot see is
+reported as `unscannable` - NOT watched, never as clean - and gets one open
+"NOT WATCHED" tracking issue, refreshed until a real scan lands (an issue that
+holds a real scan is kept instead). Any other repository GitHub cannot resolve
+is a broken roster entry (deleted, renamed, transferred or misspelled) and
+stays a red `scan-error` until `inventory/repos.yml` is fixed. Unlike a `scan-error`, that standing configuration
 gap does not fail the run every night: the sweep exits `3` and the workflow
 annotates it with a warning. Setting the optional `CODEX_FLEET_READ_PAT`
 (Contents: Read across the fleet) closes the gap; the next sweep scans them.

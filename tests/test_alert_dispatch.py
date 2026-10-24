@@ -322,6 +322,16 @@ class DecisiveWindowTests(unittest.TestCase):
         (trigger,) = at.detect_workflow_failing(workflow="Verify", conclusions=conclusions)
         self.assertEqual(trigger.subject, "Verify")
 
+    def test_runs_are_filed_under_the_workflows_current_name(self) -> None:
+        """THE review finding: three old-name failures opened an alert for a name that no longer exists."""
+        renamed = [dict(self._run("failure", 50 - i), workflowName="Old name") for i in range(3)]
+        runner = self._runner({10: renamed})
+        runs = alert_dispatch.fetch_workflow_runs("o/r", workflows=[{"id": 7, "name": "New name"}], runner=runner)
+        conclusions = alert_dispatch.workflow_conclusions(runs)
+        self.assertEqual(conclusions, {"New name": ["failure", "failure", "failure"]})
+        (trigger,) = alert_dispatch.build_triggers_from_fleet_state({"workflow_runs": conclusions})
+        self.assertEqual(trigger.subject, "New name")
+
     def test_a_decisive_or_complete_window_is_read_once(self) -> None:
         """Three decisive runs, or the whole history, is already enough."""
         decisive = [self._run("cancelled", 59 - i) for i in range(7)] + [

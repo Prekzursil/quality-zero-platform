@@ -87,8 +87,8 @@ jobs:
       - name: gate-sast opengrep (curated in-repo ruleset)
         run: |
           curl -fsSL --retry 3 -o /tmp/opengrep \
-            https://github.com/opengrep/opengrep/releases/download/v1.23.0/opengrep_manylinux_x86
-          echo "1f06548af379ab6080698a609612890ffad2d92dc2172f1e97d38d48096d5ef8  /tmp/opengrep" | sha256sum -c -
+            https://github.com/opengrep/opengrep/releases/download/v1.32.0/opengrep_manylinux_x86
+          echo "7360d60174880bd9214f2dfbe439b7bce82b7a3d44cfe945ba833c85cc8bda75  /tmp/opengrep" | sha256sum -c -
           install -m 0755 /tmp/opengrep /usr/local/bin/opengrep
           opengrep scan --config .quality/opengrep --error \
             --exclude .venv --exclude node_modules --exclude dist --exclude out --exclude build .

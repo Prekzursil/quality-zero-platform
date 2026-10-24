@@ -33,12 +33,16 @@ from tests.lean_gate_support import ROOT, find_bash, run_step_script, step_named
 WORKFLOWS = ROOT / ".github" / "workflows"
 PINS = ROOT / ".quality" / "tool-pins.yml"
 # Workflows that install tools by downloading release assets.
-DOWNLOADING = ("reusable-quality.yml", "quality-zero-platform.yml", "scheduled-cve-scan.yml")
-# A remote script piped into a shell. The one remaining instance lives in the
-# legacy scanner matrix (DeepSource CLI installer); it is named here so this
-# test fails once it is fixed, prompting removal of the exception.
+DOWNLOADING = (
+    "reusable-quality.yml",
+    "quality-zero-platform.yml",
+    "scheduled-cve-scan.yml",
+    "reusable-scanner-matrix.yml",
+)
+# A remote script piped into a shell. The last instance (the legacy scanner
+# matrix's DeepSource CLI installer) is gone: no workflow may pipe one again.
 PIPE_TO_SHELL = re.compile(r"curl[^\n|]*\|\s*(?:sudo\s+)?(?:ba|z)?sh\b")
-KNOWN_PIPE_TO_SHELL = {"reusable-scanner-matrix.yml": 1}
+KNOWN_PIPE_TO_SHELL: Dict[str, int] = {}
 DIGEST_CHECK = re.compile(r'echo "([0-9a-f]{64})  ([^"]+)" \| sha256sum -c -')
 # Stand-in for curl, defined as a shell FUNCTION ahead of the step body: a
 # function wins over every PATH lookup, including Git for Windows' bash.exe
@@ -127,7 +131,35 @@ class DownloadContractTests(unittest.TestCase):
                         if uses_target:
                             self.assertGreater(i, verify_line, f"{workflow}: {step['name']} uses {target} unverified")
                     checked += 1
-        self.assertEqual(checked, 5)  # lean gate x3, self-gate SAST, CVE sweep
+        self.assertEqual(checked, 6)  # lean gate x3, self-gate SAST, CVE sweep, legacy DeepSource CLI
+
+    def test_the_deepsource_cli_is_the_pinned_release_asset(self) -> None:
+        """The legacy matrix verifies one exact DeepSource CLI tarball before unpacking it."""
+        (step,) = downloading_steps("reusable-scanner-matrix.yml")
+        script = str(step["run"])
+        self.assertIn("DeepSourceCorp/cli/releases/download/v0.10.1/deepsource_0.10.1_linux_amd64.tar.gz", script)
+        self.assertEqual(
+            [m.group(1) for m in DIGEST_CHECK.finditer(script)],
+            ["e415a6a53257457ef1dad900fdb39aeb991dd01c35c4be9cafa88a41f9e50b3b"],
+        )
+        self.assertNotIn("./bin/deepsource", script)
+
+    def test_the_deepsource_step_refuses_a_runner_it_cannot_serve(self) -> None:
+        """Only the linux_amd64 CLI is pinned: any other runner fails before downloading anything."""
+        bash = find_bash()
+        if bash is None:  # pragma: no cover - environment guard
+            self.skipTest("no real bash found")
+        (step,) = downloading_steps("reusable-scanner-matrix.yml")
+        with tempfile.TemporaryDirectory() as tmp:
+            result = run_step_script(
+                FAKE_CURL + str(step["run"]),
+                workdir=Path(tmp),
+                bash=bash,
+                env_overrides={"DEEPSOURCE_DSN": "dsn", "RUNNER_OS": "Windows", "RUNNER_ARCH": "X64"},
+            )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("::error::DeepSource coverage publishing runs the pinned linux_amd64 CLI", result.stdout)
+        self.assertIn("Windows/X64", result.stdout)
 
     def test_lean_gate_digests_and_versions_match_tool_pins(self) -> None:
         """``.quality/tool-pins.yml`` is the single source of truth for both."""
@@ -150,6 +182,20 @@ class DownloadContractTests(unittest.TestCase):
             script = str(step_named(name)["run"])
             self.assertIn(url_part, script, name)
             self.assertEqual([m.group(1) for m in DIGEST_CHECK.finditer(script)], [digest], name)
+
+    def test_the_platform_runs_the_sast_engine_it_enforces(self) -> None:
+        """QZP's own SAST job and the fleet's gate 4 fetch the identical pinned opengrep asset.
+
+        They used to drift (the self-gate on v1.23.0, the fleet on v1.22.0): the
+        platform was not held to exactly what it enforces.
+        """
+        pins = tool_pins()
+        (step,) = [s for s in downloading_steps("quality-zero-platform.yml") if "opengrep" in str(s["run"])]
+        script = str(step["run"])
+        self.assertIn(f"opengrep/releases/download/{pins['pins']['opengrep']}/opengrep_manylinux_x86", script)
+        self.assertEqual(
+            [m.group(1) for m in DIGEST_CHECK.finditer(script)], [pins["asset_sha256"]["opengrep_manylinux_x86"]]
+        )
 
     def test_cve_sweep_verifies_the_same_osv_scanner_asset_as_the_gate(self) -> None:
         """The standing sweep and gate 6 must run the identical binary."""

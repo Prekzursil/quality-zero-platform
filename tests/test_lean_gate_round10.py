@@ -344,6 +344,15 @@ class PythonRuntimeDepsTests(_StepHarness):
         self.assertEqual(step_named(self.STEP).get("if"), "steps.detect.outputs.python == 'true'")
         self.assertNotIn("pip install -r", str(step_named("gate-tests-coverage python")["run"]))
 
+    def test_gate_2_fails_on_warnings_too(self) -> None:
+        """The documented bar is zero errors AND zero warnings: '1 warning' used to pass gate 2."""
+        run = str(step_named("gate-types basedpyright")["run"])
+        self.assertIn("  basedpyright --warnings\n", run)
+        self.assertIn("basedpyright --typecheckingmode standard --warnings", run)
+        calls = [line.strip() for line in run.splitlines() if line.strip().startswith("basedpyright")]
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(all(call.endswith("--warnings") for call in calls), calls)
+
     def test_runtime_requirement_files_are_installed_dev_and_vendored_ones_are_not(self) -> None:
         """requirements*.txt wins over the project install; dev/test lists and vendored trees are skipped."""
         for name in (

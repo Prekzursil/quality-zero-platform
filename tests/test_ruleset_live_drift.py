@@ -129,6 +129,15 @@ class CompareTests(unittest.TestCase):
             ([], ["bypass actors: not visible with this token, so they were not compared"]),
         )
 
+    def test_an_organization_admin_id_is_not_compared(self) -> None:
+        """The API ignores that id, so 1 declared and null live is the same actor."""
+        expected = dict(
+            EXPECTED, bypass_actors=[{"actor_id": 1, "actor_type": "OrganizationAdmin", "bypass_mode": "always"}]
+        )
+        live = _live(bypass_actors=[{"actor_id": None, "actor_type": "OrganizationAdmin", "bypass_mode": "always"}])
+        self.assertEqual(drift.compare(expected, live), ([], []))
+        self.assertEqual(drift.bypass_actors(live), frozenset({("OrganizationAdmin", "", "always")}))
+
     def test_expected_without_bypass_list_compares_as_empty(self) -> None:
         """A payload with no bypass list declares none."""
         expected = dict(EXPECTED)

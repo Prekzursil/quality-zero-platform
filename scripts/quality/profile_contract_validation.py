@@ -218,20 +218,40 @@ def _validate_deps_contract(profile: Dict[str, Any]) -> List[str]:
 
 
 def _validate_codeql_contract(profile: Dict[str, Any]) -> List[str]:
-    """Require an enabled CodeQL profile to declare what it analyses.
+    """Require a CodeQL profile to be consistent with what it analyses.
 
-    The reusable CodeQL gate fails such a profile at run time (it analyses
-    nothing, and only ``codeql.enabled: false`` is an opt-out); reporting it
-    here catches it while rendering, before any repository runs it.
+    An enabled profile must declare languages: the reusable CodeQL gate fails
+    one that analyses nothing (only ``codeql.enabled: false`` is an opt-out),
+    and reporting it here catches it while rendering, before any repository
+    runs it. An opted-out profile must not keep requiring CodeQL results.
     """
     codeql = profile.get("codeql")
-    if not isinstance(codeql, dict) or codeql.get("enabled", True) is False:
+    if not isinstance(codeql, dict):
         return []
+    if codeql.get("enabled", True) is False:
+        return _codeql_opt_out_findings(profile)
     if any(str(item).strip() for item in codeql.get("languages") or []):
         return []
     return [
         f"{profile['slug']}: codeql.languages is required while CodeQL is enabled "
         "(set codeql.enabled: false to opt out)"
+    ]
+
+
+def _codeql_opt_out_findings(profile: Dict[str, Any]) -> List[str]:
+    """Report an opted-out profile whose ruleset still requires CodeQL code-scanning results.
+
+    The stack's any-severity merge protection is inherited by every profile;
+    with no analysis ever uploaded, every pull request would wait on it forever.
+    """
+    ruleset = profile.get("ruleset")
+    tools = ruleset.get("code_scanning") if isinstance(ruleset, dict) else None
+    if not any(isinstance(tool, dict) and tool.get("tool") == "CodeQL" for tool in tools or []):
+        return []
+    return [
+        f"{profile['slug']}: codeql.enabled is false, yet ruleset.code_scanning still requires CodeQL "
+        "results that no analysis will upload, so every pull request would be blocked "
+        "(set ruleset.code_scanning: [] to drop the merge protection as well)"
     ]
 
 

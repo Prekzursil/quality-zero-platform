@@ -6,7 +6,6 @@ mode:
 scanners: {}
 overrides: []
 verify_command: make verify
-required_contexts_mode: replace
 required_secrets:
 - CHROMATIC_PROJECT_TOKEN
 - APPLITOOLS_API_KEY
@@ -43,48 +42,6 @@ coverage:
   - format: lcov
     name: desktop-rust
     path: coverage/desktop-rust.lcov
-required_contexts:
-  always:
-  - shared-scanner-matrix / Coverage 100 Gate
-  - shared-codecov-analytics / Codecov Analytics
-  - codeql / CodeQL
-  - shared-scanner-matrix / Sonar Zero
-  - shared-scanner-matrix / Codacy Zero
-  - shared-scanner-matrix / Semgrep Zero
-  - shared-scanner-matrix / Sentry Zero
-  - shared-scanner-matrix / DeepSource Visible Zero
-  - shared-scanner-matrix / QLTY Zero
-  - SonarCloud Code Analysis
-  - Python API & worker checks
-  - Web build
-  - Chromatic Playwright
-  - Applitools Visual
-  pull_request_only:
-  - CodeRabbit
-  - Codacy Static Code Analysis
-  - qlty check
-  - qlty coverage
-  - qlty coverage diff
-  target:
-  - shared-scanner-matrix / Coverage 100 Gate
-  - shared-codecov-analytics / Codecov Analytics
-  - qlty check
-  - qlty coverage
-  - qlty coverage diff
-  - shared-scanner-matrix / Sonar Zero
-  - shared-scanner-matrix / Codacy Zero
-  - shared-scanner-matrix / Semgrep Zero
-  - shared-scanner-matrix / Sentry Zero
-  - shared-scanner-matrix / DeepSource Visible Zero
-  - shared-scanner-matrix / QLTY Zero
-  - SonarCloud Code Analysis
-  - Python API & worker checks
-  - Web build
-  - Chromatic Playwright
-  - Applitools Visual
-  - codeql / CodeQL
-  - CodeRabbit
-  - Codacy Static Code Analysis
 visual_pair_required: true
 visual_lane:
   kind: web
@@ -128,3 +85,22 @@ dependabot:
     directory: /apps/desktop
   - ecosystem: cargo
     directory: /apps/desktop/src-tauri
+# LEAN CONTRACT (migrated 2026-10-24). The SaaS-era set this profile used to
+# require (scanner-matrix / Codecov / Sonar / Codacy / Semgrep / Sentry / QLTY /
+# DeepSource contexts) is emitted by nothing any more, so the generated ruleset
+# required 13-19 checks that could never report and would have blocked every
+# pull request if applied. Required = what the repo actually reports on a pull
+# request (re-measured 2026-10-24 against its live rulesets and branch
+# protection); the code_scanning merge protection comes from the common stack.
+#   quality - Reframe's own lean gate job (.github/workflows/quality.yml), the
+#             proven original the reusable gate generalises
+#   CodeQL  - the code-scanning aggregate (GitHub default setup, extended)
+required_contexts_mode: replace
+required_contexts:
+  always:
+  - quality
+  - CodeQL
+  pull_request_only: []
+  target:
+  - quality
+  - CodeQL

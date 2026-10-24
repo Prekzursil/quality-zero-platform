@@ -244,12 +244,31 @@ class CodeQLProfileContractTests(unittest.TestCase):
             with self.subTest(profile=profile):
                 self.assertEqual(profile_contract_validation._validate_codeql_contract(profile), [])
 
+    def test_an_opt_out_must_not_keep_requiring_codeql_results(self) -> None:
+        """THE review finding: the stack's merge protection outlived `codeql.enabled: false`."""
+        opted_out = {"enabled": False, "languages": []}
+        any_codeql = {"code_scanning": [{"tool": "CodeQL", "alerts_threshold": "all"}]}
+        findings = profile_contract_validation._validate_codeql_contract(
+            {"slug": "o/r", "codeql": opted_out, "ruleset": any_codeql}
+        )
+        self.assertEqual(len(findings), 1)
+        self.assertIn("o/r: codeql.enabled is false, yet ruleset.code_scanning still requires CodeQL", findings[0])
+        for ruleset in ({"code_scanning": []}, {"code_scanning": [{"tool": "Semgrep"}]}, {}, "not-a-mapping"):
+            with self.subTest(ruleset=ruleset):
+                profile = {"slug": "o/r", "codeql": opted_out, "ruleset": ruleset}
+                self.assertEqual(profile_contract_validation._validate_codeql_contract(profile), [])
+
     def test_validate_profile_runs_the_codeql_contract(self) -> None:
         """Wired into the full profile validation every render runs."""
         profile = load_repo_profile(load_inventory(), "Prekzursil/quality-zero-platform")
         self.assertEqual([item for item in validate_profile(profile) if "codeql.languages" in item], [])
         profile["codeql"]["languages"] = []
         self.assertTrue(any("codeql.languages is required" in item for item in validate_profile(profile)))
+        # Opting out while still inheriting the stack's CodeQL merge protection.
+        profile["codeql"]["enabled"] = False
+        self.assertTrue(
+            any("ruleset.code_scanning still requires CodeQL" in item for item in validate_profile(profile))
+        )
 
 
 if __name__ == "__main__":  # pragma: no cover

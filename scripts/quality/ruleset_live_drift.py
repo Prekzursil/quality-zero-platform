@@ -127,13 +127,18 @@ def bypass_actors(payload: Mapping[str, Any]) -> Optional[FrozenSet[Tuple[str, s
     """Return ``(actor_type, actor_id, bypass_mode)`` per actor, or ``None`` when hidden.
 
     GitHub omits ``bypass_actors`` for a token that may not see them; ``None``
-    keeps "not visible" distinct from "there are none".
+    keeps "not visible" distinct from "there are none". An ``OrganizationAdmin``
+    actor's id is ignored by the API, so it is not compared either.
     """
     actors = payload.get("bypass_actors")
     if not isinstance(actors, list):
         return None
     return frozenset(
-        (str(actor.get("actor_type", "")), str(actor.get("actor_id", "")), str(actor.get("bypass_mode", "")))
+        (
+            str(actor.get("actor_type", "")),
+            "" if actor.get("actor_type") == "OrganizationAdmin" else str(actor.get("actor_id", "")),
+            str(actor.get("bypass_mode", "")),
+        )
         for actor in actors
         if isinstance(actor, Mapping)
     )

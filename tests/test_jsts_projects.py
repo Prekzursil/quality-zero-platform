@@ -244,7 +244,7 @@ class PlanTests(unittest.TestCase):
 
     def test_a_test_directory_outside_every_project_is_not_an_orphan(self) -> None:
         """Outside a JS/TS project, `tests/` says nothing about JavaScript tests; named tests still orphan."""
-        rows, orphans = planner.plan(["web/package.json", "tests/fixtures/data.js", "e2e/flow.spec.ts"])
+        rows, orphans = planner.plan(["web/package.json", "tests/helpers/data.js", "e2e/flow.spec.ts"])
         self.assertEqual(rows, [("web", False, False)])
         self.assertEqual(orphans, ["e2e/flow.spec.ts"])
 

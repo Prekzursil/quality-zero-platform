@@ -71,7 +71,7 @@ masked before the payload is serialised, so the public site cannot leak them.
 
 ## Health semantics
 
-- **Default branch:** the NEWEST decisive run of each workflow on the default branch (from the 20 newest runs).
+- **Default branch:** the NEWEST decisive run of each workflow among the 100 newest default-branch runs. A workflow with no run in that window (dormant for 100+ runs) does not count. That is a deliberate bound: per-workflow paging would cost one API call per workflow per repo on every hourly build.
   `success` means every workflow's newest completed run passed. `partial` means at least one failed.
   `pending` means a workflow has only runs still in flight. `unknown` means no run says anything.
   Cancelled, skipped, neutral, stale and action-required runs never decide (the same set as the

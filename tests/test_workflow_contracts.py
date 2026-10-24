@@ -365,10 +365,11 @@ class WorkflowContractTests(unittest.TestCase):
             text,
         )
 
-    def test_scanner_matrix_checks_out_repo_at_requested_sha(self) -> None:
-        """Ensure scanner lanes analyze the exact requested commit without persisted credentials."""
+    def test_scanner_matrix_checks_out_the_triggering_commit_never_a_caller_ref(self) -> None:
+        """A caller-chosen ref under a privileged trigger would run fork code with secrets (CodeQL alert #303)."""
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
-        self.assertIn("ref: ${{ inputs.sha != '' && inputs.sha || github.sha }}", text)
+        self.assertIn("          path: repo\n          ref: ${{ github.sha }}\n", text)
+        self.assertNotIn("ref: ${{ inputs.sha", text)
         self.assertEqual(text.count("persist-credentials: false"), 3)
 
     def test_scanner_matrix_uses_configurable_runner_for_coverage_lane(self) -> None:

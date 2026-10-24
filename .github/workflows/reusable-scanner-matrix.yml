@@ -32,6 +32,7 @@ on:
         type: string
         required: false
         default: ""
+        description: "The commit the SaaS lanes report on. The code under test is always checked out at github.sha, never at this input."
       platform_repository:
         type: string
         required: false
@@ -105,11 +106,15 @@ jobs:
           - job_name: Dependency Alerts
             lane: deps
     steps:
+      # Always the commit that triggered the CALLER (a push, the PR merge
+      # commit, the base under pull_request_target), never a caller-chosen
+      # ref: a privileged caller passing a PR head would run fork code with
+      # its secrets (CodeQL actions/untrusted-checkout).
       - name: Check out the code under test
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           path: repo
-          ref: ${{ inputs.sha != '' && inputs.sha || github.sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
       - name: Check out the platform at this workflow's own commit
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0

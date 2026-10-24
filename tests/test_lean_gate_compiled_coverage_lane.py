@@ -71,13 +71,13 @@ class LaneWiringTests(unittest.TestCase):
         """A Go coverage script cannot run without a Go toolchain."""
         setup = [s for s in workflow_steps() if str(s.get("uses", "")).startswith("actions/setup-go@")]
         self.assertEqual(len(setup), 1, "expected exactly one setup-go step")
-        self.assertEqual(setup[0]["uses"], "actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff")
+        self.assertEqual(setup[0]["uses"], "actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e")
         self.assertEqual(setup[0].get("if"), "steps.detect.outputs.gomod == 'true'")
         self.assertEqual(dict(setup[0]["with"])["go-version-file"], "go.mod")  # type: ignore[arg-type]
         # PyYAML strips the trailing comment, so assert the repo's
         # "<sha> # <tag>" pinning convention against the raw text.
         self.assertIn(
-            "actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0",
+            "actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0",
             WORKFLOW.read_text(encoding="utf-8"),
         )
 

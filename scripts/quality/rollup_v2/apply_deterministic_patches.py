@@ -62,6 +62,7 @@ def apply_single_patch(diff: str, repo_dir: Path) -> Dict[str, Any]:
         suffix=".patch",
         delete=False,
         encoding="utf-8",
+        newline="\n",  # LF patch: CRLF context lines would fail `git apply --check`
     ) as tmp:
         tmp.write(diff)
         tmp_path = Path(tmp.name)

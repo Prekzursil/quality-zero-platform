@@ -148,6 +148,22 @@ class PrivacyTests(unittest.TestCase):
         self.assertEqual(fleet_state.public_slug("o/r"), "o/r")
         self.assertEqual(fleet_state.public_slug("o/r", private=True), fleet_state.public_slug("O/R", private=True))
 
+    def test_an_unknown_visibility_is_unread_and_its_old_alerts_stay_open(self) -> None:
+        """Review findings: a transient lookup failure, or a repo turning private, closed its raw-slug alerts."""
+        fake = FakeGh({"o/r": [[_pr(12)]]}, visibility={"o/r": 1})
+        records, unread = fleet_state.drift_sync_prs(
+            ["o/r"], runner=fake, environ={fleet_state.FLEET_READ_PAT_ENV: "pat"}
+        )
+        tag = fleet_state.public_slug("o/r", private=True)
+        self.assertEqual((records, unread), ([], {tag: "its visibility could not be read"}))
+        self.assertEqual(fake.listings(), [])  # never read, so never published under either name
+        # An alert opened while the repo was public carries the RAW slug; it is still unverifiable.
+        self.assertTrue(fleet_state.unverifiable_subject("o/r#12", unread))
+        self.assertTrue(fleet_state.unverifiable_subject(f"{tag}#12", unread))
+        self.assertTrue(fleet_state.unverifiable_subject("O/R#12", unread))  # case-insensitive tag
+        self.assertFalse(fleet_state.unverifiable_subject("o/other#3", unread))
+        self.assertTrue(fleet_state.unverifiable_subject("o/x#1", {"o/x": "the read failed"}))
+
     def test_visibility_is_read_live_and_anything_unproven_is_private(self) -> None:
         """Review finding: a repository whose visibility flipped to private was published as public."""
         fake = FakeGh({}, visibility={"o/public": "false", "o/flipped": "true", "o/unseen": 1, "o/odd": "null"})
@@ -155,7 +171,11 @@ class PrivacyTests(unittest.TestCase):
         self.assertTrue(fleet_state.repo_is_private("o/flipped", runner=fake))
         self.assertTrue(fleet_state.repo_is_private("o/unseen", runner=fake))  # 404 to this token: fail closed
         self.assertTrue(fleet_state.repo_is_private("o/odd", runner=fake))
-        argv, kwargs = fake.calls[0]
+        self.assertEqual(
+            [fleet_state.repo_visibility(s, runner=fake) for s in ("o/public", "o/flipped", "o/unseen", "o/odd")],
+            ["public", "private", "unknown", "unknown"],
+        )
+        argv, kwargs = fake.calls[0]  # the first call above
         self.assertEqual(argv, ["gh", "api", "repos/o/public", "--jq", ".private"])
         self.assertNotIn("env", kwargs)  # always the workflow token, never the fleet-read PAT
 
@@ -212,9 +232,10 @@ class DriftSyncPrTests(unittest.TestCase):
         self.assertEqual((records, unread), ([], {flipped: "private, and no fleet-read token"}))
         self.assertEqual(fake.listings(), [])  # not read without the PAT
         fake = FakeGh({"o/secret": [[_pr(4, repo="o/secret")]]}, visibility={"o/secret": "true"})
-        (record,), _unread = fleet_state.drift_sync_prs(
+        (record,), unread = fleet_state.drift_sync_prs(
             ["o/secret"], runner=fake, environ={fleet_state.FLEET_READ_PAT_ENV: "pat"}
         )
+        self.assertEqual(unread, {})
         self.assertEqual((record["slug"], record["pr_url"], record["visibility"]), (flipped, "", "private"))
         self.assertNotIn("o/secret", fleet_state.to_jsonl([record]))
 

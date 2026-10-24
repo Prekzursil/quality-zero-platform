@@ -108,7 +108,9 @@ class ScheduledAlertsWorkflowTests(unittest.TestCase):
         self.assertIn("alert_type=alerts.AlertType.BYPASS_STALE", self.text)
         self.assertIn("alert_type=alerts.AlertType.DRIFT_STUCK", self.text)
         self.assertIn("alert_dispatch.close_resolved_alerts(", self.text)
-        self.assertIn('unverifiable=lambda subject: subject.rsplit("#", 1)[0] in drift_unread,', self.text)
+        self.assertIn(
+            "unverifiable=lambda subject: fleet_state.unverifiable_subject(subject, drift_unread),", self.text
+        )
         self.assertIn("Fleet repositories NOT read (drift unknown): {len(drift_unread)}", self.text)
 
     def test_the_drift_search_may_use_the_fleet_read_pat_but_writes_keep_the_workflow_token(self) -> None:

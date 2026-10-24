@@ -166,7 +166,7 @@ jobs:
               close_comment="The drift-sync PR `{subject}` is no longer open; closing.",
               # An unread member's PR is invisible, not gone (no fleet-read PAT,
               # or a failed read): never close its alert on missing evidence.
-              unverifiable=lambda subject: subject.rsplit("#", 1)[0] in drift_unread,
+              unverifiable=lambda subject: fleet_state.unverifiable_subject(subject, drift_unread),
               dry_run=dry_run,
           )
 

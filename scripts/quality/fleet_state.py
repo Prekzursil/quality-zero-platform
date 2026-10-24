@@ -142,18 +142,36 @@ def public_slug(slug: str, *, private: Optional[bool] = None) -> str:
     return f"{PRIVATE_SUBJECT_PREFIX}{hashlib.sha256(slug.lower().encode('utf-8')).hexdigest()[:8]}>"
 
 
-def repo_is_private(slug: str, *, runner: ProcessRunner = subprocess.run) -> bool:
-    """Whether ``slug`` must be masked. Fails CLOSED.
+def repo_visibility(slug: str, *, runner: ProcessRunner = subprocess.run) -> str:
+    """``"public"``, ``"private"`` or ``"unknown"`` for one fleet member, read with the workflow token.
 
-    A known private member is private without a call. Any other repository
-    is private unless the workflow token reads it as public, so a repository
-    whose visibility flipped, or that this token cannot see, is never
-    published by name.
+    A known private member is private without a call. Otherwise the API
+    decides; a failed or odd answer is ``unknown``, and the caller treats it
+    as private for display (masked) and does not read the repository this run.
     """
     if slug.lower() in PRIVATE_SLUGS:
-        return True
+        return "private"
     completed = runner(["gh", "api", f"repos/{slug}", "--jq", ".private"], capture_output=True, text=True, check=False)
-    return completed.returncode != 0 or str(completed.stdout or "").strip() != "false"
+    answer = str(completed.stdout or "").strip() if completed.returncode == 0 else ""
+    return {"false": "public", "true": "private"}.get(answer, "unknown")
+
+
+def repo_is_private(slug: str, *, runner: ProcessRunner = subprocess.run) -> bool:
+    """Whether ``slug`` must be masked. Fails CLOSED: anything not proven public is masked."""
+    return repo_visibility(slug, runner=runner) != "public"
+
+
+def unverifiable_subject(subject: str, unread: Mapping[str, str]) -> bool:
+    """Whether an alert subject (``<repo>#<n>``) belongs to a member this run did not read.
+
+    The subject may carry the RAW slug (opened while the repository was
+    public) while ``unread`` is keyed by its masked tag (it turned private,
+    or its visibility could not be read): both forms are recognized, so a
+    visibility change or a transient lookup failure is never mistaken for a
+    resolved alert.
+    """
+    repo = subject.rsplit("#", 1)[0]
+    return repo in unread or public_slug(repo, private=True) in unread
 
 
 def fleet_read_env(environ: Mapping[str, str]) -> Optional[Dict[str, str]]:
@@ -214,8 +232,12 @@ def drift_sync_prs(
     unread: Dict[str, str] = {}
     rejected = False  # the fleet-read PAT answered 401: public members fall back to the workflow token
     for slug in slugs:
-        private = repo_is_private(slug, runner=runner)
+        visibility = repo_visibility(slug, runner=runner)
+        private = visibility != "public"
         tag = public_slug(slug, private=private)
+        if visibility == "unknown":
+            unread[tag] = "its visibility could not be read"
+            continue
         if private and (env is None or rejected):
             unread[tag] = f"private, and {'the fleet-read token was rejected' if rejected else 'no fleet-read token'}"
             continue

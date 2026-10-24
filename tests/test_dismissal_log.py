@@ -65,15 +65,22 @@ class DismissalLogTests(unittest.TestCase):
         """The QZP log itself passes, so CI catches any drift in it."""
         self.assertEqual(log.validate(DOC.read_text(encoding="utf-8"), repo=REPO), [])
 
-    def test_no_logged_dismissal_can_disappear(self) -> None:
-        """The receipt only grows: every alert logged so far must stay in the VALIDATED log table."""
+    def test_the_log_is_append_only_against_this_baseline(self) -> None:
+        """The receipt only grows: a row can never leave the VALIDATED log table.
+
+        Review finding: a later row whose alert leaves GitHub's dismissed set
+        (fixed, say) could be deleted unnoticed. So the baseline must equal the
+        log: a new row is added HERE in the same PR, and removing one is an
+        explicit, reviewable edit of this test.
+        """
         logged = set(log.logged_alerts(DOC.read_text(encoding="utf-8")))
         recorded = {
             "25", "26", "27", "28", "29", "30", "31", "32", "57", "82", "100", "109", "110", "111", "112",
             "113", "114", "126", "127", "128", "129", "138", "139", "166", "167", "168", "169", "173",
             "245", "246", "247", "272", "273", "297", "298", "299", "300", "301", "302",
         }  # fmt: skip
-        self.assertEqual(recorded - logged, set())
+        self.assertEqual(recorded - logged, set(), "a logged dismissal disappeared")
+        self.assertEqual(logged - recorded, set(), "add each new log row's alert number to this baseline")
 
     def test_a_well_formed_row_passes(self) -> None:
         """Including a pending won't-fix with no owner yet, and an escaped pipe in a cell."""
@@ -230,6 +237,17 @@ class DismissalLogTests(unittest.TestCase):
         self.assertEqual(log.logged_alerts("# Doc\n\nno log\n"), [])
         self.assertEqual(log.logged_alerts(_doc(_row(), header="| Alert | Rule |")), [])
 
+    def test_a_fenced_example_is_not_the_document(self) -> None:
+        """Review finding: a '## Log' table inside a code fence satisfied (or duplicated) the real log."""
+        example = "```markdown\n## Log (example)\n\n" + HEADER + "\n" + RULE + "\n" + _row("8") + "\n\n```\n\n"
+        self.assertEqual(_check(example + _doc(_row())), [])  # the real log is read, not a duplicate
+        self.assertEqual(_check("# Doc\n\n" + example), ["no '## Log' or '## Log (<repo>)' section"])
+        tilde = "~~~~\n## Log\n~~~\nstill inside\n~~~~\n\n"
+        self.assertEqual(_check(tilde + _doc(_row())), [])
+        self.assertEqual(
+            log._unfenced(["a", "```", "## Log", "``` trailing", "x", "```", "b"]), ["a", "", "", "", "", "", "b"]
+        )
+
     def test_the_decisions_table_is_validated_before_its_ids_count(self) -> None:
         """Review finding: a one-cell pipe row under the heading 'documented' an exclusion."""
         text = DOC.read_text(encoding="utf-8")
@@ -266,6 +284,13 @@ class DismissalLogTests(unittest.TestCase):
         (problem,) = log.decision_problems(decisions(good, header="| Query | Decision |"))
         self.assertIn("decisions table's columns must be exactly", problem)
         self.assertEqual(log.documented_queries(decisions(good, header="| Query | Decision |")), set())
+        # Review finding: a stale **Excluded** row must not outvote a later "not excluded" for the same query.
+        conflicting = decisions(good, "| `py/a` | 2026-10-24 | **Fixed in the code, not excluded.** |")
+        self.assertEqual(
+            log.decision_problems(conflicting),
+            ["more than one decision for py/a: keep one row per query, updated in place"],
+        )
+        self.assertEqual(log.documented_queries(conflicting), set())
         twice = decisions(good) + "\n" + decisions(good)
         self.assertEqual(log.decision_problems(twice), ["2 '## Query configuration decisions' sections: keep one"])
         self.assertEqual(log.documented_queries(twice), set())

@@ -58,11 +58,13 @@ characters or fewer**.
 
 The validator needs only Python (3.9 or later) and PyYAML. In QZP it is
 `scripts/quality/check_dismissal_log.py`. A governed repository fetches it at
-the platform commit its callers pin, with no QZP checkout:
+the platform commit its callers pin, with no QZP checkout. A pin from before
+the validator existed has no such file (`curl` fails with 404); use the
+platform SHA your next pin bump will move to:
 
 ```bash
 # The validator (in QZP itself: qzp_validator=scripts/quality/check_dismissal_log.py).
-sha="<the QZP commit your caller workflows pin>"
+sha="<the QZP commit your callers pin (or a later one that has the validator)>"
 qzp_validator="$(mktemp -d)/check_dismissal_log.py"
 curl -fsSL -o "$qzp_validator" \
   "https://raw.githubusercontent.com/Prekzursil/quality-zero-platform/$sha/scripts/quality/check_dismissal_log.py"
@@ -108,8 +110,9 @@ It checks:
   on a tool limitation carries one, so the dismissal cannot become permanent
   by accident;
 - the decisions table below, when present: its columns, backticked query
-  ids, a real date (or `before YYYY-MM-DD`) that is not in the future, and a
-  decision;
+  ids, a real date (or `before YYYY-MM-DD`) that is not in the future, a
+  decision, and one row per query (a changed decision is updated in place);
+- headings and tables inside a code fence are examples, not the document;
 - with `--codeql-config` (default `.github/codeql/codeql-config.yml`, skipped
   when absent): for every query the configuration excludes, a well-formed
   decision that starts with **Excluded**. A malformed row documents nothing,

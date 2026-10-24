@@ -46,6 +46,8 @@ DECISIONS_HEADING = re.compile(r"^## Query configuration decisions\s*$")
 DECISIONS_TITLE = "## Query configuration decisions"
 #: A section runs to the next h1/h2 heading (or the end of the file).
 SECTION_END = re.compile(r"^#{1,2} ")
+#: A code fence (CommonMark: up to three spaces, then three or more backticks or tildes).
+FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 COLUMNS = (
     "Alert",
     "Rule",
@@ -120,8 +122,27 @@ def _is_date(value: str) -> bool:
     return True
 
 
+def _unfenced(lines: Sequence[str]) -> List[str]:
+    """``lines`` with every fenced code block blanked: an example in a fence is not the document."""
+    out: List[str] = []
+    fence = ""
+    for line in lines:
+        match = FENCE.match(line)
+        if not fence:
+            if match:
+                fence = match.group(1)
+            out.append("" if match else line)
+            continue
+        # A closing fence: the same character, at least as long, nothing after it.
+        if match and match.group(1)[0] == fence[0] and len(match.group(1)) >= len(fence) and not match.group(2).strip():
+            fence = ""
+        out.append("")
+    return out
+
+
 def _sections(lines: Sequence[str], heading: re.Pattern[str]) -> List[List[str]]:
-    """The lines under EVERY ``heading`` match, each up to the next h1/h2 heading."""
+    """The lines under EVERY real ``heading`` (not one inside a code fence), each up to the next h1/h2 heading."""
+    lines = _unfenced(lines)
     sections: List[List[str]] = []
     for start, line in enumerate(lines):
         if not heading.match(line):
@@ -311,7 +332,16 @@ def _decision_rows(text: str) -> Tuple[List[List[str]], List[str]]:
     sections = _sections(text.splitlines(), DECISIONS_HEADING)
     if len(sections) > 1:
         return [], [f"{len(sections)} '{DECISIONS_TITLE}' sections: keep one"]
-    return _table(sections[0], DECISION_COLUMNS, "decisions") if sections else ([], [])
+    rows, problems = _table(sections[0], DECISION_COLUMNS, "decisions") if sections else ([], [])
+    # One decision per query: a stale "**Excluded**" row must not outvote a later "not excluded".
+    seen: Dict[str, int] = {}
+    for cells in rows:
+        for query in QUERY_ID.findall(cells[0]):
+            seen[query] = seen.get(query, 0) + 1
+    twice = sorted(query for query, count in seen.items() if count > 1)
+    if twice:
+        return [], [f"more than one decision for {', '.join(twice)}: keep one row per query, updated in place"]
+    return rows, problems
 
 
 def decision_problems(text: str, *, today: Optional[dt.date] = None) -> List[str]:

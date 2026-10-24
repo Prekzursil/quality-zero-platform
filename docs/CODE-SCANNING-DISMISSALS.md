@@ -31,9 +31,14 @@ SARIF producer that feeds GitHub code scanning (opengrep, zizmor, ...).
    - A governed repo's: a row in that repo's own
      `docs/CODE-SCANNING-DISMISSALS.md`, the per-repo receipt.
 4. **A dismissal you would repeat is a defect in the shared layer.** If the
-   same alert would be dismissed in several repos, or again after every
-   edit, fix the template, the reusable workflow, or the query configuration
-   once instead.
+   same alert would be dismissed in several repos because they share a
+   template, a reusable workflow or other production code, or again after
+   every edit, fix that shared source or the query configuration once
+   instead. Intentional fixtures are the exception: a repo whose tests need
+   a fixture of the flagged pattern (the input of a detector or fixer they
+   assert on) dismisses it there as `used in tests`, even if other repos
+   carry the same fixture. Excluding the query instead would hide the same
+   pattern in production code.
 
 ## Choosing the reason
 
@@ -76,9 +81,11 @@ receipt; wiring it into the fleet's reusable gate is a follow-up. It checks:
 - a backticked rule and a backticked `path:line`;
 - a GitHub reason and a real calendar date that is not in the future;
 - a non-empty rationale and verdict, and no duplicate alerts;
-- an owner plus a real review-by date on every `won't fix`. Only a row
-  dismissed before this rule (2026-10-24) and marked **Re-review.** or
-  **Fix.** may defer them until that review;
+- an owner plus a real review-by date on every `won't fix`, and a date that
+  has not passed: from the day after it, the check fails until the risk is
+  re-reviewed and the row records the outcome. Only a row dismissed before
+  this rule (2026-10-24) and marked **Re-review.** or **Fix.** may defer
+  the owner and date until that review;
 - with `--codeql-config` (default `.github/codeql/codeql-config.yml`, skipped
   when absent): a row in the decisions table below for every query the
   configuration excludes. A filter that excludes by anything other than a

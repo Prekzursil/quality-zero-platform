@@ -9,8 +9,9 @@ itself well-formed so the audit trail cannot drift silently:
 * every row links an alert OF THIS REPOSITORY, names a backticked rule, a
   ``path:line`` location, a GitHub dismissal reason, a real calendar date that
   is not in the future, a rationale and a verdict, and no alert appears twice;
-* a ``won't fix`` row names an owner and a real review-by date (accepted risk
-  always has someone answerable and a date), unless it predates the rule and
+* a ``won't fix`` row names an owner and a real review-by date that has not
+  passed (accepted risk always has someone answerable and a date, and an
+  expired one fails until it is re-reviewed), unless it predates the rule and
   is marked for re-review;
 * every query the CodeQL configuration excludes has a row in the "Query
   configuration decisions" table.
@@ -32,8 +33,10 @@ from typing import Any, List, Mapping, Optional, Sequence
 
 import yaml
 
-LOG_HEADING = "## Log"
-DECISIONS_HEADING = "## Query configuration decisions"
+#: ``## Log`` or ``## Log (<repo>)`` exactly; never ``## Logging guidance``.
+LOG_HEADING = re.compile(r"^## Log(?: \(.+\))?\s*$")
+DECISIONS_HEADING = re.compile(r"^## Query configuration decisions\s*$")
+DECISIONS_TITLE = "## Query configuration decisions"
 #: A section runs to the next h1/h2 heading (or the end of the file).
 SECTION_END = re.compile(r"^#{1,2} ")
 COLUMNS = (
@@ -83,9 +86,9 @@ def _is_date(value: str) -> bool:
     return True
 
 
-def _section(lines: Sequence[str], heading: str) -> Optional[List[str]]:
+def _section(lines: Sequence[str], heading: re.Pattern[str]) -> Optional[List[str]]:
     """The lines under the first ``heading``, up to the next h1/h2 heading (None when absent)."""
-    start = next((i for i, line in enumerate(lines) if line.startswith(heading)), None)
+    start = next((i for i, line in enumerate(lines) if heading.match(line)), None)
     if start is None:
         return None
     section: List[str] = []
@@ -96,7 +99,7 @@ def _section(lines: Sequence[str], heading: str) -> Optional[List[str]]:
     return section
 
 
-def _row_problems(cells: Sequence[str], seen: set, *, repo: str, latest: str) -> List[str]:
+def _row_problems(cells: Sequence[str], seen: set, *, repo: str, today: str, latest: str) -> List[str]:
     """Every contract violation of one data row (``latest``: the newest plausible dismissal date)."""
     alert, rule, location, reason, dismissed, rationale, owner, review_by, verdict = cells
     problems: List[str] = []
@@ -132,6 +135,10 @@ def _row_problems(cells: Sequence[str], seen: set, *, repo: str, latest: str) ->
             problems.append(f"an accepted `won't fix` has no real review-by date (got {review_by!r})")
         elif _is_date(dismissed) and review_by <= dismissed:
             problems.append(f"an accepted `won't fix` review-by {review_by} is not after its dismissal {dismissed}")
+        elif review_by < today:
+            problems.append(
+                f"an accepted `won't fix` was due for review on {review_by}: re-review it and log the outcome"
+            )
     return problems
 
 
@@ -139,7 +146,7 @@ def validate(text: str, *, repo: str, today: Optional[dt.date] = None) -> List[s
     """Return every problem with the log in ``text`` for ``repo`` (empty when well-formed)."""
     section = _section(text.splitlines(), LOG_HEADING)
     if section is None:
-        return [f"no '{LOG_HEADING} ...' section"]
+        return ["no '## Log' or '## Log (<repo>)' section"]
     first = next((i for i, line in enumerate(section) if line.strip().startswith("|")), None)
     if first is None:
         return [f"the log table's columns must be exactly {list(COLUMNS)}"]
@@ -163,8 +170,9 @@ def validate(text: str, *, repo: str, today: Optional[dt.date] = None) -> List[s
     separator = _cells(table[1])
     if len(separator) != len(COLUMNS) or not all(SEPARATOR.match(cell) for cell in separator):
         return ["the log table's second line must be its |---| separator (a row there would skip every check)"]
+    day = today or dt.datetime.now(dt.UTC).date()
     # One day of slack: a dismissal logged east of UTC can carry tomorrow's UTC date.
-    latest = ((today or dt.datetime.now(dt.UTC).date()) + dt.timedelta(days=1)).isoformat()
+    latest = (day + dt.timedelta(days=1)).isoformat()
     problems: List[str] = []
     seen: set = set()
     for number, line in enumerate(table[2:], start=1):
@@ -172,7 +180,8 @@ def validate(text: str, *, repo: str, today: Optional[dt.date] = None) -> List[s
         if len(cells) != len(COLUMNS):
             problems.append(f"row {number}: {len(cells)} cells, expected {len(COLUMNS)}")
             continue
-        problems.extend(f"row {number}: {problem}" for problem in _row_problems(cells, seen, repo=repo, latest=latest))
+        found = _row_problems(cells, seen, repo=repo, today=day.isoformat(), latest=latest)
+        problems.extend(f"row {number}: {problem}" for problem in found)
     return problems
 
 
@@ -198,7 +207,7 @@ def undocumented_exclusions(config: Any, text: str) -> List[str]:
                 continue
             for query in value if isinstance(value, list) else [value]:
                 if str(query) not in documented:
-                    problems.append(f"excluded query {query!r} has no row under '{DECISIONS_HEADING}'")
+                    problems.append(f"excluded query {query!r} has no row under '{DECISIONS_TITLE}'")
     return problems
 
 

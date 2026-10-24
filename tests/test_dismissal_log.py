@@ -27,6 +27,7 @@ HEADER = (
     "| Owner | Review by | Verdict under this rule |"
 )
 RULE = "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"
+TODAY = dt.date(2026, 10, 24)
 
 
 def _row(
@@ -50,6 +51,11 @@ def _row(
 
 def _doc(*rows: str, header: str = HEADER, separator: str = RULE) -> str:
     return "\n".join(["# Doc", "", "## Log (repo)", "", header, separator, *rows, ""])
+
+
+def _check(text: str) -> list:
+    """Validate a synthetic log on a fixed date, so no fixture's review-by ever expires."""
+    return log.validate(text, repo=REPO, today=TODAY)
 
 
 class DismissalLogTests(unittest.TestCase):
@@ -76,8 +82,8 @@ class DismissalLogTests(unittest.TestCase):
         piped = _row("9", rationale="a \\| b")
         accepted = _row("10", reason="won't fix", owner="@owner", review_by="2027-01-01")
         aligned = _doc(_row(), separator="| :--- | ---: | :---: | --- | --- | --- | --- | --- | --- |")
-        self.assertEqual(log.validate(_doc(_row(), pending, piped, accepted, spaced), repo=REPO), [])
-        self.assertEqual(log.validate(aligned, repo=REPO), [])
+        self.assertEqual(_check(_doc(_row(), pending, piped, accepted, spaced)), [])
+        self.assertEqual(_check(aligned), [])
 
     def test_each_malformation_is_named(self) -> None:
         """One broken field per row, each reported once."""
@@ -99,6 +105,9 @@ class DismissalLogTests(unittest.TestCase):
             _row(reason="won't fix", owner="@owner"): "has no real review-by date",
             _row(reason="won't fix", owner="@owner", review_by="2027-02-30"): "has no real review-by date",
             _row(reason="won't fix", owner="@owner", review_by="2020-01-01"): "is not after its dismissal",
+            _row(reason="won't fix", owner="@owner", dismissed="2026-01-02", review_by="2026-06-30"): (
+                "was due for review on 2026-06-30"
+            ),
             _row(reason="won't fix", review_by="2027-01-01", verdict="**Fixed by design.** accepted"): "names no owner",
             # A pending marker exempts only PRE-policy rows; a new won't-fix needs owner + date.
             _row(reason="won't fix", review_by="2027-01-01", verdict="**Re-review.** later"): "names no owner",
@@ -108,7 +117,7 @@ class DismissalLogTests(unittest.TestCase):
         }
         for row, expected in cases.items():
             with self.subTest(expected=expected):
-                (problem,) = log.validate(_doc(row), repo=REPO)
+                (problem,) = _check(_doc(row))
                 self.assertIn(expected, problem)
                 self.assertTrue(problem.startswith("row 1: "))
 
@@ -124,33 +133,47 @@ class DismissalLogTests(unittest.TestCase):
     def test_a_row_without_its_leading_pipe_is_reported_not_skipped(self) -> None:
         """An unpiped or indented row inside the table cannot slip past every check."""
         stray = _row(dismissed="2026-99-99").lstrip("|").lstrip()
-        (problem,) = log.validate(_doc(_row(), stray), repo=REPO)
+        (problem,) = _check(_doc(_row(), stray))
         self.assertIn("not a |-delimited table row", problem)
         indented = "   " + _row("9")
-        self.assertEqual(log.validate(_doc(_row(), indented), repo=REPO), [])
+        self.assertEqual(_check(_doc(_row(), indented)), [])
 
     def test_the_table_ends_at_its_first_blank_line(self) -> None:
         """A row a blank line cut off is reported; prose and later sections are not rows."""
-        self.assertEqual(log.validate(_doc(_row()) + "\nA closing note.\n", repo=REPO), [])
+        self.assertEqual(_check(_doc(_row()) + "\nA closing note.\n"), [])
         later = _doc(_row()) + "\n## Next\n\n| other | table |\n| --- | --- |\n"
-        self.assertEqual(log.validate(later, repo=REPO), [])
-        (problem,) = log.validate(_doc(_row()) + "\n" + _row("8") + "\n", repo=REPO)
+        self.assertEqual(_check(later), [])
+        (problem,) = _check(_doc(_row()) + "\n" + _row("8") + "\n")
         self.assertIn("after the log table's end", problem)
+
+    def test_the_log_heading_is_matched_whole(self) -> None:
+        """A '## Logging guidance' section before the log is not the log."""
+        self.assertEqual(_check("## Logging guidance\n\nKeep logs short.\n\n" + _doc(_row())), [])
+        self.assertEqual(_check(_doc(_row()).replace("## Log (repo)", "## Log")), [])
+        (problem,) = _check(_doc(_row()).replace("## Log (repo)", "## Log retention"))
+        self.assertIn("no '## Log'", problem)
+
+    def test_an_accepted_risk_is_due_on_its_review_by_date_not_after(self) -> None:
+        """The review-by date is the CI trigger: on it the row passes, the day after it fails."""
+        due = _doc(_row(reason="won't fix", owner="@owner", dismissed="2026-01-02", review_by="2026-10-24"))
+        self.assertEqual(log.validate(due, repo=REPO, today=dt.date(2026, 10, 24)), [])
+        (problem,) = log.validate(due, repo=REPO, today=dt.date(2026, 10, 25))
+        self.assertIn("was due for review on 2026-10-24", problem)
 
     def test_a_duplicate_alert_is_rejected(self) -> None:
         """Two rows for one alert would let a dismissal be rewritten silently."""
-        self.assertEqual(log.validate(_doc(_row(), _row()), repo=REPO), ["row 2: alert #7 is logged twice"])
+        self.assertEqual(_check(_doc(_row(), _row())), ["row 2: alert #7 is logged twice"])
 
     def test_a_missing_section_columns_or_separator_is_rejected(self) -> None:
         """Without the agreed table there is nothing to audit; a row in the separator slot would skip every check."""
-        self.assertEqual(log.validate("# Doc\n\nno log here\n", repo=REPO), ["no '## Log ...' section"])
-        (problem,) = log.validate(_doc(_row(), header="| Alert | Rule |"), repo=REPO)
+        self.assertEqual(_check("# Doc\n\nno log here\n"), ["no '## Log' or '## Log (<repo>)' section"])
+        (problem,) = _check(_doc(_row(), header="| Alert | Rule |"))
         self.assertIn("columns must be exactly", problem)
-        (problem,) = log.validate("## Log\n\nprose only\n", repo=REPO)
+        (problem,) = _check("## Log\n\nprose only\n")
         self.assertIn("columns must be exactly", problem)
         for separator in (_row(dismissed="2026-99-99"), "| --- | --- |"):
             with self.subTest(separator=separator):
-                (problem,) = log.validate(_doc(separator=separator), repo=REPO)
+                (problem,) = _check(_doc(separator=separator))
                 self.assertIn("second line must be its |---| separator", problem)
 
     def test_the_cli_exits_by_the_log_state(self) -> None:

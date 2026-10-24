@@ -54,13 +54,15 @@ import contextlib
 import datetime as dt
 import enum
 import json
+import os
+import re
 import subprocess  # nosec B404 — gh / osv-scanner CLI wrapper; every arg is controlled
 import sys
 import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Iterator, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Mapping, Optional, Sequence, Tuple
 
 from scripts.quality import fleet_inventory
 from scripts.quality import osv_severity_gate as severity
@@ -81,6 +83,10 @@ LABEL_COLOR = "B60205"
 LABEL_DESCRIPTION = "Standing dependency-CVE surface (observability, never a gate)."
 
 BODY_MARKER = "<!-- qzp:cve-watch -->"
+#: Marks a body that records only failed attempts to SEE the repository. A
+#: later unscannable run refreshes such a body (its explanation changes, e.g.
+#: once the read PAT exists); a body without it holds a real scan and is kept.
+NEVER_SCANNED_MARKER = "<!-- qzp:cve-watch:never-scanned -->"
 """Stable marker so a human (or a later tool) can recognise a body we own."""
 
 DEFAULT_PLATFORM_SLUG = "Prekzursil/quality-zero-platform"
@@ -122,6 +128,15 @@ entry and record the exit code.
 EXIT_OK = 0
 EXIT_INCOMPLETE = 1
 EXIT_CONFIG_ERROR = 2
+EXIT_UNWATCHED = 3
+"""Every repository the sweep can see was scanned and reconciled, but some it
+cannot see at all (private, and no fleet-read token) are NOT watched. Distinct
+from EXIT_OK, so nothing reports "every governed repo was scanned"."""
+
+INACCESSIBLE_CLONE = re.compile(r"Could not resolve to a Repository|Repository not found|HTTP 404", re.IGNORECASE)
+"""``gh repo clone`` stderr when the token cannot see the repository at all."""
+
+FLEET_READ_PAT_NAME = "CODEX_FLEET_READ_PAT"
 
 ProcessRunner = Callable[..., "subprocess.CompletedProcess[str]"]
 Sleeper = Callable[[float], None]
@@ -150,6 +165,7 @@ class ScanStatus(enum.Enum):
     FINDINGS = "findings"
     NOTHING_TO_SCAN = "nothing-to-scan"
     SCAN_ERROR = "scan-error"
+    UNSCANNABLE = "unscannable"
 
     @property
     def is_clean_result(self) -> bool:
@@ -173,6 +189,7 @@ class IssueAction(enum.Enum):
     CLOSED = "closed"
     NOOP = "noop"
     SKIPPED_SCAN_ERROR = "skipped-scan-error"
+    SKIPPED_UNSCANNABLE = "skipped-unscannable"
     FAILED = "failed"
 
 
@@ -304,9 +321,28 @@ def load_fleet_slugs(inventory_path: Path, *, only: Sequence[str] = ()) -> List[
 # ---------------------------------------------------------------------------
 
 
-def _run(args: Sequence[str], *, runner: ProcessRunner) -> "subprocess.CompletedProcess[str]":
-    """Invoke ``args`` through the injected runner, capturing text output."""
-    return runner(list(args), capture_output=True, text=True, check=False)
+def _run(
+    args: Sequence[str], *, runner: ProcessRunner, env: Optional[Mapping[str, str]] = None
+) -> "subprocess.CompletedProcess[str]":
+    """Invoke ``args`` through the injected runner, capturing text output (in ``env`` when given)."""
+    if env is None:
+        return runner(list(args), capture_output=True, text=True, check=False)
+    return runner(list(args), capture_output=True, text=True, check=False, env=dict(env))
+
+
+#: The fleet-read PAT arrives in this variable, NOT in ``GH_TOKEN``. It is
+#: read-only (Contents: Read is all it should hold), so it only ever clones;
+#: every issue write on the platform keeps the workflow token, which a
+#: read-only PAT in ``GH_TOKEN`` would have turned into a 403.
+FLEET_READ_PAT_ENV = "QZ_FLEET_READ_TOKEN"
+
+
+def clone_env(environ: Mapping[str, str]) -> Optional[Dict[str, str]]:
+    """The clone's environment: ``GH_TOKEN`` swapped for the fleet-read PAT, or ``None`` to inherit."""
+    token = str(environ.get(FLEET_READ_PAT_ENV, "")).strip()
+    if not token:
+        return None
+    return {**environ, "GH_TOKEN": token}
 
 
 def _tail(text: str) -> str:
@@ -375,15 +411,54 @@ def scan_repo(
     runner: ProcessRunner = subprocess.run,
     sleeper: Sleeper = time.sleep,
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+    read_token_configured: bool = False,
+    environ: Optional[Mapping[str, str]] = None,
 ) -> RepoScan:
     """Clone and scan one repository, splitting its report into T0 and T2.
 
     A repository that could not be cloned, or whose report could not be
     parsed, is a ``SCAN_ERROR``: we did not establish anything about it, so we
-    must not claim it is clean.
+    must not claim it is clean. Only the clone sees the fleet-read PAT.
     """
     dest = Path(workdir) / slug.replace("/", "__")
-    clone = _run(clone_command(slug, dest), runner=runner)
+    clone = _run(clone_command(slug, dest), runner=runner, env=clone_env(os.environ if environ is None else environ))
+    unresolvable = clone.returncode != 0 and bool(INACCESSIBLE_CLONE.search(str(clone.stderr or "")))
+    # GitHub answers "not found" both for a private repo the token cannot see
+    # and for one that does not exist. Only a KNOWN private member (the
+    # fleet's code-reviewed list) is a token gap; any other unresolvable slug
+    # is a broken roster entry and stays a red scan error.
+    if unresolvable and slug in fleet_inventory.PRIVATE_INCLUDE_SLUGS:
+        return RepoScan(
+            slug=slug,
+            status=ScanStatus.UNSCANNABLE,
+            exit_code=clone.returncode,
+            detail=(
+                (
+                    f"The configured `{FLEET_READ_PAT_NAME}` cannot see this repository, so it is NOT watched - "
+                    "neither a vulnerability verdict nor a clean result. Grant that token Contents: Read on it "
+                    f"to scan it. {_tail(clone.stderr)}"
+                )
+                if read_token_configured
+                else (
+                    "The sweep's token cannot see this repository (private, and no fleet-read token is "
+                    "configured), so it is NOT watched - neither a vulnerability verdict nor a clean result. "
+                    f"Set the `{FLEET_READ_PAT_NAME}` secret (read access to the fleet) to scan it. "
+                    f"{_tail(clone.stderr)}"
+                )
+            ),
+        )
+    if unresolvable:
+        return RepoScan(
+            slug=slug,
+            status=ScanStatus.SCAN_ERROR,
+            exit_code=clone.returncode,
+            detail=(
+                "`gh repo clone` cannot resolve this repository, and it is not one of the fleet's known "
+                "private members, so it was deleted, renamed, transferred or misspelled: fix "
+                f"`inventory/repos.yml`. It was never scanned - this is NOT a vulnerability verdict. "
+                f"{_tail(clone.stderr)}"
+            ),
+        )
     if clone.returncode != 0:
         return RepoScan(
             slug=slug,
@@ -496,6 +571,17 @@ def _status_section(scan: RepoScan) -> List[str]:
             "osv-scanner found no dependency manifests or lockfiles here, so there is no advisory "
             "surface to track. This issue is being closed.",
         ]
+    if scan.status is ScanStatus.UNSCANNABLE:
+        return [
+            "## NOT WATCHED - the sweep cannot see this repository",
+            "",
+            scan.detail,
+            "",
+            (
+                "Nothing about this repository's dependencies is known: this is neither a vulnerability "
+                "verdict nor a clean result. The issue stays open until a scan completes."
+            ),
+        ]
     return [
         "## SCAN ERROR - this is NOT a vulnerability verdict",
         "",
@@ -503,6 +589,19 @@ def _status_section(scan: RepoScan) -> List[str]:
         "",
         "The dependency tree was not fully scanned, so the run is **not a clean result**. No tracking "
         "issue was opened, updated or closed on this evidence - a failed scan must never clear a finding.",
+    ]
+
+
+def _scan_lines(scan: RepoScan, *, generated_at: dt.datetime) -> List[str]:
+    """The when/what lines of an issue body: a scan that never ran is not dated as one."""
+    if scan.status is ScanStatus.UNSCANNABLE:
+        return [
+            f"- Last attempted (UTC): `{generated_at.isoformat()}` - never scanned",
+            f"- Scan result: `{scan.status.value}` (`gh repo clone` exit `{scan.exit_code}`)",
+        ]
+    return [
+        f"- Last scanned (UTC): `{generated_at.isoformat()}`",
+        f"- Scan result: `{scan.status.value}` (osv-scanner exit `{scan.exit_code}`, {scan.attempts} attempt(s))",
     ]
 
 
@@ -522,6 +621,7 @@ def render_issue_body(
     """
     lines = [
         BODY_MARKER,
+        *([NEVER_SCANNED_MARKER] if scan.status is ScanStatus.UNSCANNABLE else []),
         f"# Dependency-CVE watch - `{scan.slug}`",
         "",
         "A dependency advisory is time-varying, so a PR-diff gate cannot see one published against",
@@ -529,8 +629,7 @@ def render_issue_body(
         f"it is updated in place by `{WORKFLOW_NAME}`, and it closes itself when the findings clear.",
         "",
         f"- Scanner: `osv-scanner {OSV_SCANNER_VERSION}` - the same pinned binary gate 6 runs",
-        f"- Last scanned (UTC): `{generated_at.isoformat()}`",
-        f"- Scan result: `{scan.status.value}` (osv-scanner exit `{scan.exit_code}`, {scan.attempts} attempt(s))",
+        *_scan_lines(scan, generated_at=generated_at),
         f"- Caller `{OSV_CONFIG_NAME}` ignores applied: `{'yes' if scan.config_applied else 'no'}`",
         f"- T0 floor: production dependency AND CVSS >= {format(floor, 'g')} AND a published fix",
     ]
@@ -553,7 +652,7 @@ def render_summary(outcomes: Sequence[RepoOutcome]) -> str:
     lines.extend(
         [
             f"`osv-scanner {OSV_SCANNER_VERSION}`. T0 = would block gate 6 today. T2 = inventory only, "
-            "never blocking. A `scan-error` row is NOT a clean result.",
+            "never blocking. A `scan-error` or `unscannable` row is NOT a clean result.",
             "",
             "| repo | status | T0 | T2 | issue | detail |",
             "| --- | --- | --- | --- | --- | --- |",
@@ -620,7 +719,7 @@ def find_open_issue(
             "--search",
             slug,
             "--json",
-            "number,title,state",
+            "number,title,state,body",
             "--limit",
             "100",
         ],
@@ -686,7 +785,11 @@ def reconcile(
     """Bring one repository's tracking issue in line with its scan.
 
     Findings create the issue or update it IN PLACE; a clean result closes it;
-    a scan error touches nothing at all.
+    a scan error touches nothing at all. An unscannable repository gets an
+    issue saying it is NOT watched, and that issue is refreshed while it
+    still records no real scan, because its explanation can change (e.g. once
+    the read PAT exists). An issue that holds a REAL scan is never
+    overwritten by "unknown".
     """
     counts = (len(scan.blocking), len(scan.demoted))
     if scan.status is ScanStatus.SCAN_ERROR:
@@ -702,6 +805,21 @@ def reconcile(
 
     body = render_issue_body(scan, floor=floor, generated_at=generated_at, run_url=run_url)
     existing = find_open_issue(platform_slug, slug=scan.slug, runner=runner)
+
+    if (
+        scan.status is ScanStatus.UNSCANNABLE
+        and existing is not None
+        and NEVER_SCANNED_MARKER not in str(existing.get("body") or "")
+    ):
+        return RepoOutcome(
+            scan.slug,
+            scan.status,
+            IssueAction.SKIPPED_UNSCANNABLE,
+            _issue_number(existing),
+            scan.detail,
+            dry_run,
+            *counts,
+        )
 
     if scan.status.is_clean_result:
         if existing is None:
@@ -773,6 +891,7 @@ def run_sweep(
     run_url: str = "",
     dry_run: bool = False,
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+    read_token_configured: bool = False,
 ) -> List[RepoOutcome]:
     """Scan and reconcile every slug. One repo's failure never aborts the rest."""
     outcomes: List[RepoOutcome] = []
@@ -785,6 +904,7 @@ def run_sweep(
             runner=runner,
             sleeper=sleeper,
             max_attempts=max_attempts,
+            read_token_configured=read_token_configured,
         )
         try:
             outcome = reconcile(
@@ -874,6 +994,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help=f"CVSS floor separating T0 from T2 (default {severity.SEVERITY_FLOOR}).",
     )
     parser.add_argument(
+        "--read-token-configured",
+        action="store_true",
+        help=f"The {FLEET_READ_PAT_NAME} secret is set: an unscannable repo means that token lacks access to it.",
+    )
+    parser.add_argument(
         "--max-attempts",
         type=int,
         default=DEFAULT_MAX_ATTEMPTS,
@@ -903,8 +1028,11 @@ def main(
 
     Findings alone exit ``0``: this is observability, and turning a new upstream
     advisory into a red required check is precisely the treadmill the tiering
-    was introduced to end. Only an INCOMPLETE sweep - a repo that could not be
-    scanned, or an issue that could not be reconciled - exits non-zero.
+    was introduced to end. An INCOMPLETE sweep - a repo that could not be
+    scanned, or an issue that could not be reconciled - exits ``1``. A sweep
+    complete except for repositories the token cannot see at all exits ``3``:
+    that gap is permanent until a read token exists, it is tracked by an open
+    issue per repository, and it must not read as "every repo was scanned".
     """
     args = _build_parser().parse_args(argv)
     try:
@@ -926,6 +1054,7 @@ def main(
             run_url=args.run_url,
             dry_run=args.dry_run,
             max_attempts=args.max_attempts,
+            read_token_configured=args.read_token_configured,
         )
 
     summary = render_summary(outcomes)
@@ -945,6 +1074,14 @@ def main(
             file=sys.stderr,
         )
         return EXIT_INCOMPLETE
+    unwatched = [outcome.slug for outcome in outcomes if outcome.status is ScanStatus.UNSCANNABLE]
+    if unwatched:
+        print(
+            f"UNWATCHED scheduled-cve-scan: {len(unwatched)} repo(s) cannot be seen with this token and were "
+            f"NOT scanned ({', '.join(unwatched)}). Set {FLEET_READ_PAT_NAME} to watch them.",
+            file=sys.stderr,
+        )
+        return EXIT_UNWATCHED
     return EXIT_OK
 
 

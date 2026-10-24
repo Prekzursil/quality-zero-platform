@@ -5,6 +5,8 @@ from __future__ import absolute_import, division
 import unittest
 from pathlib import Path
 
+import yaml  # type: ignore[import-untyped]
+
 ROOT = Path(__file__).resolve().parents[1]
 MUTATION_TEMPLATE_REF = "@7268fee30f1cf796938d97fe460259f27386a8cd"
 
@@ -392,7 +394,11 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertNotIn("python - <<'PY'", text)
 
     def test_all_flagged_checkout_steps_disable_persisted_credentials(self) -> None:
-        """Require every flagged checkout step to disable persisted credentials."""
+        """Require every checkout step in the flagged workflows to disable persisted credentials.
+
+        Steps are read from the parsed YAML, so a checkout pinned to a commit
+        SHA is held to the contract exactly like one pinned to a tag.
+        """
         workflow_paths = [
             ROOT / ".github" / "workflows" / "reusable-backlog-sweep.yml",
             ROOT / ".github" / "workflows" / "reusable-remediation-loop.yml",
@@ -402,12 +408,17 @@ class WorkflowContractTests(unittest.TestCase):
         ]
 
         for path in workflow_paths:
-            text = path.read_text(encoding="utf-8")
-            self.assertEqual(
-                text.count("persist-credentials: false"),
-                text.count("- uses: actions/checkout@v4"),
-                path.name,
-            )
+            document = yaml.safe_load(path.read_text(encoding="utf-8"))
+            checkouts = [
+                step
+                for job in (document.get("jobs") or {}).values()
+                for step in job.get("steps") or []
+                if str(step.get("uses", "")).startswith("actions/checkout@")
+            ]
+            with self.subTest(workflow=path.name):
+                self.assertTrue(checkouts, f"{path.name} has no checkout step to check")
+                for step in checkouts:
+                    self.assertIs((step.get("with") or {}).get("persist-credentials"), False, path.name)
 
     def test_mutation_workflows_use_env_indirection_for_codex_auth_file(self) -> None:
         """Route Codex auth file paths through environment variables instead of inline expressions."""

@@ -259,7 +259,15 @@ class NormalizeRulesetTests(unittest.TestCase):
             ),
             ({"code_scanning": None}, "code_scanning must be a list"),
             ({"code_scanning": ["CodeQL"]}, "code_scanning entries must be mappings"),
-            ({"code_scanning": [{"tool": " "}]}, "need a tool name"),
+            ({"code_scanning": [{}]}, "ruleset tool is required"),
+            ({"code_scanning": [{"tool": " "}]}, "ruleset tool must be a non-empty string"),
+            ({"code_scanning": [{"tool": None}]}, r"ruleset tool must be a non-empty string, got None"),
+            ({"code_scanning": [{"tool": 5}]}, "ruleset tool must be a non-empty string"),
+            (
+                {"code_scanning": [{"tool": "CodeQL", "alerts_threshold": None}]},
+                "alerts_threshold must be a non-empty string",
+            ),
+            ({"bypass_actors": [{"actor_id": 5}]}, "ruleset actor_type is required"),
             ({"code_scanning": [{"tool": "CodeQL", "alerts_threshold": "warnings"}]}, "alerts_threshold"),
             ({"code_scanning": [{"tool": "CodeQL", "security_alerts_threshold": "low"}]}, "security_alerts_threshold"),
             (

@@ -236,6 +236,22 @@ def _require_member(value: str, allowed: frozenset, what: str) -> str:
     return value
 
 
+def _ruleset_text(item: Mapping[str, Any], key: str, default: str = "") -> str:
+    """Return the stripped string under ``key``, or ``default`` when the key is absent.
+
+    A present value must be a non-blank string: ``str()`` would turn a blank
+    YAML value into the literal text ``"None"`` and let it through.
+    """
+    if key not in item:
+        if default:
+            return default
+        raise ValueError(f"ruleset {key} is required")
+    value = item[key]
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"ruleset {key} must be a non-empty string, got {value!r}")
+    return value.strip()
+
+
 def _reject_unknown_keys(item: Mapping[str, Any], allowed: frozenset, where: str) -> None:
     """Raise on a key ``allowed`` does not list: a typo must fail, never vanish."""
     unknown = sorted(str(key) for key in item if key not in allowed)
@@ -263,7 +279,7 @@ def _normalize_bypass_actor(item: Any) -> Dict[str, Any]:
     if not isinstance(item, Mapping):
         raise ValueError(f"ruleset bypass_actors entries must be mappings, got {item!r}")
     _reject_unknown_keys(item, RULESET_BYPASS_ACTOR_KEYS, "ruleset bypass actor")
-    actor_type = _require_member(str(item.get("actor_type", "")).strip(), RULESET_BYPASS_ACTOR_TYPES, "actor_type")
+    actor_type = _require_member(_ruleset_text(item, "actor_type"), RULESET_BYPASS_ACTOR_TYPES, "actor_type")
     raw_id = item.get("actor_id")
     if raw_id is not None and (not isinstance(raw_id, int) or isinstance(raw_id, bool)):
         raise ValueError(f"ruleset bypass actor_id must be an integer or null, got {raw_id!r}")
@@ -271,7 +287,7 @@ def _normalize_bypass_actor(item: Any) -> Dict[str, Any]:
         raise ValueError(f"ruleset bypass actor_id is required for actor_type {actor_type!r}")
     if raw_id is not None and actor_type == "DeployKey":
         raise ValueError("ruleset bypass actor_id must be null for actor_type 'DeployKey'")
-    bypass_mode = _require_member(str(item.get("bypass_mode", "always")).strip(), RULESET_BYPASS_MODES, "bypass_mode")
+    bypass_mode = _require_member(_ruleset_text(item, "bypass_mode", "always"), RULESET_BYPASS_MODES, "bypass_mode")
     if bypass_mode == "pull_request" and actor_type == "DeployKey":
         raise ValueError("ruleset bypass_mode 'pull_request' is not applicable to actor_type 'DeployKey'")
     return {"actor_id": raw_id, "actor_type": actor_type, "bypass_mode": bypass_mode}
@@ -282,14 +298,12 @@ def _normalize_code_scanning_tool(item: Any) -> Dict[str, str]:
     if not isinstance(item, Mapping):
         raise ValueError(f"ruleset code_scanning entries must be mappings, got {item!r}")
     _reject_unknown_keys(item, CODE_SCANNING_TOOL_KEYS, "ruleset code_scanning")
-    tool = str(item.get("tool", "")).strip()
-    if not tool:
-        raise ValueError("ruleset code_scanning entries need a tool name")
+    tool = _ruleset_text(item, "tool")
     alerts = _require_member(
-        str(item.get("alerts_threshold", "all")).strip(), CODE_SCANNING_ALERTS_THRESHOLDS, "alerts_threshold"
+        _ruleset_text(item, "alerts_threshold", "all"), CODE_SCANNING_ALERTS_THRESHOLDS, "alerts_threshold"
     )
     security = _require_member(
-        str(item.get("security_alerts_threshold", "all")).strip(),
+        _ruleset_text(item, "security_alerts_threshold", "all"),
         CODE_SCANNING_SECURITY_ALERTS_THRESHOLDS,
         "security_alerts_threshold",
     )
@@ -310,7 +324,7 @@ def normalize_ruleset(raw: Any) -> Dict[str, Any]:
     if not isinstance(raw, Mapping):
         raise ValueError(f"ruleset must be a mapping (omit it to inherit the stack's), got {raw!r}")
     _reject_unknown_keys(raw, RULESET_KEYS, "ruleset")
-    enforcement = _require_member(str(raw.get("enforcement", "active")).strip(), RULESET_ENFORCEMENTS, "enforcement")
+    enforcement = _require_member(_ruleset_text(raw, "enforcement", "active"), RULESET_ENFORCEMENTS, "enforcement")
     return {
         "enforcement": enforcement,
         "bypass_actors": [_normalize_bypass_actor(item) for item in _ruleset_list(raw, "bypass_actors")],

@@ -215,6 +215,20 @@ class DownloadContractTests(unittest.TestCase):
         self.assertEqual(checkout["with"]["fetch-depth"], 0)
         self.assertIs(checkout["with"]["persist-credentials"], False)
 
+    def test_secrets_gate_ignores_only_exact_triaged_findings(self) -> None:
+        """Each ignore is one commit:file:rule:line; never a whole file, rule or value."""
+        fingerprint = re.compile(r"[0-9a-f]{40}:[^:\s]+:[a-z0-9-]+:[1-9][0-9]*")
+        entries = [
+            line
+            for line in (ROOT / ".gitleaksignore").read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.startswith("#")
+        ]
+        self.assertTrue(entries)
+        for entry in entries:
+            with self.subTest(entry=entry):
+                self.assertRegex(entry, f"^{fingerprint.pattern}$")
+        self.assertEqual(len(entries), len(set(entries)))
+
     def test_cve_sweep_verifies_the_same_osv_scanner_asset_as_the_gate(self) -> None:
         """The standing sweep and gate 6 must run the identical binary."""
         digest = tool_pins()["asset_sha256"]["osv-scanner_linux_amd64"]

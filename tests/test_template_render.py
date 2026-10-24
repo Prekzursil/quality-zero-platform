@@ -267,6 +267,20 @@ class DependabotTemplateTests(unittest.TestCase):
         self.assertEqual(ignores[0]["dependency-name"], "*")
         self.assertIn("version-update:semver-major", ignores[0]["update-types"])
 
+    def test_versioning_strategy_is_rendered_only_when_declared(self) -> None:
+        """``versioning_strategy`` pins Dependabot's behaviour for that update only."""
+        profile = {
+            "dependabot": {
+                "updates": [
+                    {"ecosystem": "pip", "directory": "/", "versioning_strategy": "increase"},
+                    {"ecosystem": "npm", "directory": "/ui"},
+                ]
+            }
+        }
+        updates = yaml.safe_load(self._render(profile))["updates"]
+        self.assertEqual(updates[0]["versioning-strategy"], "increase")
+        self.assertNotIn("versioning-strategy", updates[1])
+
     def test_no_dependabot_block_yields_empty_updates_list(self) -> None:
         """Profiles without ``dependabot`` still render a valid config."""
         rendered = self._render({})

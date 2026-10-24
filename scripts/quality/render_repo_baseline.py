@@ -15,6 +15,7 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.quality.control_plane import load_inventory, load_repo_profile
+from scripts.quality.profile_normalization import validate_versioning_strategy
 
 LEGACY_ZERO_WORKFLOW_FILES = (
     "coverage-100.yml",
@@ -120,12 +121,19 @@ def render_dependabot_config(profile: Dict[str, Any]) -> str:
         ecosystem = str(item["ecosystem"]).strip()
         directory = str(item["directory"]).strip()
         group_name = _sanitize_group_name(ecosystem, directory)
-        payload["updates"].append(
+        entry: Dict[str, Any] = {
+            "package-ecosystem": ecosystem,
+            "directory": directory,
+            "schedule": {"interval": dependabot["schedule_interval"]},
+            "open-pull-requests-limit": dependabot["open_pull_requests_limit"],
+        }
+        strategy = str(item.get("versioning_strategy") or "").strip()
+        if strategy:
+            # normalisation already validated loaded profiles; re-check for raw callers
+            validate_versioning_strategy(ecosystem, directory, strategy)
+            entry["versioning-strategy"] = strategy
+        entry.update(
             {
-                "package-ecosystem": ecosystem,
-                "directory": directory,
-                "schedule": {"interval": dependabot["schedule_interval"]},
-                "open-pull-requests-limit": dependabot["open_pull_requests_limit"],
                 "groups": {
                     group_name: {
                         "patterns": ["*"],
@@ -141,6 +149,7 @@ def render_dependabot_config(profile: Dict[str, Any]) -> str:
                 "labels": list(dependabot["labels"]),
             }
         )
+        payload["updates"].append(entry)
 
     return yaml.safe_dump(payload, sort_keys=False)
 

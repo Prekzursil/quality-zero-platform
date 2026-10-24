@@ -334,8 +334,8 @@ class WorkflowContractTests(unittest.TestCase):
         remediation_text = (ROOT / ".github" / "workflows" / "reusable-remediation-loop.yml").read_text(
             encoding="utf-8"
         )
-        self.assertIn("peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c", backlog_text)
-        self.assertIn("peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c", remediation_text)
+        self.assertIn("peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1", backlog_text)
+        self.assertIn("peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1", remediation_text)
 
     def test_scanner_matrix_pins_codecov_upload_and_keeps_token_optional(self) -> None:
         """Codecov upload removed from scanner-matrix per §7.3 — kept in reusable-codecov-analytics.yml only."""
@@ -586,7 +586,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("quality-rollup", text)
         self.assertIn("build_quality_rollup.py", text)
         self.assertIn("post_pr_quality_comment.py", text)
-        self.assertRegex(text, r"uses: actions/download-artifact@[0-9a-f]{40} # v4\.\d+\.\d+")
+        self.assertRegex(text, r"uses: actions/download-artifact@[0-9a-f]{40} # v\d+\.\d+\.\d+")
         self.assertIn("job_name: Dependency Alerts", text)
         self.assertIn('lane == "deps"', text)
         self.assertIn("check_dependabot_alerts.py", text)

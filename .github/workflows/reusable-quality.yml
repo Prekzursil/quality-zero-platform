@@ -1140,9 +1140,17 @@ jobs:
 
               <dir>\t<has_tests: yes|no>\t<workspace_member: yes|no>
 
-          JS/TS test files that belong to no project at all are reported on stderr. The
-          module is pure standard library because the lane runs it with the runner's bare
-          ``python3``.
+          JS/TS test files that belong to no project at all are reported on stderr and,
+          with ``--orphans-out``, written to a file so the lane can fail on them: no
+          coverage lane ever runs a test that lives outside every project.
+
+          ``--member-evidence <dir>`` answers the one question a plan cannot: did the
+          root's coverage run actually measure that workspace member? Only a coverage
+          report that names the member's files says so; a ``workspaces`` entry alone
+          does not.
+
+          The module is pure standard library because the lane runs it with the runner's
+          bare ``python3``.
           """
 
           from __future__ import absolute_import
@@ -1272,7 +1280,12 @@ jobs:
               root_package_json: str = "",
               pnpm_workspace: str = "",
           ) -> Tuple[List[PlanRow], List[str]]:
-              """Return ``(rows, orphan_tests)`` for the tracked file list ``paths``."""
+              """Return ``(rows, orphan_tests)`` for the tracked file list ``paths``.
+
+              A workspace member's tests also count as tests of the ROOT project: a
+              root coverage run over a workspace is how they get measured, so a root
+              whose only tests live in its members still has a test surface.
+              """
               dirs = project_dirs(paths)
               with_tests = set()
               orphans: List[str] = []
@@ -1285,7 +1298,10 @@ jobs:
                   else:
                       with_tests.add(owner)
               globs = workspace_globs(root_package_json, pnpm_workspace)
-              rows = [(directory, directory in with_tests, is_workspace_member(directory, globs)) for directory in dirs]
+              members = {directory for directory in dirs if is_workspace_member(directory, globs)}
+              if with_tests & members:
+                  with_tests.add(ROOT)
+              rows = [(directory, directory in with_tests, directory in members) for directory in dirs]
               return rows, orphans
 
 
@@ -1297,6 +1313,41 @@ jobs:
               )
 
 
+          def coverage_report_paths(project_dir: Path) -> List[str]:
+              """Return every source path the project's machine-readable coverage reports name.
+
+              Read from ``coverage/**/lcov.info`` (``SF:`` records) and the istanbul
+              ``coverage-summary.json`` / ``coverage-final.json`` keys - the same
+              reporters the coverage-number assertion reads.
+              """
+              paths = set()
+              coverage_dir = Path(project_dir) / "coverage"
+              for report in sorted(coverage_dir.glob("**/lcov.info")):
+                  for line in report.read_text(encoding="utf-8", errors="replace").splitlines():
+                      if line.startswith("SF:"):
+                          paths.add(line[3:].strip().replace("\\", "/"))
+              for name in ("coverage-summary.json", "coverage-final.json"):
+                  for report in sorted(coverage_dir.glob(f"**/{name}")):
+                      try:
+                          document = json.loads(report.read_text(encoding="utf-8"))
+                      except ValueError:
+                          continue
+                      if isinstance(document, dict):
+                          paths.update(str(key).replace("\\", "/") for key in document if key != "total")
+              return sorted(paths)
+
+
+          def measured_by(member: str, report_paths: Iterable[str]) -> bool:
+              """True when a coverage report names at least one file inside ``member``.
+
+              A workspace declaration alone does not prove the root's coverage run
+              measured a member (a root ``jest src --coverage`` never does); a report
+              that lists the member's files does.
+              """
+              needle = "/" + member.strip("/") + "/"
+              return any(needle in "/" + path.lstrip("./") for path in report_paths)
+
+
           def _read_optional(path: str) -> str:
               """Read ``path`` as UTF-8, or return an empty string when no path was given."""
               if not path:
@@ -1304,15 +1355,39 @@ jobs:
               return Path(path).read_text(encoding="utf-8")
 
 
-          def main(argv: Optional[Sequence[str]] = None) -> int:
-              """Print the project plan for the file list given with ``--files``."""
+          def _split_paths(text: str) -> List[str]:
+              """Split ``git ls-files`` output: NUL-separated (``-z``) or one path per line."""
+              separator = "\0" if "\0" in text else "\n"
+              return [item.strip() for item in text.split(separator) if item.strip()]
+
+
+          def _build_parser() -> argparse.ArgumentParser:
+              """Build the CLI parser."""
               parser = argparse.ArgumentParser(description="Plan the JS/TS projects gate 3 must measure.")
-              parser.add_argument("--files", required=True, help="File holding `git ls-files` output, one path per line.")
+              parser.add_argument("--files", default="", help="File holding `git ls-files -z` (or one-per-line) output.")
               parser.add_argument("--root-package-json", default="", help="The root package.json, if the repo has one.")
               parser.add_argument("--pnpm-workspace", default="", help="The root pnpm-workspace.yaml, if the repo has one.")
-              args = parser.parse_args(argv)
+              parser.add_argument("--orphans-out", default="", help="Write test files outside every project here.")
+              parser.add_argument(
+                  "--member-evidence",
+                  default="",
+                  help="Instead of planning: exit 0 if --project-dir's coverage reports name a file in this member dir.",
+              )
+              parser.add_argument("--project-dir", default=".", help="Project whose coverage reports --member-evidence reads.")
+              return parser
+
+
+          def main(argv: Optional[Sequence[str]] = None) -> int:
+              """Print the project plan, or answer a workspace-member evidence question."""
+              args = _build_parser().parse_args(argv)
+              if args.member_evidence:
+                  evidence = measured_by(args.member_evidence, coverage_report_paths(Path(args.project_dir)))
+                  return 0 if evidence else 1
+              if not args.files:
+                  print("ERROR jsts-projects: --files is required to plan", file=sys.stderr)
+                  return 2
               try:
-                  paths = [line.strip() for line in Path(args.files).read_text(encoding="utf-8").splitlines() if line.strip()]
+                  paths = _split_paths(Path(args.files).read_text(encoding="utf-8"))
                   root_package_json = _read_optional(args.root_package_json)
                   pnpm_workspace = _read_optional(args.pnpm_workspace)
               except OSError as exc:
@@ -1322,6 +1397,8 @@ jobs:
               sys.stdout.write(render(rows))
               for orphan in orphans:
                   print(f"WARN jsts-projects: test file outside every package.json project: {orphan}", file=sys.stderr)
+              if args.orphans_out:
+                  Path(args.orphans_out).write_text("".join(f"{orphan}\n" for orphan in orphans), encoding="utf-8", newline="\n")
               return 0
 
 
@@ -1821,6 +1898,7 @@ jobs:
           set -euo pipefail
           if [ "$PYCOVCFG" != "true" ] && [ "$PYTESTS" != "true" ]; then
             echo "Python source present with NO test files and NO coverage config - no test surface by design; coverage lane skipped."
+            echo "result=no-test-surface" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           if [ "$PYCOVCFG" != "true" ] && [ "$PYTESTS" == "true" ]; then
@@ -1871,14 +1949,33 @@ jobs:
             # failure message above promised line AND branch, so a unittest
             # repo could pass at 100% lines with untested branches.
             # A tests/ directory without __init__.py is not importable as a
-            # package, so a root `discover` never finds the tests inside it and
-            # runs zero tests; discover from that directory instead.
-            start_dir=.
+            # package, so a root `discover` never enters it. Both trees are
+            # therefore discovered - the root (packages and root-level test
+            # modules) AND tests/ - each in its own parallel coverage run,
+            # combined before the report. unittest exits 5 when a pass finds
+            # NO tests; that is fine for one pass, never for both.
+            declare -a starts=(.)
             if [ -d tests ] && [ ! -f tests/__init__.py ]; then
-              start_dir=tests
+              starts+=(tests)
             fi
-            echo "unittest discover start dir: $start_dir"
-            python -m coverage run --branch -m unittest discover -s "$start_dir"
+            rm -f .coverage .coverage.*
+            ran_tests=false
+            for start in "${starts[@]}"; do
+              echo "::group::unittest discover -s $start"
+              rc=0
+              python -m coverage run --branch --parallel-mode -m unittest discover -s "$start" || rc=$?
+              echo "::endgroup::"
+              case "$rc" in
+                0) ran_tests=true ;;
+                5) echo "unittest discover -s $start: no tests there." ;;
+                *) echo "FAIL gate-tests-coverage python: the tests discovered from '$start' failed (exit $rc)." >&2; exit 1 ;;
+              esac
+            done
+            if [ "$ran_tests" != "true" ]; then
+              echo "FAIL gate-tests-coverage python: test files are present but unittest discovered and ran NONE of them (searched: ${starts[*]}). The 100% gate cannot pass unmeasured." >&2
+              exit 1
+            fi
+            python -m coverage combine
             python -m coverage report --fail-under=100 --show-missing
           fi
 
@@ -1923,7 +2020,6 @@ jobs:
         if: steps.detect.outputs.jsts == 'true'
         shell: bash
         env:
-          JSTSTESTS: ${{ steps.detect.outputs.jststests }}
           JSTS_COVERAGE_MIN: ${{ inputs.jsts-coverage-min }}
         run: |
           set -euo pipefail
@@ -1968,50 +2064,60 @@ jobs:
           # jsts_projects.py) attributes each JS/TS test file to its deepest
           # enclosing project and marks the root's workspace members. The plan
           # is written to a file first so a planner failure fails this step
-          # (a process substitution would swallow its exit status).
+          # (a process substitution would swallow its exit status). `-z` keeps
+          # non-ASCII paths unquoted, so they still match their project.
           files_list="${RUNNER_TEMP}/qzp-lean-gate/jsts-files.txt"
           plan_file="${RUNNER_TEMP}/qzp-lean-gate/jsts-plan.tsv"
-          git ls-files > "$files_list"
-          plan_args=(--files "$files_list")
+          orphans_file="${RUNNER_TEMP}/qzp-lean-gate/jsts-orphans.txt"
+          git ls-files -z > "$files_list"
+          plan_args=(--files "$files_list" --orphans-out "$orphans_file")
           if [ -f package.json ]; then plan_args+=(--root-package-json package.json); fi
           if [ -f pnpm-workspace.yaml ]; then plan_args+=(--pnpm-workspace pnpm-workspace.yaml); fi
           python3 "${RUNNER_TEMP}/qzp-lean-gate/jsts_projects.py" "${plan_args[@]}" > "$plan_file"
           mapfile -t plan < "$plan_file"
+          mapfile -t orphans < "$orphans_file"
           measured=0
-          root_measured=false
           declare -a unmeasured=()
           for row in "${plan[@]}"; do
             # tolerate a CRLF plan (python3 on a Windows runner writes one)
             IFS=$'\t' read -r d has_tests member <<< "${row%$'\r'}"
+            if [ "$has_tests" != "yes" ]; then
+              # A coverage script with no tests to run would fail on "no tests
+              # found" or print no summary: zero test files is no test surface.
+              echo "project $d: no JS/TS test files - nothing to measure."
+              continue
+            fi
             lane="$(has_cov_lane "$d")"
             if [ -n "$lane" ]; then
               run_cov_in_dir "$d" "$lane"
               measured=$(( measured + 1 ))
-              if [ "$d" = "." ]; then root_measured=true; fi
-            elif [ "$has_tests" = "yes" ]; then
-              # The root sorts first, so its result is known here. A workspace
-              # member's tests run inside the root's workspace coverage run.
-              if [ "$member" = "yes" ] && [ "$root_measured" = "true" ]; then
-                echo "project $d: no coverage script of its own; measured by the root workspace coverage run above."
-              else
-                unmeasured+=("$d")
-              fi
+            elif [ "$member" = "yes" ] && python3 "${RUNNER_TEMP}/qzp-lean-gate/jsts_projects.py" \
+                --member-evidence "$d" --project-dir .; then
+              # The root sorts first, so its reports exist by now. A workspace
+              # declaration alone proves nothing; a report naming the member's
+              # files proves the root run measured it.
+              echo "project $d: no coverage script of its own; the root coverage reports cover its files."
             else
-              echo "project $d: no JS/TS test files - nothing to measure."
+              unmeasured+=("$d")
             fi
           done
-          if [ "${#unmeasured[@]}" -gt 0 ]; then
-            echo "FAIL gate-tests-coverage jsts: these project dir(s) have JS/TS test files but no coverage lane, so their coverage was never measured: ${unmeasured[*]}. Add a 'test:coverage' npm script (or a vitest/jest '--coverage' test script) to each project's package.json." >&2
+          if [ "${#orphans[@]}" -gt 0 ]; then
+            echo "FAIL gate-tests-coverage jsts: these JS/TS test files sit outside every package.json project, so no coverage lane ever runs them: ${orphans[*]}. Move them under a project whose coverage script runs them." >&2
             exit 1
           fi
+          if [ "${#unmeasured[@]}" -gt 0 ]; then
+            echo "FAIL gate-tests-coverage jsts: these project dir(s) have JS/TS test files but no coverage lane, so their coverage was never measured: ${unmeasured[*]}. Add a 'test:coverage' npm script (or a vitest/jest '--coverage' test script) to each project's package.json, or make the root coverage run report their files." >&2
+            exit 1
+          fi
+          # Every JS/TS test file is now accounted for: inside a measured
+          # project, a proven workspace member, an unmeasured project (failed
+          # above) or an orphan (failed above). Nothing measured therefore
+          # means there is no JS/TS test file at all.
           if [ "$measured" -gt 0 ]; then
             echo "PASS gate-tests-coverage jsts: measured coverage in ${measured} project dir(s) and every measured figure met the ${JSTS_COVERAGE_MIN}% bar."
-          elif [ "$JSTSTESTS" != "true" ]; then
-            echo "ts/js source present with NO test files and no coverage script - no test surface by design; coverage lane skipped."
-            exit 0
           else
-            echo "FAIL gate-tests-coverage jsts: ts/js present (with test files) but no coverage script in any project dir (root or nested) - the 100% gate cannot pass unmeasured. Add a 'test:coverage' npm script (or a vitest/jest '--coverage' test script) in the project package.json." >&2
-            exit 1
+            echo "ts/js source present with NO JS/TS test files - no test surface by design; coverage lane skipped."
+            echo "result=no-test-surface" >> "$GITHUB_OUTPUT"
           fi
 
       # ── GATE 3 (go / c++) — tests + coverage via the CALLER's own gate ────
@@ -2074,6 +2180,7 @@ jobs:
 
           if [ -z "$needs" ]; then
             echo "Compiled source present (go=$GO_PRESENT c++=$CPP_PRESENT) with ZERO test files - no test surface by design; coverage lane skipped."
+            echo "result=no-test-surface" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "Compiled test surface DETECTED ($needs). This lane CANNOT skip: the 100% gate cannot pass unmeasured."
@@ -2285,6 +2392,7 @@ jobs:
           set -euo pipefail
           if [ "$OSVSOURCES" != "true" ]; then
             echo "No dependency manifests or lockfiles present - nothing for osv-scanner to scan; deps gate passes."
+            echo "result=nothing-to-scan" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           scan_args=(scan source --recursive)
@@ -2419,17 +2527,25 @@ jobs:
           SECRETS: ${{ steps.secrets.outcome }}
           DEPS: ${{ steps.deps.outcome }}
           CHARTER_CHECK: ${{ steps.charter.outcome }}
+          COV_PY_RESULT: ${{ steps.cov_py.outputs.result }}
+          COV_JSTS_RESULT: ${{ steps.cov_jsts.outputs.result }}
+          COV_COMPILED_RESULT: ${{ steps.cov_compiled.outputs.result }}
+          DEPS_RESULT: ${{ steps.deps.outputs.result }}
         run: |
           set -uo pipefail
           compiled=false
           if [ "$GO" = "true" ] || [ "$CPP" = "true" ]; then compiled=true; fi
-          # $1 gate, $2 step, $3 outcome, $4 does the gate apply here, $5 why not
+          # $1 gate, $2 step, $3 outcome, $4 does the gate apply here, $5 why
+          # not, $6 the step's own result output (how a successful step says
+          # it skipped measurement internally rather than passing it)
           row() {
             local result
-            case "$3" in
-              success) result="ran - passed" ;;
-              failure) result="ran - **FAILED**" ;;
-              cancelled) result="cancelled" ;;
+            case "$3:${6:-}" in
+              success:no-test-surface) result="skipped - source present but zero test files (no test surface)" ;;
+              success:nothing-to-scan) result="ran - nothing to scan (no manifests or lockfiles)" ;;
+              success:*) result="ran - passed" ;;
+              failure:*) result="ran - **FAILED**" ;;
+              cancelled:*) result="cancelled" ;;
               *)
                 if [ "$DETECT_OUTCOME" != "success" ]; then
                   result="NOT RUN - language detection did not complete"
@@ -2451,12 +2567,12 @@ jobs:
             row "1 lint+format" "ruff (Python)" "$LINT_PY" "$PY" "no Python source"
             row "2 types" "tsc" "$TYPES_TSC" "$TS" "no TypeScript source"
             row "2 types" "basedpyright" "$TYPES_PY" "$PY" "no Python source"
-            row "3 tests+coverage" "Python" "$COV_PY" "$PY" "no Python source"
-            row "3 tests+coverage" "JS/TS" "$COV_JSTS" "$JSTS" "no JS/TS source"
-            row "3 tests+coverage" "Go / C++" "$COV_COMPILED" "$compiled" "no Go or C++ source"
+            row "3 tests+coverage" "Python" "$COV_PY" "$PY" "no Python source" "$COV_PY_RESULT"
+            row "3 tests+coverage" "JS/TS" "$COV_JSTS" "$JSTS" "no JS/TS source" "$COV_JSTS_RESULT"
+            row "3 tests+coverage" "Go / C++" "$COV_COMPILED" "$compiled" "no Go or C++ source" "$COV_COMPILED_RESULT"
             row "4 SAST" "opengrep" "$SAST" "true" "-"
             row "5 secrets" "gitleaks" "$SECRETS" "true" "-"
-            row "6 deps" "osv-scanner" "$DEPS" "true" "-"
+            row "6 deps" "osv-scanner" "$DEPS" "true" "-" "$DEPS_RESULT"
             row "charter" "charter-check" "$CHARTER_CHECK" "$CHARTER" "no .quality/charter.yml"
           } >> "$GITHUB_STEP_SUMMARY"
           cat "$GITHUB_STEP_SUMMARY"

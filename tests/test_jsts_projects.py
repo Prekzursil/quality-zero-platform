@@ -197,10 +197,57 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(rows, [("web", False, False)])
         self.assertEqual(orphans, ["scripts/x.test.mjs"])
 
+    def test_member_tests_give_the_root_a_test_surface(self) -> None:
+        """A workspace root whose tests all live in members still has tests to run."""
+        rows, _ = planner.plan(
+            ["package.json", "packages/ui/package.json", "packages/ui/a.test.ts"],
+            root_package_json=json.dumps({"workspaces": ["packages/*"]}),
+        )
+        self.assertEqual(rows, [(".", True, False), ("packages/ui", True, True)])
+
     def test_render_is_tab_separated_yes_no(self) -> None:
         """The lane splits on tabs and compares to yes / no."""
         rendered = planner.render([(".", True, False), ("web app", False, True)])
         self.assertEqual(rendered, ".\tyes\tno\nweb app\tno\tyes\n")
+
+
+class MemberEvidenceTests(unittest.TestCase):
+    """A member counts as measured only when a coverage report names its files."""
+
+    def setUp(self) -> None:
+        """A project with a coverage/ directory to fill."""
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.project = Path(self._tmp.name)
+        (self.project / "coverage" / "nested").mkdir(parents=True)
+
+    def _report(self, relative: str, text: str) -> None:
+        (self.project / "coverage" / relative).write_text(text, encoding="utf-8")
+
+    def test_paths_from_every_supported_report(self) -> None:
+        """lcov SF records plus json-summary / coverage-final keys; totals and junk ignored."""
+        self._report("lcov.info", "TN:\nSF:packages/ui/src/a.ts\nend_of_record\n")
+        self._report("nested/coverage-summary.json", json.dumps({"total": {}, "C:\\w\\src\\b.ts": {}}))
+        self._report("coverage-final.json", json.dumps({"/home/runner/r/packages/api/c.ts": {}}))
+        self._report("nested/coverage-final.json", "{not json")
+        (self.project / "coverage" / "list").mkdir()
+        self._report("list/coverage-summary.json", json.dumps(["not", "a", "dict"]))
+        self.assertEqual(
+            planner.coverage_report_paths(self.project),
+            ["/home/runner/r/packages/api/c.ts", "C:/w/src/b.ts", "packages/ui/src/a.ts"],
+        )
+
+    def test_no_coverage_directory_means_no_evidence(self) -> None:
+        """A project that wrote no reports proves nothing."""
+        self.assertEqual(planner.coverage_report_paths(self.project / "absent"), [])
+
+    def test_measured_by_matches_relative_and_absolute_paths(self) -> None:
+        """The member directory must appear as a whole path segment run."""
+        self.assertTrue(planner.measured_by("packages/ui", ["packages/ui/src/a.ts"]))
+        self.assertTrue(planner.measured_by("packages/ui/", ["./packages/ui/a.ts"]))
+        self.assertTrue(planner.measured_by("packages/ui", ["/home/runner/r/packages/ui/a.ts"]))
+        self.assertFalse(planner.measured_by("packages/ui", ["packages/ui-kit/a.ts", "src/packages/uix.ts"]))
+        self.assertFalse(planner.measured_by("packages/ui", []))
 
 
 class MainTests(unittest.TestCase):
@@ -242,6 +289,32 @@ class MainTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(out.getvalue(), "web\tno\tno\n")
         self.assertIn("loose/b.test.ts", err.getvalue())
+
+    def test_main_writes_orphans_and_reads_nul_separated_input(self) -> None:
+        """`git ls-files -z` output plans the same; orphans land in --orphans-out."""
+        files = self._write("files.txt", "web/package.json\0web/a.test.ts\0loose/b.test.ts\0")
+        orphans = self.tmp / "orphans.txt"
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = planner.main(["--files", files, "--orphans-out", str(orphans)])
+        self.assertEqual(code, 0)
+        self.assertEqual(out.getvalue(), "web\tyes\tno\n")
+        self.assertEqual(orphans.read_text(encoding="utf-8"), "loose/b.test.ts\n")
+
+    def test_main_without_files_is_a_usage_error(self) -> None:
+        """Planning needs the file list."""
+        err = io.StringIO()
+        with redirect_stderr(err):
+            self.assertEqual(planner.main([]), 2)
+        self.assertIn("--files is required", err.getvalue())
+
+    def test_member_evidence_mode(self) -> None:
+        """Exit 0 when the root's reports name the member's files, 1 otherwise."""
+        (self.tmp / "coverage").mkdir()
+        (self.tmp / "coverage" / "lcov.info").write_text("SF:packages/ui/a.ts\n", encoding="utf-8")
+        argv = ["--member-evidence", "packages/ui", "--project-dir", str(self.tmp)]
+        self.assertEqual(planner.main(argv), 0)
+        self.assertEqual(planner.main(["--member-evidence", "packages/api", "--project-dir", str(self.tmp)]), 1)
 
     def test_main_fails_closed_on_unreadable_input(self) -> None:
         """A missing file list is exit 2, never an empty (all-clear) plan."""

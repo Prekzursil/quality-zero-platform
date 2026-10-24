@@ -211,6 +211,7 @@ class Gate6DepsTests(_StepHarness):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("nothing for osv-scanner to scan", result.stdout)
         self.assertEqual(self.calls("osv-calls.txt"), [])
+        self.assertIn("result=nothing-to-scan", (self.workdir / "github-output.txt").read_text(encoding="utf-8"))
 
     def test_without_a_toml_the_scan_still_runs_without_config(self) -> None:
         """THE hole: a repo with no osv-scanner.toml used to get no dependency gate."""
@@ -318,15 +319,27 @@ class Gate4SastTests(_StepHarness):
 
 
 class Gate3PythonTests(_StepHarness):
-    """The Python lane is pinned and measures branches on BOTH paths."""
+    """The Python lane is pinned, measures branches, and discovers every suite."""
 
-    FAKES = 'pip() { echo "pip $*" >> py-calls.txt; }\npython() { echo "python $*" >> py-calls.txt; }\n'
+    # The fake python answers per discovery start dir: $FAKE_RC_ROOT for
+    # `-s .`, $FAKE_RC_TESTS for `-s tests`; everything else succeeds.
+    FAKES = """pip() { echo "pip $*" >> py-calls.txt; }
+python() {
+  echo "python $*" >> py-calls.txt
+  case "$*" in
+    *"discover -s tests"*) return "${FAKE_RC_TESTS:-0}" ;;
+    *"discover -s ."*) return "${FAKE_RC_ROOT:-0}" ;;
+  esac
+  return 0
+}
+"""
 
-    def _run(self):
-        env = {"PYCOVCFG": "true", "PYTESTS": "true"}
-        return self.run_step("gate-tests-coverage python", env, self.FAKES)
+    def _run(self, **env: str):
+        overrides = {"PYCOVCFG": "true", "PYTESTS": "true"}
+        overrides.update(env)
+        return self.run_step("gate-tests-coverage python", overrides, self.FAKES)
 
-    def test_unittest_path_measures_branches(self) -> None:
+    def test_unittest_path_measures_branches_and_combines(self) -> None:
         """Line-only coverage could pass 100% with untested branches."""
         self.write("pyproject.toml", "[tool.coverage.run]\nbranch = true\n")
         self.write("pkg/__init__.py")
@@ -334,18 +347,55 @@ class Gate3PythonTests(_StepHarness):
         self.write("pkg/tests/test_x.py")
         result = self._run()
         self.assertEqual(result.returncode, 0, result.stderr)
-        pins = tool_pins()
-        self.assertIn(f"pip install coverage=={pins['coverage']}", self.calls("py-calls.txt"))
-        self.assertIn("python -m coverage run --branch -m unittest discover -s .", self.calls("py-calls.txt"))
+        calls = self.calls("py-calls.txt")
+        self.assertIn(f"pip install coverage=={tool_pins()['coverage']}", calls)
+        self.assertIn("python -m coverage run --branch --parallel-mode -m unittest discover -s .", calls)
+        self.assertNotIn("discover -s tests", " ".join(calls))
+        self.assertEqual(
+            calls[-2:], ["python -m coverage combine", "python -m coverage report --fail-under=100 --show-missing"]
+        )
 
-    def test_unittest_path_discovers_a_non_package_tests_dir(self) -> None:
-        """A root discover never enters a tests/ dir without __init__.py."""
+    def test_both_the_root_and_a_non_package_tests_dir_are_discovered(self) -> None:
+        """A root discover never enters tests/ without __init__.py; -s tests alone misses the rest."""
         self.write("pyproject.toml", "[tool.coverage.run]\nbranch = true\n")
         self.write("tests/test_x.py")
+        self.write("pkg/__init__.py")
+        self.write("pkg/test_y.py")
         result = self._run()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("unittest discover start dir: tests", result.stdout)
-        self.assertIn("python -m coverage run --branch -m unittest discover -s tests", self.calls("py-calls.txt"))
+        calls = self.calls("py-calls.txt")
+        self.assertIn("python -m coverage run --branch --parallel-mode -m unittest discover -s .", calls)
+        self.assertIn("python -m coverage run --branch --parallel-mode -m unittest discover -s tests", calls)
+
+    def test_one_empty_pass_is_fine(self) -> None:
+        """Exit 5 (no tests) from the root pass is not a failure when tests/ ran."""
+        self.write("pyproject.toml", "[tool.coverage.run]\nbranch = true\n")
+        self.write("tests/test_x.py")
+        result = self._run(FAKE_RC_ROOT="5")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("unittest discover -s .: no tests there.", result.stdout)
+
+    def test_no_tests_run_anywhere_fails(self) -> None:
+        """Every pass exiting 5 means nothing was measured."""
+        self.write("pyproject.toml", "[tool.coverage.run]\nbranch = true\n")
+        self.write("tests/test_x.py")
+        result = self._run(FAKE_RC_ROOT="5", FAKE_RC_TESTS="5")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("discovered and ran NONE of them", result.stderr)
+
+    def test_a_failing_pass_fails_the_lane(self) -> None:
+        """Any exit other than 0 or 5 is a test failure."""
+        self.write("pyproject.toml", "[tool.coverage.run]\nbranch = true\n")
+        self.write("tests/test_x.py")
+        result = self._run(FAKE_RC_TESTS="1")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("the tests discovered from 'tests' failed (exit 1)", result.stderr)
+
+    def test_no_test_surface_reports_its_skip(self) -> None:
+        """The skip is announced to the summary through the step's result output."""
+        result = self._run(PYCOVCFG="false", PYTESTS="false")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("result=no-test-surface", (self.workdir / "github-output.txt").read_text(encoding="utf-8"))
 
     def test_pytest_path_is_pinned(self) -> None:
         """pytest, pytest-cov and coverage are the pinned versions."""
@@ -379,7 +429,8 @@ npm() { echo "npm $* in $PWD" >> npm-calls.txt; }
 """
 
     def _prelude(self) -> str:
-        # python3 runs the REAL planner; the coverage assertion is recorded.
+        # python3 runs the REAL planner (plan AND member-evidence modes); the
+        # coverage-number assertion is recorded instead.
         return (
             self.FAKE_NODE
             + "python3() {\n"
@@ -390,12 +441,8 @@ npm() { echo "npm $* in $PWD" >> npm-calls.txt; }
             + "}\n"
         )
 
-    def _run(self, *, tests: bool = True):
-        env = {
-            "JSTSTESTS": "true" if tests else "false",
-            "JSTS_COVERAGE_MIN": "100",
-            "PLANNER": str(PLANNER).replace("\\", "/"),
-        }
+    def _run(self):
+        env = {"JSTS_COVERAGE_MIN": "100", "PLANNER": str(PLANNER).replace("\\", "/")}
         return self.run_step("gate-tests-coverage jsts", env, self._prelude())
 
     def _measured_dirs(self) -> List[str]:
@@ -405,6 +452,12 @@ npm() { echo "npm $* in $PWD" >> npm-calls.txt; }
             if match:
                 dirs.append(match.group(1))
         return dirs
+
+    def _root_report(self, *files: str) -> None:
+        """Simulate the coverage report the root's run would have written."""
+        report = self.workdir / "coverage" / "lcov.info"
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text("".join(f"SF:{name}\nend_of_record\n" for name in files), encoding="utf-8")
 
     def test_root_and_nested_projects_are_all_measured(self) -> None:
         """THE hole: a root package.json used to hide every nested project."""
@@ -427,43 +480,71 @@ npm() { echo "npm $* in $PWD" >> npm-calls.txt; }
         self.assertEqual(result.returncode, 1)
         self.assertIn("never measured: admin", result.stderr)
 
-    def test_workspace_member_is_measured_by_the_root_run(self) -> None:
-        """A member of a measured root workspace needs no script of its own."""
+    def test_workspace_member_is_measured_when_the_root_reports_its_files(self) -> None:
+        """A member with no script of its own passes only on report evidence."""
         self.write(
             "package.json",
             '{"workspaces": ["packages/*"], "scripts": {"test:coverage": "vitest run --coverage"}}',
         )
         self.write("packages/ui/package.json", '{"name": "ui"}')
         self.write("packages/ui/button.test.ts")
+        self._root_report("/home/runner/work/r/r/packages/ui/button.ts")
         result = self._run()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self._measured_dirs(), ["."])
-        self.assertIn("measured by the root workspace coverage run", result.stdout)
+        self.assertIn("the root coverage reports cover its files", result.stdout)
 
-    def test_project_without_tests_is_reported_not_failed(self) -> None:
-        """A tooling package with no tests has nothing to measure."""
-        self.write("package.json", '{"scripts": {"test:coverage": "vitest run --coverage"}}')
+    def test_workspace_member_without_report_evidence_fails(self) -> None:
+        """A `workspaces` entry alone does not prove the root run measured the member."""
+        self.write(
+            "package.json",
+            '{"workspaces": ["packages/*"], "scripts": {"test:coverage": "jest src --coverage"}}',
+        )
         self.write("src/a.test.ts")
-        self.write("tools/package.json", '{"name": "tools"}')
-        result = self._run()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("project tools: no JS/TS test files - nothing to measure.", result.stdout)
-
-    def test_no_test_surface_is_still_a_documented_skip(self) -> None:
-        """Source with zero test files keeps its narrow skip."""
-        self.write("package.json", '{"name": "lib"}')
-        self.write("index.js")
-        result = self._run(tests=False)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("no test surface by design", result.stdout)
-
-    def test_tests_without_any_coverage_lane_fail(self) -> None:
-        """Tests outside every project, and no lane anywhere: unmeasured."""
-        self.write("lib/index.js")
-        self.write("lib/index.test.js")
+        self.write("packages/ui/package.json", '{"name": "ui"}')
+        self.write("packages/ui/button.test.ts")
+        self._root_report("src/a.ts")
         result = self._run()
         self.assertEqual(result.returncode, 1)
-        self.assertIn("no coverage script in any project dir", result.stderr)
+        self.assertIn("never measured: packages/ui", result.stderr)
+
+    def test_project_with_a_script_but_no_tests_is_not_run(self) -> None:
+        """A template coverage script with nothing to test must not fail the gate."""
+        self.write("package.json", '{"scripts": {"test:coverage": "vitest run --coverage"}}')
+        self.write("src/a.test.ts")
+        self.write("tools/package.json", '{"scripts": {"test:coverage": "vitest run --coverage"}}')
+        self.write("tools/build.mjs")
+        result = self._run()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self._measured_dirs(), ["."])
+        self.assertIn("project tools: no JS/TS test files - nothing to measure.", result.stdout)
+
+    def test_orphan_tests_fail_even_when_another_project_passes(self) -> None:
+        """A test outside every project is run by no coverage lane."""
+        self.write("frontend/package.json", '{"scripts": {"test:coverage": "vitest run --coverage"}}')
+        self.write("frontend/src/app.test.ts")
+        self.write("e2e/flow.spec.ts")
+        result = self._run()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("outside every package.json project", result.stderr)
+        self.assertIn("e2e/flow.spec.ts", result.stderr)
+
+    def test_no_test_surface_is_still_a_documented_skip(self) -> None:
+        """Source with zero test files keeps its narrow skip, reported to the summary."""
+        self.write("package.json", '{"name": "lib"}')
+        self.write("index.js")
+        result = self._run()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("no test surface by design", result.stdout)
+        self.assertIn("result=no-test-surface", (self.workdir / "github-output.txt").read_text(encoding="utf-8"))
+
+    def test_non_ascii_paths_still_match_their_project(self) -> None:
+        """`git ls-files -z` keeps non-ASCII names unquoted."""
+        self.write("cafés/package.json", '{"scripts": {"test:coverage": "vitest run --coverage"}}')
+        self.write("cafés/über.test.ts")
+        result = self._run()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self._measured_dirs(), ["cafés"])
 
 
 class SummaryStepTests(_StepHarness):
@@ -481,6 +562,11 @@ class SummaryStepTests(_StepHarness):
         "SECRETS": "skipped",
         "DEPS": "skipped",
         "CHARTER_CHECK": "skipped",
+        # Actions sets an env var from a missing step output to "" (never unset).
+        "COV_PY_RESULT": "",
+        "COV_JSTS_RESULT": "",
+        "COV_COMPILED_RESULT": "",
+        "DEPS_RESULT": "",
     }
 
     def test_every_gate_step_is_reported(self) -> None:
@@ -522,6 +608,20 @@ class SummaryStepTests(_StepHarness):
         self.assertIn("| 1 lint+format | ruff (Python) | cancelled |", table)
         self.assertIn("| 2 types | tsc | NOT RUN - language detection did not complete |", table)
         self.assertIn("| 3 tests+coverage | Go / C++ | NOT RUN - language detection did not complete |", table)
+
+    def test_internal_skips_are_reported_as_skips(self) -> None:
+        """A step that passed by skipping measurement is not a measured pass."""
+        env = dict(self.OUTCOME_ENV)
+        env.update({"DETECT_OUTCOME": "success", "PY": "true", "TS": "false", "JSTS": "false"})
+        env.update({"GO": "false", "CPP": "false", "CHARTER": "false", "COV_PY": "success", "DEPS": "success"})
+        env.update({"COV_PY_RESULT": "no-test-surface", "DEPS_RESULT": "nothing-to-scan"})
+        result = self.run_step("Lean-gate summary", env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        table = (self.workdir / "summary.md").read_text(encoding="utf-8")
+        self.assertIn(
+            "| 3 tests+coverage | Python | skipped - source present but zero test files (no test surface) |", table
+        )
+        self.assertIn("| 6 deps | osv-scanner | ran - nothing to scan (no manifests or lockfiles) |", table)
 
     def test_compiled_row_applies_to_go_or_cpp(self) -> None:
         """Either compiled language makes the compiled lane applicable."""

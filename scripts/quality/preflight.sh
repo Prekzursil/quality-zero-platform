@@ -68,6 +68,9 @@ PINS_FILE="${PINS_FILE:-$QZP_ROOT/.quality/tool-pins.yml}"
 fail() { echo "FAIL $1: $2" >&2; exit "${3:-1}"; }
 
 [ -f "$PINS_FILE" ] || fail preflight "pin file not found at $PINS_FILE (set PINS_FILE or run from a QZP checkout)"
+# Absolute before the `cd "$REPO_DIR"` below: the asset digests are read from
+# it lazily (preflight_tools.sh), after the working directory has changed.
+PINS_FILE="$(cd "$(dirname "$PINS_FILE")" && pwd)/$(basename "$PINS_FILE")"
 
 # pin <name> — extract `  <name>: "value"` from the pin file.
 pin() {

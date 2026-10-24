@@ -81,6 +81,14 @@ class NoRemoteInstallScriptTests(unittest.TestCase):
         offenders = [str(p.relative_to(ROOT)) for p in scripts if pattern.search(p.read_text(encoding="utf-8"))]
         self.assertEqual(offenders, [])
 
+    def test_pins_file_is_absolute_before_preflight_changes_directory(self) -> None:
+        """Review (#322): digests are read lazily, after `cd "$REPO_DIR"`."""
+        lines = (ROOT / "scripts" / "quality" / "preflight.sh").read_text(encoding="utf-8").splitlines()
+        absolutize = 'PINS_FILE="$(cd "$(dirname "$PINS_FILE")" && pwd)/$(basename "$PINS_FILE")"'
+        self.assertIn(absolutize, lines)
+        first_cd = next(i for i, line in enumerate(lines) if line.startswith('cd "$REPO_DIR"'))
+        self.assertLess(lines.index(absolutize), first_cd)
+
 
 class PinFileTests(unittest.TestCase):
     """Every asset the preflight can fetch has a pinned digest."""
@@ -320,15 +328,64 @@ class ProvisioningTests(unittest.TestCase):
 
     # ---- caching and PATH -----------------------------------------------------
 
-    def test_an_already_provisioned_binary_is_reused_without_download(self) -> None:
+    def test_a_cached_binary_that_still_verifies_is_reused_without_download(self) -> None:
+        content = b"#!/bin/sh\necho genuine osv\n"
         cached = self.workdir / "cache" / "osv-scanner" / "v2.3.8" / "osv-scanner"
         cached.parent.mkdir(parents=True)
-        cached.write_text("#!/bin/sh\n", encoding="utf-8", newline="\n")
+        cached.write_bytes(content)
         result = self._run(
-            "resolve_osv", os_name="linux", arch="amd64", extra="chmod +x ./cache/osv-scanner/v2.3.8/osv-scanner"
+            "resolve_osv", os_name="linux", arch="amd64", pins={"osv-scanner_linux_amd64": self._digest(content)}
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self._urls(), [])
+        self.assertEqual(cached.read_bytes(), content)
+
+    def test_a_cached_binary_that_no_longer_verifies_is_refetched(self) -> None:
+        """Review (#322): a stale/replaced cache must not bypass the digest check."""
+        genuine = b"#!/bin/sh\necho genuine osv\n"
+        cached = self.workdir / "cache" / "osv-scanner" / "v2.3.8" / "osv-scanner"
+        cached.parent.mkdir(parents=True)
+        cached.write_bytes(b"#!/bin/sh\necho replaced\n")  # e.g. left by the old unverified downloader
+        result = self._run(
+            "resolve_osv",
+            os_name="linux",
+            arch="amd64",
+            payload=genuine,
+            pins={"osv-scanner_linux_amd64": self._digest(genuine)},
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(self._urls()), 1)
+        self.assertEqual(cached.read_bytes(), genuine)
+
+    def test_gitleaks_is_reextracted_from_its_verified_cached_archive(self) -> None:
+        """The digest pins the archive, so the binary is always re-derived from it."""
+        archive = _tar_gz("gitleaks")
+        cache = self.workdir / "cache" / "gitleaks" / "8.30.1"
+        cache.mkdir(parents=True)
+        (cache / "gitleaks.tar.gz").write_bytes(archive)
+        (cache / "gitleaks").write_bytes(b"#!/bin/sh\necho replaced binary\n")
+        result = self._run(
+            "resolve_gitleaks", os_name="linux", arch="amd64", pins={"gitleaks_linux_x64": self._digest(archive)}
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self._urls(), [])
+        self.assertEqual((cache / "gitleaks").read_bytes(), b"#!/bin/sh\necho fake\n")
+
+    def test_a_cached_gitleaks_archive_that_fails_verification_is_refetched(self) -> None:
+        archive = _tar_gz("gitleaks")
+        cache = self.workdir / "cache" / "gitleaks" / "8.30.1"
+        cache.mkdir(parents=True)
+        (cache / "gitleaks.tar.gz").write_bytes(b"truncated")
+        result = self._run(
+            "resolve_gitleaks",
+            os_name="linux",
+            arch="amd64",
+            payload=archive,
+            pins={"gitleaks_linux_x64": self._digest(archive)},
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(self._urls()), 1)
+        self.assertEqual((cache / "gitleaks.tar.gz").read_bytes(), archive)
 
     def test_a_tool_on_path_is_used_unless_pinned_only(self) -> None:
         stub = "gitleaks() { :; }; export -f gitleaks"

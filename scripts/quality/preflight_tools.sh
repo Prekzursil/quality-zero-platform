@@ -52,6 +52,19 @@ qzp_fetch_verified() {
   mv "$dest.download" "$dest"
 }
 
+# qzp_ensure_verified <url> <dest> <digest-key> -- reuse a cached <dest> only
+# while it still matches the pinned digest; a stale, corrupted or replaced
+# cache (e.g. one written by the old unverified downloader) is re-fetched.
+qzp_ensure_verified() {
+  local url="$1" dest="$2" key="$3" expected
+  expected="$(qzp_asset_digest "$key")"
+  if [ -n "$expected" ] && [ -f "$dest" ] && [ "$(qzp_sha256 "$dest" 2>/dev/null)" = "$expected" ]; then
+    return 0
+  fi
+  rm -f "$dest"
+  qzp_fetch_verified "$url" "$dest" "$key"
+}
+
 # qzp_is_musl -- true on musl libc (Alpine); QZP_LIBC overrides detection.
 qzp_is_musl() {
   case "${QZP_LIBC:-}" in
@@ -70,16 +83,16 @@ resolve_gitleaks() {
   local dir="$CACHE_DIR/gitleaks/$PIN_GITLEAKS" base="https://github.com/gitleaks/gitleaks/releases/download/v$PIN_GITLEAKS"
   local bin="$dir/gitleaks"
   [ "$os" = "windows" ] && bin="$dir/gitleaks.exe"
-  if [ ! -x "$bin" ]; then
-    if [ "$os" = "windows" ]; then
-      qzp_fetch_verified "$base/gitleaks_${PIN_GITLEAKS}_windows_x64.zip" "$dir/gitleaks.zip" gitleaks_windows_x64 || return 1
-      unzip -oq "$dir/gitleaks.zip" gitleaks.exe -d "$dir" || return 1
-    else
-      qzp_fetch_verified "$base/gitleaks_${PIN_GITLEAKS}_${os}_${garch}.tar.gz" "$dir/gitleaks.tar.gz" "gitleaks_${os}_${garch}" || return 1
-      tar -xzf "$dir/gitleaks.tar.gz" -C "$dir" gitleaks || return 1
-    fi
-    chmod +x "$bin" 2>/dev/null || true
+  # The digest pins the ARCHIVE, so the cached archive is re-verified and the
+  # binary re-extracted from it on every run (a replaced binary cannot survive).
+  if [ "$os" = "windows" ]; then
+    qzp_ensure_verified "$base/gitleaks_${PIN_GITLEAKS}_windows_x64.zip" "$dir/gitleaks.zip" gitleaks_windows_x64 || return 1
+    unzip -oq "$dir/gitleaks.zip" gitleaks.exe -d "$dir" || return 1
+  else
+    qzp_ensure_verified "$base/gitleaks_${PIN_GITLEAKS}_${os}_${garch}.tar.gz" "$dir/gitleaks.tar.gz" "gitleaks_${os}_${garch}" || return 1
+    tar -xzf "$dir/gitleaks.tar.gz" -C "$dir" gitleaks || return 1
   fi
+  chmod +x "$bin" 2>/dev/null || true
   [ -x "$bin" ] || return 1
   printf '%s' "$bin"
 }
@@ -94,10 +107,9 @@ resolve_osv() {
     windows) [ "$arch" = "amd64" ] || return 1; asset="osv-scanner_windows_amd64.exe"; key="osv-scanner_windows_amd64"; bin="$bin.exe" ;;
     *) return 1 ;;
   esac
-  if [ ! -x "$bin" ]; then
-    qzp_fetch_verified "https://github.com/google/osv-scanner/releases/download/$PIN_OSV/$asset" "$bin" "$key" || return 1
-    chmod +x "$bin" 2>/dev/null || true
-  fi
+  # the asset IS the binary: a cached copy is reused only while it verifies
+  qzp_ensure_verified "https://github.com/google/osv-scanner/releases/download/$PIN_OSV/$asset" "$bin" "$key" || return 1
+  chmod +x "$bin" 2>/dev/null || true
   [ -x "$bin" ] || return 1
   printf '%s' "$bin"
 }
@@ -114,10 +126,9 @@ resolve_opengrep() {
     *) return 1 ;;  # no opengrep CLI build for this platform
   esac
   local bin="$CACHE_DIR/opengrep/$PIN_OPENGREP/bin/opengrep"
-  if [ ! -x "$bin" ]; then
-    qzp_fetch_verified "https://github.com/opengrep/opengrep/releases/download/$PIN_OPENGREP/$asset" "$bin" "$asset" || return 1
-    chmod +x "$bin" 2>/dev/null || true
-  fi
+  # the asset IS the binary: a cached copy is reused only while it verifies
+  qzp_ensure_verified "https://github.com/opengrep/opengrep/releases/download/$PIN_OPENGREP/$asset" "$bin" "$asset" || return 1
+  chmod +x "$bin" 2>/dev/null || true
   [ -x "$bin" ] || return 1
   printf '%s' "$bin"
 }

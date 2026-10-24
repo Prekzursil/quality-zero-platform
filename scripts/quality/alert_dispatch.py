@@ -194,6 +194,40 @@ def _gh_list(args: Sequence[str], *, runner: Callable[..., "subprocess.Completed
     return payload if isinstance(payload, list) else []
 
 
+def _decisive_runs(runs: Iterable[Mapping[str, Any]]) -> int:
+    """How many of ``runs`` say something: completed with a success or a failure kind."""
+    return sum(len(conclusions) for conclusions in workflow_conclusions(runs).values())
+
+
+def _workflow_runs(
+    platform_slug: str,
+    workflow_id: str,
+    *,
+    branch: str,
+    limit: int,
+    runner: Callable[..., "subprocess.CompletedProcess[str]"],
+) -> List[Mapping[str, Any]]:
+    """The newest ``limit`` runs of one workflow on ``branch``; raise when ``gh`` fails."""
+    listed = _gh_list(
+        [
+            "run",
+            "list",
+            "--repo",
+            platform_slug,
+            "--workflow",
+            workflow_id,
+            "--branch",
+            branch,
+            "--limit",
+            str(limit),
+            "--json",
+            "workflowName,status,conclusion,createdAt",
+        ],
+        runner=runner,
+    )
+    return [run for run in listed if isinstance(run, Mapping)]
+
+
 def fetch_active_workflows(
     platform_slug: str,
     *,
@@ -211,6 +245,8 @@ def fetch_workflow_runs(
     *,
     branch: str = "main",
     per_workflow: int = 10,
+    max_per_workflow: int = 200,
+    decisive: int = at.WORKFLOW_FAILING_THRESHOLD_RUNS,
     workflows: Optional[Sequence[Mapping[str, Any]]] = None,
     runner: Callable[..., "subprocess.CompletedProcess[str]"] = subprocess.run,
 ) -> List[Mapping[str, Any]]:
@@ -219,28 +255,20 @@ def fetch_workflow_runs(
     Per workflow, because ``gh run list --limit`` caps the COMBINED result: the
     hourly dashboard alone would push a weekly workflow's last three runs out
     of any shared window, so it could fail forever below the threshold.
+
+    A full window holding fewer than ``decisive`` completed, non-neutral runs
+    is read again at ``max_per_workflow``. Cancelled and skipped runs never
+    break a streak, so a burst of them (in-progress cancellation) must not
+    push the failure that completes one out of view either.
     """
     active = workflows if workflows is not None else fetch_active_workflows(platform_slug, runner=runner)
     runs: List[Mapping[str, Any]] = []
     for workflow in active:
-        listed = _gh_list(
-            [
-                "run",
-                "list",
-                "--repo",
-                platform_slug,
-                "--workflow",
-                str(workflow.get("id")),
-                "--branch",
-                branch,
-                "--limit",
-                str(per_workflow),
-                "--json",
-                "workflowName,status,conclusion,createdAt",
-            ],
-            runner=runner,
-        )
-        runs.extend(run for run in listed if isinstance(run, Mapping))
+        workflow_id = str(workflow.get("id"))
+        listed = _workflow_runs(platform_slug, workflow_id, branch=branch, limit=per_workflow, runner=runner)
+        if len(listed) >= per_workflow and _decisive_runs(listed) < decisive:
+            listed = _workflow_runs(platform_slug, workflow_id, branch=branch, limit=max_per_workflow, runner=runner)
+        runs.extend(listed)
     return runs
 
 

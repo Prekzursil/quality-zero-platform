@@ -1132,6 +1132,30 @@ class UnscannableTests(unittest.TestCase):
         for verb in ("edit", "close", "create"):
             self.assertEqual(runner.argv_starting("gh", "issue", verb), [], verb)
 
+    def test_a_not_watched_issue_is_refreshed_with_the_current_explanation(self) -> None:
+        """THE review finding: setting the PAT left the issue claiming no token was configured."""
+        earlier = _scan(sweep.ScanStatus.UNSCANNABLE, exit_code=1, detail="No read token is configured.")
+        stale = sweep.render_issue_body(earlier, floor=severity.SEVERITY_FLOOR, generated_at=FIXED_NOW)
+        self.assertIn(sweep.NEVER_SCANNED_MARKER, stale)
+        runner = FakeRunner(issue_list=[{**OPEN_ISSUE[0], "body": stale}])
+        current = _scan(sweep.ScanStatus.UNSCANNABLE, exit_code=1, detail="Grant that token Contents: Read.")
+        outcome = self._reconcile(current, runner)
+        self.assertIs(outcome.action, sweep.IssueAction.UPDATED)
+        self.assertEqual(outcome.issue_number, 77)
+        (lookup,) = runner.argv_starting("gh", "issue", "list")
+        self.assertIn("body", lookup[lookup.index("--json") + 1].split(","))
+        (edited,) = runner.argv_starting("gh", "issue", "edit")
+        body = edited[edited.index("--body") + 1]
+        self.assertIn("Grant that token Contents: Read.", body)
+        self.assertNotIn("No read token is configured.", body)
+
+    def test_a_real_scan_body_never_carries_the_never_scanned_marker(self) -> None:
+        """Only a body that knows nothing may be refreshed by "unknown"."""
+        for status in (sweep.ScanStatus.FINDINGS, sweep.ScanStatus.CLEAN, sweep.ScanStatus.SCAN_ERROR):
+            with self.subTest(status=status):
+                body = sweep.render_issue_body(_scan(status), floor=severity.SEVERITY_FLOOR, generated_at=FIXED_NOW)
+                self.assertNotIn(sweep.NEVER_SCANNED_MARKER, body)
+
     def _main(self, runner: FakeRunner, *only: str) -> Tuple[int, str]:
         argv = ["--inventory", str(INVENTORY)]
         for name in only:

@@ -285,6 +285,59 @@ class WorkflowRunTests(unittest.TestCase):
             alert_dispatch.fetch_workflow_runs("o/r", runner=self._runner(workflows=active, runs_rc=1))
 
 
+class DecisiveWindowTests(unittest.TestCase):
+    """Neutral runs neither break a failure streak nor hide the failure that completes one."""
+
+    @staticmethod
+    def _run(conclusion: str, minute: int) -> dict:
+        return {
+            "workflowName": "Verify",
+            "status": "completed",
+            "conclusion": conclusion,
+            "createdAt": f"2026-10-24T10:{minute:02d}:00Z",
+        }
+
+    def _runner(self, pages: dict) -> MagicMock:
+        """A fake gh answering `run list` by its --limit."""
+
+        def answer(argv, **_kwargs):
+            limit = int(argv[argv.index("--limit") + 1])
+            return subprocess.CompletedProcess(argv, 0, json.dumps(pages[limit]), "")
+
+        return MagicMock(side_effect=answer)
+
+    def test_a_window_of_cancelled_runs_is_read_again_wider(self) -> None:
+        """THE review finding: eight cancellations after two failures hid the third."""
+        newest = [self._run("cancelled", 59 - i) for i in range(8)] + [
+            self._run("failure", 50),
+            self._run("failure", 49),
+        ]
+        wider = newest + [self._run("failure", 48), self._run("success", 47)]
+        runner = self._runner({10: newest, 200: wider})
+        runs = alert_dispatch.fetch_workflow_runs("o/r", workflows=[{"id": 7}], runner=runner)
+        limits = [call.args[0][call.args[0].index("--limit") + 1] for call in runner.call_args_list]
+        self.assertEqual(limits, ["10", "200"])
+        conclusions = alert_dispatch.workflow_conclusions(runs)["Verify"]
+        self.assertEqual(conclusions, ["failure", "failure", "failure", "success"])
+        (trigger,) = at.detect_workflow_failing(workflow="Verify", conclusions=conclusions)
+        self.assertEqual(trigger.subject, "Verify")
+
+    def test_a_decisive_or_complete_window_is_read_once(self) -> None:
+        """Three decisive runs, or the whole history, is already enough."""
+        decisive = [self._run("cancelled", 59 - i) for i in range(7)] + [
+            self._run("failure", 50),
+            self._run("success", 49),
+            self._run("failure", 48),
+        ]
+        short = [self._run("cancelled", 59), self._run("failure", 58)]
+        for page in (decisive, short):
+            with self.subTest(rows=len(page)):
+                runner = self._runner({10: page})
+                runs = alert_dispatch.fetch_workflow_runs("o/r", workflows=[{"id": 7}], runner=runner)
+                self.assertEqual(len(runs), len(page))
+                self.assertEqual(runner.call_count, 1)
+
+
 class VanishedWorkflowTests(unittest.TestCase):
     """An alert for a workflow that no longer exists can never be closed by a success."""
 

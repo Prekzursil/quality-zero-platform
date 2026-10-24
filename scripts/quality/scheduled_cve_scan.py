@@ -82,6 +82,10 @@ LABEL_COLOR = "B60205"
 LABEL_DESCRIPTION = "Standing dependency-CVE surface (observability, never a gate)."
 
 BODY_MARKER = "<!-- qzp:cve-watch -->"
+#: Marks a body that records only failed attempts to SEE the repository. A
+#: later unscannable run refreshes such a body (its explanation changes, e.g.
+#: once the read PAT exists); a body without it holds a real scan and is kept.
+NEVER_SCANNED_MARKER = "<!-- qzp:cve-watch:never-scanned -->"
 """Stable marker so a human (or a later tool) can recognise a body we own."""
 
 DEFAULT_PLATFORM_SLUG = "Prekzursil/quality-zero-platform"
@@ -579,6 +583,7 @@ def render_issue_body(
     """
     lines = [
         BODY_MARKER,
+        *([NEVER_SCANNED_MARKER] if scan.status is ScanStatus.UNSCANNABLE else []),
         f"# Dependency-CVE watch - `{scan.slug}`",
         "",
         "A dependency advisory is time-varying, so a PR-diff gate cannot see one published against",
@@ -676,7 +681,7 @@ def find_open_issue(
             "--search",
             slug,
             "--json",
-            "number,title,state",
+            "number,title,state,body",
             "--limit",
             "100",
         ],
@@ -743,8 +748,10 @@ def reconcile(
 
     Findings create the issue or update it IN PLACE; a clean result closes it;
     a scan error touches nothing at all. An unscannable repository gets an
-    issue saying it is NOT watched when it has none, but never overwrites an
-    existing one: that issue holds the last REAL scan.
+    issue saying it is NOT watched, and that issue is refreshed while it
+    still records no real scan, because its explanation can change (e.g. once
+    the read PAT exists). An issue that holds a REAL scan is never
+    overwritten by "unknown".
     """
     counts = (len(scan.blocking), len(scan.demoted))
     if scan.status is ScanStatus.SCAN_ERROR:
@@ -761,7 +768,11 @@ def reconcile(
     body = render_issue_body(scan, floor=floor, generated_at=generated_at, run_url=run_url)
     existing = find_open_issue(platform_slug, slug=scan.slug, runner=runner)
 
-    if scan.status is ScanStatus.UNSCANNABLE and existing is not None:
+    if (
+        scan.status is ScanStatus.UNSCANNABLE
+        and existing is not None
+        and NEVER_SCANNED_MARKER not in str(existing.get("body") or "")
+    ):
         return RepoOutcome(
             scan.slug,
             scan.status,

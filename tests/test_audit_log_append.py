@@ -140,6 +140,15 @@ class AppendRecordTests(unittest.TestCase):
         with self.assertRaisesRegex(audit.AuditAppendError, "kept changing underneath"):
             _append(FakeGitHub("", conflicts=3))
 
+    def test_only_a_stale_sha_is_retried_and_the_last_error_is_kept(self) -> None:
+        """A validation 422 fails at once with its message; exhausted retries name the last error."""
+        github = FakeGitHub("", write_error="Invalid request. content is not valid Base64 (HTTP 422)")
+        with self.assertRaisesRegex(audit.AuditAppendError, "writing audit/skip.jsonl failed: Invalid request"):
+            _append(github)
+        self.assertEqual(len(github.puts), 1)
+        with self.assertRaisesRegex(audit.AuditAppendError, r"last error: .*HTTP 409"):
+            _append(FakeGitHub("", conflicts=3))
+
     def test_read_and_write_failures_raise(self) -> None:
         """Anything but 404 on read, or 409 on write, is an error."""
         with self.assertRaisesRegex(audit.AuditAppendError, "reading audit/skip.jsonl failed: boom"):

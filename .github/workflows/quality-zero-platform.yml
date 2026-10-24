@@ -18,6 +18,10 @@ name: Quality Zero Platform
 # Gate coverage split:
 #   * gate 1 (lint + format + sec-lint)  — ruff, here
 #   * gate 4 (SAST)                       — opengrep + curated `.quality/opengrep`, here
+#   * gate 5 (secrets)                    — gitleaks over the FULL history, here
+#   * workflows                           — actionlint + zizmor over every workflow, here
+#                                           (QZP's own CI AND the reusable workflows
+#                                           the whole fleet runs)
 #   * charter consistency                 — `.quality/charter_check.sh`, here
 #   * gate 3 (tests + 100% coverage)      — the separate, unchanged `Control Plane
 #                                           Verify` workflow (`bash scripts/verify`)
@@ -92,3 +96,60 @@ jobs:
           install -m 0755 /tmp/opengrep /usr/local/bin/opengrep
           opengrep scan --config .quality/opengrep --error \
             --exclude .venv --exclude node_modules --exclude dist --exclude out --exclude build .
+
+  workflows:
+    name: gate-workflows (actionlint + zizmor)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+      # Every workflow here is QZP's own CI or a reusable workflow the fleet
+      # runs, so a defect in one is a defect in every caller. Both linters are
+      # pinned release assets, digest-verified before use.
+      #   actionlint: expression / needs / output / runner-label checks, plus
+      #               shellcheck over every run: block (shellcheck ships on the
+      #               runner image).
+      #   zizmor:     Actions security audits (template injection, credential
+      #               persistence, excessive permissions, dangerous triggers,
+      #               unpinned uses...). Offline: deterministic, no token. ANY
+      #               finding fails, informational included - the zero bar.
+      - name: gate-workflows actionlint
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 -o /tmp/actionlint.tar.gz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  /tmp/actionlint.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/actionlint.tar.gz -C /tmp actionlint
+          /tmp/actionlint -color
+      - name: gate-workflows zizmor
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 -o /tmp/zizmor.tar.gz \
+            https://github.com/zizmorcore/zizmor/releases/download/v1.31.1/zizmor-x86_64-unknown-linux-gnu.tar.gz
+          echo "d185f726bdaf92df78273217dfdd24ebcd6b0ef48cf3ce776ff5762b6e138c99  /tmp/zizmor.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/zizmor.tar.gz -C /tmp zizmor
+          /tmp/zizmor --offline --format plain .github/workflows
+
+  secrets:
+    name: gate-secrets (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+          # gitleaks detect walks the git log: the FULL history, so a secret
+          # committed and later deleted is still found.
+          fetch-depth: 0
+      # Gate 5 on the platform itself, with the same pinned gitleaks (and the
+      # same flags) the fleet's lean gate runs.
+      - name: gate-secrets gitleaks
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 -o /tmp/gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          args=(detect --no-banner --redact --verbose)
+          if [ -f .gitleaks.toml ]; then args+=(--config .gitleaks.toml); fi
+          /tmp/gitleaks "${args[@]}"

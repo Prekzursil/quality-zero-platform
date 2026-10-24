@@ -131,7 +131,8 @@ class DownloadContractTests(unittest.TestCase):
                         if uses_target:
                             self.assertGreater(i, verify_line, f"{workflow}: {step['name']} uses {target} unverified")
                     checked += 1
-        self.assertEqual(checked, 6)  # lean gate x3, self-gate SAST, CVE sweep, legacy DeepSource CLI
+        # lean gate x3; self-gate SAST, actionlint, zizmor, gitleaks; CVE sweep; legacy DeepSource CLI
+        self.assertEqual(checked, 9)
 
     def test_the_deepsource_cli_is_the_pinned_release_asset(self) -> None:
         """The legacy matrix verifies one exact DeepSource CLI tarball before unpacking it."""
@@ -196,6 +197,23 @@ class DownloadContractTests(unittest.TestCase):
         self.assertEqual(
             [m.group(1) for m in DIGEST_CHECK.finditer(script)], [pins["asset_sha256"]["opengrep_manylinux_x86"]]
         )
+
+    def test_the_platform_runs_the_secrets_gate_it_enforces(self) -> None:
+        """QZP's own gitleaks job fetches the identical pinned asset as the fleet's gate 5."""
+        pins = tool_pins()
+        (step,) = [s for s in downloading_steps("quality-zero-platform.yml") if "gitleaks" in str(s["run"])]
+        script = str(step["run"])
+        version = pins["pins"]["gitleaks"]
+        self.assertIn(f"gitleaks/releases/download/v{version}/gitleaks_{version}_linux_x64.tar.gz", script)
+        self.assertEqual(
+            [m.group(1) for m in DIGEST_CHECK.finditer(script)], [pins["asset_sha256"]["gitleaks_linux_x64"]]
+        )
+        # The same flags as the lean gate, over the whole history.
+        self.assertIn("args=(detect --no-banner --redact --verbose)", script)
+        workflow = yaml.safe_load((WORKFLOWS / "quality-zero-platform.yml").read_text(encoding="utf-8"))
+        checkout = workflow["jobs"]["secrets"]["steps"][0]
+        self.assertEqual(checkout["with"]["fetch-depth"], 0)
+        self.assertIs(checkout["with"]["persist-credentials"], False)
 
     def test_cve_sweep_verifies_the_same_osv_scanner_asset_as_the_gate(self) -> None:
         """The standing sweep and gate 6 must run the identical binary."""

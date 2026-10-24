@@ -219,6 +219,37 @@ def find_existing_alert_issue(
     return None
 
 
+def list_open_alert_issues(
+    platform_slug: str,
+    *,
+    alert_type: AlertType,
+    runner: ProcessRunner = subprocess.run,
+) -> List[Mapping[str, Any]]:
+    """Every open issue carrying ``alert_type``'s label (number + title); raise when ``gh`` fails."""
+    completed = _checked(
+        _run_gh(
+            [
+                "issue",
+                "list",
+                "--repo",
+                platform_slug,
+                "--label",
+                alert_type.label,
+                "--state",
+                "open",
+                "--json",
+                "number,title",
+                "--limit",
+                "200",
+            ],
+            runner=runner,
+        ),
+        what="issue list",
+    )
+    payload = json.loads(completed.stdout) if completed.stdout else []
+    return [issue for issue in payload if isinstance(issue, Mapping)] if isinstance(payload, list) else []
+
+
 def _issue_number_from_create_output(stdout: str) -> int:
     """Parse ``gh issue create`` URL output (trailing ``/<n>``) to int."""
     if not stdout:

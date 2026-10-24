@@ -387,6 +387,7 @@ def scan_repo(
     runner: ProcessRunner = subprocess.run,
     sleeper: Sleeper = time.sleep,
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+    read_token_configured: bool = False,
 ) -> RepoScan:
     """Clone and scan one repository, splitting its report into T0 and T2.
 
@@ -402,9 +403,18 @@ def scan_repo(
             status=ScanStatus.UNSCANNABLE,
             exit_code=clone.returncode,
             detail=(
-                "The sweep's token cannot see this repository (private, and no fleet-read token is "
-                f"configured), so it is NOT watched - neither a vulnerability verdict nor a clean result. "
-                f"Set the `{FLEET_READ_PAT_NAME}` secret (read access to the fleet) to scan it. {_tail(clone.stderr)}"
+                (
+                    f"The configured `{FLEET_READ_PAT_NAME}` cannot see this repository, so it is NOT watched - "
+                    "neither a vulnerability verdict nor a clean result. Grant that token Contents: Read on it "
+                    f"to scan it. {_tail(clone.stderr)}"
+                )
+                if read_token_configured
+                else (
+                    "The sweep's token cannot see this repository (private, and no fleet-read token is "
+                    "configured), so it is NOT watched - neither a vulnerability verdict nor a clean result. "
+                    f"Set the `{FLEET_READ_PAT_NAME}` secret (read access to the fleet) to scan it. "
+                    f"{_tail(clone.stderr)}"
+                )
             ),
         )
     if clone.returncode != 0:
@@ -832,6 +842,7 @@ def run_sweep(
     run_url: str = "",
     dry_run: bool = False,
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+    read_token_configured: bool = False,
 ) -> List[RepoOutcome]:
     """Scan and reconcile every slug. One repo's failure never aborts the rest."""
     outcomes: List[RepoOutcome] = []
@@ -844,6 +855,7 @@ def run_sweep(
             runner=runner,
             sleeper=sleeper,
             max_attempts=max_attempts,
+            read_token_configured=read_token_configured,
         )
         try:
             outcome = reconcile(
@@ -933,6 +945,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help=f"CVSS floor separating T0 from T2 (default {severity.SEVERITY_FLOOR}).",
     )
     parser.add_argument(
+        "--read-token-configured",
+        action="store_true",
+        help=f"The {FLEET_READ_PAT_NAME} secret is set: an unscannable repo means that token lacks access to it.",
+    )
+    parser.add_argument(
         "--max-attempts",
         type=int,
         default=DEFAULT_MAX_ATTEMPTS,
@@ -988,6 +1005,7 @@ def main(
             run_url=args.run_url,
             dry_run=args.dry_run,
             max_attempts=args.max_attempts,
+            read_token_configured=args.read_token_configured,
         )
 
     summary = render_summary(outcomes)

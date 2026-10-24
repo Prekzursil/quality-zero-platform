@@ -115,6 +115,7 @@ jobs:
           drift_prs = _safe_jsonl("audit/drift-sync.jsonl")
           staging = _safe_jsonl("audit/bump-staging-results.jsonl")
 
+          active = alert_dispatch.fetch_active_workflows(PLATFORM)
           state = {
               "today": dt.date.today(),
               "now": dt.datetime.now(tz=dt.timezone.utc),
@@ -125,7 +126,7 @@ jobs:
               "recipe_name": cov.get("active_bump_recipe", ""),
               # QZP's own workflows: newest-first conclusions per workflow.
               "workflow_runs": alert_dispatch.workflow_conclusions(
-                  alert_dispatch.fetch_workflow_runs(PLATFORM)
+                  alert_dispatch.fetch_workflow_runs(PLATFORM, workflows=active)
               ),
           }
           if not dry_run:
@@ -140,6 +141,7 @@ jobs:
           closed = alert_dispatch.close_recovered_workflow_alerts(
               platform_slug=PLATFORM,
               workflow_runs=state["workflow_runs"],
+              active_workflows={str(workflow.get("name", "")) for workflow in active},
               dry_run=dry_run,
           )
 

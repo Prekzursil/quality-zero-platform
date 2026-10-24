@@ -24,7 +24,7 @@ import json
 import subprocess  # nosec B404 # noqa: S404 — gh CLI wrapper; args are controlled
 import sys
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Sequence
+from typing import Any, Callable, Collection, Dict, Iterable, List, Mapping, Optional, Sequence
 
 from scripts.quality import alert_triggers as at
 from scripts.quality import alerts
@@ -194,11 +194,24 @@ def _gh_list(args: Sequence[str], *, runner: Callable[..., "subprocess.Completed
     return payload if isinstance(payload, list) else []
 
 
+def fetch_active_workflows(
+    platform_slug: str,
+    *,
+    runner: Callable[..., "subprocess.CompletedProcess[str]"] = subprocess.run,
+) -> List[Mapping[str, Any]]:
+    """The platform's ACTIVE workflows (id, name, state); raise when ``gh`` fails."""
+    listed = _gh_list(
+        ["workflow", "list", "--repo", platform_slug, "--json", "id,name,state", "--limit", "200"], runner=runner
+    )
+    return [workflow for workflow in listed if isinstance(workflow, Mapping) and workflow.get("state") == "active"]
+
+
 def fetch_workflow_runs(
     platform_slug: str,
     *,
     branch: str = "main",
     per_workflow: int = 10,
+    workflows: Optional[Sequence[Mapping[str, Any]]] = None,
     runner: Callable[..., "subprocess.CompletedProcess[str]"] = subprocess.run,
 ) -> List[Mapping[str, Any]]:
     """Read every active workflow's newest default-branch runs through ``gh``; raise if it cannot.
@@ -207,13 +220,9 @@ def fetch_workflow_runs(
     hourly dashboard alone would push a weekly workflow's last three runs out
     of any shared window, so it could fail forever below the threshold.
     """
-    workflows = _gh_list(
-        ["workflow", "list", "--repo", platform_slug, "--json", "id,state", "--limit", "200"], runner=runner
-    )
+    active = workflows if workflows is not None else fetch_active_workflows(platform_slug, runner=runner)
     runs: List[Mapping[str, Any]] = []
-    for workflow in workflows:
-        if not isinstance(workflow, Mapping) or workflow.get("state") != "active":
-            continue
+    for workflow in active:
         listed = _gh_list(
             [
                 "run",
@@ -239,11 +248,39 @@ def close_recovered_workflow_alerts(
     *,
     platform_slug: str,
     workflow_runs: Mapping[str, Sequence[str]],
+    active_workflows: Optional[Collection[str]] = None,
     closer: Callable[..., Mapping[str, Any]] = alerts.close_alert_issue,
+    lister: Callable[..., Sequence[Mapping[str, Any]]] = alerts.list_open_alert_issues,
     dry_run: bool = False,
 ) -> List[Dict[str, Any]]:
-    """Close the failing-workflow alert of every workflow whose newest completed run succeeded."""
+    """Close the failing-workflow alerts that no longer describe a failing workflow.
+
+    A workflow whose newest completed run succeeded has recovered. With
+    ``active_workflows`` given, an open alert for a workflow that is no longer
+    active (deleted, renamed or disabled) closes too: it can never produce the
+    successful run that would otherwise close it.
+    """
     results: List[Dict[str, Any]] = []
+    if active_workflows is not None:
+        prefix = alerts.alert_issue_title(alerts.AlertType.WORKFLOW_FAILING, "")
+        for issue in lister(platform_slug, alert_type=alerts.AlertType.WORKFLOW_FAILING):
+            title = str(issue.get("title", ""))
+            subject = title[len(prefix) :]
+            if not title.startswith(prefix) or subject in active_workflows:
+                continue
+            results.append(
+                dict(
+                    closer(
+                        platform_slug,
+                        alert_type=alerts.AlertType.WORKFLOW_FAILING,
+                        subject=subject,
+                        dry_run=dry_run,
+                        close_comment=(
+                            f"`{subject}` is no longer an active workflow (deleted, renamed or disabled); closing."
+                        ),
+                    )
+                )
+            )
     for workflow in sorted(workflow_runs):
         conclusions = list(workflow_runs[workflow])
         if not conclusions or conclusions[0] != "success":

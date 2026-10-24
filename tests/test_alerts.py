@@ -415,5 +415,31 @@ class GhFailurePropagationTests(unittest.TestCase):
             alerts.close_alert_issue("o/r", alert_type=alerts.AlertType.REGRESSION, subject="x", runner=runner)
 
 
+class ListOpenAlertIssuesTests(unittest.TestCase):
+    """Every open issue of one alert type, for closing the ones that went stale."""
+
+    def test_open_issues_of_the_type_are_listed(self) -> None:
+        """The label filter and state are passed; junk entries are dropped."""
+        payload = json.dumps([{"number": 3, "title": "[alert:workflow-failing] Old"}, "junk"])
+        runner = MagicMock(return_value=_fake_completed(payload))
+        issues = alerts.list_open_alert_issues("o/r", alert_type=alerts.AlertType.WORKFLOW_FAILING, runner=runner)
+        self.assertEqual(issues, [{"number": 3, "title": "[alert:workflow-failing] Old"}])
+        argv = runner.call_args.args[0]
+        self.assertEqual(argv[argv.index("--label") + 1], "alert:workflow-failing")
+        self.assertEqual(argv[argv.index("--state") + 1], "open")
+
+    def test_non_list_or_empty_output_is_no_issue_and_failure_raises(self) -> None:
+        """A failed listing is never read as "nothing to close"."""
+        for stdout in ("{}", ""):
+            with self.subTest(stdout=stdout):
+                runner = MagicMock(return_value=_fake_completed(stdout))
+                self.assertEqual(
+                    alerts.list_open_alert_issues("o/r", alert_type=alerts.AlertType.REGRESSION, runner=runner), []
+                )
+        failed = MagicMock(return_value=subprocess.CompletedProcess(["gh"], 1, "", "boom\n"))
+        with self.assertRaisesRegex(alerts.AlertCommandError, "gh issue list"):
+            alerts.list_open_alert_issues("o/r", alert_type=alerts.AlertType.REGRESSION, runner=failed)
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

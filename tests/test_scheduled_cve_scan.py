@@ -407,6 +407,22 @@ class ScanRepoTests(unittest.TestCase):
                 self.assertIn("NOT watched", scan.detail)
                 self.assertEqual(runner.argv_starting("osv-scanner"), [], "no scan should be attempted")
 
+    def test_an_unscannable_repo_names_the_configured_token_when_there_is_one(self) -> None:
+        """A PAT that exists but lacks access needs a grant, not a new secret."""
+        runner = FakeRunner(inaccessible=["Prekzursil/momentstudio"])
+        with isolated_cwd() as tmp:
+            scan = sweep.scan_repo(
+                "Prekzursil/momentstudio",
+                workdir=Path(tmp),
+                floor=severity.SEVERITY_FLOOR,
+                runner=runner,
+                sleeper=NoopSleeper(),
+                read_token_configured=True,
+            )
+        self.assertIs(scan.status, sweep.ScanStatus.UNSCANNABLE)
+        self.assertIn("The configured `CODEX_FLEET_READ_PAT` cannot see this repository", scan.detail)
+        self.assertIn("Grant that token Contents: Read", scan.detail)
+
     def test_transient_exit_is_retried_then_succeeds(self) -> None:
         """127 retries with gate 6's ``attempt * 20`` backoff, then passes."""
         sleeper = NoopSleeper()
@@ -1134,6 +1150,16 @@ class UnscannableTests(unittest.TestCase):
         self.assertIn("Prekzursil/PrimariRo", text)
         self.assertIn("| unscannable |", text)
 
+    def test_the_cli_flag_reaches_the_scan(self) -> None:
+        """--read-token-configured switches the explanation the issue and summary carry."""
+        runner = FakeRunner(inaccessible=["Prekzursil/PrimariRo"])
+        argv = ["--inventory", str(INVENTORY), "--only", "PrimariRo", "--read-token-configured"]
+        out, err = io.StringIO(), io.StringIO()
+        with isolated_cwd() as tmp, redirect_stdout(out), redirect_stderr(err):
+            code = sweep.main(argv + ["--workdir", str(tmp)], runner=runner, sleeper=NoopSleeper(), now=FIXED_NOW)
+        self.assertEqual(code, sweep.EXIT_UNWATCHED)
+        self.assertIn("Grant that token Contents: Read", out.getvalue())
+
     def test_an_incomplete_sweep_still_exits_1(self) -> None:
         """A real scan error outranks the standing unwatched gap."""
         runner = FakeRunner(osv_results=[(130, "")], inaccessible=["Prekzursil/PrimariRo"])
@@ -1221,6 +1247,13 @@ class ScheduledCveScanWorkflowTests(unittest.TestCase):
         self.assertIn("::warning title=scheduled-cve-scan: private repos NOT watched::", branch)
         self.assertNotIn("exit", branch)
         self.assertNotIn("PASS", branch)
+
+    def test_the_workflow_says_whether_the_read_pat_exists(self) -> None:
+        """Only whether it is set travels (never its value), and only through env:."""
+        (step,) = [s for s in self.doc["jobs"]["sweep"]["steps"] if "scheduled_cve_scan" in str(s.get("run", ""))]
+        self.assertEqual(step["env"]["QZ_READ_PAT_CONFIGURED"], "${{ secrets.CODEX_FLEET_READ_PAT != '' }}")
+        self.assertIn('if [ "${QZ_READ_PAT_CONFIGURED:-false}" = "true" ]; then', step["run"])
+        self.assertIn("args+=(--read-token-configured)", step["run"])
 
     def test_osv_scanner_is_pinned_to_the_gate_version(self) -> None:
         """Same binary as gate 6 - a T0 prediction from another version is noise."""

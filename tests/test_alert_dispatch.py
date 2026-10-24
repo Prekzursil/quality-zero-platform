@@ -285,5 +285,50 @@ class WorkflowRunTests(unittest.TestCase):
             alert_dispatch.fetch_workflow_runs("o/r", runner=self._runner(workflows=active, runs_rc=1))
 
 
+class VanishedWorkflowTests(unittest.TestCase):
+    """An alert for a workflow that no longer exists can never be closed by a success."""
+
+    def test_only_active_workflows_are_listed(self) -> None:
+        """Disabled workflows and junk rows are dropped."""
+        listed = json.dumps(
+            [{"id": 1, "name": "A", "state": "active"}, {"id": 2, "name": "B", "state": "disabled_fork"}, 3]
+        )
+        runner = MagicMock(return_value=subprocess.CompletedProcess(["gh"], 0, listed, ""))
+        self.assertEqual(
+            alert_dispatch.fetch_active_workflows("o/r", runner=runner), [{"id": 1, "name": "A", "state": "active"}]
+        )
+
+    def test_given_workflows_are_not_listed_again(self) -> None:
+        """The scheduled job lists the workflows once and reuses them."""
+        runner = MagicMock(return_value=subprocess.CompletedProcess(["gh"], 0, "[]", ""))
+        alert_dispatch.fetch_workflow_runs("o/r", workflows=[{"id": 5}], runner=runner)
+        (call,) = runner.call_args_list
+        self.assertEqual(call.args[0][1:3], ["run", "list"])
+        self.assertIn("5", call.args[0])
+
+    def test_alerts_of_vanished_workflows_close(self) -> None:
+        """THE review finding: deleted / renamed / disabled workflows left their alert open forever."""
+        lister = MagicMock(
+            return_value=[
+                {"number": 1, "title": "[alert:workflow-failing] Old Workflow"},
+                {"number": 2, "title": "[alert:workflow-failing] Wave"},
+                {"number": 3, "title": "[alert:regression] Old Workflow"},
+            ]
+        )
+        closer = MagicMock(return_value={"number": 1, "closed": True})
+        results = alert_dispatch.close_recovered_workflow_alerts(
+            platform_slug="o/r",
+            workflow_runs={"Wave": ["failure"]},
+            active_workflows={"Wave"},
+            closer=closer,
+            lister=lister,
+        )
+        self.assertEqual(results, [{"number": 1, "closed": True}])
+        (call,) = closer.call_args_list
+        self.assertEqual(call.kwargs["subject"], "Old Workflow")
+        self.assertIn("no longer an active workflow", call.kwargs["close_comment"])
+        self.assertEqual(lister.call_args.kwargs["alert_type"], alerts.AlertType.WORKFLOW_FAILING)
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

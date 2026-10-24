@@ -86,8 +86,10 @@ class ScheduledAlertsWorkflowTests(unittest.TestCase):
         """Run history needs actions:read; labels are provisioned only on a live run."""
         perms = self.doc["jobs"]["dispatch"]["permissions"]
         self.assertEqual(perms.get("actions"), "read")
-        self.assertIn("alert_dispatch.fetch_workflow_runs(PLATFORM)", self.text)
+        self.assertIn("active = alert_dispatch.fetch_active_workflows(PLATFORM)", self.text)
+        self.assertIn("alert_dispatch.fetch_workflow_runs(PLATFORM, workflows=active)", self.text)
         self.assertIn("close_recovered_workflow_alerts", self.text)
+        self.assertIn('active_workflows={str(workflow.get("name", "")) for workflow in active}', self.text)
         self.assertIn("if not dry_run:\n              # gh issue create rejects a label the repo lacks.", self.text)
 
     def test_checkout_does_not_persist_credentials(self) -> None:

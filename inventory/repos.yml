@@ -94,4 +94,4 @@ repos:
     profile: fractal-darkroom
     rollout: observe
     default_branch: main
-    notes: Lean member (public repo). Buddhabrot-family orbit-density renderer (renamed from brot-farm 2026-10-21). Enforces its own CI (ubuntu+windows x py3.11-3.13 matrix, pytest-cov 100% line+branch) plus the lean quality.yml caller. CodeQL via default setup (python) - aggregate CodeQL context, not Analyze (<lang>). Private vulnerability reporting enabled; SECURITY.md in-repo.
+    notes: Lean member (public repo). Buddhabrot-family orbit-density renderer (renamed from brot-farm 2026-10-21). Enforces its own CI (ubuntu+windows x py3.11-3.14 matrix, pytest-cov 100% line+branch, Playwright site suite, research gate; fail-closed ci-green aggregate) plus the lean quality.yml caller. CodeQL via default setup (python) - aggregate CodeQL context, not Analyze (<lang>). Private vulnerability reporting enabled; SECURITY.md in-repo.

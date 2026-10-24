@@ -323,6 +323,73 @@ class Gate4SastTests(_StepHarness):
         self.assertTrue(self.calls("og-calls.txt")[0].endswith("--exclude build src lib"))
 
 
+class PythonRuntimeDepsTests(_StepHarness):
+    """The caller's runtime deps are installed once, BEFORE the type check and the tests."""
+
+    STEP = "Install the caller's Python runtime dependencies"
+    FAKE_PIP = 'pip() { echo "pip $*" >> pip-calls.txt; [ "${FAKE_PIP_RC:-0}" = 0 ]; }\n'
+
+    def _run(self, **env: str):
+        return self.run_step(self.STEP, dict(env), self.FAKE_PIP)
+
+    def test_lane_order_is_deps_then_types_then_tests(self) -> None:
+        """THE lane-order bug: basedpyright ran before the deps it resolves imports against."""
+        names = [step.get("name") for step in workflow_steps()]
+        # The caller's deps install BEFORE the pinned gate tools, so a caller
+        # dependency that pulls ruff/basedpyright can never replace the pin.
+        self.assertLess(names.index(self.STEP), names.index("Install ruff"))
+        self.assertLess(names.index(self.STEP), names.index("Install basedpyright"))
+        self.assertLess(names.index(self.STEP), names.index("gate-types basedpyright"))
+        self.assertLess(names.index("gate-types basedpyright"), names.index("gate-tests-coverage python"))
+        self.assertEqual(step_named(self.STEP).get("if"), "steps.detect.outputs.python == 'true'")
+        self.assertNotIn("pip install -r", str(step_named("gate-tests-coverage python")["run"]))
+
+    def test_runtime_requirement_files_are_installed_dev_and_vendored_ones_are_not(self) -> None:
+        """requirements*.txt wins over the project install; dev/test lists and vendored trees are skipped."""
+        for name in (
+            "requirements.txt",
+            "requirements/base.txt",
+            "sub/requirements.txt",
+            "requirements-dev.txt",
+            "requirements-test.txt",
+            "node_modules/x/requirements.txt",
+        ):
+            self.write(name, "x\n")
+        self.write("pyproject.toml", "[project]\nname = 'x'\n")
+        result = self._run()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            sorted(self.calls("pip-calls.txt")),
+            [
+                "pip install -r requirements.txt",
+                "pip install -r requirements/base.txt",
+                "pip install -r sub/requirements.txt",
+            ],
+        )
+
+    def test_the_project_itself_is_installed_without_requirement_files(self) -> None:
+        """pyproject.toml / setup.cfg / setup.py pull the declared deps."""
+        self.write("pyproject.toml", "[project]\nname = 'x'\n")
+        result = self._run()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.calls("pip-calls.txt"), ["pip install ."])
+
+    def test_a_pure_stdlib_repo_is_said_out_loud(self) -> None:
+        """No manifest at all installs nothing and says why."""
+        self.write("tool.py", "print(1)\n")
+        result = self._run()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.calls("pip-calls.txt"), [])
+        self.assertIn("assuming pure-stdlib", result.stdout)
+
+    def test_a_failed_install_warns_and_the_gates_decide(self) -> None:
+        """Best-effort: a broken optional dependency must not hide the real type/test verdict."""
+        self.write("requirements.txt", "x\n")
+        result = self._run(FAKE_PIP_RC="1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("WARN: 'pip install -r requirements.txt' failed", result.stdout)
+
+
 class Gate3PythonTests(_StepHarness):
     """The Python lane is pinned, measures branches, and discovers every suite."""
 

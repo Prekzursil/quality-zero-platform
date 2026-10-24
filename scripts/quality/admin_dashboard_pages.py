@@ -22,7 +22,7 @@ import html
 import json
 import sys
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional
+from typing import Any, Callable, Collection, Dict, List, Mapping, Optional
 
 # Newline constant used by the body builders so the duplicate "\n" literal
 # Sonar's python:S1192 rule flagged at line 93 stays at zero.
@@ -39,6 +39,7 @@ def _ensure_platform_on_syspath() -> None:
 
 _ensure_platform_on_syspath()
 
+from scripts.quality.fleet_inventory import PRIVATE_INCLUDE_SLUGS  # noqa: E402
 
 PRIVATE_SLUG_PLACEHOLDER = "<private>"
 
@@ -162,8 +163,14 @@ def render_audit_page(
     *,
     entries: Optional[List[Mapping[str, Any]]],
     source: str = "",
+    private_slugs: Collection[str] = PRIVATE_INCLUDE_SLUGS,
 ) -> str:
-    """Return the HTML for ``audit.html`` (break-glass / skip feed; ``entries=None``: no source)."""
+    """Return the HTML for ``audit.html`` (break-glass / skip feed; ``entries=None``: no source).
+
+    Audit records carry no ``visibility`` field, so a PR slug from one of the
+    fleet's private members (the code-reviewed ``PRIVATE_INCLUDE_SLUGS``) is
+    masked here: the page is published publicly.
+    """
     if entries is None:
         return _wrap_html("Bypass audit feed", _no_source_body(source, "bypass events"))
     if not entries:
@@ -176,7 +183,8 @@ def render_audit_page(
         pr = entry.get("pr") if isinstance(entry.get("pr"), Mapping) else {}
         ts = html.escape(str(entry.get("timestamp_utc", entry.get("timestamp", ""))))
         label = html.escape(str(entry.get("label", "")))
-        slug = html.escape(str(pr.get("slug", entry.get("pr_slug", ""))))
+        raw_slug = str(pr.get("slug", entry.get("pr_slug", "")))
+        slug = html.escape(PRIVATE_SLUG_PLACEHOLDER if raw_slug in private_slugs else raw_slug)
         number = html.escape(str(pr.get("number", entry.get("pr_number", ""))))
         actor = html.escape(str(entry.get("actor", "")))
         incident = html.escape(str(entry.get("incident", "")))

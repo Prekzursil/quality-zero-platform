@@ -155,6 +155,16 @@ class AuditRecordShapeTests(unittest.TestCase):
         self.assertIn("<td>2026-10-23T09:00:00Z</td>", html)
         self.assertIn("<td>#</td>", html)
 
+    def test_a_private_members_pr_slug_is_masked_on_the_public_page(self) -> None:
+        """Audit records have no visibility field: the known private members are masked by slug."""
+        entry = {"label": "quality-zero:skip", "pr": {"slug": "Prekzursil/PrimariRo", "number": 3}, "actor": "x"}
+        html = pages.render_audit_page(entries=[entry])
+        self.assertIn("<td>&lt;private&gt;#3</td>", html)
+        self.assertNotIn("PrimariRo", html)
+        self.assertIn(
+            "o/public#3", pages.render_audit_page(entries=[{**entry, "pr": {"slug": "o/public", "number": 3}}])
+        )
+
 
 class NoSourceTests(unittest.TestCase):
     """A page whose source file does not exist knows nothing - and must say so."""

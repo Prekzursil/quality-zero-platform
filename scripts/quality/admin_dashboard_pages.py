@@ -171,10 +171,13 @@ def render_audit_page(
         return _wrap_html("Bypass audit feed", body)
     rows = []
     for entry in entries:
-        ts = html.escape(str(entry.get("timestamp", "")))
+        # bypass_labels writes {"timestamp_utc", "pr": {"slug", "number"}}; the
+        # flat {"timestamp", "pr_slug", "pr_number"} shape is read as well.
+        pr = entry.get("pr") if isinstance(entry.get("pr"), Mapping) else {}
+        ts = html.escape(str(entry.get("timestamp_utc", entry.get("timestamp", ""))))
         label = html.escape(str(entry.get("label", "")))
-        slug = html.escape(str(entry.get("pr_slug", "")))
-        number = html.escape(str(entry.get("pr_number", "")))
+        slug = html.escape(str(pr.get("slug", entry.get("pr_slug", ""))))
+        number = html.escape(str(pr.get("number", entry.get("pr_number", ""))))
         actor = html.escape(str(entry.get("actor", "")))
         incident = html.escape(str(entry.get("incident", "")))
         rows.append(

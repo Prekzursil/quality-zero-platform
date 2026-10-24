@@ -133,6 +133,29 @@ class RenderAuditPageTests(unittest.TestCase):
         self.assertIn("No bypass", html)
 
 
+class AuditRecordShapeTests(unittest.TestCase):
+    """The audit page reads the records the bypass workflow actually writes."""
+
+    def test_the_bypass_label_record_shape_renders_its_time_and_pr(self) -> None:
+        """bypass_labels writes timestamp_utc and a nested pr object; both used to render blank."""
+        html = pages.render_audit_page(
+            entries=[
+                {
+                    "timestamp_utc": "2026-10-24T10:00:00Z",
+                    "label": "quality-zero:break-glass",
+                    "pr": {"slug": "o/r", "number": 7, "head_sha": "abc"},
+                    "actor": "dev",
+                    "incident": "INC-1",
+                },
+                {"timestamp": "2026-10-23T09:00:00Z", "label": "quality-zero:skip", "pr": "junk", "actor": "x"},
+            ]
+        )
+        self.assertIn("<td>2026-10-24T10:00:00Z</td>", html)
+        self.assertIn("<td>o/r#7</td>", html)
+        self.assertIn("<td>2026-10-23T09:00:00Z</td>", html)
+        self.assertIn("<td>#</td>", html)
+
+
 class NoSourceTests(unittest.TestCase):
     """A page whose source file does not exist knows nothing - and must say so."""
 

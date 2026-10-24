@@ -37,6 +37,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
+from unittest.mock import patch
 
 import yaml  # type: ignore[import-untyped]
 from tests.workspace_isolation import isolated_cwd
@@ -118,9 +119,12 @@ class FakeRunner:
         edit_returncode: int = 0,
         close_returncode: int = 0,
         config_repos: Sequence[str] = (),
+        inaccessible: Sequence[str] = (),
+        inaccessible_stderr: str = "GraphQL: Could not resolve to a Repository with the name '{slug}'. (repository)\n",
     ) -> None:
         """Script the fake ``gh`` / ``osv-scanner`` responses for one test."""
         self.calls: List[List[str]] = []
+        self.call_kwargs: List[Dict[str, Any]] = []
         self.osv_results = list(osv_results or [(0, json.dumps(CLEAN_REPORT))])
         self.clone_returncode = clone_returncode
         self.issue_list = issue_list
@@ -130,12 +134,15 @@ class FakeRunner:
         self.edit_returncode = edit_returncode
         self.close_returncode = close_returncode
         self.config_repos = set(config_repos)
+        self.inaccessible = set(inaccessible)
+        self.inaccessible_stderr = inaccessible_stderr
         self._osv_index = 0
 
-    def __call__(self, args: Sequence[str], **_kwargs: Any) -> "subprocess.CompletedProcess[str]":
+    def __call__(self, args: Sequence[str], **kwargs: Any) -> "subprocess.CompletedProcess[str]":
         """Dispatch on the argv shape, exactly as the real binaries would be."""
         argv = list(args)
         self.calls.append(argv)
+        self.call_kwargs.append(kwargs)
         if argv[0] == "osv-scanner":
             return self._osv(argv)
         if argv[:3] == ["gh", "repo", "clone"]:
@@ -155,9 +162,11 @@ class FakeRunner:
 
     def _clone(self, argv: List[str]) -> "subprocess.CompletedProcess[str]":
         """Create the destination tree so the config probe has something to see."""
+        slug = argv[3]
+        if slug in self.inaccessible:
+            return _completed(argv, returncode=1, stderr=self.inaccessible_stderr.format(slug=slug))
         if self.clone_returncode != 0:
             return _completed(argv, returncode=self.clone_returncode, stderr="clone failed\n")
-        slug = argv[3]
         dest = Path(argv[4])
         dest.mkdir(parents=True, exist_ok=True)
         if slug in self.config_repos:
@@ -346,11 +355,18 @@ class FleetRosterTests(unittest.TestCase):
 class ScanRepoTests(unittest.TestCase):
     """One repo, end to end, against a scripted ``gh`` + ``osv-scanner``."""
 
-    def _scan(self, runner: FakeRunner, *, sleeper: Optional[NoopSleeper] = None, **kwargs: Any) -> sweep.RepoScan:
+    def _scan(
+        self,
+        runner: FakeRunner,
+        *,
+        sleeper: Optional[NoopSleeper] = None,
+        slug: str = "Prekzursil/momentstudio",
+        **kwargs: Any,
+    ) -> sweep.RepoScan:
         """Run ``scan_repo`` inside a throwaway workdir."""
         with isolated_cwd() as tmp:
             return sweep.scan_repo(
-                "Prekzursil/momentstudio",
+                slug,
                 workdir=tmp,
                 floor=severity.SEVERITY_FLOOR,
                 runner=runner,
@@ -384,6 +400,88 @@ class ScanRepoTests(unittest.TestCase):
         self.assertIs(scan.status, sweep.ScanStatus.SCAN_ERROR)
         self.assertFalse(scan.status.is_clean_result)
         self.assertEqual(runner.argv_starting("osv-scanner"), [], "no scan should be attempted")
+
+    def test_a_repo_the_token_cannot_see_is_unscannable_not_a_scan_error(self) -> None:
+        """A private repo without a read token is a standing gap, not a transient failure."""
+        for stderr in (
+            "GraphQL: Could not resolve to a Repository with the name '{slug}'. (repository)\n",
+            "remote: Repository not found.\nfatal: repository '{slug}' not found\n",
+            "HTTP 404: Not Found (https://api.github.com/repos/{slug})\n",
+        ):
+            with self.subTest(stderr=stderr):
+                runner = FakeRunner(inaccessible=["Prekzursil/PrimariRo"], inaccessible_stderr=stderr)
+                scan = self._scan(runner, slug="Prekzursil/PrimariRo")
+                self.assertIs(scan.status, sweep.ScanStatus.UNSCANNABLE)
+                self.assertFalse(scan.status.is_clean_result)
+                self.assertIn("CODEX_FLEET_READ_PAT", scan.detail)
+                self.assertIn("NOT watched", scan.detail)
+                self.assertEqual(runner.argv_starting("osv-scanner"), [], "no scan should be attempted")
+
+    def test_a_missing_public_repo_is_a_scan_error_not_an_unwatched_one(self) -> None:
+        """THE review finding: a deleted or misspelled roster entry must keep the run red."""
+        for stderr in (
+            "GraphQL: Could not resolve to a Repository with the name '{slug}'. (repository)\n",
+            "HTTP 404: Not Found (https://api.github.com/repos/{slug})\n",
+        ):
+            with self.subTest(stderr=stderr):
+                runner = FakeRunner(inaccessible=["Prekzursil/momentstudio"], inaccessible_stderr=stderr)
+                scan = self._scan(runner)
+                self.assertIs(scan.status, sweep.ScanStatus.SCAN_ERROR)
+                self.assertIn("fix `inventory/repos.yml`", scan.detail)
+                self.assertNotIn("CODEX_FLEET_READ_PAT", scan.detail)
+                self.assertEqual(runner.argv_starting("osv-scanner"), [])
+
+    def test_an_unscannable_repo_names_the_configured_token_when_there_is_one(self) -> None:
+        """A PAT that exists but lacks access needs a grant, not a new secret."""
+        runner = FakeRunner(inaccessible=["Prekzursil/PrimariRo"])
+        with isolated_cwd() as tmp:
+            scan = sweep.scan_repo(
+                "Prekzursil/PrimariRo",
+                workdir=Path(tmp),
+                floor=severity.SEVERITY_FLOOR,
+                runner=runner,
+                sleeper=NoopSleeper(),
+                read_token_configured=True,
+            )
+        self.assertIs(scan.status, sweep.ScanStatus.UNSCANNABLE)
+        self.assertIn("The configured `CODEX_FLEET_READ_PAT` cannot see this repository", scan.detail)
+        self.assertIn("Grant that token Contents: Read", scan.detail)
+
+    def test_only_the_clone_runs_with_the_fleet_read_token(self) -> None:
+        """The PAT replaces GH_TOKEN for `gh repo clone`; nothing else sees it."""
+        runner = FakeRunner()
+        environ = {"GH_TOKEN": "workflow-token", sweep.FLEET_READ_PAT_ENV: " read-pat ", "PATH": "/bin"}
+        with isolated_cwd() as tmp:
+            sweep.scan_repo(
+                "Prekzursil/momentstudio",
+                workdir=Path(tmp),
+                floor=severity.SEVERITY_FLOOR,
+                runner=runner,
+                sleeper=NoopSleeper(),
+                environ=environ,
+            )
+        clone_kwargs, osv_kwargs = runner.call_kwargs
+        self.assertEqual(runner.calls[0][:3], ["gh", "repo", "clone"])
+        self.assertEqual(clone_kwargs["env"]["GH_TOKEN"], "read-pat")
+        self.assertEqual(clone_kwargs["env"]["PATH"], "/bin")
+        self.assertNotIn("env", osv_kwargs)
+        self.assertEqual(environ["GH_TOKEN"], "workflow-token")
+
+    def test_without_a_read_token_the_clone_inherits_the_environment(self) -> None:
+        """No PAT (or a blank one): the clone runs with the workflow token like every other call."""
+        for environ in ({}, {sweep.FLEET_READ_PAT_ENV: "  "}):
+            with self.subTest(environ=environ):
+                self.assertIsNone(sweep.clone_env(environ))
+        runner = FakeRunner()
+        with isolated_cwd() as tmp, patch.dict(sweep.os.environ, {sweep.FLEET_READ_PAT_ENV: ""}):
+            sweep.scan_repo(
+                "Prekzursil/momentstudio",
+                workdir=Path(tmp),
+                floor=severity.SEVERITY_FLOOR,
+                runner=runner,
+                sleeper=NoopSleeper(),
+            )
+        self.assertNotIn("env", runner.call_kwargs[0])
 
     def test_transient_exit_is_retried_then_succeeds(self) -> None:
         """127 retries with gate 6's ``attempt * 20`` backoff, then passes."""
@@ -1055,6 +1153,104 @@ class MainTests(unittest.TestCase):
         self.assertLessEqual(stamped, after)
 
 
+class UnscannableTests(unittest.TestCase):
+    """A repository the token cannot see is tracked as NOT WATCHED, never as clean or as a red run."""
+
+    def _reconcile(self, scan: sweep.RepoScan, runner: FakeRunner) -> sweep.RepoOutcome:
+        return sweep.reconcile(
+            scan,
+            platform_slug="Prekzursil/quality-zero-platform",
+            floor=severity.SEVERITY_FLOOR,
+            generated_at=FIXED_NOW,
+            runner=runner,
+        )
+
+    def test_the_issue_body_never_dates_a_scan_that_never_ran(self) -> None:
+        """ "Last attempted ... never scanned", the clone's exit, and the NOT WATCHED section."""
+        scan = _scan(sweep.ScanStatus.UNSCANNABLE, exit_code=1, detail="token cannot see it")
+        body = sweep.render_issue_body(scan, floor=severity.SEVERITY_FLOOR, generated_at=FIXED_NOW)
+        self.assertIn(f"- Last attempted (UTC): `{FIXED_NOW.isoformat()}` - never scanned", body)
+        self.assertIn("- Scan result: `unscannable` (`gh repo clone` exit `1`)", body)
+        self.assertIn("## NOT WATCHED - the sweep cannot see this repository", body)
+        self.assertIn("token cannot see it", body)
+        self.assertNotIn("Last scanned (UTC)", body)
+
+    def test_an_unwatched_repo_without_an_issue_gets_one(self) -> None:
+        """The standing signal is an open issue, not a daily red run."""
+        runner = FakeRunner()
+        outcome = self._reconcile(_scan(sweep.ScanStatus.UNSCANNABLE, exit_code=1), runner)
+        self.assertIs(outcome.action, sweep.IssueAction.CREATED)
+        (create,) = runner.argv_starting("gh", "issue", "create")
+        self.assertIn("NOT WATCHED", create[create.index("--body") + 1])
+
+    def test_an_existing_issue_keeps_its_last_real_scan(self) -> None:
+        """A repo that went private must not have its findings overwritten by "unknown"."""
+        runner = FakeRunner(issue_list=OPEN_ISSUE)
+        outcome = self._reconcile(_scan(sweep.ScanStatus.UNSCANNABLE, exit_code=1), runner)
+        self.assertIs(outcome.action, sweep.IssueAction.SKIPPED_UNSCANNABLE)
+        self.assertEqual(outcome.issue_number, 77)
+        for verb in ("edit", "close", "create"):
+            self.assertEqual(runner.argv_starting("gh", "issue", verb), [], verb)
+
+    def test_a_not_watched_issue_is_refreshed_with_the_current_explanation(self) -> None:
+        """THE review finding: setting the PAT left the issue claiming no token was configured."""
+        earlier = _scan(sweep.ScanStatus.UNSCANNABLE, exit_code=1, detail="No read token is configured.")
+        stale = sweep.render_issue_body(earlier, floor=severity.SEVERITY_FLOOR, generated_at=FIXED_NOW)
+        self.assertIn(sweep.NEVER_SCANNED_MARKER, stale)
+        runner = FakeRunner(issue_list=[{**OPEN_ISSUE[0], "body": stale}])
+        current = _scan(sweep.ScanStatus.UNSCANNABLE, exit_code=1, detail="Grant that token Contents: Read.")
+        outcome = self._reconcile(current, runner)
+        self.assertIs(outcome.action, sweep.IssueAction.UPDATED)
+        self.assertEqual(outcome.issue_number, 77)
+        (lookup,) = runner.argv_starting("gh", "issue", "list")
+        self.assertIn("body", lookup[lookup.index("--json") + 1].split(","))
+        (edited,) = runner.argv_starting("gh", "issue", "edit")
+        body = edited[edited.index("--body") + 1]
+        self.assertIn("Grant that token Contents: Read.", body)
+        self.assertNotIn("No read token is configured.", body)
+
+    def test_a_real_scan_body_never_carries_the_never_scanned_marker(self) -> None:
+        """Only a body that knows nothing may be refreshed by "unknown"."""
+        for status in (sweep.ScanStatus.FINDINGS, sweep.ScanStatus.CLEAN, sweep.ScanStatus.SCAN_ERROR):
+            with self.subTest(status=status):
+                body = sweep.render_issue_body(_scan(status), floor=severity.SEVERITY_FLOOR, generated_at=FIXED_NOW)
+                self.assertNotIn(sweep.NEVER_SCANNED_MARKER, body)
+
+    def _main(self, runner: FakeRunner, *only: str) -> Tuple[int, str]:
+        argv = ["--inventory", str(INVENTORY)]
+        for name in only:
+            argv += ["--only", name]
+        out, err = io.StringIO(), io.StringIO()
+        with isolated_cwd() as tmp, redirect_stdout(out), redirect_stderr(err):
+            code = sweep.main(argv + ["--workdir", str(tmp)], runner=runner, sleeper=NoopSleeper(), now=FIXED_NOW)
+        return code, out.getvalue() + err.getvalue()
+
+    def test_a_sweep_complete_except_unwatched_repos_exits_3(self) -> None:
+        """Distinct from EXIT_OK: it must never read as "every governed repo was scanned"."""
+        runner = FakeRunner(inaccessible=["Prekzursil/PrimariRo"])
+        code, text = self._main(runner, "momentstudio", "PrimariRo")
+        self.assertEqual(code, sweep.EXIT_UNWATCHED)
+        self.assertIn("UNWATCHED scheduled-cve-scan: 1 repo(s)", text)
+        self.assertIn("Prekzursil/PrimariRo", text)
+        self.assertIn("| unscannable |", text)
+
+    def test_the_cli_flag_reaches_the_scan(self) -> None:
+        """--read-token-configured switches the explanation the issue and summary carry."""
+        runner = FakeRunner(inaccessible=["Prekzursil/PrimariRo"])
+        argv = ["--inventory", str(INVENTORY), "--only", "PrimariRo", "--read-token-configured"]
+        out, err = io.StringIO(), io.StringIO()
+        with isolated_cwd() as tmp, redirect_stdout(out), redirect_stderr(err):
+            code = sweep.main(argv + ["--workdir", str(tmp)], runner=runner, sleeper=NoopSleeper(), now=FIXED_NOW)
+        self.assertEqual(code, sweep.EXIT_UNWATCHED)
+        self.assertIn("Grant that token Contents: Read", out.getvalue())
+
+    def test_an_incomplete_sweep_still_exits_1(self) -> None:
+        """A real scan error outranks the standing unwatched gap."""
+        runner = FakeRunner(osv_results=[(130, "")], inaccessible=["Prekzursil/PrimariRo"])
+        code, _text = self._main(runner, "momentstudio", "PrimariRo")
+        self.assertEqual(code, sweep.EXIT_INCOMPLETE)
+
+
 class IssueNumberParsingTests(unittest.TestCase):
     """The two number parsers, including the shapes coverage cannot branch on."""
 
@@ -1126,6 +1322,24 @@ class ScheduledCveScanWorkflowTests(unittest.TestCase):
         checkouts = [step for step in steps if str(step.get("uses", "")).startswith("actions/checkout")]
         self.assertEqual(len(checkouts), 1)
         self.assertIs(checkouts[0]["with"]["persist-credentials"], False)
+
+    def test_unwatched_repos_warn_without_failing_or_passing(self) -> None:
+        """Exit 3 annotates the run; it neither fails it nor prints the all-scanned PASS."""
+        (step,) = [s for s in self.doc["jobs"]["sweep"]["steps"] if "scheduled_cve_scan" in str(s.get("run", ""))]
+        run = str(step["run"])
+        branch = run.split('elif [ "$rc" -eq 3 ]; then', 1)[1].split("elif", 1)[0]
+        self.assertIn("::warning title=scheduled-cve-scan: private repos NOT watched::", branch)
+        self.assertNotIn("exit", branch)
+        self.assertNotIn("PASS", branch)
+
+    def test_the_read_pat_never_becomes_the_issue_writing_token(self) -> None:
+        """THE review finding: a read-only PAT as GH_TOKEN 403s every issue write."""
+        (step,) = [s for s in self.doc["jobs"]["sweep"]["steps"] if "scheduled_cve_scan" in str(s.get("run", ""))]
+        self.assertEqual(step["env"]["GH_TOKEN"], "${{ github.token }}")
+        self.assertEqual(step["env"][sweep.FLEET_READ_PAT_ENV], "${{ secrets.CODEX_FLEET_READ_PAT }}")
+        self.assertNotIn("CODEX_FLEET_READ_PAT ||", self.text)
+        self.assertIn('if [ -n "${QZ_FLEET_READ_TOKEN:-}" ]; then', step["run"])
+        self.assertIn("args+=(--read-token-configured)", step["run"])
 
     def test_osv_scanner_is_pinned_to_the_gate_version(self) -> None:
         """Same binary as gate 6 - a T0 prediction from another version is noise."""

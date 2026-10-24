@@ -94,6 +94,27 @@ class ReusableBypassWorkflowTests(unittest.TestCase):
             self.text,
         )
 
+    def test_the_audit_record_is_appended_without_a_checkout(self) -> None:
+        """One read-only code checkout; the record goes through the Contents API with the PAT."""
+        steps = self.doc["jobs"]["bypass"]["steps"]
+        (code,) = [s for s in steps if str(s.get("uses", "")).startswith("actions/checkout@")]
+        self.assertEqual(code["with"]["repository"], "${{ job.workflow_repository }}")
+        self.assertEqual(code["with"]["ref"], "${{ job.workflow_sha }}")
+        self.assertIs(code["with"]["persist-credentials"], False)
+        self.assertNotIn("token", code["with"])
+        (commit,) = [s for s in steps if s.get("name") == "Commit audit log"]
+        self.assertEqual(commit["if"], "${{ env.HAS_AUDIT_PAT == 'true' }}")
+        self.assertEqual(commit["env"]["GH_TOKEN"], "${{ secrets.BYPASS_AUDIT_PAT }}")
+        self.assertEqual(commit["env"]["QZ_PLATFORM_REPO"], "${{ job.workflow_repository }}")
+        self.assertIn("python scripts/quality/audit_log_append.py", commit["run"])
+        self.assertIn("--branch main", commit["run"])
+        self.assertNotIn("git push", self.text)
+        self.assertNotIn("audit-store", self.text)
+        # The gate's flag lives in the JOB env: a step's own env is invisible to its `if:`.
+        self.assertEqual(self.doc["jobs"]["bypass"]["env"]["HAS_AUDIT_PAT"], "${{ secrets.BYPASS_AUDIT_PAT != '' }}")
+        self.assertFalse(any("HAS_AUDIT_PAT" in (step.get("env") or {}) for step in steps))
+        self.assertIn("QZ_PLATFORM_REPO: ${{ job.workflow_repository }}", self.text)
+
     def test_tracking_issue_step_runs_only_for_break_glass(self) -> None:
         """Post-merge tracking issue is opened only for break-glass labels."""
         self.assertIn(

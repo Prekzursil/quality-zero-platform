@@ -4,9 +4,9 @@ from __future__ import absolute_import
 
 import tempfile
 import unittest
+import unittest.mock as mock
 from pathlib import Path
 from typing import Any, Dict
-from unittest import mock
 from urllib.error import HTTPError
 
 from scripts.quality import build_admin_dashboard

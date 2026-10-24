@@ -20,9 +20,11 @@ unit-testable without network / filesystem.
 from __future__ import absolute_import
 
 import datetime as dt
+import json
+import subprocess  # nosec B404 # noqa: S404 — gh CLI wrapper; args are controlled
 import sys
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Mapping
+from typing import Any, Callable, Collection, Dict, Iterable, List, Mapping, Optional, Sequence
 
 from scripts.quality import alert_triggers as at
 from scripts.quality import alerts
@@ -156,6 +158,179 @@ def _drift_pr_triggers(
     return triggers
 
 
+#: Outcomes that neither fail nor pass a workflow: they never break a failure
+#: streak and never count as a recovery.
+NEUTRAL_CONCLUSIONS = frozenset({"cancelled", "skipped", "neutral", "action_required", "stale"})
+
+
+def workflow_conclusions(runs: Iterable[Mapping[str, Any]]) -> Dict[str, List[str]]:
+    """Group ``gh run list --json workflowName,status,conclusion,createdAt`` rows by workflow.
+
+    Each list is newest first and holds only COMPLETED runs whose conclusion
+    says something (success or a failure kind).
+    """
+    ordered = sorted(
+        (run for run in runs if isinstance(run, Mapping)),
+        key=lambda run: str(run.get("createdAt", "")),
+        reverse=True,
+    )
+    grouped: Dict[str, List[str]] = {}
+    for run in ordered:
+        conclusion = str(run.get("conclusion") or "")
+        if run.get("status") != "completed" or not conclusion or conclusion in NEUTRAL_CONCLUSIONS:
+            continue
+        grouped.setdefault(str(run.get("workflowName", "")), []).append(conclusion)
+    return grouped
+
+
+def _gh_list(args: Sequence[str], *, runner: Callable[..., "subprocess.CompletedProcess[str]"]) -> List[Any]:
+    """Run one ``gh`` listing and return its JSON array; raise when ``gh`` fails."""
+    completed = runner(["gh", *args], capture_output=True, text=True, check=False)  # nosec B603 — fixed argv
+    if completed.returncode != 0:
+        raise alerts.AlertCommandError(
+            f"`gh {' '.join(args[:2])}` exited {completed.returncode}: {completed.stderr.strip()}"
+        )
+    payload = json.loads(completed.stdout or "[]")
+    return payload if isinstance(payload, list) else []
+
+
+def _decisive_runs(runs: Iterable[Mapping[str, Any]]) -> int:
+    """How many of ``runs`` say something: completed with a success or a failure kind."""
+    return sum(len(conclusions) for conclusions in workflow_conclusions(runs).values())
+
+
+def _workflow_runs(
+    platform_slug: str,
+    workflow_id: str,
+    *,
+    branch: str,
+    limit: int,
+    runner: Callable[..., "subprocess.CompletedProcess[str]"],
+) -> List[Mapping[str, Any]]:
+    """The newest ``limit`` runs of one workflow on ``branch``; raise when ``gh`` fails."""
+    listed = _gh_list(
+        [
+            "run",
+            "list",
+            "--repo",
+            platform_slug,
+            "--workflow",
+            workflow_id,
+            "--branch",
+            branch,
+            "--limit",
+            str(limit),
+            "--json",
+            "workflowName,status,conclusion,createdAt",
+        ],
+        runner=runner,
+    )
+    return [run for run in listed if isinstance(run, Mapping)]
+
+
+def fetch_active_workflows(
+    platform_slug: str,
+    *,
+    runner: Callable[..., "subprocess.CompletedProcess[str]"] = subprocess.run,
+) -> List[Mapping[str, Any]]:
+    """The platform's ACTIVE workflows (id, name, state); raise when ``gh`` fails."""
+    listed = _gh_list(
+        ["workflow", "list", "--repo", platform_slug, "--json", "id,name,state", "--limit", "200"], runner=runner
+    )
+    return [workflow for workflow in listed if isinstance(workflow, Mapping) and workflow.get("state") == "active"]
+
+
+def fetch_workflow_runs(
+    platform_slug: str,
+    *,
+    branch: str = "main",
+    per_workflow: int = 10,
+    max_per_workflow: int = 200,
+    decisive: int = at.WORKFLOW_FAILING_THRESHOLD_RUNS,
+    workflows: Optional[Sequence[Mapping[str, Any]]] = None,
+    runner: Callable[..., "subprocess.CompletedProcess[str]"] = subprocess.run,
+) -> List[Mapping[str, Any]]:
+    """Read every active workflow's newest default-branch runs through ``gh``; raise if it cannot.
+
+    Per workflow, because ``gh run list --limit`` caps the COMBINED result: the
+    hourly dashboard alone would push a weekly workflow's last three runs out
+    of any shared window, so it could fail forever below the threshold.
+
+    A full window holding fewer than ``decisive`` completed, non-neutral runs
+    is read again at ``max_per_workflow``. Cancelled and skipped runs never
+    break a streak, so a burst of them (in-progress cancellation) must not
+    push the failure that completes one out of view either.
+    """
+    active = workflows if workflows is not None else fetch_active_workflows(platform_slug, runner=runner)
+    runs: List[Mapping[str, Any]] = []
+    for workflow in active:
+        workflow_id = str(workflow.get("id"))
+        listed = _workflow_runs(platform_slug, workflow_id, branch=branch, limit=per_workflow, runner=runner)
+        if len(listed) >= per_workflow and _decisive_runs(listed) < decisive:
+            listed = _workflow_runs(platform_slug, workflow_id, branch=branch, limit=max_per_workflow, runner=runner)
+        # A renamed workflow's older runs still carry the OLD name. File every
+        # run under the current one, so a rename never opens (and at once
+        # closes) an alert for a name that no longer exists.
+        name = str(workflow.get("name") or "")
+        runs.extend({**run, "workflowName": name} if name else run for run in listed)
+    return runs
+
+
+def close_recovered_workflow_alerts(
+    *,
+    platform_slug: str,
+    workflow_runs: Mapping[str, Sequence[str]],
+    active_workflows: Optional[Collection[str]] = None,
+    closer: Callable[..., Mapping[str, Any]] = alerts.close_alert_issue,
+    lister: Callable[..., Sequence[Mapping[str, Any]]] = alerts.list_open_alert_issues,
+    dry_run: bool = False,
+) -> List[Dict[str, Any]]:
+    """Close the failing-workflow alerts that no longer describe a failing workflow.
+
+    A workflow whose newest completed run succeeded has recovered. With
+    ``active_workflows`` given, an open alert for a workflow that is no longer
+    active (deleted, renamed or disabled) closes too: it can never produce the
+    successful run that would otherwise close it.
+    """
+    results: List[Dict[str, Any]] = []
+    if active_workflows is not None:
+        prefix = alerts.alert_issue_title(alerts.AlertType.WORKFLOW_FAILING, "")
+        for issue in lister(platform_slug, alert_type=alerts.AlertType.WORKFLOW_FAILING):
+            title = str(issue.get("title", ""))
+            subject = title[len(prefix) :]
+            if not title.startswith(prefix) or subject in active_workflows:
+                continue
+            results.append(
+                dict(
+                    closer(
+                        platform_slug,
+                        alert_type=alerts.AlertType.WORKFLOW_FAILING,
+                        subject=subject,
+                        dry_run=dry_run,
+                        close_comment=(
+                            f"`{subject}` is no longer an active workflow (deleted, renamed or disabled); closing."
+                        ),
+                    )
+                )
+            )
+    for workflow in sorted(workflow_runs):
+        conclusions = list(workflow_runs[workflow])
+        if not conclusions or conclusions[0] != "success":
+            continue
+        results.append(
+            dict(
+                closer(
+                    platform_slug,
+                    alert_type=alerts.AlertType.WORKFLOW_FAILING,
+                    subject=workflow,
+                    dry_run=dry_run,
+                    close_comment=f"`{workflow}` succeeded on its newest completed run; closing.",
+                )
+            )
+        )
+    return results
+
+
 def build_triggers_from_fleet_state(
     state: Mapping[str, Any],
 ) -> List[at.AlertTrigger]:
@@ -178,6 +353,10 @@ def build_triggers_from_fleet_state(
             now=now,
         )
     )
+
+    workflow_runs: Mapping[str, Sequence[str]] = state.get("workflow_runs", {})
+    for workflow in sorted(workflow_runs):
+        triggers.extend(at.detect_workflow_failing(workflow=workflow, conclusions=list(workflow_runs[workflow])))
 
     recipe_name = str(state.get("recipe_name", ""))
     staging = list(state.get("staging_results", []))

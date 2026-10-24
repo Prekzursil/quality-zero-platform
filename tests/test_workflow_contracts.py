@@ -30,6 +30,76 @@ class WorkflowContractTests(unittest.TestCase):
             self.assertIn("CODEX_AUTH_JSON", text, path.name)
             self.assertIn("codex_runner_labels_json", text, path.name)
 
+    def test_reusable_workflows_check_the_platform_out_at_their_own_commit(self) -> None:
+        """A caller (or a PR head) can no longer pick the platform scripts a job runs.
+
+        ``job.workflow_repository`` / ``job.workflow_sha`` name the reusable
+        workflow file itself, so the scripts always match the workflow that
+        drives them. ``platform_ref`` used to default to ``main``, which ran a
+        caller pinned to an old workflow against the newest scripts.
+        """
+        for path in sorted((ROOT / ".github" / "workflows").glob("reusable-*.yml")):
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(workflow=path.name):
+                self.assertNotIn("inputs.platform_ref", text)
+                self.assertNotIn("inputs.platform_repository", text)
+                doc = yaml.safe_load(text)
+                declared = (doc[True].get("workflow_call") or {}).get("inputs") or {}
+                for name in ("platform_repository", "platform_ref"):
+                    if name in declared:
+                        self.assertIn("Deprecated and ignored", declared[name]["description"])
+                for job in doc["jobs"].values():
+                    for step in job.get("steps", []):
+                        settings = step.get("with") or {}
+                        # Every checkout naming a repository that is not the caller's
+                        # target (``inputs.repo_slug``) is the platform itself.
+                        if (
+                            str(step.get("uses", "")).startswith("actions/checkout@")
+                            and "repository" in settings
+                            and "inputs.repo_slug" not in str(settings["repository"])
+                        ):
+                            self.assertEqual(settings["repository"], "${{ job.workflow_repository }}")
+                            if settings.get("path") != "audit-store":
+                                self.assertEqual(settings["ref"], "${{ job.workflow_sha }}")
+
+    def test_no_step_gates_on_its_own_env(self) -> None:
+        """A step's own env does not exist yet when its `if:` is evaluated.
+
+        `if: env.X == 'true'` with X defined only in that step's `env:` is
+        always false, so the step is skipped silently on every run. That
+        is how the drift-sync and bump PR steps, the bypass audit commit
+        and the SonarCloud scan never ran. Gate flags belong in the job
+        or workflow env, which may read `secrets`.
+        """
+        env_ref = re.compile(r"\benv\.([A-Za-z_][A-Za-z0-9_]*)")
+        for path in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+            doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+            outer = set(doc.get("env") or {})
+            for job_name, job in (doc.get("jobs") or {}).items():
+                visible = outer | set(job.get("env") or {})
+                for step in job.get("steps") or []:
+                    own_only = {
+                        name
+                        for name in env_ref.findall(str(step.get("if", "")))
+                        if name in (step.get("env") or {}) and name not in visible
+                    }
+                    with self.subTest(workflow=path.name, job=job_name, step=step.get("name") or step.get("uses")):
+                        self.assertEqual(own_only, set())
+
+    def test_actionlint_ignores_only_the_job_workflow_properties(self) -> None:
+        """The one actionlint exception is the job context's workflow_* fields, nothing broader."""
+        config = yaml.safe_load((ROOT / ".github" / "actionlint.yaml").read_text(encoding="utf-8"))
+        (rules,) = config["paths"].values()
+        self.assertEqual(
+            rules["ignore"],
+            [
+                (
+                    'property "workflow_(sha|repository|ref|file_path)" is not defined in object type '
+                    r"\{check_run_id: number; container:"
+                )
+            ],
+        )
+
     def test_self_wrapper_workflows_do_not_inherit_all_secrets(self) -> None:
         """Ensure top-level wrappers pass only the secrets they actually need."""
         workflow_paths = [

@@ -24,10 +24,12 @@ on:
         type: string
         required: false
         default: Prekzursil/quality-zero-platform
+        description: "Deprecated and ignored. The platform is checked out at this workflow file's own commit (job.workflow_repository / job.workflow_sha), so a caller can no longer pick, or drift from, the scripts it runs. Still declared so existing callers that pass it keep working."
       platform_ref:
         type: string
         required: false
         default: main
+        description: "Deprecated and ignored. The platform is checked out at this workflow file's own commit (job.workflow_repository / job.workflow_sha), so a caller can no longer pick, or drift from, the scripts it runs. Still declared so existing callers that pass it keep working."
     secrets:
       CODEX_AUTH_JSON:
         required: false
@@ -47,10 +49,11 @@ jobs:
       title: ${{ steps.naming.outputs.title }}
       short_sha: ${{ steps.naming.outputs.short_sha }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Check out the platform at this workflow's own commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          repository: ${{ inputs.platform_repository }}
-          ref: ${{ inputs.platform_ref }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: platform
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
@@ -113,10 +116,11 @@ jobs:
         with:
           path: repo
           persist-credentials: false
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Check out the platform at this workflow's own commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          repository: ${{ inputs.platform_repository }}
-          ref: ${{ inputs.platform_ref }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: platform
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
@@ -174,9 +178,9 @@ jobs:
           TARGET_SHA: ${{ inputs.sha || github.sha }}
           ACTIONS_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          canonical_args=()
+          CANONICAL_ARG=""
           if [ -f "$RUNNER_TEMP/quality-rollup/canonical.json" ]; then
-            canonical_args=(--canonical-json "$RUNNER_TEMP/quality-rollup/canonical.json")
+            CANONICAL_ARG="--canonical-json $RUNNER_TEMP/quality-rollup/canonical.json"
           fi
           python platform/scripts/quality/render_codex_prompt.py \
             --repo-slug "$REPO_SLUG" \
@@ -185,7 +189,7 @@ jobs:
             --failure-context "$FAILURE_CONTEXT" \
             --artifact "Actions run: $ACTIONS_RUN_URL" \
             --artifact "Target SHA: $TARGET_SHA" \
-            "${canonical_args[@]}" \
+            $CANONICAL_ARG \
             --output "$RUNNER_TEMP/remediation-prompt.md"
       - name: Run Codex on the trusted private runner
         run: |

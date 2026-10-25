@@ -1874,6 +1874,9 @@ jobs:
       # the gate uses the proven standard bar instead of basedpyright's stricter
       # default. This is NOT weakening — standard is the proven bar and reportAny-
       # everywhere is gold-plating; REAL type errors at standard level still FAIL.
+      # --warnings: the documented bar is zero errors AND zero warnings
+      # (docs/FLEET-BASELINE.md). Without it a warning, such as an unresolved
+      # import, printed "1 warning" and the gate still passed.
       - name: gate-types basedpyright
         id: types_py
         if: steps.detect.outputs.python == 'true'
@@ -1884,10 +1887,10 @@ jobs:
           set -euo pipefail
           if [ "$PYRIGHTCFG" = "true" ]; then
             echo "Honoring caller-shipped basedpyright/pyright config (running as-is)."
-            basedpyright
+            basedpyright --warnings
           else
             echo "No caller basedpyright/pyright config - using standard typeCheckingMode (mirrors Reframe)."
-            basedpyright --typecheckingmode standard
+            basedpyright --typecheckingmode standard --warnings
           fi
 
       # ── GATE 3 — tests + coverage (STRICT 100% line+branch) ───────────────

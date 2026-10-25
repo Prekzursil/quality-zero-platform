@@ -126,6 +126,52 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("--format plain .github/workflows templates/repo/.github/workflows", zizmor)
         self.assertTrue(sorted((ROOT / "templates" / "repo" / ".github" / "workflows").glob("*.yml")))
 
+    def test_every_own_commit_checkout_is_pinned_to_this_workflows_own_commit(self) -> None:
+        """The invariant the dismissed own-commit false positives (#312-#317) rest on.
+
+        The alert fingerprint covers only the step's first 100 non-space
+        characters (name + comment), never ``repository:`` or ``ref:``. So if
+        a step with this name ever checked out a ref a caller or a PR head
+        could choose, CodeQL would raise the same fingerprint and the alert
+        would stay dismissed. Hence, both ways round: a step with this name
+        checks out exactly job.workflow_repository at job.workflow_sha,
+        without persisted credentials and with no second ref or repository,
+        and every checkout of job.workflow_sha carries this name.
+        """
+        canonical = "Check out the platform at this workflow's own commit"
+        found = 0
+        for path in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+            text = path.read_text(encoding="utf-8")
+            workflow = yaml.safe_load(text)
+            lines = text.split("\n")
+            starts = [i for i, line in enumerate(lines) if line.strip() == f"- name: {canonical}"]
+            for job_id, job in (workflow.get("jobs") or {}).items():
+                for step in job.get("steps") or []:
+                    named = step.get("name") == canonical
+                    with_ = step.get("with") or {}
+                    if not (named or with_.get("ref") == "${{ job.workflow_sha }}"):
+                        continue
+                    found += 1
+                    with self.subTest(workflow=path.name, job=job_id):
+                        self.assertTrue(named, "a job.workflow_sha checkout must carry the canonical name")
+                        self.assertTrue(str(step.get("uses", "")).startswith("actions/checkout@"))
+                        self.assertEqual(with_.get("repository"), "${{ job.workflow_repository }}")
+                        self.assertEqual(with_.get("ref"), "${{ job.workflow_sha }}")
+                        self.assertIs(with_.get("persist-credentials"), False)
+                        self.assertLessEqual(set(with_), {"repository", "ref", "path", "persist-credentials"})
+            # YAML keeps only the last of two equal keys, so read each step's own lines for duplicates.
+            for start in starts:
+                indent = len(lines[start]) - len(lines[start].lstrip())
+                block = []
+                for line in lines[start + 1 :]:
+                    if line.strip() and len(line) - len(line.lstrip()) <= indent:
+                        break
+                    block.append(line.strip())
+                with self.subTest(workflow=path.name, line=start + 1):
+                    self.assertEqual(sum(line.startswith("ref:") for line in block), 1)
+                    self.assertEqual(sum(line.startswith("repository:") for line in block), 1)
+        self.assertGreaterEqual(found, 14)
+
     def test_a_pin_bump_cannot_re_identify_an_own_commit_checkout_alert(self) -> None:
         """CodeQL's alert fingerprint hashes the first 100 non-space/tab characters from the alert's first line.
 

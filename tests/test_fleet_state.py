@@ -163,6 +163,10 @@ class PrivacyTests(unittest.TestCase):
         self.assertTrue(fleet_state.unverifiable_subject("O/R#12", unread))  # case-insensitive tag
         self.assertFalse(fleet_state.unverifiable_subject("o/other#3", unread))
         self.assertTrue(fleet_state.unverifiable_subject("o/x#1", {"o/x": "the read failed"}))
+        # Review finding: opened while private (masked subject), unread now as a public repo (raw key).
+        masked = fleet_state.public_slug("o/x", private=True)
+        self.assertTrue(fleet_state.unverifiable_subject(f"{masked}#1", {"o/x": "the read failed"}))
+        self.assertFalse(fleet_state.unverifiable_subject(f"{masked}#1", {"o/y": "the read failed"}))
 
     def test_visibility_is_read_live_and_anything_unproven_is_private(self) -> None:
         """Review finding: a repository whose visibility flipped to private was published as public."""

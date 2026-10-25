@@ -166,12 +166,16 @@ def unverifiable_subject(subject: str, unread: Mapping[str, str]) -> bool:
 
     The subject may carry the RAW slug (opened while the repository was
     public) while ``unread`` is keyed by its masked tag (it turned private,
-    or its visibility could not be read): both forms are recognized, so a
-    visibility change or a transient lookup failure is never mistaken for a
-    resolved alert.
+    or its visibility could not be read), or the other way round (opened
+    while private, unread now as a public repository): both forms are
+    recognized, so a visibility change or a transient failure is never
+    mistaken for a resolved alert.
     """
     repo = subject.rsplit("#", 1)[0]
-    return repo in unread or public_slug(repo, private=True) in unread
+    # Both directions: a raw unread key also answers for its masked tag (an
+    # alert opened while the repository was private, read failing now).
+    names = set(unread) | {public_slug(key, private=True) for key in unread}
+    return repo in names or public_slug(repo, private=True) in names
 
 
 def fleet_read_env(environ: Mapping[str, str]) -> Optional[Dict[str, str]]:

@@ -38,13 +38,14 @@ jobs:
       codex_runner_labels_json: ${{ steps.profile.outputs.codex_runner_labels_json }}
     steps:
       - name: Check out the platform at this workflow's own commit
-        uses: actions/checkout@v4
+        # job.workflow_sha is this file's own commit: no caller or PR head picks it.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
           path: platform
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       - name: Install platform dependencies
@@ -69,18 +70,19 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: repo
           persist-credentials: false
       - name: Check out the platform at this workflow's own commit
-        uses: actions/checkout@v4
+        # job.workflow_sha is this file's own commit: no caller or PR head picks it.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
           path: platform
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       - name: Install platform dependencies
@@ -117,7 +119,7 @@ jobs:
             --json-log "$RUNNER_TEMP/codex-events.jsonl"
       - name: Upload Codex execution artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: codex-backlog-artifacts
           path: |
@@ -126,7 +128,7 @@ jobs:
             ${{ runner.temp }}/codex-events.jsonl
             ${{ runner.temp }}/backlog-prompt.md
       - name: Create or update backlog pull request
-        uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
           path: repo
           branch: codex/backlog/${{ inputs.lane }}

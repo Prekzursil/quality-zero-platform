@@ -43,6 +43,12 @@
             "context": "gate-sast (opengrep)"
           },
           {
+            "context": "gate-workflows (actionlint + zizmor)"
+          },
+          {
+            "context": "gate-secrets (gitleaks)"
+          },
+          {
             "context": "CodeQL"
           }
         ],

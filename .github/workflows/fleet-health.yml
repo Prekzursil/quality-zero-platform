@@ -64,11 +64,11 @@ jobs:
       contents: read
       issues: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
 
@@ -109,9 +109,11 @@ jobs:
             check_pin "$asset" "$(sed -n "s/^  $asset: \"\(.*\)\"\$/\1/p" "$pins_file" | head -1)  "
           done
           if [ -n "$offenders" ]; then
-            printf 'offenders<<__QZT_EOF__\n' >> "$GITHUB_OUTPUT"
-            printf '%b' "$offenders" >> "$GITHUB_OUTPUT"
-            printf '__QZT_EOF__\n' >> "$GITHUB_OUTPUT"
+            {
+              printf 'offenders<<__QZT_EOF__\n'
+              printf '%b' "$offenders"
+              printf '__QZT_EOF__\n'
+            } >> "$GITHUB_OUTPUT"
             echo "PIN DRIFT FOUND:"
             printf '%b' "$offenders"
           else
@@ -162,6 +164,7 @@ jobs:
           echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
           # Render the offender section for the tracking issue body here,
           # where the JSON lives — no heredoc-in-command-substitution nesting.
+          # shellcheck disable=SC2016 # single quotes on purpose: this is Python source, not shell
           section="$(python -c '
           import json, sys
           payload = json.load(open("build/fleet-health-contexts.json", encoding="utf-8"))

@@ -8,11 +8,28 @@ on:
   workflow_dispatch:
 
 jobs:
+  require-codex-auth:
+    # Disabled since 2026-10, and CODEX_AUTH_JSON is being removed from this
+    # repository. Re-enabled without recreating that secret, this workflow
+    # must fail HERE, visibly, not deep inside a Codex run or a runner queue.
+    name: Require CODEX_AUTH_JSON
+    runs-on: ubuntu-latest
+    permissions: {}
+    env:
+      CODEX_AUTH_PRESENT: ${{ secrets.CODEX_AUTH_JSON != '' }}
+    steps:
+      - name: Fail when CODEX_AUTH_JSON is not configured
+        if: ${{ env.CODEX_AUTH_PRESENT != 'true' }}
+        run: |
+          echo "::error title=CODEX_AUTH_JSON not configured::This workflow needs the CODEX_AUTH_JSON Actions secret, which this repository no longer has. Recreate it before re-enabling the workflow."
+          exit 1
+
   shared-backlog-sweep:
+    needs: require-codex-auth
     permissions:
       contents: write
       pull-requests: write
-    uses: ./.github/workflows/reusable-backlog-sweep.yml
+    uses: ./.github/workflows/reusable-backlog-sweep.yml # zizmor: ignore[self-repository]
     with:
       repo_slug: Prekzursil/quality-zero-platform
       lane: quality

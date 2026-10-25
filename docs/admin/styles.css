@@ -59,7 +59,7 @@ tbody tr:hover { background: #16203d; cursor: pointer; }
 }
 .badge.pass { background: #14532d; color: #f0fdf4; }
 .badge.fail { background: #7f1d1d; color: #fef2f2; }
-.badge.pending, .badge.unknown { background: #334155; color: #f8fafc; }
+.badge.pending, .badge.unknown, .badge.none { background: #334155; color: #f8fafc; }
 /* Lane 8 operator panels: pre-existing success/partial values (heatmap) plus
    the gate/drift/rollup vocabularies. */
 .badge.success { background: #14532d; color: #f0fdf4; }

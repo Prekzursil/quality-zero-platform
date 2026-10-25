@@ -35,13 +35,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the platform at this workflow's own commit
-        uses: actions/checkout@v4
+        # job.workflow_sha is this file's own commit: no caller or PR head picks it.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
           path: platform
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       - name: Install platform dependencies
@@ -69,7 +70,7 @@ jobs:
             --out-md "quality-zero-gate/required-checks.md"
       - name: Upload aggregate artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: quality-zero-gate
           path: quality-zero-gate

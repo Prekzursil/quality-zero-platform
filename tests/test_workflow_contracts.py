@@ -81,6 +81,71 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertEqual(notice["if"], "${{ env.CODECOV_UPLOADABLE != 'true' }}")
         self.assertIn("::notice title=Codecov upload skipped::", notice["run"])
 
+    def test_a_reenabled_codex_workflow_fails_visibly_without_its_secret(self) -> None:
+        """CODEX_AUTH_JSON is being removed: re-enabling either Codex workflow must fail first, by name."""
+        for name, job in (
+            ("quality-zero-backlog.yml", "shared-backlog-sweep"),
+            ("quality-zero-remediation.yml", "shared-remediation-loop"),
+        ):
+            with self.subTest(workflow=name):
+                workflow = yaml.safe_load((ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8"))
+                guard = workflow["jobs"]["require-codex-auth"]
+                self.assertEqual(guard["permissions"], {})
+                self.assertEqual(guard["env"]["CODEX_AUTH_PRESENT"], "${{ secrets.CODEX_AUTH_JSON != '' }}")
+                (step,) = guard["steps"]
+                self.assertEqual(step["if"], "${{ env.CODEX_AUTH_PRESENT != 'true' }}")
+                self.assertIn("::error title=CODEX_AUTH_JSON not configured::", step["run"])
+                self.assertIn("exit 1", step["run"])
+                self.assertEqual(workflow["jobs"][job]["needs"], "require-codex-auth")
+                self.assertEqual(guard.get("if"), workflow["jobs"][job].get("if"))
+
+    def test_an_opted_in_sonar_scan_without_its_token_says_it_was_skipped(self) -> None:
+        """The scan is opt-in; opted in with no SONAR_TOKEN it must not vanish silently."""
+        workflow = yaml.safe_load(
+            (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
+        )
+        steps = workflow["jobs"]["scanner"]["steps"]
+        names = [step.get("name", "") for step in steps]
+        notice = steps[names.index("SonarCloud scan skipped (no SONAR_TOKEN)")]
+        self.assertIn("env.SONAR_TOKEN_PRESENT != 'true'", notice["if"])
+        self.assertIn("steps.profile.outputs.sonar_coverage_enabled == 'true'", notice["if"])
+        self.assertIn("::warning title=SonarCloud scan skipped::", notice["run"])
+        scan = steps[names.index("SonarCloud scan")]
+        self.assertIn("env.SONAR_TOKEN_PRESENT == 'true'", scan["if"])
+
+    def test_the_workflow_gate_lints_the_consumer_templates_too(self) -> None:
+        """Governed repos copy templates/repo/.github/workflows: a defect there must fail QZP's own gate."""
+        workflow = yaml.safe_load(
+            (ROOT / ".github" / "workflows" / "quality-zero-platform.yml").read_text(encoding="utf-8")
+        )
+        steps = {step.get("name", ""): step for step in workflow["jobs"]["workflows"]["steps"]}
+        actionlint = steps["gate-workflows actionlint"]["run"]
+        self.assertIn("templates/repo/.github/workflows/*.y*ml", actionlint)
+        self.assertIn('/tmp/actionlint -color "${workflows[@]}"', actionlint)
+        zizmor = steps["gate-workflows zizmor"]["run"]
+        self.assertIn("--format plain .github/workflows templates/repo/.github/workflows", zizmor)
+        self.assertTrue(sorted((ROOT / "templates" / "repo" / ".github" / "workflows").glob("*.yml")))
+
+    def test_a_pin_bump_cannot_re_identify_an_own_commit_checkout_alert(self) -> None:
+        """CodeQL's alert fingerprint hashes the first 100 non-space/tab characters from the alert's first line.
+
+        The own-commit platform checkouts carry dismissed false positives
+        (CodeQL does not model job.workflow_sha). If that window reaches the
+        pinned SHA, every Dependabot bump re-identifies them as new alerts
+        (#306-#310). The comment line keeps the window inside name + comment.
+        """
+        name = "- name: Check out the platform at this workflow's own commit"
+        found = 0
+        for path in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+            lines = path.read_text(encoding="utf-8").split("\n")
+            for start in [i for i, line in enumerate(lines) if line.strip() == name]:
+                found += 1
+                tail = "".join(ch for ch in "\n".join(lines[start:]) if ch not in " \t")
+                with self.subTest(workflow=path.name, line=start + 1):
+                    self.assertNotIn("@", tail[:100], "the fingerprint window reaches the action pin")
+                    self.assertIn("uses:actions/checkout@", tail[:400])
+        self.assertGreaterEqual(found, 14)
+
     def test_no_step_gates_on_its_own_env(self) -> None:
         """A step's own env does not exist yet when its `if:` is evaluated.
 
@@ -321,8 +386,8 @@ class WorkflowContractTests(unittest.TestCase):
         remediation_text = (ROOT / ".github" / "workflows" / "reusable-remediation-loop.yml").read_text(
             encoding="utf-8"
         )
-        self.assertIn("peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c", backlog_text)
-        self.assertIn("peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c", remediation_text)
+        self.assertIn("peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1", backlog_text)
+        self.assertIn("peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1", remediation_text)
 
     def test_scanner_matrix_pins_codecov_upload_and_keeps_token_optional(self) -> None:
         """Codecov upload removed from scanner-matrix per §7.3 — kept in reusable-codecov-analytics.yml only."""
@@ -384,10 +449,26 @@ class WorkflowContractTests(unittest.TestCase):
             text,
         )
 
-    def test_scanner_matrix_checks_out_repo_at_requested_sha(self) -> None:
-        """Ensure scanner lanes analyze the exact requested commit without persisted credentials."""
+    def test_scanner_matrix_checks_out_the_triggering_commit_never_a_caller_ref(self) -> None:
+        """CodeQL alert #303: no caller-chosen ref, and a fork's code never reaches a self-hosted runner."""
+        workflow = yaml.safe_load(
+            (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
+        )
+        steps = workflow["jobs"]["scanner"]["steps"]
+        names = [step.get("name", "") for step in steps]
+        checkout = steps[names.index("Check out the code under test")]
+        self.assertEqual(checkout["with"], {"path": "repo", "persist-credentials": False})
+        guard = steps[names.index("Refuse a fork's code on a self-hosted runner")]
+        self.assertEqual(names.index(guard["name"]), 0)
+        for clause in (
+            "github.event_name == 'pull_request'",
+            "github.event.pull_request.head.repo.full_name != github.repository",
+            "runner.environment == 'self-hosted'",
+        ):
+            self.assertIn(clause, guard["if"])
+        self.assertIn("exit 1", guard["run"])
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
-        self.assertIn("ref: ${{ inputs.sha != '' && inputs.sha || github.sha }}", text)
+        self.assertNotIn("ref: ${{ inputs.sha", text)
         self.assertEqual(text.count("persist-credentials: false"), 3)
 
     def test_scanner_matrix_uses_configurable_runner_for_coverage_lane(self) -> None:
@@ -483,6 +564,16 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("run_quality_zero_gate.py", text)
         self.assertNotIn("python - <<'PY'", text)
 
+    def test_every_action_reference_is_pinned_to_a_commit(self) -> None:
+        """A tag can be moved under every caller; a commit SHA cannot (zizmor's unpinned-uses)."""
+        uses = re.compile(r"^\s*(?:-\s+)?uses:\s+(\S+)", re.MULTILINE)
+        for path in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+            for ref in uses.findall(path.read_text(encoding="utf-8")):
+                if ref.startswith("./"):
+                    continue
+                with self.subTest(workflow=path.name, ref=ref):
+                    self.assertRegex(ref, r"@[0-9a-f]{40}$")
+
     def test_all_flagged_checkout_steps_disable_persisted_credentials(self) -> None:
         """Require every checkout step in the flagged workflows to disable persisted credentials.
 
@@ -547,7 +638,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("quality-rollup", text)
         self.assertIn("build_quality_rollup.py", text)
         self.assertIn("post_pr_quality_comment.py", text)
-        self.assertIn("actions/download-artifact@v4", text)
+        self.assertRegex(text, r"uses: actions/download-artifact@[0-9a-f]{40} # v\d+\.\d+\.\d+")
         self.assertIn("job_name: Dependency Alerts", text)
         self.assertIn('lane == "deps"', text)
         self.assertIn("check_dependabot_alerts.py", text)

@@ -32,6 +32,7 @@ on:
         type: string
         required: false
         default: ""
+        description: "The commit the SaaS lanes report on. The code under test is always checked out at github.sha, never at this input."
       platform_repository:
         type: string
         required: false
@@ -105,19 +106,32 @@ jobs:
           - job_name: Dependency Alerts
             lane: deps
     steps:
-      - uses: actions/checkout@v4
+      # A fork's code never runs on a self-hosted runner: it could take over
+      # the machine, or poison what later jobs read there (CodeQL
+      # actions/untrusted-checkout). coverage_runner lets a caller choose one.
+      - name: Refuse a fork's code on a self-hosted runner
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && runner.environment == 'self-hosted'
+        run: |
+          echo "::error title=Fork PR on a self-hosted runner::This job would run a fork's code on a self-hosted runner. Run fork pull requests on a GitHub-hosted runner."
+          exit 1
+      # actions/checkout's default: the commit that triggered the CALLER (a
+      # push, the PR merge commit, the base under pull_request_target), never
+      # a caller-chosen ref, since a privileged caller passing a PR head would
+      # run fork code with its secrets.
+      - name: Check out the code under test
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: repo
-          ref: ${{ inputs.sha != '' && inputs.sha || github.sha }}
           persist-credentials: false
       - name: Check out the platform at this workflow's own commit
-        uses: actions/checkout@v4
+        # job.workflow_sha is this file's own commit: no caller or PR head picks it.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
           path: platform
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       - name: Install platform dependencies
@@ -152,23 +166,25 @@ jobs:
           PACKAGES_JSON: ${{ steps.profile.outputs.coverage_system_packages_json }}
       - name: Set up Node
         if: matrix.lane == 'coverage' && steps.profile.outputs.coverage_node_version != ''
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ steps.profile.outputs.coverage_node_version }}
+          # No implicit npm cache: deterministic installs, nothing a PR run can seed.
+          package-manager-cache: false
       - name: Set up Go
         if: matrix.lane == 'coverage' && steps.profile.outputs.coverage_go_version != ''
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ steps.profile.outputs.coverage_go_version }}
       - name: Set up Java
         if: matrix.lane == 'coverage' && steps.profile.outputs.coverage_java_version != ''
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: ${{ steps.profile.outputs.coverage_java_distribution }}
           java-version: ${{ steps.profile.outputs.coverage_java_version }}
       - name: Set up .NET
         if: matrix.lane == 'coverage' && steps.profile.outputs.coverage_dotnet_version != ''
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: ${{ steps.profile.outputs.coverage_dotnet_version }}
       - name: Set up Rust
@@ -428,14 +444,18 @@ jobs:
         run: |
           python platform/scripts/quality/rollup_v2/verify_action_pins.py \
             --workflows-dir platform/.github/workflows
+      - name: SonarCloud scan skipped (no SONAR_TOKEN)
+        if: matrix.lane == 'coverage' && env.SONAR_TOKEN_PRESENT != 'true' && steps.profile.outputs.sonar_coverage_enabled == 'true'
+        run: |
+          echo "::warning title=SonarCloud scan skipped::The profile opts in (sonar_coverage: true), but the caller passes no SONAR_TOKEN, so no SonarCloud analysis ran."
       - name: SonarCloud scan
-        # Profile-gated (default on) so a repo can retire the SonarCloud
-        # coverage scan without touching this shared workflow. The platform's
-        # own lean self-CI sets ``sonar_coverage: false`` because SonarCloud is
-        # a retired-tier tool there and CI analysis is rejected while
-        # Automatic Analysis is enabled on the project — the 100% coverage
-        # MEASURE stays in Control Plane Verify (scripts/verify --fail-under=100).
-        # The enrolled fleet (no toggle) keeps the legacy on-by-token behaviour.
+        # OPT-IN per profile (``sonar_coverage: true``; export_profile defaults
+        # it off): SonarCloud rejects CI analysis wherever Automatic Analysis
+        # is enabled. Until #336 this step could never run (its `if:` read its
+        # own env), so no repository has depended on it. QZP's own profile
+        # keeps it off; its 100% coverage MEASURE stays in Control Plane
+        # Verify (scripts/verify --fail-under=100). Opted in without a
+        # SONAR_TOKEN, the step above says the scan was skipped.
         if: matrix.lane == 'coverage' && env.SONAR_TOKEN_PRESENT == 'true' && steps.profile.outputs.sonar_coverage_enabled != 'false'
         # The Sonar action SHA pin (40-char hex) trips
         # generic.secrets.security.detected-sonarqube-docs-api-key on the
@@ -444,7 +464,7 @@ jobs:
         # any rule on the line below — the rule-id form was being
         # ignored by --config auto so we drop the suffix.
         # nosem
-        uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602  # v6 pinned per §A.2.4
+        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
         with:
           projectBaseDir: repo
         env:
@@ -644,7 +664,7 @@ jobs:
 
       - name: Upload lane artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ matrix.lane }}-artifacts
           path: |
@@ -669,13 +689,14 @@ jobs:
       pull-requests: write
     steps:
       - name: Check out the platform at this workflow's own commit
-        uses: actions/checkout@v4
+        # job.workflow_sha is this file's own commit: no caller or PR head picks it.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
           path: platform
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       - name: Install platform dependencies
@@ -691,7 +712,7 @@ jobs:
             --event-name "$EVENT_NAME_INPUT" \
             --out-json "$RUNNER_TEMP/profile.json"
       - name: Download lane artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: artifacts
           pattern: "*-artifacts"
@@ -725,7 +746,7 @@ jobs:
             --out-json quality-rollup/summary.json \
             --out-md quality-rollup/summary.md
       - name: Upload quality rollup
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: quality-rollup
           path: quality-rollup

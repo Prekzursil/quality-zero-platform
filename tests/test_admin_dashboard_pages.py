@@ -19,6 +19,8 @@ from pathlib import Path
 
 from scripts.quality import admin_dashboard_pages as pages
 
+ROOT = Path(__file__).resolve().parents[1]
+
 
 class RedactPrivateRepoRowsTests(unittest.TestCase):
     """Private repo rows are masked in every page."""
@@ -131,6 +133,118 @@ class RenderAuditPageTests(unittest.TestCase):
         """No bypass events → placeholder."""
         html = pages.render_audit_page(entries=[])
         self.assertIn("No bypass", html)
+
+    def test_every_state_says_the_earlier_period_is_unaudited_not_clean(self) -> None:
+        """The recording step never ran before #336: an empty feed must not read as "nothing was bypassed"."""
+        states = {
+            "absent": pages.render_audit_page(entries=None, source="audit/break-glass.jsonl"),
+            "empty": pages.render_audit_page(entries=[]),
+            "entries": pages.render_audit_page(entries=[{"label": "quality-zero:skip", "actor": "x"}]),
+        }
+        for state, html in states.items():
+            with self.subTest(state=state):
+                self.assertIn("<strong>unaudited, not clean</strong>", html)
+                self.assertIn("Before 2026-10-24 (#336)", html)
+                self.assertIn("<code>BYPASS_AUDIT_PAT</code>", html)
+                self.assertIn("rule insights", html)
+
+
+class AuditRecordShapeTests(unittest.TestCase):
+    """The audit page reads the records the bypass workflow actually writes."""
+
+    def test_the_bypass_label_record_shape_renders_its_time_and_pr(self) -> None:
+        """bypass_labels writes timestamp_utc and a nested pr object; both used to render blank."""
+        html = pages.render_audit_page(
+            entries=[
+                {
+                    "timestamp_utc": "2026-10-24T10:00:00Z",
+                    "label": "quality-zero:break-glass",
+                    "pr": {"slug": "o/r", "number": 7, "head_sha": "abc"},
+                    "actor": "dev",
+                    "incident": "INC-1",
+                },
+                {"timestamp": "2026-10-23T09:00:00Z", "label": "quality-zero:skip", "pr": "junk", "actor": "x"},
+            ]
+        )
+        self.assertIn("<td>2026-10-24T10:00:00Z</td>", html)
+        self.assertIn("<td>o/r#7</td>", html)
+        self.assertIn("<td>2026-10-23T09:00:00Z</td>", html)
+        self.assertIn("<td>#</td>", html)
+
+    def test_a_private_members_pr_slug_is_masked_on_the_public_page(self) -> None:
+        """Audit records have no visibility field: the known private members are masked by slug."""
+        entry = {"label": "quality-zero:skip", "pr": {"slug": "Prekzursil/PrimariRo", "number": 3}, "actor": "x"}
+        html = pages.render_audit_page(entries=[entry])
+        self.assertIn("<td>&lt;private&gt;#3</td>", html)
+        self.assertNotIn("PrimariRo", html)
+        self.assertIn(
+            "o/public#3", pages.render_audit_page(entries=[{**entry, "pr": {"slug": "o/public", "number": 3}}])
+        )
+
+
+class AuditSourcesTests(unittest.TestCase):
+    """The feed reads both bypass files: skip records used to be silently absent."""
+
+    def test_break_glass_and_skip_records_are_merged_oldest_first(self) -> None:
+        """None only when neither file exists; one present file is read alone."""
+        with tempfile.TemporaryDirectory() as tmp:
+            glass = Path(tmp) / "break-glass.jsonl"
+            skip = Path(tmp) / "skip.jsonl"
+            self.assertIsNone(pages.load_audit_sources([str(glass), str(skip)]))
+            skip.write_text(
+                '{"timestamp_utc": "2026-10-24T11:00:00Z", "label": "quality-zero:skip"}\n', encoding="utf-8"
+            )
+            self.assertEqual(len(pages.load_audit_sources([str(glass), str(skip)])), 1)
+            glass.write_text(
+                '{"timestamp_utc": "2026-10-24T12:00:00Z", "label": "quality-zero:break-glass"}\n'
+                '{"timestamp": "2026-10-24T10:00:00Z", "label": "quality-zero:break-glass"}\n',
+                encoding="utf-8",
+            )
+            merged = pages.load_audit_sources([str(glass), str(skip)])
+        self.assertEqual(
+            [record.get("timestamp_utc", record.get("timestamp")) for record in merged],
+            ["2026-10-24T10:00:00Z", "2026-10-24T11:00:00Z", "2026-10-24T12:00:00Z"],
+        )
+        self.assertIn("quality-zero:skip", pages.render_audit_page(entries=merged))
+
+    def test_the_publish_workflow_passes_both_bypass_files(self) -> None:
+        """reusable-quality-zero-bypass writes skips to audit/skip.jsonl; the page must be given it."""
+        workflow = (ROOT / ".github" / "workflows" / "publish-admin-dashboard.yml").read_text(encoding="utf-8")
+        self.assertIn("--audit-jsonl audit/break-glass.jsonl", workflow)
+        self.assertIn("--audit-jsonl audit/skip.jsonl", workflow)
+
+
+class NoSourceTests(unittest.TestCase):
+    """A page whose source file does not exist knows nothing - and must say so."""
+
+    def test_every_page_says_it_has_no_data_when_its_source_is_absent(self) -> None:
+        """THE bug: drift.html said "Fleet is in sync" with no drift data at all."""
+        rendered = (
+            pages.render_coverage_trend_page(rows=None, source="quality-rollup/coverage-trend.json"),
+            pages.render_drift_page(entries=None, source="audit/drift-sync.jsonl"),
+            pages.render_audit_page(entries=None, source="audit/break-glass.jsonl"),
+        )
+        sources = ("quality-rollup/coverage-trend.json", "audit/drift-sync.jsonl", "audit/break-glass.jsonl")
+        for html, source in zip(rendered, sources, strict=True):
+            with self.subTest(source=source):
+                self.assertIn("<strong>No data.</strong>", html)
+                self.assertIn(f"<code>{source}</code> does not exist", html)
+                self.assertIn("NOT an all-clear", html)
+                self.assertNotIn("in sync", html)
+        self.assertIn("Its data source does not exist", pages.render_drift_page(entries=None))
+
+    def test_load_source_tells_absent_from_empty(self) -> None:
+        """Absent (or not configured) is None; present-but-empty is an empty list."""
+        self.assertIsNone(pages.load_source("", pages.load_audit_jsonl))
+        self.assertIsNone(pages.load_source("/does/not/exist.jsonl", pages.load_audit_jsonl))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "drift.jsonl"
+            path.write_text("", encoding="utf-8")
+            self.assertEqual(pages.load_source(str(path), pages.load_drift_entries), [])
+            path.write_text('{"slug": "o/r", "status": "open"}\n', encoding="utf-8")
+            self.assertEqual(
+                pages.load_source(str(path), pages.load_drift_entries), [{"slug": "o/r", "status": "open"}]
+            )
 
 
 class LoadAuditJsonlTests(unittest.TestCase):

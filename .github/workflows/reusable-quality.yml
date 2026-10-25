@@ -236,7 +236,10 @@ jobs:
           esac
 
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No gate pushes or fetches with credentials: keep the token off disk.
+          persist-credentials: false
 
       # ── Language detection ────────────────────────────────────────────────
       # Sets boolean outputs consumed by the per-lane `if:` guards below.
@@ -376,7 +379,7 @@ jobs:
       # least one manifest exists; setup-python cannot hard-fail before the gates.)
       - name: Set up Python (cached)
         if: steps.detect.outputs.python == 'true' && steps.detect.outputs.pymanifest == 'true'
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ inputs.python-version }}
           cache: pip
@@ -384,15 +387,17 @@ jobs:
 
       - name: Set up Python (no cache)
         if: steps.detect.outputs.python == 'true' && steps.detect.outputs.pymanifest == 'false'
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ inputs.python-version }}
 
       - name: Set up Node
         if: steps.detect.outputs.jsts == 'true'
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ inputs.node-version }}
+          # No implicit npm cache: deterministic installs, nothing a PR run can seed.
+          package-manager-cache: false
 
       # round-7: setup-go is RESTORED — but only for gate 3, never for a lint
       # autofixer. round-6's stated reason for dropping the per-language setups
@@ -413,7 +418,7 @@ jobs:
       # (see the setup-python cached/no-cache split above).
       - name: Set up Go
         if: steps.detect.outputs.gomod == 'true'
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: false
@@ -1768,6 +1773,7 @@ jobs:
             # trees explicitly via files.includes negations instead. The config dir
             # is a mktemp dir OUTSIDE the scanned tree, so biome does not treat it
             # as a "nested root configuration".
+            # shellcheck disable=SC2016 # "$schema" is a literal JSON key, not a shell expansion
             printf '%s' '{"$schema":"https://biomejs.dev/schemas/2.5.15/schema.json","files":{"includes":["**/*.ts","**/*.tsx","**/*.js","**/*.jsx","**/*.mjs","**/*.cjs","!**/node_modules/**","!**/dist/**","!**/build/**","!**/out/**","!**/.venv/**","!**/vendor/**"]},"formatter":{"enabled":true,"indentStyle":"space","indentWidth":2,"lineWidth":100,"lineEnding":"lf"},"javascript":{"formatter":{"quoteStyle":"single","trailingCommas":"all","semicolons":"always"}},"linter":{"enabled":false},"assist":{"enabled":false}}' > "$tmp_biome_dir/biome.json"
             biome_cfg_args=(--config-path "$tmp_biome_dir")
             echo "No caller biome.json/biome.jsonc - using the lean template's bundled biome config."
@@ -1868,6 +1874,9 @@ jobs:
       # the gate uses the proven standard bar instead of basedpyright's stricter
       # default. This is NOT weakening — standard is the proven bar and reportAny-
       # everywhere is gold-plating; REAL type errors at standard level still FAIL.
+      # --warnings: the documented bar is zero errors AND zero warnings
+      # (docs/FLEET-BASELINE.md). Without it a warning, such as an unresolved
+      # import, printed "1 warning" and the gate still passed.
       - name: gate-types basedpyright
         id: types_py
         if: steps.detect.outputs.python == 'true'
@@ -1878,10 +1887,10 @@ jobs:
           set -euo pipefail
           if [ "$PYRIGHTCFG" = "true" ]; then
             echo "Honoring caller-shipped basedpyright/pyright config (running as-is)."
-            basedpyright
+            basedpyright --warnings
           else
             echo "No caller basedpyright/pyright config - using standard typeCheckingMode (mirrors Reframe)."
-            basedpyright --typecheckingmode standard
+            basedpyright --typecheckingmode standard --warnings
           fi
 
       # ── GATE 3 — tests + coverage (STRICT 100% line+branch) ───────────────

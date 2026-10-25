@@ -296,6 +296,7 @@ if [ "$DETECT_PYTHON" = "true" ]; then
 fi
 
 # ── GATE 2 py — basedpyright (caller config honored, else standard) ────────
+# --warnings, like CI: the bar is zero errors AND zero warnings.
 if [ "$DETECT_PYTHON" = "true" ]; then
   echo "== gate-types basedpyright@$PIN_BASEDPYRIGHT =="
   ensure_pip_pin basedpyright "$PIN_BASEDPYRIGHT" \
@@ -303,13 +304,13 @@ if [ "$DETECT_PYTHON" = "true" ]; then
   rc=0
   if [ "$DETECT_PYRIGHTCFG" = "true" ]; then
     echo "Honoring caller-shipped basedpyright/pyright config (running as-is)."
-    python -m basedpyright || rc=$?
+    python -m basedpyright --warnings || rc=$?
   else
     echo "No caller basedpyright/pyright config - using standard typeCheckingMode (mirrors Reframe)."
-    python -m basedpyright --typecheckingmode standard || rc=$?
+    python -m basedpyright --typecheckingmode standard --warnings || rc=$?
   fi
   if [ "$rc" -ne 0 ]; then
-    lane_fail gate-types-py "basedpyright@$PIN_BASEDPYRIGHT reported type errors"
+    lane_fail gate-types-py "basedpyright@$PIN_BASEDPYRIGHT reported type errors or warnings"
   else
     lane_pass gate-types-py "basedpyright@$PIN_BASEDPYRIGHT clean"
   fi

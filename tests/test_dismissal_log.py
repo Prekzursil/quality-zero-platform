@@ -267,13 +267,13 @@ class DismissalLogTests(unittest.TestCase):
         """Review finding: a one-cell pipe row under the heading 'documented' an exclusion."""
         text = DOC.read_text(encoding="utf-8")
         self.assertEqual(log.decision_problems(text), [])
-        self.assertIn("py/clear-text-storage-sensitive-data", log.documented_queries(text))
+        self.assertEqual(log.documented_queries(text), set())  # no global exclusion is left
         self.assertEqual(log.decision_problems("# Doc\n\nno decisions here\n"), [])
 
         def decisions(*rows: str, header: str = "| Query | Decided | Decision |") -> str:
             return "\n".join(["## Query configuration decisions", "", header, "| --- | --- | --- |", *rows, ""])
 
-        good = "| `py/a`, `py/b` | before 2026-10-24 | **Excluded (pre-policy).** Re-review. |"
+        good = "| `py/a`, `py/b` | before 2026-10-24 | **Excluded (pre-policy).** Review by 2099-12-31. |"
         self.assertEqual(log.documented_queries(decisions(good)), {"py/a", "py/b"})
         # Review finding: a decision NOT to exclude must not authorize a later exclusion.
         refused = "| `py/c` | 2026-10-24 | **Fixed in the code by #1, not excluded.** |"
@@ -287,8 +287,11 @@ class DismissalLogTests(unittest.TestCase):
             "| `py/x` | 2026-02-30 | why |": "is neither a real YYYY-MM-DD date nor 'before YYYY-MM-DD'",
             "| `py/x` | 2026-10-24 |  |": "decision is empty",
             "| `py/x` | 2026-10-24 | - |": "decision is empty",
-            "| `py/x` | 2099-01-01 | **Excluded.** |": "is in the future",
-            "| `py/x` | before 2099-01-01 | **Excluded.** |": "is in the future",
+            "| `py/x` | 2099-01-01 | **Excluded.** Review by 2099-12-31. |": "is in the future",
+            "| `py/x` | before 2099-01-01 | **Excluded.** Review by 2099-12-31. |": "is in the future",
+            # Review finding: an exclusion "under re-review" could stay forever; it is time-boxed now.
+            "| `py/x` | 2026-10-24 | **Excluded.** pending |": "names no real 'Review by YYYY-MM-DD'",
+            "| `py/x` | 2026-01-01 | **Excluded.** Review by 2026-06-30. |": "was due for review on 2026-06-30",
         }
         for row, expected in cases.items():
             with self.subTest(row=row):
@@ -342,7 +345,7 @@ class DismissalLogTests(unittest.TestCase):
         self.assertEqual(job["permissions"], {"contents": "read", "security-events": "read"})
         listing, check = job["steps"][-2:]
         self.assertIn("code-scanning/alerts?state=dismissed", listing["run"])
-        self.assertIn("{number, dismissed_reason, dismissed_at, dismissed_comment}", listing["run"])
+        self.assertIn("{number, rule: .rule.id, dismissed_reason, dismissed_at, dismissed_comment}", listing["run"])
         self.assertIn("--paginate", listing["run"])
         self.assertIn('> "$RUNNER_TEMP/dismissed.jsonl"', listing["run"])
         self.assertEqual(
@@ -393,7 +396,17 @@ class DismissalLogTests(unittest.TestCase):
 
         attached = f"{rationale}. Logged: docs/CODE-SCANNING-DISMISSALS.md"
         self.assertEqual(check(dismissed_at="2026-10-24T22:10:00Z", dismissed_comment=attached), [])
-        self.assertEqual(check(dismissed_at="2026-10-25T01:00:00Z", dismissed_comment=rationale), [])  # time zones
+        self.assertEqual(check(dismissed_at="2026-10-25T01:00:00Z", dismissed_comment=attached), [])  # time zones
+        # Before the rule's first commit (same day), a comment without the pointer is history, not a breach.
+        self.assertEqual(check(dismissed_at="2026-10-24T13:26:12Z", dismissed_comment=rationale), [])
+        self.assertEqual(
+            check(dismissed_at="2026-10-24T22:10:00Z", dismissed_comment=rationale),
+            [
+                "alert #7 was dismissed under the rule without the log pointer 'Logged: docs/CODE-SCANNING-DISMISSALS.md'"
+            ],
+        )
+        self.assertEqual(check(rule="py/x"), [])
+        self.assertEqual(check(rule="py/other"), ["alert #7 is a py/other alert on GitHub but logged as `py/x`"])
         self.assertEqual(check(), [])  # an export without the fields checks the reason only
         self.assertEqual(
             check(dismissed_at="2026-04-27T09:00:00Z"),
@@ -411,6 +424,25 @@ class DismissalLogTests(unittest.TestCase):
             ["alert #7's GitHub comment does not match its logged rationale"],
         )
 
+    def test_the_tolerance_never_moves_a_dismissal_across_the_rules_start(self) -> None:
+        """Review finding: a dismissal under the rule, logged a day early, read as pre-policy."""
+        early = _doc(_row(reason="won't fix", dismissed="2026-10-23", verdict="**Re-review.** later"))
+        alert = {"number": 7, "dismissed_reason": "won't fix", "dismissed_at": "2026-10-24T17:00:00Z"}
+        self.assertEqual(
+            log.unlogged_dismissals(early, [alert]),
+            ["alert #7 was dismissed under the rule (2026-10-24T17:00:00Z) but is logged before it (2026-10-23)"],
+        )
+        self.assertEqual(log.POLICY_AT[:10], log.POLICY_DATE)
+
+    def test_a_table_indented_as_a_code_block_is_rejected(self) -> None:
+        """Review finding: four leading spaces render the table as code, yet it validated."""
+        coded = "\n".join(["# Doc", "", "## Log (repo)", "", "    " + HEADER, "    " + RULE, "    " + _row(), ""])
+        (problem,) = _check(coded)
+        self.assertIn("indented as a code block", problem)
+        decisions = "## Query configuration decisions\n\n    | Query | Decided | Decision |\n    | --- | --- | --- |\n"
+        decisions += "    | `py/x` | 2026-10-24 | **Excluded.** Review by 2099-12-31. |\n"
+        self.assertEqual(log.documented_queries(decisions), set())
+
     def test_a_row_without_its_closing_pipe_is_rejected_not_truncated(self) -> None:
         """Review finding: '[1:-1]' turned a verdict '**Re-review.**X' into the exact pending marker."""
         open_row = _row("8", reason="won't fix", dismissed="2026-04-27", verdict="**Re-review.**X").rstrip("|").rstrip()
@@ -423,11 +455,14 @@ class DismissalLogTests(unittest.TestCase):
         """Rule 4: a global query filter cannot land without its row in the decisions table."""
         text = DOC.read_text(encoding="utf-8")
         config = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
-        self.assertTrue(config["query-filters"])  # the reconciliation below is not vacuous
+        # No global exclusion is left (py/clear-text-* was fixed in code); the synthetic configs below keep
+        # the reconciliation itself under test.
+        self.assertNotIn("query-filters", config)
         self.assertEqual(log.undocumented_exclusions(config, text), [])
         decisions = "## Query configuration decisions\n\n| Query | Decided | Decision |\n| --- | --- | --- |\n"
         decisions += (
-            "| `py/kept`, `py/also` | 2026-10-24 | **Excluded.** reason |\n\n## Log\n\n| `py/not-a-decision` |\n"
+            "| `py/kept`, `py/also` | 2026-10-24 | **Excluded.** Review by 2099-12-31. |\n\n## Log\n\n"
+            "| `py/not-a-decision` |\n"
         )
         added = {
             "query-filters": [

@@ -74,6 +74,9 @@ DECIDED = re.compile(r"^(?:before )?(\d{4}-\d{2}-\d{2})$")
 #: Only a decision that starts with this marker AUTHORIZES excluding its
 #: queries; "**Fixed in the code ..., not excluded.**" documents the opposite.
 EXCLUDED = "**Excluded"
+#: An exclusion is time-boxed: its decision names "Review by YYYY-MM-DD", and it
+#: fails the check from the day after, like an expiring dismissal.
+EXCLUSION_REVIEW = re.compile(r"Review by (\d{4}-\d{2}-\d{2})")
 #: The document's marker for "no value" (Owner, Review by); never a rationale or verdict.
 MISSING = ("", "-")
 #: What the documented dismiss command appends to the rationale core in GitHub's comment.
@@ -87,6 +90,9 @@ LOCATION = re.compile(r"^`[^`]*[^`\s][^`]*:[1-9][0-9]*`$")
 #: Pending markers (Re-review / Fix) exempt only rows dismissed BEFORE this
 #: rule existed; a won't-fix dismissed under the rule needs an owner and date.
 POLICY_DATE = "2026-10-24"
+#: The rule's exact start (its first commit): GitHub timestamps on POLICY_DATE
+#: fall on either side of it, and only those after it are bound by the rule.
+POLICY_AT = "2026-10-24T16:26:15Z"
 # Exact markers: a verdict that merely starts with "**Fix" (e.g. "**Fixed by
 # design.**") is an accepted risk and must carry an owner and a date.
 PENDING = ("**Re-review.**", "**Fix.**")
@@ -200,6 +206,10 @@ def _table(section: Sequence[str], columns: Sequence[str], name: str) -> Tuple[L
     table = [line.strip() for line in block if line.strip().startswith("|")]
     if len(table) < 2 or tuple(_cells(table[0])) != tuple(columns):
         return [], columns_problem
+    # Four leading spaces make an indented code block, which renders as text, not a table.
+    coded = next((line for line in block if len(line) - len(line.lstrip(" ")) >= 4), None)
+    if coded is not None:
+        return [], [f"the {name} table is indented as a code block (4+ spaces), so it does not render"]
     stray = next((line for line in block if not line.strip().startswith("|")), None)
     if stray is not None:
         return [], [f"the {name} table has a row that is not a |-delimited table row: {stray.strip()[:60]!r}"]
@@ -301,19 +311,29 @@ def _mismatch(number: str, cells: Sequence[str], alert: Mapping[str, Any]) -> Op
     reason = str(alert.get("dismissed_reason") or "")
     if cells[3] != reason:
         return f"alert #{number} is dismissed on GitHub as {reason!r} but logged as {cells[3]!r}"
-    when = str(alert.get("dismissed_at") or "")[:10]
+    if "rule" in alert and cells[1] != f"`{alert.get('rule')}`":
+        return f"alert #{number} is a {alert.get('rule')} alert on GitHub but logged as {cells[1]}"
+    stamp = str(alert.get("dismissed_at") or "")
+    when = stamp[:10]
     if "dismissed_at" in alert and not (
         _is_date(when)
         and _is_date(cells[4])
         and abs(dt.date.fromisoformat(when) - dt.date.fromisoformat(cells[4])).days <= 1
     ):
         return f"alert #{number} was dismissed on GitHub on {when or '?'} but is logged as {cells[4]}"
+    # The day of tolerance never moves a dismissal across the rule's start.
+    under_rule = stamp >= POLICY_AT
+    if under_rule and cells[4] < POLICY_DATE:
+        return f"alert #{number} was dismissed under the rule ({stamp}) but is logged before it ({cells[4]})"
     if "dismissed_comment" in alert:
-        core = _normalized(str(alert.get("dismissed_comment") or "").removesuffix(POINTER))
+        comment = str(alert.get("dismissed_comment") or "")
+        core = _normalized(comment.removesuffix(POINTER))
         if not core:
             return f"alert #{number} was dismissed on GitHub without a comment: the logged rationale was never attached"
         if not _normalized(cells[5]).startswith(core):
             return f"alert #{number}'s GitHub comment does not match its logged rationale"
+        if under_rule and not comment.endswith(POINTER):
+            return f"alert #{number} was dismissed under the rule without the log pointer {POINTER.strip('. ')!r}"
     return None
 
 
@@ -363,7 +383,7 @@ def validate(text: str, *, repo: str, today: Optional[dt.date] = None) -> List[s
     return problems
 
 
-def _decision_row_problems(cells: Sequence[str], *, latest: str) -> List[str]:
+def _decision_row_problems(cells: Sequence[str], *, latest: str, today: str) -> List[str]:
     """Every contract violation of one query configuration decision."""
     if len(cells) != len(DECISION_COLUMNS):
         return [f"{len(cells)} cells, expected {len(DECISION_COLUMNS)}"]
@@ -378,6 +398,14 @@ def _decision_row_problems(cells: Sequence[str], *, latest: str) -> List[str]:
         problems.append(f"decided {decided!r} is in the future")
     if decision in MISSING:
         problems.append("decision is empty")
+    if decision.startswith(EXCLUDED):
+        review = EXCLUSION_REVIEW.search(decision)
+        if not review or not _is_date(review.group(1)):
+            problems.append("an **Excluded** decision names no real 'Review by YYYY-MM-DD'")
+        elif review.group(1) < today:
+            problems.append(
+                f"the exclusion was due for review on {review.group(1)}: re-review it and update the decision"
+            )
     return problems
 
 
@@ -401,9 +429,11 @@ def _decision_rows(text: str) -> Tuple[List[List[str]], List[str]]:
 def decision_problems(text: str, *, today: Optional[dt.date] = None) -> List[str]:
     """Every problem with the query configuration decisions table (none when there is no such section)."""
     rows, problems = _decision_rows(text)
-    latest = _latest(_today(today))
+    day = _today(today)
+    latest = _latest(day)
     for number, cells in enumerate(rows, start=1):
-        problems.extend(f"decision {number}: {problem}" for problem in _decision_row_problems(cells, latest=latest))
+        found = _decision_row_problems(cells, latest=latest, today=day.isoformat())
+        problems.extend(f"decision {number}: {problem}" for problem in found)
     return problems
 
 
@@ -416,11 +446,12 @@ def documented_queries(text: str, *, today: Optional[dt.date] = None) -> set:
     rows, problems = _decision_rows(text)
     if problems:
         return set()
-    latest = _latest(_today(today))
+    day = _today(today)
     return {
         query
         for cells in rows
-        if not _decision_row_problems(cells, latest=latest) and cells[2].startswith(EXCLUDED)
+        if not _decision_row_problems(cells, latest=_latest(day), today=day.isoformat())
+        and cells[2].startswith(EXCLUDED)
         for query in QUERY_ID.findall(cells[0])
     }
 

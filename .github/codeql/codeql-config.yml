@@ -4,23 +4,9 @@ name: "Quality Zero Platform CodeQL Config"
 queries:
   - uses: security-and-quality
 
-# GLOBAL suppression of ``py/clear-text-storage-sensitive-data`` on
-# this repo. This query's taint tracker can't verify user-written
-# sanitisers, so it flags the ``append_audit_jsonl`` path in
-# ``scripts/quality/secrets_sync.py`` even though that function
-# passes every record through a whitelist re-projection that drops
-# any non-whitelisted key (``_sanitise_audit_record``) — proven by
-# ``tests/test_secrets_sync.py::test_sanitiser_drops_unknown_keys``.
-#
-# The rest of the codebase has no password / secret storage paths,
-# so the practical scope of this suppression is the verified false
-# positive only. If new code reintroduces a real clear-text-secret
-# storage path, tests should catch it; CodeQL no longer will.
-#
-# To re-enable the query after a future secrets_sync rewrite:
-# delete this ``query-filters`` block.
-query-filters:
-  - exclude:
-      id: py/clear-text-storage-sensitive-data
-  - exclude:
-      id: py/clear-text-logging-sensitive-data
+# No query-filters. Excluding a query silences it for ALL code. Every query
+# exclusion needs a time-boxed "**Excluded ...** Review by YYYY-MM-DD" decision
+# in docs/CODE-SCANNING-DISMISSALS.md, and check_dismissal_log.py
+# --codeql-config enforces that. The py/clear-text-* exclusion was removed
+# on 2026-10-24: a full analysis without it found no clear-text result
+# anywhere (run 40138157571).

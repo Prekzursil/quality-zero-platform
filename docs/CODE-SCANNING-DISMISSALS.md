@@ -113,7 +113,10 @@ It checks:
   by accident;
 - the decisions table below, when present: its columns, backticked query
   ids, a real date (or `before YYYY-MM-DD`) that is not in the future, a
-  decision, and one row per query (a changed decision is updated in place);
+  decision, and one row per query (a changed decision is updated in place).
+  An **Excluded** decision is time-boxed: it names "Review by YYYY-MM-DD"
+  and fails from the day after;
+- a table indented four spaces is a code block, not a table, and is rejected;
 - headings and tables inside a code fence or an HTML comment are examples
   or hidden text, not the document;
 - with `--codeql-config` (default `.github/codeql/codeql-config.yml`, skipped
@@ -133,7 +136,7 @@ the check above fails while an excluded query id has no row.
 | Query | Decided | Decision |
 | --- | --- | --- |
 | `actions/untrusted-checkout/medium`, `actions/cache-poisoning/poisonable-step` | 2026-10-24 | **Fixed in the code by #336, not excluded.** Each reusable workflow checked out QZP's scripts at a caller-supplied `platform_ref`. Every action-pin bump re-fingerprinted those alerts, and in QZP's own `pull_request` flow the ref is the PR head. The platform is now checked out at the workflow file's own commit (`job.workflow_repository` / `job.workflow_sha`), and every alert on in-repo-called workflows, including all 7 high, is gone from main. CodeQL does not model `job.workflow_sha` yet, so 6 own-commit checkouts in externally-called reusables are still flagged. They are dismissed below as demonstrable false positives, and the steps are named so the fingerprint survives Dependabot SHA bumps. CodeQL's fingerprint hashes the first 100 non-space characters from the step's first line, so naming the steps re-identified five of them once (#306-#310), and #345, which put a comment line after each name to keep the pinned SHA out of that window, re-identified all six one last time (#312-#317). All are logged below as the same findings. From #345 on, a pin bump cannot re-identify them; `test_a_pin_bump_cannot_re_identify_an_own_commit_checkout_alert` computes the window. **These dismissals expire.** They rest only on CodeQL not modelling `job.workflow_sha`. Each row carries review-by 2027-01-24, and the check fails from the day after it. Once CodeQL models the property the alerts should close on their own; one that stays open is a real finding to fix. Excluding the query was considered and rejected. |
-| `py/clear-text-storage-sensitive-data`, `py/clear-text-logging-sensitive-data` | before 2026-10-24 | **Excluded (pre-policy); under re-review.** One verified false positive in `scripts/quality/secrets_sync.py` (its records pass `_sanitise_audit_record`'s allow-list) led to a GLOBAL exclusion. That silences both queries for all code, not just the verified call site. |
+| `py/clear-text-storage-sensitive-data`, `py/clear-text-logging-sensitive-data` | 2026-10-24 | **Fixed in the code, not excluded.** One verified false positive in `scripts/quality/secrets_sync.py` had led to a GLOBAL exclusion that silenced both queries for all code. A full CodeQL analysis without it (run 40138157571) ran both queries and found nothing: `make_gh_secret_setter`'s closure keeps the secret value out of `sync_secret`'s scope, and `_sanitise_audit_record` re-projects every audit record. The filter is removed; both queries run on all code again. |
 
 ## Log (quality-zero-platform)
 

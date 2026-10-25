@@ -37,7 +37,8 @@ jobs:
           QZ_REPO: ${{ github.repository }}
         run: |
           gh api --paginate "repos/$QZ_REPO/code-scanning/alerts?state=dismissed&per_page=100" \
-            --jq '.[] | {number, dismissed_reason, dismissed_at, dismissed_comment}' > "$RUNNER_TEMP/dismissed.jsonl"
+            --jq '.[] | {number, rule: .rule.id, dismissed_reason, dismissed_at, dismissed_comment}' \
+            > "$RUNNER_TEMP/dismissed.jsonl"
       - name: Check the dismissal log
         env:
           QZ_REPO: ${{ github.repository }}

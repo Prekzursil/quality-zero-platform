@@ -442,6 +442,15 @@ class DismissalLogTests(unittest.TestCase):
         decisions = "## Query configuration decisions\n\n    | Query | Decided | Decision |\n    | --- | --- | --- |\n"
         decisions += "    | `py/x` | 2026-10-24 | **Excluded.** Review by 2099-12-31. |\n"
         self.assertEqual(log.documented_queries(decisions), set())
+        # Review finding: a leading tab is code-block indentation too (tab stops every four columns).
+        tabbed = "\n".join(["# Doc", "", "## Log (repo)", "", "\t" + HEADER, "\t" + RULE, "\t" + _row(), ""])
+        (problem,) = _check(tabbed)
+        self.assertIn("indented as a code block", problem)
+        tabbed_decisions = decisions.replace("    |", "\t|")
+        self.assertEqual(log.documented_queries(tabbed_decisions), set())
+        self.assertEqual(_check(_doc(_row()).replace(HEADER, "  \t" + HEADER)), [(problem)])  # 2 spaces + tab = 4
+        self.assertEqual(log._indent(" \t| x |"), 4)
+        self.assertEqual(log._indent("   | x |"), 3)
 
     def test_a_row_without_its_closing_pipe_is_rejected_not_truncated(self) -> None:
         """Review finding: '[1:-1]' turned a verdict '**Re-review.**X' into the exact pending marker."""
@@ -497,6 +506,7 @@ class DismissalLogTests(unittest.TestCase):
             {"rule": {"id": "py/sql-injection", "security_severity_level": "high", "tags": []}},
             {"rule": {"id": "js/xss", "tags": ["external/cwe/cwe-079"]}},
             {"rule": {"id": "r", "tags": ["OWASP-A03:2021 - Injection"]}},
+            {"rule": {"id": "r", "tags": ["external/owasp/owasp-a03"]}},  # namespaced, no CWE, no severity
             {"id": "sarif-rule", "properties": {"security-severity": "7.5"}},
             {"rule": {"id": "unpinned", "tags": []}, "tool": {"name": "zizmor"}},
         )

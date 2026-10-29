@@ -98,7 +98,7 @@ POLICY_AT = "2026-10-24T16:26:15Z"
 PENDING = ("**Re-review.**", "**Fix.**")
 #: Security markers across SARIF producers: CodeQL tags ``security`` and
 #: ``external/cwe/cwe-N``; Semgrep and others ``security``, ``CWE-N``, ``OWASP-...``.
-SECURITY_TAG = re.compile(r"^(?:security$|external/cwe/|cwe-|owasp)", re.IGNORECASE)
+SECURITY_TAG = re.compile(r"^(?:security$|external/cwe/|cwe-|external/owasp/|owasp)", re.IGNORECASE)
 #: Scanners whose every finding is a security finding, tags or not.
 SECURITY_TOOLS = frozenset({"bandit", "gitleaks", "grype", "osv-scanner", "trivy", "zizmor"})
 
@@ -180,6 +180,12 @@ def _sections(lines: Sequence[str], heading: re.Pattern[str]) -> List[List[str]]
     return sections
 
 
+def _indent(line: str) -> int:
+    """Leading indentation as Markdown sees it: a tab advances to the next multiple of four columns."""
+    expanded = line.expandtabs(4)
+    return len(expanded) - len(expanded.lstrip(" "))
+
+
 def _row_like(line: str) -> bool:
     """A line that carries a table row Markdown may not render as one: a pipe row, an alert link, or cells."""
     stripped = line.strip()
@@ -206,10 +212,10 @@ def _table(section: Sequence[str], columns: Sequence[str], name: str) -> Tuple[L
     table = [line.strip() for line in block if line.strip().startswith("|")]
     if len(table) < 2 or tuple(_cells(table[0])) != tuple(columns):
         return [], columns_problem
-    # Four leading spaces make an indented code block, which renders as text, not a table.
-    coded = next((line for line in block if len(line) - len(line.lstrip(" ")) >= 4), None)
+    # Four columns of indentation (spaces, or a tab) make an indented code block: text, not a table.
+    coded = next((line for line in block if _indent(line) >= 4), None)
     if coded is not None:
-        return [], [f"the {name} table is indented as a code block (4+ spaces), so it does not render"]
+        return [], [f"the {name} table is indented as a code block (4+ columns), so it does not render"]
     stray = next((line for line in block if not line.strip().startswith("|")), None)
     if stray is not None:
         return [], [f"the {name} table has a row that is not a |-delimited table row: {stray.strip()[:60]!r}"]

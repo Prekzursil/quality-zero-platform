@@ -116,7 +116,8 @@ It checks:
   decision, and one row per query (a changed decision is updated in place).
   An **Excluded** decision is time-boxed: it names "Review by YYYY-MM-DD"
   and fails from the day after;
-- a table indented four spaces is a code block, not a table, and is rejected;
+- a table indented four columns (spaces, or a tab) is a code block, not a
+  table, and is rejected;
 - headings and tables inside a code fence or an HTML comment are examples
   or hidden text, not the document;
 - with `--codeql-config` (default `.github/codeql/codeql-config.yml`, skipped

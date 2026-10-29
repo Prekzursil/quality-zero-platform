@@ -385,7 +385,11 @@ def main(
             return EXIT_ROSTER
     report = build_report(entries, profiles_dir, runner=runner)
     if args.out_json:
-        Path(args.out_json).write_text(json.dumps(report_json(report), indent=2) + "\n", encoding="utf-8", newline="\n")
+        # fleet-health passes build/fleet-health-contexts.json and nothing else
+        # creates build/: the write crashed (exit 1, read as "findings").
+        out = Path(args.out_json)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(report_json(report), indent=2) + "\n", encoding="utf-8", newline="\n")
     print(render_text(report))
     return report.exit_code()
 

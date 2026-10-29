@@ -773,9 +773,10 @@ class PlanTests(unittest.TestCase):
             "npm": ["/", "/web", "/web/sub"],
             "gradle": ["/", "/app"],
             "pip": ["/", "/svc", "/lib"],
-            "cargo": ["/", "/crates/a"],
+            "cargo": ["/", "/crates/a", "/crates/b", "/tools/x"],
             "uv": ["/py"],
             "composer": ["/"],
+            "bundler": ["/"],
             "gomod": ["/"],
         }
         paths = [
@@ -794,26 +795,46 @@ class PlanTests(unittest.TestCase):
             "crates/a/Cargo.toml",
             "other/uv.lock",
             "vendor/x/composer.lock",
+            "examples/Gemfile.lock",
         ]
-        self.assertEqual(
-            fb.unscanned_rails(rails, paths),
-            [
-                "Swift packages (/)",
-                gap("npm", "/web"),
-                gap("pip", "/svc"),
-                gap("uv", "/py"),
-                gap("composer", "/"),
-                gap("gradle", "/app"),
-                gap("nuget", "/tools"),
-            ],
-        )
+        files = {"Cargo.toml": '[workspace]\nmembers = ["crates/*"]\nexclude = ["crates/b"]\n'}
+        expected = [
+            "Swift packages (/)",
+            gap("npm", "/web"),
+            gap("pip", "/svc"),
+            gap("pip", "/lib"),
+            gap("uv", "/py"),
+            gap("cargo", "/crates/b"),
+            gap("cargo", "/tools/x"),
+            gap("composer", "/"),
+            gap("bundler", "/"),
+            gap("gradle", "/app"),
+            gap("nuget", "/tools"),
+        ]
+        self.assertEqual(fb.unscanned_rails(rails, paths, _reader(files)), expected)
+        # without a reader no workspace membership can be shown, so every member is a gap
+        self.assertIn(gap("cargo", "/crates/a"), fb.unscanned_rails(rails, paths))
         self.assertTrue(fb._readable("app/gradle/verification-metadata.xml", fb._SCANNED_LOCKFILES["gradle"]))
         self.assertFalse(fb._readable("svc/requirements/base.txt", fb._SCANNED_LOCKFILES["pip"]))
         self.assertIsNone(fb._rail_of("other/uv.lock", ["/py"]))
         self.assertEqual(fb._rail_of("web/sub/yarn.lock", ["/", "/web", "/web/sub"]), "/web/sub")
+        self.assertEqual(fb._lockfile_rail("npm", "web/sub/yarn.lock", ["/", "/web"]), None)
+        self.assertEqual(fb._lockfile_rail("gradle", "app/gradle.lockfile", ["/"]), "/")
         plan = _by_path(fb.plan_baseline(_facts(["Package.swift", "a.swift"]), _reader({}), PIN))
         self.assertIn("Swift packages", plan[fb.GATE6_SCOPE].reason)
         self.assertNotIn(fb.GATE6_SCOPE, _by_path(fb.plan_baseline(_facts(["a.py"]), _reader({}), PIN)))
+
+    def test_workspace_members(self) -> None:
+        uv = {"py/pyproject.toml": "[tool.uv.workspace]\nmembers = ['packages/*']\n"}
+        self.assertEqual(fb.workspace_members("uv", "/py", _reader(uv)), (["py/packages/*"], []))
+        self.assertEqual(fb.workspace_members("cargo", "/", _reader({"Cargo.toml": "[[broken"})), ([], []))
+        self.assertEqual(
+            fb.workspace_members("cargo", "/", _reader({"Cargo.toml": "[package]\nname = 'x'\n"})), ([], [])
+        )
+        self.assertEqual(fb.workspace_members("cargo", "/", _reader({})), ([], []))
+        odd = {"Cargo.toml": "[workspace]\nmembers = 'crates/*'\n"}
+        self.assertEqual(fb.workspace_members("cargo", "/", _reader(odd)), ([], []))
+        self.assertFalse(fb._in_workspace("cargo", "/", "/crates/a", _reader(odd)))
 
     def test_jsts_tests_need_a_coverage_script(self) -> None:
         files = {"package.json": json.dumps({"scripts": {"test": "vitest run"}})}
@@ -892,6 +913,8 @@ class TruthfulDocumentTests(unittest.TestCase):
         )
         self.assertEqual(fb._codeql_suite("queries:\n  - uses: security-extended\n"), "configured")
         self.assertEqual(fb._codeql_suite("with:\n  config-file: ./.github/codeql.yml\n"), "configured")
+        self.assertEqual(fb._codeql_suite("queries: |\n  security-extended\n"), "configured")
+        self.assertEqual(fb._codeql_suite("queries: >-\n  security-extended\n"), "configured")
 
     def test_codeql_workflow_detection(self) -> None:
         self.assertIsNone(fb.codeql_workflow(_facts(["a.py"]), _reader({})))
@@ -904,8 +927,9 @@ class TruthfulDocumentTests(unittest.TestCase):
         found = fb.codeql_workflow(_facts(list(files)), _reader(files))
         self.assertEqual(found, (".github/workflows/codeql.yml", None, True))
         own = {
-            ".github/workflows/scan.yaml": "# uses: x/reusable-codeql.yml@v1\nsteps:\n"
-            "  - uses: github/codeql-action/init@v3\n    with:\n      queries: security-and-quality\n"
+            ".github/workflows/scan.yaml": "# uses: x/reusable-codeql.yml@v1\njobs:\n  odd: 3\n  lint:\n    steps: nope\n"
+            "  analyze:\n    steps:\n      - run: echo hi\n      - 7\n"
+            "      - uses: github/codeql-action/init@v3\n        with:\n          queries: security-and-quality\n"
         }
         self.assertEqual(
             fb.codeql_workflow(_facts(list(own)), _reader(own)),
@@ -913,6 +937,14 @@ class TruthfulDocumentTests(unittest.TestCase):
         )
         commented = {".github/workflows/scan.yml": f"# uses: {reusable}\n# - uses: github/codeql-action/init@v3\n"}
         self.assertIsNone(fb.codeql_workflow(_facts(list(commented)), _reader(commented)))
+        # an inline comment, shell text or an unparseable file never counts as a CodeQL workflow
+        mentions = {
+            ".github/workflows/a.yml": "jobs: {}  # formerly github/codeql-action/init@v3\n",
+            ".github/workflows/b.yml": "jobs:\n  x:\n    steps:\n      - run: echo github/codeql-action/init@v3\n",
+            ".github/workflows/c.yml": "jobs: [unclosed\n",
+            ".github/workflows/d.yml": "- a list\n",
+        }
+        self.assertIsNone(fb.codeql_workflow(_facts(list(mentions)), _reader(mentions)))
 
     def test_codeql_control_variants(self) -> None:
         self.assertIn("GitHub Advanced Security", fb._codeql_control(_facts(["a.py"], private=True), _reader({})))
@@ -926,16 +958,22 @@ class TruthfulDocumentTests(unittest.TestCase):
             text,
         )
         self.assertIn("any severity cannot be merged", text)
-        bare = {".github/workflows/codeql.yml": "steps:\n  - uses: github/codeql-action/init@v3\n"}
+        bare = {
+            ".github/workflows/codeql.yml": "jobs:\n  analyze:\n    steps:\n      - uses: github/codeql-action/init@v3\n"
+        }
         self.assertIn(
             "`.github/workflows/codeql.yml` runs the default query suite",
             fb._codeql_control(_facts(list(bare)), _reader(bare)),
         )
         named = {
-            ".github/workflows/codeql.yml": bare[".github/workflows/codeql.yml"] + "      queries: security-extended\n"
+            ".github/workflows/codeql.yml": bare[".github/workflows/codeql.yml"]
+            + "        with:\n          queries: security-extended\n"
         }
         self.assertIn("runs the `security-extended` queries", fb._codeql_control(_facts(list(named)), _reader(named)))
-        listed = {".github/workflows/codeql.yml": bare[".github/workflows/codeql.yml"] + "      config-file: c.yml\n"}
+        listed = {
+            ".github/workflows/codeql.yml": bare[".github/workflows/codeql.yml"]
+            + "        with:\n          config-file: c.yml\n"
+        }
         self.assertIn(
             "runs the queries its configuration lists", fb._codeql_control(_facts(list(listed)), _reader(listed))
         )
@@ -1030,6 +1068,7 @@ class ThinCallerTests(unittest.TestCase):
             # YAML 1.1 reads `on` as a boolean; GitHub reads it as text, so the caller stays hand-written
             self.THIN + "    with:\n      opengrep-paths: on\n",
             self.THIN + "    with:\n      flag: true\n",
+            self.THIN + "    with:\n      on: x\n",
             self.THIN.replace(
                 "  workflow_dispatch:\n", "  workflow_dispatch:\n    inputs:\n      x:\n        type: string\n"
             ),

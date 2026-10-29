@@ -348,6 +348,43 @@ class DecisiveWindowTests(unittest.TestCase):
                 self.assertEqual(runner.call_count, 1)
 
 
+class ResolvedAlertTests(unittest.TestCase):
+    """Bypass-stale and drift-stuck alerts close once their subject is no longer live."""
+
+    def _close(self, open_titles, live, **kwargs):
+        lister = MagicMock(return_value=[{"number": i, "title": t} for i, t in enumerate(open_titles)])
+        closer = MagicMock(side_effect=lambda *a, **k: {"subject": k["subject"], "closed": True})
+        results = alert_dispatch.close_resolved_alerts(
+            platform_slug="o/qzp",
+            alert_type=alerts.AlertType.DRIFT_STUCK,
+            live_subjects=live,
+            close_comment="`{subject}` is no longer open; closing.",
+            closer=closer,
+            lister=lister,
+            **kwargs,
+        )
+        return results, closer
+
+    def test_a_merged_drift_pr_closes_its_alert(self) -> None:
+        """THE review finding: open-only queries never closed a recovered alert."""
+        results, closer = self._close(
+            ["[alert:drift-stuck] o/r#1", "[alert:drift-stuck] o/r#2", "[alert:regression] o/r#1"], {"o/r#2"}
+        )
+        self.assertEqual(results, [{"subject": "o/r#1", "closed": True}])
+        (call,) = closer.call_args_list
+        self.assertEqual(call.kwargs["close_comment"], "`o/r#1` is no longer open; closing.")
+        self.assertEqual(call.kwargs["alert_type"], alerts.AlertType.DRIFT_STUCK)
+        self.assertFalse(call.kwargs["dry_run"])
+
+    def test_an_unverifiable_subject_is_left_open(self) -> None:
+        """A private member's PR the search could not see is invisible, not gone."""
+        results, closer = self._close(
+            ["[alert:drift-stuck] o/private#1"], set(), unverifiable=lambda subject: subject.startswith("o/private#")
+        )
+        self.assertEqual(results, [])
+        closer.assert_not_called()
+
+
 class VanishedWorkflowTests(unittest.TestCase):
     """An alert for a workflow that no longer exists can never be closed by a success."""
 

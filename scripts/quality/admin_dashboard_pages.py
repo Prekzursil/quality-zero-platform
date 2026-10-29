@@ -142,17 +142,43 @@ def render_coverage_trend_page(
     return _wrap_html("Coverage trend", body)
 
 
+def _count(value: Any) -> int:
+    """A non-negative count from a JSONL field (0 when unusable)."""
+    try:
+        return max(int(value), 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _partial_drift_note(marker: Mapping[str, Any]) -> str:
+    """The banner for a drift read that could not cover every fleet member."""
+    unread, read = _count(marker.get("unread")), _count(marker.get("read"))
+    return (
+        f"    <p><strong>Partial.</strong> {unread} fleet repositories could not be read (no fleet-read "
+        "token, or a failed read), so their drift is <strong>unknown</strong>. What follows covers the "
+        f"{read} that were read. This is NOT an all-clear.</p>\n"
+    )
+
+
 def render_drift_page(
     *,
     entries: Optional[List[Mapping[str, Any]]],
     source: str = "",
 ) -> str:
-    """Return the HTML for ``drift.html`` (``entries=None``: the source does not exist)."""
+    """Return the HTML for ``drift.html`` (``entries=None``: the source does not exist).
+
+    A ``{"kind": "partial"}`` line (``fleet_state.partial_marker``) means some
+    fleet members could not be read: the page says their drift is UNKNOWN and
+    that the rows cover only the members read - never "no drift".
+    """
     if entries is None:
         return _wrap_html("Drift-sync status", _no_source_body(source, "drift"))
+    markers = [entry for entry in entries if entry.get("kind") == "partial"]
+    entries = [entry for entry in entries if entry.get("kind") != "partial"]
+    note = _partial_drift_note(markers[-1]) if markers else ""
     if not entries:
-        body = "    <p>No drift entries recorded.</p>\n"
-        return _wrap_html("Drift-sync status", body)
+        empty = "No drift-sync PR is open in the repositories read." if markers else "No drift entries recorded."
+        return _wrap_html("Drift-sync status", note + f"    <p>{empty}</p>\n")
     rows = []
     for entry in entries:
         slug = html.escape(str(entry.get("slug", "")))
@@ -162,7 +188,7 @@ def render_drift_page(
         rows.append(
             f"      <tr><td>{slug}</td><td>{status}</td><td>{pr_cell}</td></tr>",
         )
-    body = (
+    body = note + (
         "    <table>\n"
         "      <thead><tr><th>Repo</th><th>Status</th><th>Sync PR</th></tr></thead>\n"
         "      <tbody>\n" + "\n".join(rows) + "\n"

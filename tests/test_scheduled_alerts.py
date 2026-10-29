@@ -92,6 +92,33 @@ class ScheduledAlertsWorkflowTests(unittest.TestCase):
         self.assertIn('active_workflows={str(workflow.get("name", "")) for workflow in active}', self.text)
         self.assertIn("if not dry_run:\n              # gh issue create rejects a label the repo lacks.", self.text)
 
+    def test_bypass_and_drift_detectors_read_live_state(self) -> None:
+        """They used to read files nothing wrote, so they were never evaluated."""
+        self.assertIn("from scripts.quality import alert_dispatch, alerts, fleet_state", self.text)
+        self.assertIn("bypass_issues = fleet_state.bypass_followups(PLATFORM)", self.text)
+        self.assertIn("drift_prs, drift_unread = fleet_state.drift_sync_prs(fleet_state.fleet_slugs())", self.text)
+        self.assertNotIn("bypass-tracking.jsonl", self.text)
+        self.assertNotIn('_safe_jsonl("audit/drift-sync.jsonl")', self.text)
+        # The detectors still without a producer are named as NOT evaluated.
+        self.assertIn('"quality-rollup/coverage-trend.json": "regression / deadline / escalation / flag"', self.text)
+        self.assertIn('"audit/bump-staging-results.jsonl": "fleet-bump-fail"', self.text)
+
+    def test_resolved_bypass_and_drift_alerts_are_closed(self) -> None:
+        """A closed follow-up or merged drift PR leaves the live set; its alert must close."""
+        self.assertIn("alert_type=alerts.AlertType.BYPASS_STALE", self.text)
+        self.assertIn("alert_type=alerts.AlertType.DRIFT_STUCK", self.text)
+        self.assertIn("alert_dispatch.close_resolved_alerts(", self.text)
+        self.assertIn(
+            "unverifiable=lambda subject: fleet_state.unverifiable_subject(subject, drift_unread),", self.text
+        )
+        self.assertIn("Fleet repositories NOT read (drift unknown): {len(drift_unread)}", self.text)
+
+    def test_the_drift_search_may_use_the_fleet_read_pat_but_writes_keep_the_workflow_token(self) -> None:
+        """Private members' drift PRs are only visible to the fleet-read PAT."""
+        (step,) = [s for s in self.doc["jobs"]["dispatch"]["steps"] if "fleet_state" in str(s.get("run", ""))]
+        self.assertEqual(step["env"]["GH_TOKEN"], "${{ github.token }}")
+        self.assertEqual(step["env"]["QZ_FLEET_READ_TOKEN"], "${{ secrets.CODEX_FLEET_READ_PAT }}")
+
     def test_checkout_does_not_persist_credentials(self) -> None:
         """``persist-credentials: false`` — CodeQL safety."""
         steps = self.doc["jobs"]["dispatch"]["steps"]

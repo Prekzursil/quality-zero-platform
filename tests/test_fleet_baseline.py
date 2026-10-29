@@ -834,6 +834,25 @@ class PlanTests(unittest.TestCase):
         self.assertIn("Swift packages", plan[fb.GATE6_SCOPE].reason)
         self.assertNotIn(fb.GATE6_SCOPE, _by_path(fb.plan_baseline(_facts(["a.py"]), _reader({}), PIN)))
 
+    def test_js_workspaces_share_the_root_lockfile(self) -> None:
+        def gap(ecosystem: str, directory: str) -> str:
+            return f"{ecosystem} {directory} has no file osv-scanner reads ({' / '.join(fb._SCANNED_LOCKFILES[ecosystem])})"
+
+        files = {"package.json": '{"workspaces": ["packages/*", "!packages/legacy"]}'}
+        rails = {"npm": ["/", "/packages/a", "/packages/legacy", "/tools/x"]}
+        paths = ["package.json", "package-lock.json", "packages/a/package.json"]
+        self.assertEqual(
+            fb.unscanned_rails(rails, paths, _reader(files)), [gap("npm", "/packages/legacy"), gap("npm", "/tools/x")]
+        )
+        yarn = {"package.json": '{"workspaces": {"packages": ["./apps/*"]}}'}
+        self.assertEqual(fb.workspace_members("npm", "/", _reader(yarn)), (["apps/*"], []))
+        pnpm = {"web/pnpm-workspace.yaml": "packages:\n  - 'libs/*'\n  - '!libs/old'\n"}
+        self.assertEqual(fb.workspace_members("npm", "/web", _reader(pnpm)), (["web/libs/*"], ["web/libs/old"]))
+        broken = {"package.json": "{nope", "pnpm-workspace.yaml": "packages: [unclosed"}
+        self.assertEqual(fb.workspace_members("bun", "/", _reader(broken)), ([], []))
+        odd = {"package.json": "[1]", "pnpm-workspace.yaml": "- 1\n"}
+        self.assertEqual(fb.workspace_members("npm", "/", _reader(odd)), ([], []))
+
     def test_workspace_members(self) -> None:
         uv = {"py/pyproject.toml": "[tool.uv.workspace]\nmembers = ['packages/*']\n"}
         self.assertEqual(fb.workspace_members("uv", "/py", _reader(uv)), (["py/packages/*"], []))
@@ -943,11 +962,16 @@ class TruthfulDocumentTests(unittest.TestCase):
             ".github/workflows/scan.yaml": "# uses: x/reusable-codeql.yml@v1\njobs:\n  odd: 3\n  lint:\n    steps: nope\n"
             "  analyze:\n    steps:\n      - run: echo hi\n      - 7\n"
             "      - uses: github/codeql-action/init@v3\n        with:\n          queries: security-and-quality\n"
+            "      - uses: github/codeql-action/analyze@v3\n"
         }
         self.assertEqual(
             fb.codeql_workflow(_facts(list(own)), _reader(own)),
             (".github/workflows/scan.yaml", "security-and-quality", False),
         )
+        init_only = {
+            ".github/workflows/scan.yml": "jobs:\n  a:\n    steps:\n      - uses: github/codeql-action/init@v3\n"
+        }
+        self.assertIsNone(fb.codeql_workflow(_facts(list(init_only)), _reader(init_only)))
         commented = {".github/workflows/scan.yml": f"# uses: {reusable}\n# - uses: github/codeql-action/init@v3\n"}
         self.assertIsNone(fb.codeql_workflow(_facts(list(commented)), _reader(commented)))
         # an inline comment, shell text or an unparseable file never counts as a CodeQL workflow
@@ -971,22 +995,18 @@ class TruthfulDocumentTests(unittest.TestCase):
             text,
         )
         self.assertIn("any severity cannot be merged", text)
-        bare = {
-            ".github/workflows/codeql.yml": "jobs:\n  analyze:\n    steps:\n      - uses: github/codeql-action/init@v3\n"
-        }
+        head = "jobs:\n  analyze:\n    steps:\n      - uses: github/codeql-action/init@v3\n"
+        analyze = "      - uses: github/codeql-action/analyze@v3\n"
+        bare = {".github/workflows/codeql.yml": head + analyze}
         self.assertIn(
             "`.github/workflows/codeql.yml` runs the default query suite",
             fb._codeql_control(_facts(list(bare)), _reader(bare)),
         )
         named = {
-            ".github/workflows/codeql.yml": bare[".github/workflows/codeql.yml"]
-            + "        with:\n          queries: security-extended\n"
+            ".github/workflows/codeql.yml": head + "        with:\n          queries: security-extended\n" + analyze
         }
         self.assertIn("runs the `security-extended` queries", fb._codeql_control(_facts(list(named)), _reader(named)))
-        listed = {
-            ".github/workflows/codeql.yml": bare[".github/workflows/codeql.yml"]
-            + "        with:\n          config-file: c.yml\n"
-        }
+        listed = {".github/workflows/codeql.yml": head + "        with:\n          config-file: c.yml\n" + analyze}
         self.assertIn(
             "runs the queries its configuration lists", fb._codeql_control(_facts(list(listed)), _reader(listed))
         )
@@ -1003,7 +1023,7 @@ class TruthfulDocumentTests(unittest.TestCase):
         self.assertIn("4. Open a pull request and fill in the pull-request template.\n", contributing)
         self.assertIn("on the schedule set in\n`.github/dependabot.yml`", contributing)
         self.assertNotIn("maps 1:1", contributing)
-        self.assertIn("(this repository's own configuration)", context["extra_controls"])
+        self.assertIn("configured by `.github/dependabot.yml`, this repository's own file", context["extra_controls"])
         self.assertIn("Dependabot alerts and security updates.", context["security_controls"])
         self.assertIn("(this\n  repository's own checks)", fb.render_template("AGENTS.md", context))
         for name in ("CONTRIBUTING.md", "AGENTS.md"):
@@ -1070,6 +1090,8 @@ class ThinCallerTests(unittest.TestCase):
         self.assertEqual(fb.thin_caller(job_scoped), fb.ThinCaller({}, ("main",), (), True))
         manual = self.THIN.replace("  workflow_dispatch:\n", "  workflow_dispatch: {}\n")
         self.assertTrue(fb.thin_caller(manual).dispatch)
+        queued = self.THIN.replace("  workflow_dispatch:\n", "  merge_group:\n    types: [checks_requested]\n")
+        self.assertEqual(fb.thin_caller(queued), fb.ThinCaller({}, ("main",), (), False))
         for broken in (
             "jobs: [unclosed\n",
             "- a list\n",
@@ -1090,6 +1112,7 @@ class ThinCallerTests(unittest.TestCase):
             # a trigger the template does not render, or a filter other than branches, stays hand-written
             self.THIN.replace("  workflow_dispatch:\n", "  schedule:\n    - cron: '0 3 * * 1'\n"),
             listed.replace("[push, pull_request]", "[push, pull_request, schedule]"),
+            self.THIN.replace("  workflow_dispatch:\n", "  merge_group:\n    branches: [release]\n"),
             listed.replace("[push, pull_request]", "[pull_request, {push: 1}]"),
             self.THIN.replace("  pull_request:\n", "  pull_request:\n    paths: ['src/**']\n"),
             self.THIN.replace("  pull_request:\n", "  pull_request:\n    branches: []\n"),

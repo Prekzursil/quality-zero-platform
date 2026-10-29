@@ -83,6 +83,7 @@ FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 DEPS_FLOORS = ("t0", "any")
 #: An advanced CodeQL setup is a checked-in workflow that runs CodeQL itself or through QZP.
 _CODEQL_INIT_RE = re.compile(r"github/codeql-action/init@")
+_CODEQL_ANALYZE_RE = re.compile(r"github/codeql-action/analyze@")
 _REUSABLE_CODEQL_RE = re.compile(r"Prekzursil/quality-zero-platform/\.github/workflows/reusable-codeql\.yml@")
 #: The managed scripts/verify carries this phrase; any other scripts/verify is the repository's own.
 MANAGED_VERIFY_MARKER = "Managed by quality-zero-platform"
@@ -654,7 +655,9 @@ def codeql_workflow(facts: RepoFacts, read: Reader) -> Optional[Tuple[str, Optio
     """The checked-in CodeQL workflow: ``(path, query suite, runs through QZP's reusable-codeql.yml)``.
 
     ``None`` means no workflow runs CodeQL, so the repository relies on GitHub default setup.
-    Only parsed job and step ``uses`` values count, never comments or shell text. A QZP
+    Only parsed job and step ``uses`` values count, never comments or shell text, and an
+    ``init`` step only with an ``analyze`` step in the same workflow (nothing is uploaded
+    otherwise). A QZP
     caller's suite is ``None``: it is whatever ``reusable-codeql.yml`` selects at the commit
     the caller pins, which the planner cannot see.
     """
@@ -666,10 +669,12 @@ def codeql_workflow(facts: RepoFacts, read: Reader) -> Optional[Tuple[str, Optio
             document = yaml.safe_load(read(path) or "")
         except yaml.YAMLError:
             continue
-        for uses, inputs in _workflow_uses(document):
+        steps = _workflow_uses(document)
+        analyzes = any(_CODEQL_ANALYZE_RE.match(uses) for uses, _inputs in steps)
+        for uses, inputs in steps:
             if _REUSABLE_CODEQL_RE.match(uses):
                 return path, None, True
-            if _CODEQL_INIT_RE.match(uses):
+            if analyzes and _CODEQL_INIT_RE.match(uses):
                 return path, _codeql_queries(inputs), False
     return None
 
@@ -804,7 +809,7 @@ def template_context(facts: RepoFacts, read: Reader, qzp_pin: str, deps_floor: s
     controls = [codeql, f"- **SAST** — opengrep {gate}.", secrets, dependencies]
     outside = [label for key, label in _OUTSIDE_LEAN_GATE.items() if key in languages]
     if own_dependabot:
-        dependabot = f"- **Dependabot** — `{own_dependabot}` (this repository's own configuration) proposes updates."
+        dependabot = f"- **Dependabot** — configured by `{own_dependabot}`, this repository's own file."
     else:
         dependabot = "- **Dependabot** — `.github/dependabot.yml` keeps every manifest tree on a weekly update rail."
     extra = [codeql, dependabot]
@@ -1090,6 +1095,8 @@ _UNSCANNED_ECOSYSTEMS = {"swift": "Swift packages"}
 _FOLDING_ECOSYSTEMS = frozenset({"gradle", "maven", "nuget"})
 #: Workspace roots whose members share the root lockfile: (manifest, TOML path to the workspace table).
 _WORKSPACE_TABLES = {"cargo": ("Cargo.toml", ("workspace",)), "uv": ("pyproject.toml", ("tool", "uv", "workspace"))}
+#: JS ecosystems whose root lockfile covers the workspaces its package.json / pnpm config declares.
+_JS_WORKSPACES = frozenset({"npm", "bun"})
 
 
 def _rail_of(path: str, directories: Sequence[str]) -> Optional[str]:
@@ -1133,10 +1140,37 @@ def _lockfile_rail(
     return None
 
 
+def _js_workspace_globs(prefix: str, read: Reader) -> Tuple[List[str], List[str]]:
+    """The member / excluded globs a JS root declares (package.json ``workspaces``, pnpm-workspace.yaml)."""
+    try:
+        manifest = json.loads(read(prefix + "package.json") or "{}")
+    except ValueError:
+        manifest = {}
+    workspaces = manifest.get("workspaces") if isinstance(manifest, dict) else None
+    if isinstance(workspaces, dict):
+        workspaces = workspaces.get("packages")
+    globs = [str(item) for item in workspaces] if isinstance(workspaces, list) else []
+    try:
+        pnpm = yaml.safe_load(read(prefix + "pnpm-workspace.yaml") or "") or {}
+    except yaml.YAMLError:
+        pnpm = {}
+    packages = pnpm.get("packages") if isinstance(pnpm, dict) else None
+    globs += [str(item) for item in packages] if isinstance(packages, list) else []
+    members = [prefix + glob.strip("./") for glob in globs if not glob.startswith("!")]
+    exclude = [prefix + glob[1:].strip("./") for glob in globs if glob.startswith("!")]
+    return members, exclude
+
+
 def workspace_members(ecosystem: str, root: str, read: Reader) -> Tuple[List[str], List[str]]:
-    """The ``members`` / ``exclude`` globs a Cargo or uv workspace root declares (``a/*`` form)."""
-    manifest, table_path = _WORKSPACE_TABLES[ecosystem]
+    """The ``members`` / ``exclude`` globs a workspace root declares (``a/*`` form).
+
+    Cargo (``[workspace]``) and uv (``[tool.uv.workspace]``) read TOML; npm and bun read the
+    root package.json ``workspaces`` (and pnpm's pnpm-workspace.yaml, ``!`` excluding).
+    """
     prefix = "" if root == "/" else root.strip("/") + "/"
+    if ecosystem in _JS_WORKSPACES:
+        return _js_workspace_globs(prefix, read)
+    manifest, table_path = _WORKSPACE_TABLES[ecosystem]
     try:
         table: object = tomllib.loads(read(prefix + manifest) or "")
     except tomllib.TOMLDecodeError:
@@ -1191,7 +1225,7 @@ def unscanned_rails(rails: Dict[str, List[str]], paths: Sequence[str], read: Opt
         for directory in directories:
             shared = (
                 read is not None
-                and workspace in _WORKSPACE_TABLES
+                and (workspace in _WORKSPACE_TABLES or workspace in _JS_WORKSPACES)
                 and any(
                     root is not None
                     and _is_ancestor(root, directory)
@@ -1320,6 +1354,8 @@ class ThinCaller:
 
 #: Triggers a thin caller may have; anything else (schedule, workflow_call, ...) is hand-written.
 _THIN_TRIGGERS = frozenset({"push", "pull_request", "merge_group", "workflow_dispatch"})
+#: The template's own merge_group trigger; any other filter makes a caller hand-written.
+_TEMPLATE_MERGE_GROUP = {"types": ["checks_requested"]}
 
 
 def _trigger_branches(
@@ -1381,7 +1417,11 @@ def thin_caller(text: str, default_branch: str = "main") -> Optional[ThinCaller]
     if isinstance(triggers, list) and not all(isinstance(name, str) for name in triggers):
         return None
     names = set(triggers)
-    if names - _THIN_TRIGGERS or (isinstance(triggers, dict) and triggers.get("workflow_dispatch")):
+    if (
+        names - _THIN_TRIGGERS
+        or (isinstance(triggers, dict) and triggers.get("workflow_dispatch"))
+        or (isinstance(triggers, dict) and triggers.get("merge_group") not in (None, _TEMPLATE_MERGE_GROUP))
+    ):
         return None
     push = _trigger_branches(triggers, "push", default_branch)
     pull_request = _trigger_branches(triggers, "pull_request", default_branch)

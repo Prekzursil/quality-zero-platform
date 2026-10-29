@@ -259,13 +259,36 @@ class DependabotTemplateTests(unittest.TestCase):
         self.assertEqual(update["schedule"]["interval"], "weekly")
         self.assertEqual(update["open-pull-requests-limit"], 10)
 
-    def test_major_updates_are_ignored_by_default(self) -> None:
-        """Every rendered update blocks major bumps — goes via ``bumps.yml``."""
+    def test_majors_arrive_and_security_updates_are_grouped(self) -> None:
+        """The fleet policy: no semver-major ignore, a security group, the `dependencies` label."""
         profile = {"dependabot": {"updates": [{"ecosystem": "npm", "directory": "/ui"}]}}
-        data = yaml.safe_load(self._render(profile))
-        ignores = data["updates"][0]["ignore"]
-        self.assertEqual(ignores[0]["dependency-name"], "*")
-        self.assertIn("version-update:semver-major", ignores[0]["update-types"])
+        update = yaml.safe_load(self._render(profile))["updates"][0]
+        self.assertNotIn("ignore", update)
+        self.assertEqual(update["groups"]["security-updates"], {"applies-to": "security-updates", "patterns": ["*"]})
+        self.assertEqual(
+            update["groups"]["minor-patch"],
+            {"applies-to": "version-updates", "patterns": ["*"], "update-types": ["patch", "minor"]},
+        )
+        self.assertEqual(update["labels"], ["dependencies"])
+
+    def test_declared_groups_and_labels_are_kept(self) -> None:
+        """A profile's own groups replace the default version group; the security group stays."""
+        profile = {
+            "dependabot": {
+                "updates": [
+                    {
+                        "ecosystem": "pip",
+                        "directory": "/",
+                        "groups": {"tooling": {"patterns": ["ruff*"], "update_types": ["patch"]}},
+                        "labels": ["deps"],
+                    }
+                ]
+            }
+        }
+        update = yaml.safe_load(self._render(profile))["updates"][0]
+        self.assertEqual(set(update["groups"]), {"tooling", "security-updates"})
+        self.assertEqual(update["groups"]["tooling"]["update-types"], ["patch"])
+        self.assertEqual(update["labels"], ["deps"])
 
     def test_versioning_strategy_is_rendered_only_when_declared(self) -> None:
         """``versioning_strategy`` pins Dependabot's behaviour for that update only."""

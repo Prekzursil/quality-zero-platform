@@ -633,25 +633,47 @@ def _codeql_suite(text: str) -> str:
     if match is None:
         return "configured" if _CODEQL_CONFIG_RE.search(live) else "default"
     value = match.group(1).split(" #", 1)[0].strip().strip("'\"")
-    return value or "configured"
+    # empty (a list follows) or a block scalar (`|` / `>`): the queries are configured, not named
+    return value if value and value[0] not in "|>" else "configured"
+
+
+def _workflow_uses(document: object) -> List[Tuple[str, str]]:
+    """Every ``(uses, step-or-job text)`` a parsed workflow runs: job-level and step-level ``uses``."""
+    found: List[Tuple[str, str]] = []
+    jobs = document.get("jobs") if isinstance(document, dict) else None
+    for job in jobs.values() if isinstance(jobs, dict) else []:
+        if not isinstance(job, dict):
+            continue
+        if isinstance(job.get("uses"), str):
+            found.append((job["uses"], ""))
+        steps = job.get("steps")
+        for step in steps if isinstance(steps, list) else []:
+            if isinstance(step, dict) and isinstance(step.get("uses"), str):
+                found.append((step["uses"], yaml.safe_dump(step.get("with") or {}, sort_keys=False)))
+    return found
 
 
 def codeql_workflow(facts: RepoFacts, read: Reader) -> Optional[Tuple[str, Optional[str], bool]]:
     """The checked-in CodeQL workflow: ``(path, query suite, runs through QZP's reusable-codeql.yml)``.
 
     ``None`` means no workflow runs CodeQL, so the repository relies on GitHub default setup.
-    Comment lines never count. A QZP caller's suite is ``None``: it is whatever
-    ``reusable-codeql.yml`` selects at the commit the caller pins, which the planner cannot see.
+    Only parsed job and step ``uses`` values count, never comments or shell text. A QZP
+    caller's suite is ``None``: it is whatever ``reusable-codeql.yml`` selects at the commit
+    the caller pins, which the planner cannot see.
     """
     workflows = sorted(
         p for p in facts.paths if posixpath.dirname(p) == ".github/workflows" and p.endswith((".yml", ".yaml"))
     )
     for path in workflows:
-        live = "\n".join(line for line in (read(path) or "").splitlines() if not line.lstrip().startswith("#"))
-        if _REUSABLE_CODEQL_RE.search(live):
-            return path, None, True
-        if _CODEQL_INIT_RE.search(live):
-            return path, _codeql_suite(live), False
+        try:
+            document = yaml.safe_load(read(path) or "")
+        except yaml.YAMLError:
+            continue
+        for uses, inputs in _workflow_uses(document):
+            if _REUSABLE_CODEQL_RE.match(uses):
+                return path, None, True
+            if _CODEQL_INIT_RE.match(uses):
+                return path, _codeql_suite(inputs), False
     return None
 
 
@@ -1063,8 +1085,12 @@ _SCANNED_LOCKFILES = {
 }
 #: Package ecosystems osv-scanner has no extractor for at all.
 _UNSCANNED_ECOSYSTEMS = {"swift": "Swift packages"}
-#: Workspace ecosystems: members share the lockfile at an enclosing workspace root.
-_WORKSPACE_LOCKFILES = frozenset({"cargo", "uv"})
+#: Ecosystems whose root build folds declared modules into its own rail (see ``_drop_declared``):
+#: a lockfile in such a module counts for the root. Everywhere else a lockfile must sit in the
+#: rail's own directory (pip also reads a ``requirements/`` subdirectory).
+_FOLDING_ECOSYSTEMS = frozenset({"gradle", "maven", "nuget"})
+#: Workspace roots whose members share the root lockfile: (manifest, TOML path to the workspace table).
+_WORKSPACE_TABLES = {"cargo": ("Cargo.toml", ("workspace",)), "uv": ("pyproject.toml", ("tool", "uv", "workspace"))}
 
 
 def _rail_of(path: str, directories: Sequence[str]) -> Optional[str]:
@@ -1082,23 +1108,74 @@ def _readable(path: str, lockfiles: Sequence[str]) -> bool:
     )
 
 
-def unscanned_rails(rails: Dict[str, List[str]], paths: Sequence[str]) -> List[str]:
+def _lockfile_rail(ecosystem: str, path: str, directories: Sequence[str]) -> Optional[str]:
+    """The rail a readable lockfile covers: its own directory's rail, or a folding root's."""
+    owner = _rail_of(path, directories)
+    if owner is None or ecosystem in _FOLDING_ECOSYSTEMS:
+        return owner
+    relative = path if owner == "/" else path[len(owner.strip("/")) + 1 :]
+    depth = relative.count("/")
+    if depth == 0 or (depth == 1 and ecosystem == "pip" and relative.startswith("requirements/")):
+        return owner
+    return None
+
+
+def workspace_members(ecosystem: str, root: str, read: Reader) -> Tuple[List[str], List[str]]:
+    """The ``members`` / ``exclude`` globs a Cargo or uv workspace root declares (``a/*`` form)."""
+    manifest, table_path = _WORKSPACE_TABLES[ecosystem]
+    prefix = "" if root == "/" else root.strip("/") + "/"
+    try:
+        table: object = tomllib.loads(read(prefix + manifest) or "")
+    except tomllib.TOMLDecodeError:
+        return [], []
+    for key in table_path:
+        table = table.get(key) if isinstance(table, dict) else None
+    if not isinstance(table, dict):
+        return [], []
+    globs = {name: table.get(name) for name in ("members", "exclude")}
+    members, exclude = (
+        [prefix + str(item).strip("/") for item in value] if isinstance(value, list) else []
+        for value in (globs["members"], globs["exclude"])
+    )
+    return members, exclude
+
+
+def _in_workspace(ecosystem: str, root: str, directory: str, read: Reader) -> bool:
+    """Whether ``directory`` is a declared member (and not excluded) of the workspace at ``root``."""
+    members, exclude = workspace_members(ecosystem, root, read)
+    target = directory.strip("/")
+    return any(fnmatch.fnmatchcase(target, glob) for glob in members) and not any(
+        fnmatch.fnmatchcase(target, glob) for glob in exclude
+    )
+
+
+def unscanned_rails(rails: Dict[str, List[str]], paths: Sequence[str], read: Optional[Reader] = None) -> List[str]:
     """Rails whose dependencies gate 6 (osv-scanner) cannot read, so it can never fail on them.
 
-    A lockfile counts for the deepest rail of its ecosystem that contains it, so a nested
-    project's lockfile never hides a parent's blind spot, while a declared module that has
-    no rail of its own (folded into its root's rail) still counts. Cargo and uv workspace
-    members share the lockfile of an enclosing rail. Vendored trees never count.
+    A lockfile covers the rail of its own directory (pip: also ``requirements/``); in Gradle,
+    Maven and NuGet, whose roots fold declared modules into one rail, a module's lockfile
+    covers the root rail. A Cargo or uv workspace member shares the root lockfile only when
+    the root manifest declares it a member (and does not exclude it). Vendored trees never
+    count, and a lockfile in an unrelated subdirectory never hides a rail's blind spot.
     """
     gaps = [f"{label} ({', '.join(rails[eco])})" for eco, label in _UNSCANNED_ECOSYSTEMS.items() if eco in rails]
     for ecosystem, lockfiles in _SCANNED_LOCKFILES.items():
         directories = rails.get(ecosystem, [])
         covered = {
-            _rail_of(path, directories) for path in paths if not _is_excluded(path) and _readable(path, lockfiles)
+            _lockfile_rail(ecosystem, path, directories)
+            for path in paths
+            if not _is_excluded(path) and _readable(path, lockfiles)
         }
         for directory in directories:
-            shared = ecosystem in _WORKSPACE_LOCKFILES and any(
-                owner is not None and _is_ancestor(owner, directory) for owner in covered
+            shared = (
+                read is not None
+                and ecosystem in _WORKSPACE_TABLES
+                and any(
+                    root is not None
+                    and _is_ancestor(root, directory)
+                    and _in_workspace(ecosystem, root, directory, read)
+                    for root in covered
+                )
             )
             if directory not in covered and not shared:
                 gaps.append(f"{ecosystem} {directory} has no file osv-scanner reads ({' / '.join(lockfiles)})")
@@ -1270,6 +1347,7 @@ def thin_caller(text: str, default_branch: str = "main") -> Optional[ThinCaller]
         list(jobs) != ["quality"]
         or set(job) - _THIN_CALLER_JOB_KEYS
         or not isinstance(inputs, dict)
+        or not all(isinstance(key, str) for key in inputs)
         or not all(isinstance(v, (str, int, float)) and not isinstance(v, bool) for v in inputs.values())
         or document.get("permissions", READ_ONLY) != READ_ONLY
         or job.get("permissions", READ_ONLY) != READ_ONLY
@@ -1500,7 +1578,7 @@ def plan_baseline(facts: RepoFacts, read: Reader, qzp_pin: str, deps_floor: str 
     actions.extend(_plan_compiled_lane(facts))
     actions.extend(_plan_jsts_lane(facts, read))
     actions.extend(_plan_outside_languages(facts, read))
-    unscanned = unscanned_rails(detect_rails(facts.paths, read), facts.paths)
+    unscanned = unscanned_rails(detect_rails(facts.paths, read), facts.paths, read)
     if unscanned:
         actions.append(
             FileAction(GATE6_SCOPE, "gap", f"gate 6 does not scan these dependencies: {'; '.join(unscanned)}")

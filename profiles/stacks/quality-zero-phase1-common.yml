@@ -137,5 +137,3 @@ dependabot:
   schedule_interval: weekly
   labels:
     - dependencies
-    - type:chore
-    - area:ci

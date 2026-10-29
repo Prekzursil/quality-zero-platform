@@ -91,6 +91,8 @@ jobs:
           QZ_ACTOR: ${{ inputs.actor }}
           QZ_PR_BODY: ${{ inputs.pr_body }}
           QZ_AUDIT_DIR: ${{ inputs.audit_dir }}
+          # The CALLER's repository (a reusable workflow runs in its context).
+          QZ_CALLER_PRIVATE: ${{ github.event.repository.private }}
         run: |
           python - <<'PY'
           import json
@@ -98,6 +100,7 @@ jobs:
           import sys
           from pathlib import Path
           from scripts.quality import bypass_labels as bl
+          from scripts.quality.fleet_state import public_slug
 
           label = os.environ["QZ_LABEL"].strip()
           pr_body = os.environ.get("QZ_PR_BODY", "")
@@ -106,12 +109,19 @@ jobs:
           head_sha = os.environ["QZ_HEAD_SHA"].strip()
           actor = os.environ["QZ_ACTOR"].strip()
           audit_dir = Path(os.environ.get("QZ_AUDIT_DIR", "audit"))
+          # The audit record, its commit message and the tracking issue land in
+          # QZP's PUBLIC repository. A private caller (anything not proven
+          # public) is recorded by a masked slug, with no actor and no SHA.
+          private = os.environ.get("QZ_CALLER_PRIVATE", "").strip().lower() != "false"
+          public_pr = public_slug(pr_slug, private=True) if private else pr_slug
+          public_actor = "<private>" if private else actor
+          public_sha = "" if private else head_sha
 
           if label == bl.BREAK_GLASS_LABEL:
             try:
               decision = bl.evaluate_break_glass(
-                  pr_body=pr_body, pr_slug=pr_slug, pr_number=pr_number,
-                  head_sha=head_sha, actor=actor,
+                  pr_body=pr_body, pr_slug=public_pr, pr_number=pr_number,
+                  head_sha=public_sha, actor=public_actor,
               )
             except bl.BypassError as exc:
               print(f"::error::{exc}", flush=True)
@@ -119,8 +129,8 @@ jobs:
             filename = "break-glass.jsonl"
           elif label == bl.SKIP_LABEL:
             decision = bl.evaluate_skip(
-                pr_body=pr_body, pr_slug=pr_slug, pr_number=pr_number,
-                head_sha=head_sha, actor=actor,
+                pr_body=pr_body, pr_slug=public_pr, pr_number=pr_number,
+                head_sha=public_sha, actor=public_actor,
             )
             filename = "skip.jsonl"
           else:
@@ -134,6 +144,8 @@ jobs:
           if output_path:
             with open(output_path, "a", encoding="utf-8") as handle:
               handle.write(f"allowed={'true' if decision.allowed else 'false'}\n")
+              handle.write(f"public_pr_slug={public_pr}\n")
+              handle.write(f"public_actor={public_actor if private else '@' + actor}\n")
               handle.write(f"label={decision.label}\n")
               handle.write(f"audit_path={audit_path}\n")
               if decision.incident:
@@ -172,7 +184,7 @@ jobs:
           QZ_PLATFORM_REPO: ${{ job.workflow_repository }}
           QZ_AUDIT_PATH: ${{ steps.evaluate.outputs.audit_path }}
           QZ_LABEL: ${{ inputs.label }}
-          QZ_PR_SLUG: ${{ inputs.pr_slug }}
+          QZ_PR_SLUG: ${{ steps.evaluate.outputs.public_pr_slug }}
           QZ_PR_NUMBER: ${{ inputs.pr_number }}
         run: |
           set -euo pipefail
@@ -188,9 +200,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.BYPASS_AUDIT_PAT || github.token }}
           QZ_ISSUE_TITLE: ${{ steps.evaluate.outputs.tracking_issue_title }}
-          QZ_PR_SLUG: ${{ inputs.pr_slug }}
+          QZ_PR_SLUG: ${{ steps.evaluate.outputs.public_pr_slug }}
           QZ_PR_NUMBER: ${{ inputs.pr_number }}
-          QZ_ACTOR: ${{ inputs.actor }}
+          QZ_ACTOR: ${{ steps.evaluate.outputs.public_actor }}
           QZ_INCIDENT: ${{ steps.evaluate.outputs.incident }}
           QZ_PLATFORM_REPO: ${{ job.workflow_repository }}
         run: |
@@ -201,7 +213,7 @@ jobs:
             --body "Automated tracking issue from the reusable-quality-zero-bypass workflow.
 
           - PR: $QZ_PR_SLUG#$QZ_PR_NUMBER
-          - Actor: @$QZ_ACTOR
+          - Actor: $QZ_ACTOR
           - Incident: $QZ_INCIDENT
 
           Post-merge remediation required: the PR merged past a red quality-zero gate using break-glass. Debrief the incident, resolve the underlying failure, and close this issue when the gate is green again on main."

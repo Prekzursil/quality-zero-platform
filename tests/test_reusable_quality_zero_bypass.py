@@ -8,6 +8,10 @@ Semgrep CWE-78.
 
 from __future__ import absolute_import
 
+import os
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -124,6 +128,51 @@ class ReusableBypassWorkflowTests(unittest.TestCase):
         self.assertEqual(self.doc["jobs"]["bypass"]["env"]["HAS_AUDIT_PAT"], "${{ secrets.BYPASS_AUDIT_PAT != '' }}")
         self.assertFalse(any("HAS_AUDIT_PAT" in (step.get("env") or {}) for step in steps))
         self.assertIn("QZ_PLATFORM_REPO: ${{ job.workflow_repository }}", self.text)
+
+    def test_a_private_callers_names_never_reach_the_public_platform_repo(self) -> None:
+        """The audit record, its commit message and the tracking issue land in QZP's PUBLIC repository."""
+        steps = {step.get("name", ""): step for step in self.doc["jobs"]["bypass"]["steps"]}
+        evaluate = steps["Evaluate bypass"]
+        self.assertEqual(evaluate["env"]["QZ_CALLER_PRIVATE"], "${{ github.event.repository.private }}")
+        for name in ("Commit audit log", "Open post-merge tracking issue"):
+            with self.subTest(step=name):
+                self.assertEqual(steps[name]["env"]["QZ_PR_SLUG"], "${{ steps.evaluate.outputs.public_pr_slug }}")
+        self.assertEqual(
+            steps["Open post-merge tracking issue"]["env"]["QZ_ACTOR"], "${{ steps.evaluate.outputs.public_actor }}"
+        )
+        script = str(evaluate["run"]).split("<<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
+        for private, expect_masked in (("true", True), ("", True), ("false", False)):
+            with self.subTest(caller_private=private or "(absent)"), tempfile.TemporaryDirectory() as tmp:
+                outputs = Path(tmp) / "outputs"
+                env = {
+                    **os.environ,
+                    "PYTHONPATH": str(_WORKFLOW.parents[2]),
+                    "QZ_LABEL": "quality-zero:skip",
+                    "QZ_PR_SLUG": "Prekzursil/hidden-repo",
+                    "QZ_PR_NUMBER": "3",
+                    "QZ_HEAD_SHA": "abc123",
+                    "QZ_ACTOR": "dev",
+                    "QZ_PR_BODY": "",
+                    "QZ_AUDIT_DIR": tmp,
+                    "QZ_CALLER_PRIVATE": private,
+                    "GITHUB_OUTPUT": str(outputs),
+                }
+                env.pop("GITHUB_STEP_SUMMARY", None)
+                done = subprocess.run(
+                    [sys.executable, "-c", script], env=env, capture_output=True, text=True, check=False
+                )
+                self.assertEqual(done.returncode, 0, done.stderr)
+                record = (Path(tmp) / "skip.jsonl").read_text(encoding="utf-8")
+                written = outputs.read_text(encoding="utf-8")
+                if expect_masked:
+                    for leak in ("hidden-repo", "abc123", '"dev"'):
+                        self.assertNotIn(leak, record)
+                    self.assertIn("public_pr_slug=<private:", written)
+                    self.assertIn("public_actor=<private>", written)
+                else:
+                    self.assertIn("Prekzursil/hidden-repo", record)
+                    self.assertIn("public_pr_slug=Prekzursil/hidden-repo", written)
+                    self.assertIn("public_actor=@dev", written)
 
     def test_tracking_issue_step_runs_only_for_break_glass(self) -> None:
         """Post-merge tracking issue is opened only for break-glass labels."""

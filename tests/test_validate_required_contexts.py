@@ -7,13 +7,16 @@ temp workspace so the pure logic is tested against real YAML shapes.
 
 from __future__ import absolute_import
 
+import io
 import json
 import subprocess
 import tempfile
 import textwrap
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Any, List, Sequence
+from unittest.mock import MagicMock
 
 from scripts.quality import validate_required_contexts as vrc
 
@@ -410,3 +413,19 @@ class MainTests(unittest.TestCase):
             runner=ScriptedRunner(returncode=1, stderr="gh: Not Found"),
         )
         self.assertEqual(code, vrc.EXIT_PHANTOM)
+
+
+class OutJsonDirectoryTests(unittest.TestCase):
+    """fleet-health passes build/fleet-health-contexts.json; nothing else creates build/."""
+
+    def test_the_report_directory_is_created(self) -> None:
+        """The write crashed (exit 1, read as 'findings') when the directory did not exist."""
+        with tempfile.TemporaryDirectory() as tmp:
+            inventory = Path(tmp) / "repos.yml"
+            inventory.write_text("version: 1\nrepos: []\n", encoding="utf-8")
+            out = Path(tmp) / "build" / "nested" / "contexts.json"
+            with redirect_stdout(io.StringIO()):
+                code = vrc.main(["--inventory", str(inventory), "--out-json", str(out)], runner=MagicMock())
+            self.assertIn(code, (0, 1))
+            self.assertTrue(out.is_file())
+            self.assertIn("repos", json.loads(out.read_text(encoding="utf-8")))

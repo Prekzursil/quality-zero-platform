@@ -209,6 +209,24 @@ class WorkflowContractTests(unittest.TestCase):
                     self.assertIn("uses:actions/checkout@", tail[:400])
         self.assertGreaterEqual(found, 14)
 
+    def test_an_apply_run_without_drift_sync_pat_fails_visibly(self) -> None:
+        """QZP has no DRIFT_SYNC_PAT: a non-dry wave computed everything and finished green having changed nothing."""
+        for name, apply_step in (
+            ("reusable-drift-sync.yml", "Apply drift fixes + open PR"),
+            ("reusable-bump-workflow-shas.yml", "Open bump PR on consumer repo"),
+            ("reusable-bump-apply.yml", "Commit + open bump PR on consumer repo"),
+        ):
+            with self.subTest(workflow=name):
+                workflow = yaml.safe_load((ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8"))
+                (job,) = workflow["jobs"].values()
+                self.assertEqual(job["env"]["DRIFT_SYNC_PAT_PRESENT"], "${{ secrets.DRIFT_SYNC_PAT != '' }}")
+                names = [step.get("name", "") for step in job["steps"]]
+                guard = job["steps"][names.index("Fail when an apply runs without DRIFT_SYNC_PAT")]
+                self.assertEqual(guard["if"], "${{ !inputs.dry_run && env.DRIFT_SYNC_PAT_PRESENT != 'true' }}")
+                self.assertIn("::error title=DRIFT_SYNC_PAT not configured::", guard["run"])
+                self.assertIn("exit 1", guard["run"])
+                self.assertEqual(names.index(apply_step), names.index(guard["name"]) + 1)
+
     def test_no_step_gates_on_its_own_env(self) -> None:
         """A step's own env does not exist yet when its `if:` is evaluated.
 

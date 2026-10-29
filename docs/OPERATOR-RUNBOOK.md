@@ -196,10 +196,14 @@ gh workflow run scheduled-alerts.yml --ref main -f dry_run=false
 
 The cron schedule is LIVE: it opens and closes `alert:*` issues (see "Scheduled
 Alerts and the platform's own workflows" below). Only a manual dispatch defaults
-to `dry_run=true`. A detector whose input file does not exist is NOT evaluated,
-and the run summary lists each one as such - the fleet-state files are not
-produced by anything yet, so today only `alert:workflow-failing` has live input.
-Any failed `gh` call fails the run rather than reading as "no issue" or "done".
+to `dry_run=true`. Three detectors read LIVE state (`scripts/quality/fleet_state.py`):
+- `alert:workflow-failing`: the platform's own workflow runs;
+- `alert:bypass-stale`: open `quality-zero:break-glass-followup` issues;
+- `alert:drift-stuck`: open `quality-zero/drift-sync*` PRs across the fleet.
+
+The coverage and fleet-bump detectors still read files that nothing produces
+yet. Each is listed in the run summary as NOT evaluated. Any failed `gh` call
+fails the run rather than reading as "no issue" or "done".
 
 ### `scheduled-cve-scan.yml` (cron)
 

@@ -643,6 +643,19 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn('lane == "deps"', text)
         self.assertIn("check_dependabot_alerts.py", text)
 
+    def test_the_drift_page_reads_live_drift_prs_before_rendering(self) -> None:
+        """drift.html used to claim "Fleet is in sync" from a file no job wrote."""
+        workflow = yaml.safe_load(
+            (ROOT / ".github" / "workflows" / "publish-admin-dashboard.yml").read_text(encoding="utf-8")
+        )
+        names = [step.get("name", "") for step in workflow["jobs"]["build"]["steps"]]
+        read = names.index("Read live drift-sync PRs")
+        self.assertLess(read, names.index("Build Phase 5 dashboard pages (coverage / drift / audit)"))
+        step = workflow["jobs"]["build"]["steps"][read]
+        self.assertIn("scripts/quality/fleet_state.py", step["run"])
+        self.assertIn("--drift-jsonl audit/drift-sync.jsonl", step["run"])
+        self.assertEqual(step["env"]["GH_TOKEN"], "${{ github.token }}")
+
     def test_admin_dashboard_and_control_plane_admin_workflows_exist_with_expected_triggers(self) -> None:
         """Assert the admin dashboard and control-plane admin workflows keep their expected controls."""
         dashboard_text = (ROOT / ".github" / "workflows" / "publish-admin-dashboard.yml").read_text(encoding="utf-8")

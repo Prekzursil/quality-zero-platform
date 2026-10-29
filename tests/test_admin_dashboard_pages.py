@@ -100,6 +100,25 @@ class RenderDriftPageTests(unittest.TestCase):
         self.assertIn("No drift", html)
 
 
+class PartialDriftTests(unittest.TestCase):
+    """Review finding: a partial read rendered as a blank row and the page still read as complete."""
+
+    def test_the_partial_marker_is_a_banner_never_a_row(self) -> None:
+        marker = {"kind": "partial", "read": 17, "unread": 2}
+        pr = {"slug": "o/r", "status": "open", "pr_url": "https://github.com/o/r/pull/1"}
+        with_rows = pages.render_drift_page(entries=[pr, marker])
+        self.assertIn("<strong>Partial.</strong> 2 fleet repositories could not be read", with_rows)
+        self.assertIn("covers the 17 that were read", with_rows)
+        self.assertEqual(with_rows.count("<tr><td>"), 1)  # the marker is not a table row
+        empty = pages.render_drift_page(entries=[marker])
+        self.assertIn("No drift-sync PR is open in the repositories read.", empty)
+        self.assertNotIn("No drift entries recorded.", empty)
+        self.assertIn("NOT an all-clear", empty)
+        junk = pages.render_drift_page(entries=[{"kind": "partial", "read": "x", "unread": None}])
+        self.assertIn("<strong>Partial.</strong> 0 fleet repositories", junk)
+        self.assertIn("No drift entries recorded.", pages.render_drift_page(entries=[]))
+
+
 class RenderAuditPageTests(unittest.TestCase):
     """``render_audit_page`` emits the bypass JSONL feed."""
 

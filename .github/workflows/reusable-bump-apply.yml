@@ -145,6 +145,14 @@ jobs:
           path: ${{ runner.temp }}/bump-apply.json
           if-no-files-found: ignore
 
+      - name: Fail when an apply runs without DRIFT_SYNC_PAT
+        # The commit-and-open-PR step below needs the PAT. Skipped silently, a non-dry
+        # run would compute everything and finish green having changed nothing.
+        if: ${{ !inputs.dry_run && env.DRIFT_SYNC_PAT_PRESENT != 'true' }}
+        run: |
+          echo "::error title=DRIFT_SYNC_PAT not configured::An apply run (dry_run: false) needs the DRIFT_SYNC_PAT secret for the commit-and-open-PR step. None is configured, so nothing was applied. Pass the secret, or run with dry_run: true."
+          exit 1
+
       - name: Commit + open bump PR on consumer repo
         if: ${{ !inputs.dry_run && steps.apply.outputs.bumped_total != '0' && env.DRIFT_SYNC_PAT_PRESENT == 'true' }}
         env:

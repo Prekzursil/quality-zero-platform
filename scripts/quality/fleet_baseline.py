@@ -84,8 +84,6 @@ DEPS_FLOORS = ("t0", "any")
 #: An advanced CodeQL setup is a checked-in workflow that runs CodeQL itself or through QZP.
 _CODEQL_INIT_RE = re.compile(r"github/codeql-action/init@")
 _REUSABLE_CODEQL_RE = re.compile(r"Prekzursil/quality-zero-platform/\.github/workflows/reusable-codeql\.yml@")
-_CODEQL_QUERIES_RE = re.compile(r"^[ \t]*queries:[ \t]*(.*)$", re.MULTILINE)
-_CODEQL_CONFIG_RE = re.compile(r"^[ \t]*config(-file)?:", re.MULTILINE)
 #: The managed scripts/verify carries this phrase; any other scripts/verify is the repository's own.
 MANAGED_VERIFY_MARKER = "Managed by quality-zero-platform"
 #: Top-level keys and caller-job keys a thin lean-gate caller may have; anything more is hand-written.
@@ -622,34 +620,33 @@ def _first_present(paths: Sequence[str], candidates: Sequence[str]) -> Optional[
     return next((present[c.lower()] for c in candidates if c.lower() in present), None)
 
 
-def _codeql_suite(text: str) -> str:
-    """What a CodeQL workflow's ``queries:`` selects, ignoring comments.
+def _codeql_queries(inputs: object) -> str:
+    """What a parsed ``codeql-action/init`` step's ``with:`` selects.
 
-    ``default`` when it selects nothing and has no config; ``configured`` when the queries
-    come from a list or a referenced config the planner cannot see; else the value itself.
+    ``default`` with no ``queries`` and no config; ``configured`` for a list, several suites on
+    several lines, or a referenced config the planner cannot see; else the single value.
     """
-    live = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
-    match = _CODEQL_QUERIES_RE.search(live)
-    if match is None:
-        return "configured" if _CODEQL_CONFIG_RE.search(live) else "default"
-    value = match.group(1).split(" #", 1)[0].strip().strip("'\"")
-    # empty (a list follows) or a block scalar (`|` / `>`): the queries are configured, not named
-    return value if value and value[0] not in "|>" else "configured"
+    inputs = inputs if isinstance(inputs, dict) else {}
+    queries = inputs.get("queries")
+    if queries is None:
+        return "configured" if ("config-file" in inputs or "config" in inputs) else "default"
+    value = str(queries).strip() if isinstance(queries, (str, int, float)) else ""
+    return value if value and "\n" not in value else "configured"
 
 
-def _workflow_uses(document: object) -> List[Tuple[str, str]]:
-    """Every ``(uses, step-or-job text)`` a parsed workflow runs: job-level and step-level ``uses``."""
-    found: List[Tuple[str, str]] = []
+def _workflow_uses(document: object) -> List[Tuple[str, object]]:
+    """Every ``(uses, with)`` a parsed workflow runs: job-level and step-level ``uses``."""
+    found: List[Tuple[str, object]] = []
     jobs = document.get("jobs") if isinstance(document, dict) else None
     for job in jobs.values() if isinstance(jobs, dict) else []:
         if not isinstance(job, dict):
             continue
         if isinstance(job.get("uses"), str):
-            found.append((job["uses"], ""))
+            found.append((job["uses"], job.get("with")))
         steps = job.get("steps")
         for step in steps if isinstance(steps, list) else []:
             if isinstance(step, dict) and isinstance(step.get("uses"), str):
-                found.append((step["uses"], yaml.safe_dump(step.get("with") or {}, sort_keys=False)))
+                found.append((step["uses"], step.get("with")))
     return found
 
 
@@ -673,7 +670,7 @@ def codeql_workflow(facts: RepoFacts, read: Reader) -> Optional[Tuple[str, Optio
             if _REUSABLE_CODEQL_RE.match(uses):
                 return path, None, True
             if _CODEQL_INIT_RE.match(uses):
-                return path, _codeql_suite(inputs), False
+                return path, _codeql_queries(inputs), False
     return None
 
 
@@ -705,7 +702,8 @@ def _codeql_control(facts: RepoFacts, read: Reader) -> str:
 
 def _verify_is_managed(facts: RepoFacts, read: Reader) -> bool:
     """Whether scripts/verify is (or will be) the baseline's managed QZP-preflight wrapper."""
-    return VERIFY_SCRIPT not in facts.paths or MANAGED_VERIFY_MARKER in (read(VERIFY_SCRIPT) or "")
+    existing = _first_present(facts.paths, (VERIFY_SCRIPT,))
+    return existing is None or MANAGED_VERIFY_MARKER in (read(existing) or "")
 
 
 def _dependabot_config(facts: RepoFacts, read: Reader) -> Optional[str]:
@@ -903,14 +901,15 @@ def _plan_simple(
 def _plan_verify(facts: RepoFacts, read: Reader, context: Dict[str, str]) -> FileAction:
     """Create scripts/verify, upgrade an outdated managed one, or keep the repository's own."""
     rendered = render_template("verify", context)
-    if VERIFY_SCRIPT not in facts.paths:
+    existing = _first_present(facts.paths, (VERIFY_SCRIPT,))
+    if existing is None:
         return FileAction(VERIFY_SCRIPT, "create", "missing", rendered, executable=True)
-    text = (read(VERIFY_SCRIPT) or "").replace("\r\n", "\n")
+    text = (read(existing) or "").replace("\r\n", "\n")
     if MANAGED_VERIFY_MARKER not in text:
-        return FileAction(VERIFY_SCRIPT, "keep", "repository-authored file")
+        return FileAction(existing, "keep", "repository-authored file")
     if text == rendered:
-        return FileAction(VERIFY_SCRIPT, "keep", "managed verify is current")
-    return FileAction(VERIFY_SCRIPT, "replace", "managed verify upgraded to the current template", rendered, True)
+        return FileAction(existing, "keep", "managed verify is current")
+    return FileAction(existing, "replace", "managed verify upgraded to the current template", rendered, True)
 
 
 def _plan_issue_forms(facts: RepoFacts, context: Dict[str, str]) -> List[FileAction]:
@@ -1108,15 +1107,29 @@ def _readable(path: str, lockfiles: Sequence[str]) -> bool:
     )
 
 
-def _lockfile_rail(ecosystem: str, path: str, directories: Sequence[str]) -> Optional[str]:
-    """The rail a readable lockfile covers: its own directory's rail, or a folding root's."""
+def _lockfile_rail(
+    ecosystem: str, path: str, directories: Sequence[str], paths: Sequence[str], read: Optional[Reader]
+) -> Optional[str]:
+    """The rail a readable lockfile covers, or ``None`` when it describes no rail's dependencies.
+
+    It covers its own directory's rail when it sits at its pattern's own depth there (pip:
+    also ``requirements/``). In Gradle, Maven and NuGet it also covers the root rail when its
+    directory is a module the root build declares (read from the build files).
+    """
     owner = _rail_of(path, directories)
-    if owner is None or ecosystem in _FOLDING_ECOSYSTEMS:
-        return owner
+    if owner is None:
+        return None
     relative = path if owner == "/" else path[len(owner.strip("/")) + 1 :]
     depth = relative.count("/")
-    if depth == 0 or (depth == 1 and ecosystem == "pip" and relative.startswith("requirements/")):
+    lockfiles = _SCANNED_LOCKFILES[ecosystem]
+    if any(depth == pattern.count("/") and fnmatch.fnmatchcase(relative, pattern) for pattern in lockfiles):
         return owner
+    if depth == 1 and ecosystem == "pip" and relative.startswith("requirements/"):
+        return owner
+    if read is not None and ecosystem in _FOLDING_ECOSYSTEMS:
+        module = posixpath.dirname(relative)
+        if module in declared_modules(ecosystem, _build_text(ecosystem, owner, paths, read)):
+            return owner
     return None
 
 
@@ -1153,28 +1166,37 @@ def unscanned_rails(rails: Dict[str, List[str]], paths: Sequence[str], read: Opt
     """Rails whose dependencies gate 6 (osv-scanner) cannot read, so it can never fail on them.
 
     A lockfile covers the rail of its own directory (pip: also ``requirements/``); in Gradle,
-    Maven and NuGet, whose roots fold declared modules into one rail, a module's lockfile
-    covers the root rail. A Cargo or uv workspace member shares the root lockfile only when
-    the root manifest declares it a member (and does not exclude it). Vendored trees never
-    count, and a lockfile in an unrelated subdirectory never hides a rail's blind spot.
+    Maven and NuGet, whose roots fold declared modules into one rail, a declared module's
+    lockfile covers the root rail. A Cargo or uv workspace member (a uv member is a pip rail of
+    its own) shares the root lockfile only when the root manifest declares it a member and does
+    not exclude it. Vendored trees never count, and a lockfile in an unrelated subdirectory
+    never hides a rail's blind spot.
     """
     gaps = [f"{label} ({', '.join(rails[eco])})" for eco, label in _UNSCANNED_ECOSYSTEMS.items() if eco in rails]
+    uv_roots = {
+        _lockfile_rail("uv", path, rails.get("uv", []), paths, read)
+        for path in paths
+        if not _is_excluded(path) and _readable(path, _SCANNED_LOCKFILES["uv"])
+    }
     for ecosystem, lockfiles in _SCANNED_LOCKFILES.items():
         directories = rails.get(ecosystem, [])
         covered = {
-            _lockfile_rail(ecosystem, path, directories)
+            _lockfile_rail(ecosystem, path, directories, paths, read)
             for path in paths
             if not _is_excluded(path) and _readable(path, lockfiles)
         }
+        # a uv workspace member is detected as a pip rail (its own pyproject.toml, no uv.lock)
+        workspace = "uv" if ecosystem == "pip" else ecosystem
+        roots = covered if workspace == ecosystem else uv_roots
         for directory in directories:
             shared = (
                 read is not None
-                and ecosystem in _WORKSPACE_TABLES
+                and workspace in _WORKSPACE_TABLES
                 and any(
                     root is not None
                     and _is_ancestor(root, directory)
-                    and _in_workspace(ecosystem, root, directory, read)
-                    for root in covered
+                    and _in_workspace(workspace, root, directory, read)
+                    for root in roots
                 )
             )
             if directory not in covered and not shared:

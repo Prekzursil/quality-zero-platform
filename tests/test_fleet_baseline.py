@@ -772,9 +772,9 @@ class PlanTests(unittest.TestCase):
             "nuget": ["/src", "/tools"],
             "npm": ["/", "/web", "/web/sub"],
             "gradle": ["/", "/app"],
-            "pip": ["/", "/svc", "/lib"],
+            "pip": ["/", "/svc", "/lib", "/ws/packages/a", "/ws/other"],
             "cargo": ["/", "/crates/a", "/crates/b", "/tools/x"],
-            "uv": ["/py"],
+            "uv": ["/py", "/ws"],
             "composer": ["/"],
             "bundler": ["/"],
             "gomod": ["/"],
@@ -796,13 +796,18 @@ class PlanTests(unittest.TestCase):
             "other/uv.lock",
             "vendor/x/composer.lock",
             "examples/Gemfile.lock",
+            "ws/uv.lock",
         ]
-        files = {"Cargo.toml": '[workspace]\nmembers = ["crates/*"]\nexclude = ["crates/b"]\n'}
+        files = {
+            "Cargo.toml": '[workspace]\nmembers = ["crates/*"]\nexclude = ["crates/b"]\n',
+            "ws/pyproject.toml": "[tool.uv.workspace]\nmembers = ['packages/*']\n",
+        }
         expected = [
             "Swift packages (/)",
             gap("npm", "/web"),
             gap("pip", "/svc"),
             gap("pip", "/lib"),
+            gap("pip", "/ws/other"),
             gap("uv", "/py"),
             gap("cargo", "/crates/b"),
             gap("cargo", "/tools/x"),
@@ -818,8 +823,13 @@ class PlanTests(unittest.TestCase):
         self.assertFalse(fb._readable("svc/requirements/base.txt", fb._SCANNED_LOCKFILES["pip"]))
         self.assertIsNone(fb._rail_of("other/uv.lock", ["/py"]))
         self.assertEqual(fb._rail_of("web/sub/yarn.lock", ["/", "/web", "/web/sub"]), "/web/sub")
-        self.assertEqual(fb._lockfile_rail("npm", "web/sub/yarn.lock", ["/", "/web"]), None)
-        self.assertEqual(fb._lockfile_rail("gradle", "app/gradle.lockfile", ["/"]), "/")
+        self.assertIsNone(fb._lockfile_rail("npm", "web/sub/yarn.lock", ["/", "/web"], paths, None))
+        # Gradle folds a module into the root rail only when the root build declares it
+        build = {"settings.gradle": "include 'app'\n"}
+        gradle_paths = ["settings.gradle", "app/gradle.lockfile", "examples/gradle.lockfile"]
+        self.assertEqual(fb._lockfile_rail("gradle", "app/gradle.lockfile", ["/"], gradle_paths, _reader(build)), "/")
+        self.assertIsNone(fb._lockfile_rail("gradle", "examples/gradle.lockfile", ["/"], gradle_paths, _reader(build)))
+        self.assertIsNone(fb._lockfile_rail("gradle", "app/gradle.lockfile", ["/"], gradle_paths, None))
         plan = _by_path(fb.plan_baseline(_facts(["Package.swift", "a.swift"]), _reader({}), PIN))
         self.assertIn("Swift packages", plan[fb.GATE6_SCOPE].reason)
         self.assertNotIn(fb.GATE6_SCOPE, _by_path(fb.plan_baseline(_facts(["a.py"]), _reader({}), PIN)))
@@ -904,17 +914,20 @@ class PlanTests(unittest.TestCase):
 class TruthfulDocumentTests(unittest.TestCase):
     """The documents describe the repository as it is, not as the managed default."""
 
-    def test_codeql_suite_ignores_comments(self) -> None:
-        self.assertEqual(fb._codeql_suite("# queries: security-extended\nsteps: []\n"), "default")
-        self.assertEqual(fb._codeql_suite("with:\n  queries: 'security-extended'  # pinned\n"), "security-extended")
+    def test_codeql_queries_reads_the_parsed_inputs(self) -> None:
+        self.assertEqual(fb._codeql_queries(None), "default")
+        self.assertEqual(fb._codeql_queries({}), "default")
+        self.assertEqual(fb._codeql_queries({"config-file": "./.github/codeql.yml"}), "configured")
+        self.assertEqual(fb._codeql_queries({"config": "paths: [src]"}), "configured")
+        self.assertEqual(fb._codeql_queries({"queries": "security-extended"}), "security-extended")
         self.assertEqual(
-            fb._codeql_suite("queries: security-extended,security-and-quality\n"),
+            fb._codeql_queries({"queries": "security-extended,security-and-quality"}),
             "security-extended,security-and-quality",
         )
-        self.assertEqual(fb._codeql_suite("queries:\n  - uses: security-extended\n"), "configured")
-        self.assertEqual(fb._codeql_suite("with:\n  config-file: ./.github/codeql.yml\n"), "configured")
-        self.assertEqual(fb._codeql_suite("queries: |\n  security-extended\n"), "configured")
-        self.assertEqual(fb._codeql_suite("queries: >-\n  security-extended\n"), "configured")
+        # a block scalar listing several suites, a list, or an empty value is "configured"
+        self.assertEqual(fb._codeql_queries({"queries": "security-extended\nsecurity-and-quality\n"}), "configured")
+        self.assertEqual(fb._codeql_queries({"queries": ["security-extended"]}), "configured")
+        self.assertEqual(fb._codeql_queries({"queries": ""}), "configured")
 
     def test_codeql_workflow_detection(self) -> None:
         self.assertIsNone(fb.codeql_workflow(_facts(["a.py"]), _reader({})))
@@ -1128,6 +1141,10 @@ class VerifyAndFloorTests(unittest.TestCase):
         self.assertEqual((created.action, created.executable), ("create", True))
         own = fb._plan_verify(_facts([fb.VERIFY_SCRIPT]), _reader({fb.VERIFY_SCRIPT: "make test\n"}), context)
         self.assertEqual((own.action, own.reason), ("keep", "repository-authored file"))
+        variant = fb._plan_verify(_facts(["Scripts/Verify"]), _reader({"Scripts/Verify": "make test\n"}), context)
+        self.assertEqual((variant.path, variant.action), ("Scripts/Verify", "keep"))
+        managed = fb.template_context(_facts(["Scripts/Verify"]), _reader({"Scripts/Verify": "make test\n"}), PIN)
+        self.assertIn("this repository's own verification script", managed["verify_section"])
         current = {fb.VERIFY_SCRIPT: (created.content or "").replace("\n", "\r\n")}
         kept = fb._plan_verify(_facts(list(current)), _reader(current), context)
         self.assertEqual((kept.action, kept.reason), ("keep", "managed verify is current"))

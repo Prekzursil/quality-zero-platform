@@ -84,6 +84,20 @@ class DismissalLogTests(unittest.TestCase):
         self.assertEqual(recorded - logged, set(), "a logged dismissal disappeared")
         self.assertEqual(logged - recorded, set(), "add each new log row's alert number to this baseline")
 
+    def test_pre_policy_re_reviews_have_a_deadline(self) -> None:
+        """Review finding: a pre-policy row marked for re-review could stay pending forever."""
+        pending = _doc(_row(reason="won't fix", dismissed="2026-04-27", verdict="**Re-review.** wrong category"))
+        self.assertEqual(log.validate(pending, repo=REPO, today=dt.date(2027, 1, 24)), [])
+        problems = log.validate(pending, repo=REPO, today=dt.date(2027, 1, 25))
+        self.assertIn(
+            "row 1: still marked for re-review after the 2027-01-24 deadline: re-review it and record the outcome",
+            problems,
+        )
+        self.assertIn("row 1: an accepted `won't fix` names no owner", problems)  # the exemption ends with it
+        fixed = _doc(_row(dismissed="2026-04-27", verdict="**Fix.** later"))
+        (problem,) = log.validate(fixed, repo=REPO, today=dt.date(2027, 1, 25))
+        self.assertIn("still marked for re-review after the 2027-01-24 deadline", problem)
+
     def test_a_well_formed_row_passes(self) -> None:
         """Including a pending won't-fix with no owner yet, and an escaped pipe in a cell."""
         pending = _row("8", reason="won't fix", dismissed="2026-04-27", verdict="**Re-review.** wrong category")
@@ -258,7 +272,10 @@ class DismissalLogTests(unittest.TestCase):
         self.assertEqual(
             _check("# Doc\n\n<!-- never closed\n" + _doc(_row())), ["no '## Log' or '## Log (<repo>)' section"]
         )
-        self.assertEqual(log._rendered(["a <!-- x --> b", "c<!--", "d", "-->e"]), ["a  b", "c", "", "e"])
+        self.assertEqual(log._rendered(["a <!-- x --> b", "c<!--", "d", "-->e"]), ["a   b", "c ", "", "e"])
+        # Review finding: removing a comment must not glue tokens into a heading the page never renders.
+        glued = "#<!-- --># Log (repo)\n\n" + HEADER + "\n" + RULE + "\n" + _row() + "\n"
+        self.assertEqual(_check(glued), ["no '## Log' or '## Log (<repo>)' section"])
         decision = "## Query configuration decisions\n\n<!--\n| Query | Decided | Decision |\n| --- | --- | --- |\n"
         decision += "| `py/x` | 2026-10-24 | **Excluded.** |\n-->\n"
         self.assertEqual(log.documented_queries(decision), set())

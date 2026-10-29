@@ -90,6 +90,10 @@ LOCATION = re.compile(r"^`[^`]*[^`\s][^`]*:[1-9][0-9]*`$")
 #: Pending markers (Re-review / Fix) exempt only rows dismissed BEFORE this
 #: rule existed; a won't-fix dismissed under the rule needs an owner and date.
 POLICY_DATE = "2026-10-24"
+#: Rows marked **Re-review.** or **Fix.** must be worked through by this date:
+#: from the day after, a row still marked fails, so the promised re-review of
+#: the pre-policy dismissals cannot stay pending forever.
+PENDING_DEADLINE = "2027-01-24"
 #: The rule's exact start (its first commit): GitHub timestamps on POLICY_DATE
 #: fall on either side of it, and only those after it are bound by the rule.
 POLICY_AT = "2026-10-24T16:26:15Z"
@@ -157,7 +161,9 @@ def _rendered(lines: Sequence[str]) -> List[str]:
     the receipt; an unclosed comment hides everything after it.
     """
     text = "\n".join(_unfenced(lines))
-    text = HTML_COMMENT.sub(lambda match: "\n" * match.group(0).count("\n"), text)
+    # A space, not nothing: '#<!-- --># Log' renders as no heading at all, and
+    # deleting the comment would glue the two halves into '## Log'.
+    text = HTML_COMMENT.sub(lambda match: " " + "\n" * match.group(0).count("\n"), text)
     start = text.find("<!--")
     if start != -1:
         text = text[:start] + "\n" * text[start:].count("\n")
@@ -259,7 +265,12 @@ def _row_problems(cells: Sequence[str], seen: set, *, repo: str, today: str, lat
         problems.append("rationale is empty")
     if verdict in MISSING:
         problems.append("verdict is empty")
-    pending = verdict.startswith(PENDING) and _is_date(dismissed) and dismissed < POLICY_DATE
+    marked = verdict.startswith(PENDING)
+    if marked and today > PENDING_DEADLINE:
+        problems.append(
+            f"still marked for re-review after the {PENDING_DEADLINE} deadline: re-review it and record the outcome"
+        )
+    pending = marked and _is_date(dismissed) and dismissed < POLICY_DATE and today <= PENDING_DEADLINE
     if reason == "won't fix" and not pending:
         if owner in MISSING:
             problems.append("an accepted `won't fix` names no owner")

@@ -183,6 +183,17 @@ class SecurityBaselineProfileTests(unittest.TestCase):
         self.assertEqual(by_ecosystem["pip"]["versioning-strategy"], "increase")
         self.assertNotIn("versioning-strategy", by_ecosystem["github-actions"])
 
+    def test_render_dependabot_config_follows_the_fleet_policy(self) -> None:
+        """No semver-major ignore, a security group per rail, the stack's `dependencies` label."""
+        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
+        profile = load_repo_profile(inventory, "Prekzursil/fractal-darkroom")
+        for entry in yaml.safe_load(render_dependabot_config(profile))["updates"]:
+            with self.subTest(ecosystem=entry["package-ecosystem"]):
+                self.assertNotIn("ignore", entry)
+                security = [g for g in entry["groups"].values() if g.get("applies-to") == "security-updates"]
+                self.assertEqual(security, [{"applies-to": "security-updates", "patterns": ["*"]}])
+                self.assertEqual(entry["labels"], ["dependencies"])
+
     def test_render_dependabot_config_rejects_an_unknown_versioning_strategy(self) -> None:
         """A typo must fail the render, not ship a config Dependabot rejects."""
         profile = {

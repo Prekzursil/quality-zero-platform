@@ -1,9 +1,9 @@
 {#- Render GitHub Dependabot config from ``dependabot.updates[]`` in the
-   profile. Keeps the weekly cadence + patch/minor grouping consistent
-   across every repo; ignores major upgrades by default so Dependabot
-   doesn't flood the queue with potentially breaking bumps — major
-   bumps go through the platform's ``reusable-bumps.yml`` canary
-   workflow instead (Phase 5). -#}
+   profile, under the fleet policy (docs/FLEET-BASELINE.md): weekly
+   cadence, patch/minor version updates grouped, every security update
+   grouped so one pull request can clear every open advisory, and
+   semver-major updates never ignored - under a zero-tolerance dependency
+   gate a fix that only ships in a new major has to be able to arrive. -#}
 {%- set dep = dependabot | default({}, true) -%}
 version: 2
 updates:
@@ -16,10 +16,10 @@ updates:
 {% if update.get('versioning_strategy') %}
     versioning-strategy: {{ update['versioning_strategy'] }}
 {% endif %}
-{% if update.get('groups') %}
     groups:
-{% for group_name, group in update['groups'].items() %}
+{% for group_name, group in (update.get('groups') or {'minor-patch': {}}).items() %}
       {{ group_name }}:
+        applies-to: version-updates
         patterns:
 {% for pattern in group.get('patterns') or ['*'] %}
           - "{{ pattern }}"
@@ -29,13 +29,12 @@ updates:
           - {{ t }}
 {% endfor %}
 {% endfor %}
-{% endif %}
-    ignore:
-      - dependency-name: "*"
-        update-types:
-          - version-update:semver-major
+      security-updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
     labels:
-{% for label in update.get('labels') or ['dependencies', 'type:chore', 'area:ci'] %}
+{% for label in update.get('labels') or ['dependencies'] %}
       - {{ label }}
 {% endfor %}
 {% endfor %}

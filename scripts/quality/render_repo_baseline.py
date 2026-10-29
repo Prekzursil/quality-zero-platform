@@ -38,12 +38,12 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _sanitize_group_name(ecosystem: str, directory: str) -> str:
-    """Return a stable Dependabot group name for one update entry."""
+def _sanitize_group_name(ecosystem: str, directory: str, kind: str = "patch-minor") -> str:
+    """Return a stable Dependabot group name for one update entry (``kind``: patch-minor | security)."""
     directory_slug = directory.strip("/") or "root"
-    base = f"{ecosystem}-{directory_slug}-patch-minor"
+    base = f"{ecosystem}-{directory_slug}-{kind}"
     sanitized = re.sub(r"[^a-z0-9]+", "-", base.lower()).strip("-")
-    return sanitized or f"{ecosystem}-patch-minor"
+    return sanitized or f"{ecosystem}-{kind}"
 
 
 def _codeql_wrapper_uses_line(is_self_repo: bool, platform_release_sha: str) -> str:
@@ -110,7 +110,13 @@ def render_codeql_wrapper(*, repo_slug: str, platform_release_sha: str) -> str:
 
 
 def render_dependabot_config(profile: Dict[str, Any]) -> str:
-    """Return the managed Dependabot config for one repo."""
+    """Return the managed Dependabot config for one repo.
+
+    The fleet policy (docs/FLEET-BASELINE.md): minor and patch version updates are grouped,
+    every advisory's security update is grouped so one pull request can clear them all, and
+    semver-major updates are never ignored, so a fix that only ships in a new major can
+    arrive (the dependency gate fails on any known advisory).
+    """
     dependabot = profile["dependabot"]
     updates = list(dependabot.get("updates", []))
     if not any(item.get("ecosystem") == "github-actions" for item in updates):
@@ -136,16 +142,15 @@ def render_dependabot_config(profile: Dict[str, Any]) -> str:
             {
                 "groups": {
                     group_name: {
+                        "applies-to": "version-updates",
                         "patterns": ["*"],
                         "update-types": ["patch", "minor"],
-                    }
+                    },
+                    _sanitize_group_name(ecosystem, directory, "security"): {
+                        "applies-to": "security-updates",
+                        "patterns": ["*"],
+                    },
                 },
-                "ignore": [
-                    {
-                        "dependency-name": "*",
-                        "update-types": ["version-update:semver-major"],
-                    }
-                ],
                 "labels": list(dependabot["labels"]),
             }
         )

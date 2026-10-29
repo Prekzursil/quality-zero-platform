@@ -207,7 +207,7 @@ def normalize_dependabot(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
         "updates": updates,
         "open_pull_requests_limit": int(payload.get("open_pull_requests_limit", 10)),
         "schedule_interval": str(payload.get("schedule_interval", "weekly")).strip() or "weekly",
-        "labels": dedupe_strings(payload.get("labels", ["dependencies", "type:chore", "area:ci"])),
+        "labels": dedupe_strings(payload.get("labels", ["dependencies"])),
     }
 
 

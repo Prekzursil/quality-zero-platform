@@ -137,6 +137,14 @@ jobs:
                     handle.write(f"- `{entry['output_path']}` ({entry['status']})\n")
           PY
 
+      - name: Fail when an apply runs without DRIFT_SYNC_PAT
+        # The apply-and-open-PR step below needs the PAT. Skipped silently, a non-dry
+        # run would compute everything and finish green having changed nothing.
+        if: ${{ !inputs.dry_run && env.DRIFT_SYNC_PAT_PRESENT != 'true' }}
+        run: |
+          echo "::error title=DRIFT_SYNC_PAT not configured::An apply run (dry_run: false) needs the DRIFT_SYNC_PAT secret for the apply-and-open-PR step. None is configured, so nothing was applied. Pass the secret, or run with dry_run: true."
+          exit 1
+
       - name: Apply drift fixes + open PR
         if: ${{ !inputs.dry_run && env.DRIFT_SYNC_PAT_PRESENT == 'true' }}
         env:

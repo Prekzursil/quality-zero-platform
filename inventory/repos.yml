@@ -75,6 +75,16 @@ repos:
     rollout: observe
     default_branch: main
     notes: Lean member (private repo). Ruleset models the repo's own aggregate CI gate (Required / all CI and privacy gates) plus the platform CodeQL baseline context; no active ruleset on main today; coverage informational, not CI-enforced.
+  - slug: Prekzursil/tss
+    profile: tss
+    rollout: phase2-wave3
+    default_branch: main
+    notes: FMI TSS deliverable (testing lab + AmbieGen course project); lean member, coverage repo-enforced, onboarded straight to absolute.
+  - slug: Prekzursil/tsis-agent-evaluation
+    profile: tsis-agent-evaluation
+    rollout: phase2-wave3
+    default_branch: main
+    notes: FMI TSIS Agentic-AI evaluation (tau2-bench reproduction + cross-taxonomy study); lean member, coverage repo-enforced, onboarded straight to absolute.
   - slug: Prekzursil/tracelines
     profile: tracelines
     rollout: observe

@@ -38,6 +38,9 @@
           },
           {
             "context": "research-green"
+          },
+          {
+            "context": "codeql / CodeQL"
           }
         ],
         "strict_required_status_checks_policy": true
@@ -49,6 +52,18 @@
     },
     {
       "type": "deletion"
+    },
+    {
+      "parameters": {
+        "code_scanning_tools": [
+          {
+            "alerts_threshold": "all",
+            "security_alerts_threshold": "all",
+            "tool": "CodeQL"
+          }
+        ]
+      },
+      "type": "code_scanning"
     }
   ],
   "target": "branch"

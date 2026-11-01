@@ -52,21 +52,25 @@ required_contexts:
   always:
   - quality / quality
   - research-green
+  - codeql / CodeQL
   pull_request_only: []
   target:
   - quality / quality
   - research-green
+  - codeql / CodeQL
 trigger:
   mode: pr-focused
   pr_head_sha: true
+# CodeQL is DECLARED but not yet live: private repositories on a personal
+# account cannot use GHAS, so no codeql.yml wrapper is seeded (the same
+# target-not-live shape as PrimariRo). The CodeQL context goes live if/when
+# the repo turns public or the account gains GHAS. The repo's LIVE
+# secret-scanning and code-scanning controls are the lean gate's gitleaks +
+# opengrep lanes (docs/FLEET-BASELINE.md). Rollout is observe, so the
+# unemitted context cannot strand a branch.
 codeql:
-  enabled: false
-# Private repo: no CodeQL analysis will ever upload, so the code-scanning
-# merge protection inherited from the common stack is dropped (an empty
-# code_scanning list) rather than left to block every PR on a context that
-# cannot exist. The repo's secret-scanning/code-scanning controls are the
-# lean gate's gitleaks + opengrep lanes.
-ruleset:
-  code_scanning: []
+  languages:
+  - actions
+  - python
 dependabot:
   updates: []

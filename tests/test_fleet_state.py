@@ -124,7 +124,7 @@ class FleetRosterTests(unittest.TestCase):
             self.assertEqual(fleet_state.fleet_slugs(inventory), ["o/a", "o/b"])
         roster = fleet_state.fleet_slugs()
         self.assertIn("Prekzursil/quality-zero-platform", roster)
-        self.assertNotIn("Prekzursil/fractal-darkroom-research", roster)
+        self.assertIn("Prekzursil/fractal-darkroom-research", roster)  # enrolled 2026-11-02
 
     def test_an_empty_roster_is_an_error_never_no_drift(self) -> None:
         """Review finding: zero declared repos read as 'no drift' and closed every drift alert."""

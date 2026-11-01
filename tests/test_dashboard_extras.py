@@ -375,9 +375,9 @@ class ExtrasCliArgparseTests(unittest.TestCase):
             gaps = json.loads((cwd / "out" / "rollup-gaps.json").read_text(encoding="utf-8"))
             drift = json.loads((cwd / "out" / "ruleset-drift.json").read_text(encoding="utf-8"))
         self.assertEqual(
-                [row["slug"] for row in gaps["repos"]],
-                ["Prekzursil/fractal-darkroom", "Prekzursil/fractal-darkroom-research"],
-            )
+            [row["slug"] for row in gaps["repos"]],
+            ["Prekzursil/fractal-darkroom", "Prekzursil/fractal-darkroom-research"],
+        )
         self.assertEqual(drift["status"], "in_sync")
 
 

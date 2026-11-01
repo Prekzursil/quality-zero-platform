@@ -297,7 +297,7 @@ class ExtrasCliTests(unittest.TestCase):
                 build_dashboard_extras.main()
             gaps = json.loads((output / "rollup-gaps.json").read_text(encoding="utf-8"))
             slugs = [row["slug"] for row in gaps["repos"]]
-            self.assertEqual(slugs, ["Prekzursil/fractal-darkroom"])
+            self.assertEqual(slugs, ["Prekzursil/fractal-darkroom", "Prekzursil/fractal-darkroom-research"])
             self.assertTrue(all(row["status"] == "stale" for row in gaps["repos"]))
             self.assertTrue(all(row["reason"] == "no token" for row in gaps["repos"]))
             # The drift dataset is still computed from the real inventory
@@ -374,7 +374,10 @@ class ExtrasCliArgparseTests(unittest.TestCase):
             # Read INSIDE the context: isolated_cwd deletes the directory on exit.
             gaps = json.loads((cwd / "out" / "rollup-gaps.json").read_text(encoding="utf-8"))
             drift = json.loads((cwd / "out" / "ruleset-drift.json").read_text(encoding="utf-8"))
-        self.assertEqual([row["slug"] for row in gaps["repos"]], ["Prekzursil/fractal-darkroom"])
+        self.assertEqual(
+            [row["slug"] for row in gaps["repos"]],
+            ["Prekzursil/fractal-darkroom", "Prekzursil/fractal-darkroom-research"],
+        )
         self.assertEqual(drift["status"], "in_sync")
 
 

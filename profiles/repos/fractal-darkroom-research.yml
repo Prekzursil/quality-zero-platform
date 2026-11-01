@@ -1,0 +1,76 @@
+slug: Prekzursil/fractal-darkroom-research
+version: 2
+stack: python-tooling
+mode:
+  phase: absolute
+scanners: {}
+overrides: []
+verify_command: bash scripts/verify
+required_contexts_mode: replace
+issue_policy:
+  mode: zero
+  pr_behavior: absolute
+  main_behavior: absolute
+# Lean member (PRIVATE evidence/research-record repo; no CodeQL — private
+# repositories on a personal account cannot use GHAS, so the lean gate's
+# gitleaks + opengrep lanes are its secret-scanning and code-scanning
+# controls per docs/FLEET-BASELINE.md). Enrolled 2026-11-02 from the
+# fleet-audit backlog (candidate #6). Evidence-repo conventions per
+# docs/BEST-CONFIG.md section 8 (deny-by-default .gitignore, large data
+# pointed to in experiments/data/MANIFEST.md, never committed): already live
+# in-repo. The research code under experiments/ is part of the byte-exact
+# record and is excluded by name from ruff/basedpyright/pytest via the
+# repo's own ruff.toml / pyrightconfig.json / pytest.ini; its gate is
+# tools/check_record.py inside the repo's own green research-ci workflow.
+# Coverage of the owned code (tools/) is 100% line+branch, enforced by
+# .coveragerc fail_under = 100 and asserted by the lean caller's gate-3
+# lane (verified 2026-11-02: 691 statements, 138 branches, 0 missed,
+# 33 tests).
+enabled_scanners:
+  coverage: false
+  codecov: false
+  sonar: false
+  codacy: false
+  semgrep: false
+  sentry: false
+  qlty: false
+coverage:
+  min_percent: 100.0
+  branch_min_percent: 100.0
+  assert_mode:
+    default: evidence_only
+  policy: repo_enforced
+  evidence_note: >-
+    Coverage is ENFORCED in the repo's own CI: pytest testpaths=tools with
+    .coveragerc branch=true, source=tools, fail_under=100 (the repo's
+    research-ci workflow runs the tool tests at 100% line+branch, and the
+    lean gate caller's gate-3 lane runs the same assertion). The research
+    record under experiments/ is out of scope by design and declared in
+    pytest.ini/CONTRIBUTING. QZP collects and gates no coverage artifact
+    here.
+required_contexts:
+  always:
+  - quality / quality
+  - research-green
+  - codeql / CodeQL
+  pull_request_only: []
+  target:
+  - quality / quality
+  - research-green
+  - codeql / CodeQL
+trigger:
+  mode: pr-focused
+  pr_head_sha: true
+# CodeQL is DECLARED but not yet live: private repositories on a personal
+# account cannot use GHAS, so no codeql.yml wrapper is seeded (the same
+# target-not-live shape as PrimariRo). The CodeQL context goes live if/when
+# the repo turns public or the account gains GHAS. The repo's LIVE
+# secret-scanning and code-scanning controls are the lean gate's gitleaks +
+# opengrep lanes (docs/FLEET-BASELINE.md). Rollout is observe, so the
+# unemitted context cannot strand a branch.
+codeql:
+  languages:
+  - actions
+  - python
+dependabot:
+  updates: []

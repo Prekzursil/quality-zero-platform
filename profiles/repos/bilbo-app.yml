@@ -1,0 +1,61 @@
+slug: Prekzursil/bilbo-app
+version: 2
+stack: gradle-java
+mode:
+  phase: absolute
+scanners: {}
+overrides: []
+verify_command: bash scripts/verify
+required_contexts_mode: replace
+issue_policy:
+  mode: zero
+  pr_behavior: absolute
+  main_behavior: absolute
+# Lean member (public repo, Kotlin Multiplatform Android/iOS product).
+# Enrolled 2026-11-02 from the fleet-audit backlog (candidate #2). The repo
+# already carried the lean quality.yml caller (pinned to an older platform
+# SHA) green on main; the wave bumped the pin to the platform SHA and moved
+# CodeQL from the repo's in-repo wrapper (javascript-typescript,
+# security-extended) to the thin reusable-codeql caller, which raises the
+# suite to security-and-quality and fail-closes on resolve/analyze failure.
+# Kotlin/Java sources are NOT yet CodeQL-scanned (they were not before
+# enrollment either); adding the java language is a follow-up backlog item,
+# not a regression. Coverage is enforced by the repo's own test workflows
+# (shared-tests.yml / android-ci.yml / ios-ci.yml); QZP collects no artifact.
+enabled_scanners:
+  coverage: false
+  codecov: false
+  sonar: false
+  codacy: false
+  semgrep: false
+  sentry: false
+  qlty: false
+coverage:
+  min_percent: 100.0
+  branch_min_percent: 100.0
+  assert_mode:
+    default: evidence_only
+  policy: repo_enforced
+  evidence_note: >-
+    Coverage is enforced by the repo's own Gradle test workflows
+    (shared-tests.yml, android-ci.yml, ios-ci.yml run the KMP unit-test
+    suites on every PR); the lean gate's language lanes auto-skip compiled
+    Kotlin it does not measure. QZP collects and gates no coverage artifact
+    here.
+required_contexts:
+  always:
+  - quality / quality
+  - CodeQL
+  pull_request_only: []
+  target:
+  - quality / quality
+  - CodeQL
+trigger:
+  mode: pr-focused
+  pr_head_sha: true
+codeql:
+  languages:
+  - actions
+  - javascript-typescript
+dependabot:
+  updates: []

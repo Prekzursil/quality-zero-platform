@@ -1,0 +1,63 @@
+slug: Prekzursil/grace-iberlef-2026
+version: 2
+stack: python-tooling
+mode:
+  phase: absolute
+scanners: {}
+overrides: []
+verify_command: bash scripts/verify
+required_contexts_mode: replace
+issue_policy:
+  mode: zero
+  pr_behavior: absolute
+  main_behavior: absolute
+# Lean member (public repo, IberLEF 2026 research deliverable; DEFAULT
+# BRANCH IS master, not main). Enrolled 2026-11-02 from the fleet-audit
+# backlog (candidate #5). Already carried the lean quality caller (older
+# pin) green on master; the wave bumped the pin, moved CodeQL to the thin
+# reusable-codeql caller with the repo's declared codeql-config.yml paths
+# (grace/ + tests/; FINAL/, scripts/, notebooks/, experiments/ are
+# machine-generated or one-off research trees, excluded with reasons in
+# .github/codeql/codeql-config.yml), fixed all 10 open CodeQL alerts (2
+# actions/unpinned-tag + 8 py/path-injection / py/command-line-injection in
+# FINAL/kaggle_runs/orchestrate.py, grace/io/loaders.py and
+# scripts/gen_variant_configs.py by validating untrusted path/argv inputs)
+# and added the missing community files. Coverage is enforced by the lean
+# caller's gate-3 pytest lane over the repo's declared scope.
+enabled_scanners:
+  coverage: false
+  codecov: false
+  sonar: false
+  codacy: false
+  semgrep: false
+  sentry: false
+  qlty: false
+coverage:
+  min_percent: 100.0
+  branch_min_percent: 100.0
+  assert_mode:
+    default: evidence_only
+  policy: repo_enforced
+  evidence_note: >-
+    Coverage is ENFORCED in the repo's own CI by the lean gate caller's
+    gate-3 lane: pytest-cov with --cov-branch and fail_under = 100 from the
+    repo's coverage configuration; a coverage regression reddens the
+    required quality / quality context. QZP collects and gates no coverage
+    artifact here.
+required_contexts:
+  always:
+  - quality / quality
+  - CodeQL
+  pull_request_only: []
+  target:
+  - quality / quality
+  - CodeQL
+trigger:
+  mode: pr-focused
+  pr_head_sha: true
+codeql:
+  languages:
+  - actions
+  - python
+dependabot:
+  updates: []

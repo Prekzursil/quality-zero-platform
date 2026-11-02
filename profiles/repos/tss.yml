@@ -1,0 +1,66 @@
+slug: Prekzursil/tss
+version: 2
+stack: python-tooling
+mode:
+  phase: absolute
+scanners: {}
+overrides: []
+verify_command: python -m pytest
+required_contexts_mode: replace
+issue_policy:
+  mode: zero
+  pr_behavior: absolute
+  main_behavior: absolute
+# Lean member (public repo, Python-only). FMI Master IS course deliverable:
+# the systematic-testing lab (pricing module, 212 tests) + AmbieGen course
+# project. Ruleset models the repo's OWN tss-ci matrix (ubuntu+windows x
+# py3.10/3.12) plus the lean quality gate and the platform CodeQL baseline.
+# Onboarded straight to absolute: the repo entered the fleet already at zero
+# findings on every lean gate (ruff, format, basedpyright standard,
+# 100% line+branch coverage on the declared scope, gitleaks, opengrep,
+# osv at deps-severity-floor: any).
+enabled_scanners:
+  coverage: false   # enforced by the repo's own CI, not a QZP artifact
+  codecov: false
+  sonar: false
+  codacy: false
+  semgrep: false
+  sentry: false
+  qlty: false
+coverage:
+  min_percent: 100.0
+  branch_min_percent: 100.0
+  assert_mode:
+    default: evidence_only
+  policy: repo_enforced
+  evidence_note: >-
+    Coverage is ENFORCED by the repo's own tss-ci workflow: every leg runs
+    pytest with --cov-branch and --cov-fail-under=100 (config in
+    pyproject.toml [tool.coverage], measured scope and the documented
+    generator-script omissions are declared in CONTRIBUTING.md). QZP
+    collects and gates no coverage artifact here.
+required_contexts:
+  always:
+  - verify (ubuntu-latest, py3.10)
+  - verify (ubuntu-latest, py3.12)
+  - verify (windows-latest, py3.10)
+  - verify (windows-latest, py3.12)
+  - quality / quality
+  - CodeQL / codeql
+  pull_request_only: []
+  target:
+  - verify (ubuntu-latest, py3.10)
+  - verify (ubuntu-latest, py3.12)
+  - verify (windows-latest, py3.10)
+  - verify (windows-latest, py3.12)
+  - quality / quality
+  - CodeQL / codeql
+trigger:
+  mode: push-and-pr
+  pr_head_sha: false
+codeql:
+  languages:
+  - actions
+  - python
+dependabot:
+  updates: []

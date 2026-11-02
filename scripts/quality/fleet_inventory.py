@@ -44,6 +44,8 @@ PRIVATE_INCLUDE_SLUGS: FrozenSet[str] = frozenset(
         "Prekzursil/pbinfo-get-unsolved",
         "Prekzursil/PrimariRo",
         "Prekzursil/agent-skills-toolchain",
+        # enrolled 2026-11-02 (wave: profiles/repos/fractal-darkroom-research.yml)
+        "Prekzursil/fractal-darkroom-research",
     }
 )
 

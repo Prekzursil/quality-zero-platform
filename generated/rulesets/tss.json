@@ -1,0 +1,79 @@
+{
+  "bypass_actors": [
+    {
+      "actor_id": 5,
+      "actor_type": "RepositoryRole",
+      "bypass_mode": "pull_request"
+    }
+  ],
+  "conditions": {
+    "ref_name": {
+      "exclude": [],
+      "include": [
+        "refs/heads/main"
+      ]
+    }
+  },
+  "enforcement": "active",
+  "name": "quality-zero-platform / tss",
+  "profile_id": "tss",
+  "repo_slug": "Prekzursil/tss",
+  "rules": [
+    {
+      "parameters": {
+        "dismiss_stale_reviews_on_push": false,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_approving_review_count": 0,
+        "required_review_thread_resolution": false
+      },
+      "type": "pull_request"
+    },
+    {
+      "parameters": {
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          {
+            "context": "verify (ubuntu-latest, py3.10)"
+          },
+          {
+            "context": "verify (ubuntu-latest, py3.12)"
+          },
+          {
+            "context": "verify (windows-latest, py3.10)"
+          },
+          {
+            "context": "verify (windows-latest, py3.12)"
+          },
+          {
+            "context": "quality / quality"
+          },
+          {
+            "context": "CodeQL / codeql"
+          }
+        ],
+        "strict_required_status_checks_policy": true
+      },
+      "type": "required_status_checks"
+    },
+    {
+      "type": "non_fast_forward"
+    },
+    {
+      "type": "deletion"
+    },
+    {
+      "parameters": {
+        "code_scanning_tools": [
+          {
+            "alerts_threshold": "all",
+            "security_alerts_threshold": "all",
+            "tool": "CodeQL"
+          }
+        ]
+      },
+      "type": "code_scanning"
+    }
+  ],
+  "target": "branch"
+}

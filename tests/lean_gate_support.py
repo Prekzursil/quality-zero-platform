@@ -60,10 +60,17 @@ def run_step_script(
     bash: str,
     filename: str = "step.sh",
 ) -> subprocess.CompletedProcess:
-    """Write a step's shell body to ``workdir`` and execute it under ``bash``."""
+    """Write a step's shell body to ``workdir`` and execute it under ``bash``.
+
+    ``GITHUB_OUTPUT`` and ``GITHUB_STEP_SUMMARY`` point into ``workdir`` unless
+    the test overrides them: a step under test must never append to the files
+    of the CI job that happens to be running the tests.
+    """
     script_path = workdir / filename
     script_path.write_text(script, encoding="utf-8", newline="\n")
     env = dict(os.environ)
+    env["GITHUB_OUTPUT"] = str(workdir / "github-output.txt")
+    env["GITHUB_STEP_SUMMARY"] = str(workdir / "github-step-summary.md")
     env.update(env_overrides)
     return subprocess.run(
         [bash, filename],

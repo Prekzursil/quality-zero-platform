@@ -72,6 +72,9 @@ from scripts.quality.profile_normalization import (
     normalize_required_contexts as common_normalize_required_contexts,
 )
 from scripts.quality.profile_normalization import (
+    normalize_ruleset as common_normalize_ruleset,
+)
+from scripts.quality.profile_normalization import (
     normalize_scanners as common_normalize_scanners,
 )
 
@@ -334,6 +337,7 @@ def _finalize_normalized_profile_sections(merged: Dict[str, Any]) -> None:
     merged["enabled_scanners"]["deps"] = bool(merged["deps"]["enabled"])
     merged["codeql"] = common_normalize_codeql(merged.get("codeql", {}))
     merged["dependabot"] = common_normalize_dependabot(merged.get("dependabot", {}))
+    merged["ruleset"] = common_normalize_ruleset(merged.get("ruleset", {}))
     merged["coverage"] = common_normalize_coverage(merged.get("coverage", {}))
     merged["codex_environment"] = common_normalize_codex_environment(
         merged.get("codex_environment", {}),
@@ -395,43 +399,58 @@ def active_required_contexts(profile: Dict[str, Any], *, event_name: str) -> Lis
 
 
 def build_ruleset_payload(profile: Dict[str, Any]) -> Dict[str, Any]:
-    """Build the GitHub ruleset payload for one governed repository."""
+    """Build the GitHub ruleset payload for one governed repository.
+
+    Besides the required checks, the payload carries the profile's
+    enforcement, its bypass actors and, when configured, a ``code_scanning``
+    rule: the merge protection that blocks a pull request on code-scanning
+    alerts at or above the configured thresholds.
+    """
     contexts = active_required_contexts(profile, event_name="ruleset")
+    ruleset = common_normalize_ruleset(profile.get("ruleset", {}))
+    rules: List[Dict[str, Any]] = [
+        {
+            "type": "pull_request",
+            "parameters": {
+                "required_approving_review_count": 0,
+                "dismiss_stale_reviews_on_push": False,
+                "require_code_owner_review": False,
+                "require_last_push_approval": False,
+                "required_review_thread_resolution": False,
+            },
+        },
+        {
+            "type": "required_status_checks",
+            "parameters": {
+                "strict_required_status_checks_policy": True,
+                "do_not_enforce_on_create": False,
+                "required_status_checks": [{"context": name} for name in contexts],
+            },
+        },
+        {"type": "non_fast_forward"},
+        {"type": "deletion"},
+    ]
+    if ruleset["code_scanning"]:
+        rules.append(
+            {
+                "type": "code_scanning",
+                "parameters": {"code_scanning_tools": [dict(tool) for tool in ruleset["code_scanning"]]},
+            }
+        )
     return {
         "profile_id": profile["profile_id"],
         "repo_slug": profile["slug"],
         "name": f"quality-zero-platform / {profile['repo_name']}",
         "target": "branch",
-        "enforcement": "active",
+        "enforcement": ruleset["enforcement"],
         "conditions": {
             "ref_name": {
                 "include": [f"refs/heads/{profile['default_branch']}"],
                 "exclude": [],
             }
         },
-        "bypass_actors": [],
-        "rules": [
-            {
-                "type": "pull_request",
-                "parameters": {
-                    "required_approving_review_count": 0,
-                    "dismiss_stale_reviews_on_push": False,
-                    "require_code_owner_review": False,
-                    "require_last_push_approval": False,
-                    "required_review_thread_resolution": False,
-                },
-            },
-            {
-                "type": "required_status_checks",
-                "parameters": {
-                    "strict_required_status_checks_policy": True,
-                    "do_not_enforce_on_create": False,
-                    "required_status_checks": [{"context": name} for name in contexts],
-                },
-            },
-            {"type": "non_fast_forward"},
-            {"type": "deletion"},
-        ],
+        "bypass_actors": [dict(actor) for actor in ruleset["bypass_actors"]],
+        "rules": rules,
     }
 
 

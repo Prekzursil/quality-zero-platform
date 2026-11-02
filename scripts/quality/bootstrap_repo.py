@@ -214,6 +214,6 @@ if __name__ == "__main__":  # pragma: no cover — ad-hoc CLI
     )
     if _plan["ready"]:
         if _args.out:
-            Path(_args.out).write_text(_plan["promoted_yaml"], encoding="utf-8")
+            Path(_args.out).write_text(_plan["promoted_yaml"], encoding="utf-8", newline="\n")
         else:
             print(_plan["promoted_yaml"])

@@ -74,6 +74,51 @@ class ScheduledAlertsWorkflowTests(unittest.TestCase):
         self.assertEqual(perms.get("contents"), "read")
         self.assertEqual(perms.get("issues"), "write")
 
+    def test_scheduled_runs_are_live(self) -> None:
+        """THE bug: every cron run was a dry run, so 470+ green runs opened nothing."""
+        steps = self.doc["jobs"]["dispatch"]["steps"]
+        (step,) = [s for s in steps if "QZ_DRY_RUN" in (s.get("env") or {})]
+        self.assertEqual(
+            step["env"]["QZ_DRY_RUN"], "${{ github.event_name == 'schedule' && 'false' || inputs.dry_run }}"
+        )
+
+    def test_it_watches_the_platforms_own_workflows(self) -> None:
+        """Run history needs actions:read; labels are provisioned only on a live run."""
+        perms = self.doc["jobs"]["dispatch"]["permissions"]
+        self.assertEqual(perms.get("actions"), "read")
+        self.assertIn("active = alert_dispatch.fetch_active_workflows(PLATFORM)", self.text)
+        self.assertIn("alert_dispatch.fetch_workflow_runs(PLATFORM, workflows=active)", self.text)
+        self.assertIn("close_recovered_workflow_alerts", self.text)
+        self.assertIn('active_workflows={str(workflow.get("name", "")) for workflow in active}', self.text)
+        self.assertIn("if not dry_run:\n              # gh issue create rejects a label the repo lacks.", self.text)
+
+    def test_bypass_and_drift_detectors_read_live_state(self) -> None:
+        """They used to read files nothing wrote, so they were never evaluated."""
+        self.assertIn("from scripts.quality import alert_dispatch, alerts, fleet_state", self.text)
+        self.assertIn("bypass_issues = fleet_state.bypass_followups(PLATFORM)", self.text)
+        self.assertIn("drift_prs, drift_unread = fleet_state.drift_sync_prs(fleet_state.fleet_slugs())", self.text)
+        self.assertNotIn("bypass-tracking.jsonl", self.text)
+        self.assertNotIn('_safe_jsonl("audit/drift-sync.jsonl")', self.text)
+        # The detectors still without a producer are named as NOT evaluated.
+        self.assertIn('"quality-rollup/coverage-trend.json": "regression / deadline / escalation / flag"', self.text)
+        self.assertIn('"audit/bump-staging-results.jsonl": "fleet-bump-fail"', self.text)
+
+    def test_resolved_bypass_and_drift_alerts_are_closed(self) -> None:
+        """A closed follow-up or merged drift PR leaves the live set; its alert must close."""
+        self.assertIn("alert_type=alerts.AlertType.BYPASS_STALE", self.text)
+        self.assertIn("alert_type=alerts.AlertType.DRIFT_STUCK", self.text)
+        self.assertIn("alert_dispatch.close_resolved_alerts(", self.text)
+        self.assertIn(
+            "unverifiable=lambda subject: fleet_state.unverifiable_subject(subject, drift_unread),", self.text
+        )
+        self.assertIn("Fleet repositories NOT read (drift unknown): {len(drift_unread)}", self.text)
+
+    def test_the_drift_search_may_use_the_fleet_read_pat_but_writes_keep_the_workflow_token(self) -> None:
+        """Private members' drift PRs are only visible to the fleet-read PAT."""
+        (step,) = [s for s in self.doc["jobs"]["dispatch"]["steps"] if "fleet_state" in str(s.get("run", ""))]
+        self.assertEqual(step["env"]["GH_TOKEN"], "${{ github.token }}")
+        self.assertEqual(step["env"]["QZ_FLEET_READ_TOKEN"], "${{ secrets.CODEX_FLEET_READ_PAT }}")
+
     def test_checkout_does_not_persist_credentials(self) -> None:
         """``persist-credentials: false`` — CodeQL safety."""
         steps = self.doc["jobs"]["dispatch"]["steps"]

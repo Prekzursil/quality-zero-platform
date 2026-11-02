@@ -127,8 +127,12 @@ class IsolatedCwdTests(unittest.TestCase):
     def test_isolated_cwd_restores_the_previous_directory_on_error(self) -> None:
         """Cover isolated cwd restores the previous directory on error."""
         original = Path.cwd()
-        with self.assertRaises(RuntimeError), isolated_cwd():
-            raise RuntimeError("boom")
+
+        def fail_inside() -> None:
+            with isolated_cwd():
+                raise RuntimeError("boom")
+
+        self.assertRaises(RuntimeError, fail_inside)
         self.assertEqual(Path.cwd(), original)
 
 

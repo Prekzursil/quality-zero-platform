@@ -1,0 +1,9 @@
+# actionlint 1.7.12 (the newest release, 2026-03-30) predates the job
+# context's workflow_* properties (GitHub, 2026-04-23), which the reusable
+# workflows use to check the platform out at their own commit. Ignore exactly
+# that "not defined" error on the job object, nothing broader. Drop this
+# file once an actionlint release knows job.workflow_*.
+paths:
+  .github/workflows/**/*.{yml,yaml}:
+    ignore:
+      - 'property "workflow_(sha|repository|ref|file_path)" is not defined in object type \{check_run_id: number; container:'

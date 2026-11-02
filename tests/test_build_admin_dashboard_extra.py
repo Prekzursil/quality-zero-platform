@@ -50,8 +50,8 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
         self.assertIn("\n    1.\n", page)
 
         runs: List[Mapping[str, Any]] = [
-            {"event": "push", "conclusion": "success"},
-            {"event": "pull_request", "conclusion": "failure"},
+            {"event": "push", "name": "CI", "conclusion": "success"},
+            {"event": "pull_request", "name": "Lint", "conclusion": "failure"},
         ]
         self.assertEqual(len(build_admin_dashboard._select_runs(runs)), 2)
         self.assertEqual(
@@ -63,7 +63,6 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
             ),
             1,
         )
-        self.assertEqual(build_admin_dashboard._run_conclusions(runs), {"success", "failure"})
         self.assertEqual(build_admin_dashboard._compute_health([]), "unknown")
         self.assertEqual(build_admin_dashboard._compute_health(runs), "partial")
         self.assertEqual(
@@ -88,21 +87,30 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
         self.assertEqual(payload["workflow_runs"][0]["event"], "pull_request")
         self.assertEqual(load_json_mock.call_args.kwargs["allowed_hosts"], {"api.github.com"})
 
-        with patch.object(
-            build_admin_dashboard,
-            "_github_payload",
-            side_effect=[
-                {
-                    "workflow_runs": [
-                        {"event": "push", "conclusion": "success"},
-                        {"event": "pull_request", "conclusion": "success"},
-                    ]
-                },
-                [{"id": 1}],
-                # repo metadata fetch added in the Phase-5 redaction wiring
-                # (see _live_health) — third call returns visibility.
-                {"visibility": "public"},
-            ],
+        pr_runs = {"workflow_runs": [{"head_sha": "abc", "name": "CI", "status": "completed", "conclusion": "success"}]}
+        with (
+            patch.object(
+                build_admin_dashboard,
+                "_github_payload",
+                side_effect=[
+                    {
+                        "workflow_runs": [
+                            {"event": "push", "conclusion": "success"},
+                            {"event": "pull_request", "conclusion": "success"},
+                        ]
+                    },
+                    [{"id": 1}],
+                    # repo metadata fetch added in the Phase-5 redaction wiring
+                    # (see _live_health) — third call returns visibility.
+                    {"visibility": "public"},
+                ],
+            ),
+            # open PRs, then the pull_request runs on their heads (403/404-tolerant)
+            patch.object(
+                build_admin_dashboard,
+                "_github_fetch_degraded",
+                side_effect=[([{"number": 4, "head": {"sha": "abc"}}], {}), (pr_runs, {})],
+            ),
         ):
             live = build_admin_dashboard._live_health("token", "Prekzursil/example", "main")
         self.assertEqual(live["default_branch_health"], "success")
@@ -152,33 +160,249 @@ class BuildAdminDashboardExtraTests(unittest.TestCase):
     def test_live_health_partial_404_keeps_reachable_data_and_public_default(self) -> None:
         """A 404 on one resource degrades only that field; unusable metadata stays public."""
         runs_payload = {"workflow_runs": [{"event": "push", "conclusion": "success"}]}
-        with patch.object(
-            build_admin_dashboard,
-            "_github_payload",
-            side_effect=[
-                runs_payload,  # actions/runs reachable
-                _http_error(404, "Not Found"),  # rulesets absent
-                ["unexpected"],  # metadata reachable but not a dict
-            ],
+        with (
+            patch.object(
+                build_admin_dashboard,
+                "_github_payload",
+                side_effect=[
+                    runs_payload,  # actions/runs reachable
+                    _http_error(404, "Not Found"),  # rulesets absent
+                    ["unexpected"],  # metadata reachable but not a dict
+                ],
+            ),
+            patch.object(build_admin_dashboard, "_github_fetch_degraded", return_value=([], {})),  # no open PR
         ):
             live = build_admin_dashboard._live_health("token", "Prekzursil/tracelines", "main")
         self.assertEqual(live["default_branch_health"], "success")
+        self.assertEqual(live["open_pr_health"], "none")
         self.assertFalse(live["ruleset_present"])
         self.assertEqual(live["visibility"], "public")
 
-        with patch.object(
-            build_admin_dashboard,
-            "_github_payload",
-            side_effect=[
-                _http_error(404, "Not Found"),  # actions/runs absent
-                [{"id": 1}],  # rulesets reachable
-                {"visibility": "   "},  # metadata dict with blank visibility
-            ],
+        with (
+            patch.object(
+                build_admin_dashboard,
+                "_github_payload",
+                side_effect=[
+                    _http_error(404, "Not Found"),  # actions/runs absent
+                    [{"id": 1}],  # rulesets reachable
+                    {"visibility": "   "},  # metadata dict with blank visibility
+                ],
+            ),
+            patch.object(build_admin_dashboard, "_github_fetch_degraded", return_value=(None, None)),  # denied
         ):
             live = build_admin_dashboard._live_health("token", "Prekzursil/tracelines", "main")
         self.assertEqual(live["default_branch_health"], "unknown")
+        self.assertEqual(live["open_pr_health"], "unknown")
         self.assertTrue(live["ruleset_present"])
         self.assertEqual(live["visibility"], "public")
+
+    def test_health_reads_the_newest_decisive_run_of_each_workflow(self) -> None:
+        """A fixed failure, a cancelled run, or a run in flight no longer paints a green branch red."""
+
+        def run(name: str, conclusion: str, status: str = "completed", minute: int = 0) -> dict:
+            return {
+                "name": name,
+                "conclusion": conclusion,
+                "status": status,
+                "created_at": f"2026-10-24T10:{minute:02d}:00Z",
+            }
+
+        health = build_admin_dashboard._compute_health
+        recovered = [run("CI", "failure", minute=1), run("CI", "success", minute=2)]
+        self.assertEqual(health(recovered), "success")
+        cancelled = [run("CI", "success", minute=1), run("CI", "cancelled", minute=2), run("Lint", "skipped")]
+        self.assertEqual(health(cancelled), "success")
+        broken = [run("CI", "success", minute=2), run("Lint", "failure", minute=1)]
+        self.assertEqual(health(broken), "partial")
+        in_flight = [run("CI", "", status="in_progress", minute=2), run("CI", "success", minute=1)]
+        self.assertEqual(health(in_flight), "success")
+        self.assertEqual(health([run("CI", "", status="queued")]), "pending")
+        self.assertEqual(health([run("CI", "neutral")]), "unknown")
+
+    def test_open_pr_health_reads_each_open_heads_runs(self) -> None:
+        """THE bug: PR health filtered default-branch runs for PR events, so every repo read unknown."""
+        next_page = {"link": '<https://api.github.com/x?page=2>; rel="next"'}
+
+        def live(pulls: Any, *runs: Any, link: str = "") -> str:
+            responses = [(pulls, {"link": link})] + [r if isinstance(r, tuple) else (r, {}) for r in runs]
+            with patch.object(build_admin_dashboard, "_github_fetch_degraded", side_effect=responses) as fetch:
+                verdict = build_admin_dashboard._open_pr_health("token", "Prekzursil/example")
+            for call in fetch.call_args_list[1:]:  # every lookup: one head, pull_request runs only
+                self.assertIn("event=pull_request", call.args[0])
+                self.assertIn("head_sha=", call.args[0])
+            return verdict
+
+        pulls = [{"number": 1, "head": {"sha": "h1"}}, {"number": 2, "head": {"sha": "h2"}}, {"head": None}]
+
+        def runs(*conclusions: str) -> dict:
+            return {
+                "workflow_runs": [
+                    {"name": f"wf{i}", "conclusion": c, "created_at": f"2026-10-24T10:{i:02d}:00Z"}
+                    for i, c in enumerate(conclusions)
+                ]
+            }
+
+        self.assertEqual(live(pulls, runs("success"), runs("success")), "success")
+        # Review finding: h1's newest CI passed but an older, different workflow failed - per-head lookups see it.
+        self.assertEqual(live(pulls, runs("failure", "success"), runs("success")), "partial")
+        # A head with only cancelled/skipped runs, or none at all, has no verdict: not a pass.
+        self.assertEqual(live(pulls, runs("success"), runs("cancelled", "skipped")), "unknown")
+        self.assertEqual(live(pulls, runs("success"), {"workflow_runs": []}), "unknown")
+        self.assertEqual(live(pulls, runs("success"), ["not", "a", "dict"]), "unknown")
+        # ...unless another head already failed: a failure is a failure.
+        self.assertEqual(live(pulls, runs("failure"), (None, None)), "partial")
+        self.assertEqual(
+            live(pulls, runs("success"), {"workflow_runs": [{"name": "CI", "status": "in_progress"}]}), "pending"
+        )
+        # Review finding: a head whose runs span more than one page is unproven, unless it already failed.
+        self.assertEqual(live(pulls, runs("success"), (runs("success"), next_page)), "unknown")
+        self.assertEqual(live(pulls, runs("success"), (runs("failure"), next_page)), "partial")
+        self.assertEqual(live([]), "none")
+        self.assertEqual(live({"message": "not a list"}), "unknown")
+        self.assertEqual(live(None), "unknown")  # 403/404: degraded to this field only
+        # Review finding: more open PRs than one page lists - no verdict rather than a partial one.
+        self.assertEqual(live(pulls, link=next_page["link"]), "unknown")
+
+    def test_a_head_two_prs_share_never_reads_green_over_a_failure(self) -> None:
+        """Review findings: one head, two PRs (two bases, or two forks) - a newer success cannot hide a failure.
+
+        GitHub's ``pull_requests`` on a run lists every matching open PR (none
+        for a fork), not the one that triggered it, so the runs cannot be split.
+        """
+        pulls = [{"number": 1, "head": {"sha": "h"}}, {"number": 2, "head": {"sha": "h"}}]
+
+        def verdict(*conclusions: str) -> str:
+            runs = {
+                "workflow_runs": [
+                    {"name": "CI", "conclusion": c, "created_at": f"2026-10-24T10:0{i}:00Z", "pull_requests": []}
+                    for i, c in enumerate(conclusions)
+                ]
+            }
+            with patch.object(
+                build_admin_dashboard, "_github_fetch_degraded", side_effect=[(pulls, {}), (runs, {})]
+            ) as fetch:
+                result = build_admin_dashboard._open_pr_health("token", "o/r")
+            self.assertEqual(fetch.call_count, 2)  # one lookup per distinct head
+            return result
+
+        self.assertEqual(verdict("failure", "success"), "unknown")  # was "success": PR 2's failure hidden
+        self.assertEqual(verdict("success", "failure"), "partial")
+        # Review finding: PR 2 may have no run at all - PR 1's green runs prove nothing about it.
+        self.assertEqual(verdict("cancelled", "success"), "unknown")
+        self.assertEqual(verdict("success", "success"), "unknown")
+
+    def test_the_default_branch_window_is_filled_with_eligible_runs(self) -> None:
+        """Review finding: 99 PR-triggered runs on page 1 pushed a real failure out of a 100-run window."""
+        own = {"full_name": "o/r"}
+
+        def runs(n: int, event: str, conclusion: str, start: int, name: str = "CI") -> List[dict]:
+            return [
+                {
+                    "name": name,
+                    "event": event,
+                    "conclusion": conclusion,
+                    "head_repository": own,
+                    "created_at": f"2026-10-{24 - (start + i) // 1000:02d}T{(start + i) % 1000:06d}",
+                }
+                for i in range(n)
+            ]
+
+        def health(*pages: List[dict]) -> str:
+            payloads = [{"workflow_runs": page} for page in pages]
+            with patch.object(build_admin_dashboard, "_github_payload_or_none", side_effect=payloads) as fetch:
+                verdict = build_admin_dashboard._default_branch_health("token", "o/r", "main")
+            for number, call in enumerate(fetch.call_args_list, start=1):
+                self.assertIn(f"?branch=main&per_page=100&page={number}", call.args[0])
+            return verdict
+
+        crowded = runs(1, "push", "success", 0) + runs(99, "pull_request_target", "failure", 1, name="Label")
+        weekly_failure = runs(1, "schedule", "failure", 200, name="Weekly")
+        self.assertEqual(health(crowded, weekly_failure), "partial")  # was "success"
+        self.assertEqual(health(crowded, runs(1, "schedule", "success", 200, name="Weekly")), "success")
+        # Page cap reached with the window still short: unproven, unless a failure is already visible.
+        pr_only = runs(100, "pull_request", "success", 300)
+        self.assertEqual(health(crowded, pr_only, pr_only), "unknown")
+        visible = runs(1, "push", "failure", 0) + runs(99, "pull_request", "success", 1)
+        self.assertEqual(health(visible, pr_only, pr_only), "partial")
+        full = runs(100, "push", "success", 0)
+        self.assertEqual(health(full), "success")  # a full window needs no second page
+
+    def test_default_branch_health_ignores_runs_a_pull_request_triggered(self) -> None:
+        """Review finding: ?branch=main matches head branches, so a fork PR from its own main landed in the window."""
+        own = {"full_name": "Prekzursil/Example"}
+        runs = [
+            {"name": "CI", "event": "push", "conclusion": "success", "head_repository": own},
+            {"name": "Scan", "event": "schedule", "conclusion": "success", "head_repository": own},
+            {"name": "CI", "event": "pull_request", "conclusion": "failure", "created_at": "9"},
+            {"name": "Label", "event": "pull_request_target", "conclusion": "failure", "head_repository": own},
+            {
+                "name": "Report",
+                "event": "workflow_run",
+                "conclusion": "failure",
+                "head_repository": {"full_name": "someone/example"},
+            },
+        ]
+        keep = [run for run in runs if build_admin_dashboard._is_default_branch_run(run, "Prekzursil/example")]
+        self.assertEqual([run["name"] for run in keep], ["CI", "Scan"])
+        self.assertEqual(build_admin_dashboard._is_default_branch_run({"event": "push"}, "o/r"), True)
+        with (
+            patch.object(
+                build_admin_dashboard,
+                "_github_payload",
+                side_effect=[{"workflow_runs": runs}, [], {"visibility": "public"}],
+            ),
+            patch.object(build_admin_dashboard, "_github_fetch_degraded", return_value=([], {})),
+        ):
+            live = build_admin_dashboard._live_health("token", "Prekzursil/example", "main")
+        self.assertEqual(live["default_branch_health"], "success")
+
+    def test_runs_older_than_the_open_pr_are_not_its_ci(self) -> None:
+        """Review finding: a commit reused by a new PR inherited the closed PR's green runs."""
+        pulls = [{"number": 9, "head": {"sha": "h"}, "created_at": "2026-10-24T12:00:00Z"}]
+
+        def verdict(*runs: tuple) -> str:
+            payload = {"workflow_runs": [{"name": n, "conclusion": c, "created_at": t} for n, c, t in runs]}
+            with patch.object(
+                build_admin_dashboard, "_github_fetch_degraded", side_effect=[(pulls, {}), (payload, {})]
+            ):
+                return build_admin_dashboard._open_pr_health("token", "o/r")
+
+        old_green = ("CI", "success", "2026-10-20T09:00:00Z")
+        self.assertEqual(verdict(old_green), "unknown")  # was "success": the new PR never ran CI
+        self.assertEqual(verdict(old_green, ("CI", "failure", "2026-10-24T12:05:00Z")), "partial")
+        self.assertEqual(
+            verdict(("CI", "failure", "2026-10-20T09:00:00Z"), ("CI", "success", "2026-10-24T12:00:00Z")), "success"
+        )
+
+    def test_a_shared_head_keeps_the_runs_of_its_oldest_open_pr(self) -> None:
+        """The filter uses the OLDEST open PR on a head, so a failure that PR saw is never dropped."""
+        pulls = [
+            {"number": 1, "head": {"sha": "h"}, "created_at": "2026-10-24T08:00:00Z"},
+            {"number": 2, "head": {"sha": "h"}, "created_at": "2026-10-24T12:00:00Z"},
+            {"number": 3, "head": {"sha": "g"}},
+        ]
+        failing = {"workflow_runs": [{"name": "CI", "conclusion": "failure", "created_at": "2026-10-24T09:00:00Z"}]}
+        green = {"workflow_runs": [{"name": "CI", "conclusion": "success", "created_at": "2026-10-01T00:00:00Z"}]}
+        with patch.object(
+            build_admin_dashboard, "_github_fetch_degraded", side_effect=[(pulls, {}), (green, {}), (failing, {})]
+        ):
+            self.assertEqual(build_admin_dashboard._open_pr_health("token", "o/r"), "partial")
+
+    def test_per_head_lookups_are_capped(self) -> None:
+        """A huge PR backlog cannot stall the hourly build; heads past the cap leave no verdict."""
+        cap = build_admin_dashboard.MAX_PR_HEAD_LOOKUPS
+        pulls = [{"head": {"sha": f"h{i:03d}"}} for i in range(cap + 5)]
+        green = ({"workflow_runs": [{"name": "CI", "conclusion": "success"}]}, {})
+        with patch.object(
+            build_admin_dashboard, "_github_fetch_degraded", side_effect=[(pulls, {})] + [green] * cap
+        ) as fetch:
+            self.assertEqual(build_admin_dashboard._open_pr_health("token", "o/r"), "unknown")
+        self.assertEqual(fetch.call_count, 1 + cap)
+
+    def test_a_denied_pull_request_feed_degrades_only_open_pr_health(self) -> None:
+        """A 403 on /pulls (metadata readable, PRs denied) must not fail the whole dashboard build."""
+        with patch.object(build_admin_dashboard, "load_json_https", side_effect=_http_error(403, "Forbidden")):
+            self.assertEqual(build_admin_dashboard._open_pr_health("token", "Prekzursil/example"), "unknown")
 
     def test_main_uses_live_health_when_token_is_present(self) -> None:
         """Cover main uses live health when token is present."""

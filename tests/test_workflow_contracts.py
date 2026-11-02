@@ -2,8 +2,11 @@
 
 from __future__ import absolute_import, division
 
+import re
 import unittest
 from pathlib import Path
+
+import yaml  # type: ignore[import-untyped]
 
 ROOT = Path(__file__).resolve().parents[1]
 MUTATION_TEMPLATE_REF = "@7268fee30f1cf796938d97fe460259f27386a8cd"
@@ -26,6 +29,241 @@ class WorkflowContractTests(unittest.TestCase):
             self.assertIn("run_codex_exec.py", text, path.name)
             self.assertIn("CODEX_AUTH_JSON", text, path.name)
             self.assertIn("codex_runner_labels_json", text, path.name)
+
+    def test_reusable_workflows_check_the_platform_out_at_their_own_commit(self) -> None:
+        """A caller (or a PR head) can no longer pick the platform scripts a job runs.
+
+        ``job.workflow_repository`` / ``job.workflow_sha`` name the reusable
+        workflow file itself, so the scripts always match the workflow that
+        drives them. ``platform_ref`` used to default to ``main``, which ran a
+        caller pinned to an old workflow against the newest scripts.
+        """
+        for path in sorted((ROOT / ".github" / "workflows").glob("reusable-*.yml")):
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(workflow=path.name):
+                self.assertNotIn("inputs.platform_ref", text)
+                self.assertNotIn("inputs.platform_repository", text)
+                doc = yaml.safe_load(text)
+                declared = (doc[True].get("workflow_call") or {}).get("inputs") or {}
+                for name in ("platform_repository", "platform_ref"):
+                    if name in declared:
+                        self.assertIn("Deprecated and ignored", declared[name]["description"])
+                for job in doc["jobs"].values():
+                    for step in job.get("steps", []):
+                        settings = step.get("with") or {}
+                        # Every checkout naming a repository that is not the caller's
+                        # target (``inputs.repo_slug``) is the platform itself.
+                        if (
+                            str(step.get("uses", "")).startswith("actions/checkout@")
+                            and "repository" in settings
+                            and "inputs.repo_slug" not in str(settings["repository"])
+                        ):
+                            self.assertEqual(settings["repository"], "${{ job.workflow_repository }}")
+                            if settings.get("path") != "audit-store":
+                                self.assertEqual(settings["ref"], "${{ job.workflow_sha }}")
+
+    def test_codecov_skips_dependabot_prs_visibly_instead_of_failing(self) -> None:
+        """A Dependabot PR has no CODECOV_TOKEN; a tokenless upload never lands, so the flag check failed them all."""
+        doc = yaml.safe_load(
+            (ROOT / ".github" / "workflows" / "reusable-codecov-analytics.yml").read_text(encoding="utf-8")
+        )
+        job = doc["jobs"]["codecov-analytics"]
+        self.assertEqual(
+            job["env"]["CODECOV_UPLOADABLE"],
+            "${{ secrets.CODECOV_TOKEN != '' || github.event.pull_request.user.login != 'dependabot[bot]' }}",
+        )
+        steps = {step.get("name"): step for step in job["steps"]}
+        self.assertEqual(
+            steps["Upload coverage to Codecov (per-flag split)"]["if"], "${{ env.CODECOV_UPLOADABLE == 'true' }}"
+        )
+        self.assertEqual(steps["Validate Codecov flags"]["if"], "${{ always() && env.CODECOV_UPLOADABLE == 'true' }}")
+        notice = steps["Codecov upload skipped (Dependabot PR, no token)"]
+        self.assertEqual(notice["if"], "${{ env.CODECOV_UPLOADABLE != 'true' }}")
+        self.assertIn("::notice title=Codecov upload skipped::", notice["run"])
+
+    def test_a_reenabled_codex_workflow_fails_visibly_without_its_secret(self) -> None:
+        """CODEX_AUTH_JSON is being removed: re-enabling either Codex workflow must fail first, by name."""
+        for name, job in (
+            ("quality-zero-backlog.yml", "shared-backlog-sweep"),
+            ("quality-zero-remediation.yml", "shared-remediation-loop"),
+        ):
+            with self.subTest(workflow=name):
+                workflow = yaml.safe_load((ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8"))
+                guard = workflow["jobs"]["require-codex-auth"]
+                self.assertEqual(guard["permissions"], {})
+                self.assertEqual(guard["env"]["CODEX_AUTH_PRESENT"], "${{ secrets.CODEX_AUTH_JSON != '' }}")
+                (step,) = guard["steps"]
+                self.assertEqual(step["if"], "${{ env.CODEX_AUTH_PRESENT != 'true' }}")
+                self.assertIn("::error title=CODEX_AUTH_JSON not configured::", step["run"])
+                self.assertIn("exit 1", step["run"])
+                self.assertEqual(workflow["jobs"][job]["needs"], "require-codex-auth")
+                self.assertEqual(guard.get("if"), workflow["jobs"][job].get("if"))
+
+    def test_an_opted_in_sonar_scan_without_its_token_says_it_was_skipped(self) -> None:
+        """The scan is opt-in; opted in with no SONAR_TOKEN it must not vanish silently."""
+        workflow = yaml.safe_load(
+            (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
+        )
+        steps = workflow["jobs"]["scanner"]["steps"]
+        names = [step.get("name", "") for step in steps]
+        notice = steps[names.index("SonarCloud scan skipped (no SONAR_TOKEN)")]
+        self.assertIn("env.SONAR_TOKEN_PRESENT != 'true'", notice["if"])
+        self.assertIn("steps.profile.outputs.sonar_coverage_enabled == 'true'", notice["if"])
+        self.assertIn("::warning title=SonarCloud scan skipped::", notice["run"])
+        scan = steps[names.index("SonarCloud scan")]
+        self.assertIn("env.SONAR_TOKEN_PRESENT == 'true'", scan["if"])
+
+    def test_the_workflow_gate_lints_the_consumer_templates_too(self) -> None:
+        """Governed repos copy templates/repo/.github/workflows: a defect there must fail QZP's own gate."""
+        workflow = yaml.safe_load(
+            (ROOT / ".github" / "workflows" / "quality-zero-platform.yml").read_text(encoding="utf-8")
+        )
+        steps = {step.get("name", ""): step for step in workflow["jobs"]["workflows"]["steps"]}
+        actionlint = steps["gate-workflows actionlint"]["run"]
+        self.assertIn("templates/repo/.github/workflows/*.y*ml", actionlint)
+        self.assertIn('/tmp/actionlint -color "${workflows[@]}"', actionlint)
+        zizmor = steps["gate-workflows zizmor"]["run"]
+        self.assertIn("--format plain .github/workflows templates/repo/.github/workflows", zizmor)
+        self.assertTrue(sorted((ROOT / "templates" / "repo" / ".github" / "workflows").glob("*.yml")))
+
+    def test_every_own_commit_checkout_is_pinned_to_this_workflows_own_commit(self) -> None:
+        """The invariant the dismissed own-commit false positives (#312-#317) rest on.
+
+        The alert fingerprint covers only the step's first 100 non-space
+        characters (name + comment), never ``repository:`` or ``ref:``. So if
+        a step with this name ever checked out a ref a caller or a PR head
+        could choose, CodeQL would raise the same fingerprint and the alert
+        would stay dismissed. Hence, both ways round: a step with this name
+        checks out exactly job.workflow_repository at job.workflow_sha,
+        without persisted credentials and with no second ref, repository or
+        name, and every checkout of job.workflow_sha carries this name.
+        Expressions are compared without whitespace (``${{job.workflow_sha}}``
+        is the same reference), and both workflow suffixes are scanned.
+        """
+        canonical = "Check out the platform at this workflow's own commit"
+        own_ref, own_repo = "${{job.workflow_sha}}", "${{job.workflow_repository}}"
+
+        def expr(value: object) -> str:
+            return re.sub(r"\s+", "", str(value or ""))
+
+        found = 0
+        workflows = ROOT / ".github" / "workflows"
+        for path in sorted([*workflows.glob("*.yml"), *workflows.glob("*.yaml")]):
+            text = path.read_text(encoding="utf-8")
+            workflow = yaml.safe_load(text)
+            lines = text.split("\n")
+            starts = [i for i, line in enumerate(lines) if line.strip() == f"- name: {canonical}"]
+            structural = 0
+            for job_id, job in (workflow.get("jobs") or {}).items():
+                for step in job.get("steps") or []:
+                    named = step.get("name") == canonical
+                    with_ = step.get("with") or {}
+                    if not (named or expr(with_.get("ref")) == own_ref):
+                        continue
+                    found += 1
+                    structural += named
+                    with self.subTest(workflow=path.name, job=job_id):
+                        self.assertTrue(named, "a job.workflow_sha checkout must carry the canonical name")
+                        self.assertTrue(str(step.get("uses", "")).startswith("actions/checkout@"))
+                        self.assertEqual(expr(with_.get("repository")), own_repo)
+                        self.assertEqual(expr(with_.get("ref")), own_ref)
+                        self.assertIs(with_.get("persist-credentials"), False)
+                        self.assertLessEqual(set(with_), {"repository", "ref", "path", "persist-credentials"})
+            # Every step that READS as canonical must BE one: a later duplicate name: key would leave
+            # the fingerprinted first line in place while YAML sees another step.
+            with self.subTest(workflow=path.name, check="textual == structural canonical steps"):
+                self.assertEqual(len(starts), structural)
+            # YAML keeps only the last of two equal keys, so read each step's own lines too.
+            for start in starts:
+                indent = len(lines[start]) - len(lines[start].lstrip())
+                block = []
+                for line in lines[start + 1 :]:
+                    if line.strip() and len(line) - len(line.lstrip()) <= indent:
+                        break
+                    block.append(line.strip())
+                with self.subTest(workflow=path.name, line=start + 1):
+                    refs = [expr(line[len("ref:") :]) for line in block if line.startswith("ref:")]
+                    repos = [expr(line[len("repository:") :]) for line in block if line.startswith("repository:")]
+                    self.assertEqual(refs, [own_ref])
+                    self.assertEqual(repos, [own_repo])
+                    self.assertEqual([line for line in block if line.startswith("name:")], [])
+        self.assertGreaterEqual(found, 14)
+
+    def test_a_pin_bump_cannot_re_identify_an_own_commit_checkout_alert(self) -> None:
+        """CodeQL's alert fingerprint hashes the first 100 non-space/tab characters from the alert's first line.
+
+        The own-commit platform checkouts carry dismissed false positives
+        (CodeQL does not model job.workflow_sha). If that window reaches the
+        pinned SHA, every Dependabot bump re-identifies them as new alerts
+        (#306-#310). The comment line keeps the window inside name + comment.
+        """
+        name = "- name: Check out the platform at this workflow's own commit"
+        found = 0
+        for path in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+            lines = path.read_text(encoding="utf-8").split("\n")
+            for start in [i for i, line in enumerate(lines) if line.strip() == name]:
+                found += 1
+                tail = "".join(ch for ch in "\n".join(lines[start:]) if ch not in " \t")
+                with self.subTest(workflow=path.name, line=start + 1):
+                    self.assertNotIn("@", tail[:100], "the fingerprint window reaches the action pin")
+                    self.assertIn("uses:actions/checkout@", tail[:400])
+        self.assertGreaterEqual(found, 14)
+
+    def test_an_apply_run_without_drift_sync_pat_fails_visibly(self) -> None:
+        """QZP has no DRIFT_SYNC_PAT: a non-dry wave computed everything and finished green having changed nothing."""
+        for name, apply_step in (
+            ("reusable-drift-sync.yml", "Apply drift fixes + open PR"),
+            ("reusable-bump-workflow-shas.yml", "Open bump PR on consumer repo"),
+            ("reusable-bump-apply.yml", "Commit + open bump PR on consumer repo"),
+        ):
+            with self.subTest(workflow=name):
+                workflow = yaml.safe_load((ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8"))
+                (job,) = workflow["jobs"].values()
+                self.assertEqual(job["env"]["DRIFT_SYNC_PAT_PRESENT"], "${{ secrets.DRIFT_SYNC_PAT != '' }}")
+                names = [step.get("name", "") for step in job["steps"]]
+                guard = job["steps"][names.index("Fail when an apply runs without DRIFT_SYNC_PAT")]
+                self.assertEqual(guard["if"], "${{ !inputs.dry_run && env.DRIFT_SYNC_PAT_PRESENT != 'true' }}")
+                self.assertIn("::error title=DRIFT_SYNC_PAT not configured::", guard["run"])
+                self.assertIn("exit 1", guard["run"])
+                self.assertEqual(names.index(apply_step), names.index(guard["name"]) + 1)
+
+    def test_no_step_gates_on_its_own_env(self) -> None:
+        """A step's own env does not exist yet when its `if:` is evaluated.
+
+        `if: env.X == 'true'` with X defined only in that step's `env:` is
+        always false, so the step is skipped silently on every run. That
+        is how the drift-sync and bump PR steps, the bypass audit commit
+        and the SonarCloud scan never ran. Gate flags belong in the job
+        or workflow env, which may read `secrets`.
+        """
+        env_ref = re.compile(r"\benv\.([A-Za-z_][A-Za-z0-9_]*)")
+        for path in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+            doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+            outer = set(doc.get("env") or {})
+            for job_name, job in (doc.get("jobs") or {}).items():
+                visible = outer | set(job.get("env") or {})
+                for step in job.get("steps") or []:
+                    own_only = {
+                        name
+                        for name in env_ref.findall(str(step.get("if", "")))
+                        if name in (step.get("env") or {}) and name not in visible
+                    }
+                    with self.subTest(workflow=path.name, job=job_name, step=step.get("name") or step.get("uses")):
+                        self.assertEqual(own_only, set())
+
+    def test_actionlint_ignores_only_the_job_workflow_properties(self) -> None:
+        """The one actionlint exception is the job context's workflow_* fields, nothing broader."""
+        config = yaml.safe_load((ROOT / ".github" / "actionlint.yaml").read_text(encoding="utf-8"))
+        (rules,) = config["paths"].values()
+        self.assertEqual(
+            rules["ignore"],
+            [
+                (
+                    'property "workflow_(sha|repository|ref|file_path)" is not defined in object type '
+                    r"\{check_run_id: number; container:"
+                )
+            ],
+        )
 
     def test_self_wrapper_workflows_do_not_inherit_all_secrets(self) -> None:
         """Ensure top-level wrappers pass only the secrets they actually need."""
@@ -209,7 +447,7 @@ class WorkflowContractTests(unittest.TestCase):
     def test_scanner_matrix_pins_qlty_actions_to_full_sha(self) -> None:
         """Pin QLTY and PR creation actions to immutable full SHAs."""
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
-        self.assertIn("qltysh/qlty-action/install@08a0a862c159eae9b9003081da6663d96efef637", text)
+        self.assertIn("qltysh/qlty-action/install@c9b09987143d1e4ac955f4803c7bea742102feb5", text)
         self.assertIn(
             "matrix.lane == 'qlty_zero' || (matrix.lane == 'coverage' && steps.profile.outputs.qlty_coverage_files != '' && runner.os != 'Windows')",
             text,
@@ -229,8 +467,8 @@ class WorkflowContractTests(unittest.TestCase):
         remediation_text = (ROOT / ".github" / "workflows" / "reusable-remediation-loop.yml").read_text(
             encoding="utf-8"
         )
-        self.assertIn("peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c", backlog_text)
-        self.assertIn("peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c", remediation_text)
+        self.assertIn("peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1", backlog_text)
+        self.assertIn("peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1", remediation_text)
 
     def test_scanner_matrix_pins_codecov_upload_and_keeps_token_optional(self) -> None:
         """Codecov upload removed from scanner-matrix per §7.3 — kept in reusable-codecov-analytics.yml only."""
@@ -292,10 +530,26 @@ class WorkflowContractTests(unittest.TestCase):
             text,
         )
 
-    def test_scanner_matrix_checks_out_repo_at_requested_sha(self) -> None:
-        """Ensure scanner lanes analyze the exact requested commit without persisted credentials."""
+    def test_scanner_matrix_checks_out_the_triggering_commit_never_a_caller_ref(self) -> None:
+        """CodeQL alert #303: no caller-chosen ref, and a fork's code never reaches a self-hosted runner."""
+        workflow = yaml.safe_load(
+            (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
+        )
+        steps = workflow["jobs"]["scanner"]["steps"]
+        names = [step.get("name", "") for step in steps]
+        checkout = steps[names.index("Check out the code under test")]
+        self.assertEqual(checkout["with"], {"path": "repo", "persist-credentials": False})
+        guard = steps[names.index("Refuse a fork's code on a self-hosted runner")]
+        self.assertEqual(names.index(guard["name"]), 0)
+        for clause in (
+            "github.event_name == 'pull_request'",
+            "github.event.pull_request.head.repo.full_name != github.repository",
+            "runner.environment == 'self-hosted'",
+        ):
+            self.assertIn(clause, guard["if"])
+        self.assertIn("exit 1", guard["run"])
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
-        self.assertIn("ref: ${{ inputs.sha != '' && inputs.sha || github.sha }}", text)
+        self.assertNotIn("ref: ${{ inputs.sha", text)
         self.assertEqual(text.count("persist-credentials: false"), 3)
 
     def test_scanner_matrix_uses_configurable_runner_for_coverage_lane(self) -> None:
@@ -391,8 +645,22 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("run_quality_zero_gate.py", text)
         self.assertNotIn("python - <<'PY'", text)
 
+    def test_every_action_reference_is_pinned_to_a_commit(self) -> None:
+        """A tag can be moved under every caller; a commit SHA cannot (zizmor's unpinned-uses)."""
+        uses = re.compile(r"^\s*(?:-\s+)?uses:\s+(\S+)", re.MULTILINE)
+        for path in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+            for ref in uses.findall(path.read_text(encoding="utf-8")):
+                if ref.startswith("./"):
+                    continue
+                with self.subTest(workflow=path.name, ref=ref):
+                    self.assertRegex(ref, r"@[0-9a-f]{40}$")
+
     def test_all_flagged_checkout_steps_disable_persisted_credentials(self) -> None:
-        """Require every flagged checkout step to disable persisted credentials."""
+        """Require every checkout step in the flagged workflows to disable persisted credentials.
+
+        Steps are read from the parsed YAML, so a checkout pinned to a commit
+        SHA is held to the contract exactly like one pinned to a tag.
+        """
         workflow_paths = [
             ROOT / ".github" / "workflows" / "reusable-backlog-sweep.yml",
             ROOT / ".github" / "workflows" / "reusable-remediation-loop.yml",
@@ -402,12 +670,17 @@ class WorkflowContractTests(unittest.TestCase):
         ]
 
         for path in workflow_paths:
-            text = path.read_text(encoding="utf-8")
-            self.assertEqual(
-                text.count("persist-credentials: false"),
-                text.count("- uses: actions/checkout@v4"),
-                path.name,
-            )
+            document = yaml.safe_load(path.read_text(encoding="utf-8"))
+            checkouts = [
+                step
+                for job in (document.get("jobs") or {}).values()
+                for step in job.get("steps") or []
+                if str(step.get("uses", "")).startswith("actions/checkout@")
+            ]
+            with self.subTest(workflow=path.name):
+                self.assertTrue(checkouts, f"{path.name} has no checkout step to check")
+                for step in checkouts:
+                    self.assertIs((step.get("with") or {}).get("persist-credentials"), False, path.name)
 
     def test_mutation_workflows_use_env_indirection_for_codex_auth_file(self) -> None:
         """Route Codex auth file paths through environment variables instead of inline expressions."""
@@ -446,10 +719,23 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("quality-rollup", text)
         self.assertIn("build_quality_rollup.py", text)
         self.assertIn("post_pr_quality_comment.py", text)
-        self.assertIn("actions/download-artifact@v4", text)
+        self.assertRegex(text, r"uses: actions/download-artifact@[0-9a-f]{40} # v\d+\.\d+\.\d+")
         self.assertIn("job_name: Dependency Alerts", text)
         self.assertIn('lane == "deps"', text)
         self.assertIn("check_dependabot_alerts.py", text)
+
+    def test_the_drift_page_reads_live_drift_prs_before_rendering(self) -> None:
+        """drift.html used to claim "Fleet is in sync" from a file no job wrote."""
+        workflow = yaml.safe_load(
+            (ROOT / ".github" / "workflows" / "publish-admin-dashboard.yml").read_text(encoding="utf-8")
+        )
+        names = [step.get("name", "") for step in workflow["jobs"]["build"]["steps"]]
+        read = names.index("Read live drift-sync PRs")
+        self.assertLess(read, names.index("Build Phase 5 dashboard pages (coverage / drift / audit)"))
+        step = workflow["jobs"]["build"]["steps"][read]
+        self.assertIn("scripts/quality/fleet_state.py", step["run"])
+        self.assertIn("--drift-jsonl audit/drift-sync.jsonl", step["run"])
+        self.assertEqual(step["env"]["GH_TOKEN"], "${{ github.token }}")
 
     def test_admin_dashboard_and_control_plane_admin_workflows_exist_with_expected_triggers(self) -> None:
         """Assert the admin dashboard and control-plane admin workflows keep their expected controls."""

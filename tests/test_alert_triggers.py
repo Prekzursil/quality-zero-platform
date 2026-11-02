@@ -409,5 +409,28 @@ class DetectFlagMissingTests(unittest.TestCase):
         self.assertEqual(triggers, [])
 
 
+class DetectWorkflowFailingTests(unittest.TestCase):
+    """One of QZP's own workflows red on its last N completed runs."""
+
+    def test_three_failures_in_a_row_fire(self) -> None:
+        """Any failure kind counts; the body names the workflow and the streak."""
+        triggers = at.detect_workflow_failing(
+            workflow="Codex Fleet Wave", conclusions=["failure", "timed_out", "startup_failure", "success"]
+        )
+        self.assertEqual(len(triggers), 1)
+        self.assertIs(triggers[0].alert_type, alerts.AlertType.WORKFLOW_FAILING)
+        self.assertEqual(triggers[0].subject, "Codex Fleet Wave")
+        self.assertIn("failed its last 3 completed runs", triggers[0].body)
+        self.assertIn("failure, timed_out, startup_failure", triggers[0].body)
+
+    def test_a_success_in_the_window_or_too_few_runs_is_quiet(self) -> None:
+        """Flaky is not failing, and two runs are not a streak."""
+        self.assertEqual(at.detect_workflow_failing(workflow="w", conclusions=["failure", "success", "failure"]), [])
+        self.assertEqual(at.detect_workflow_failing(workflow="w", conclusions=["failure", "failure"]), [])
+        self.assertEqual(
+            at.detect_workflow_failing(workflow="w", conclusions=["failure"] * 2, threshold=2)[0].subject, "w"
+        )
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

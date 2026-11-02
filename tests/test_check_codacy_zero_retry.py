@@ -14,8 +14,7 @@ from typing import List
 from unittest.mock import patch
 from urllib.error import HTTPError
 
-import scripts.quality.check_codacy_zero as check_codacy_zero
-from scripts.quality import codacy_zero_support
+from scripts.quality import check_codacy_zero, codacy_zero_support
 from scripts.quality.check_codacy_zero import (
     CodacyQuery,
     CodacyRetryConfig,

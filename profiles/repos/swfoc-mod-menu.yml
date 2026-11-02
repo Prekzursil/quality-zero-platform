@@ -50,3 +50,21 @@ dependabot:
   updates:
   - ecosystem: nuget
     directory: /
+# LEAN CONTRACT (migrated 2026-10-24). The SaaS-era set this profile used to
+# require (scanner-matrix / Codecov / Sonar / Codacy / Semgrep / Sentry / QLTY /
+# DeepSource contexts) is emitted by nothing any more, so the generated ruleset
+# required 13-19 checks that could never report and would have blocked every
+# pull request if applied. Required = what the repo actually reports on a pull
+# request (re-measured 2026-10-24 against its live rulesets and branch
+# protection); the code_scanning merge protection comes from the common stack.
+#   quality / quality - the lean 6-gate caller (reusable-quality.yml)
+#   CodeQL            - the code-scanning aggregate
+required_contexts_mode: replace
+required_contexts:
+  always:
+  - quality / quality
+  - CodeQL
+  pull_request_only: []
+  target:
+  - quality / quality
+  - CodeQL

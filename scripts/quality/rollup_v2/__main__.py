@@ -97,10 +97,11 @@ def main() -> int:
     canonical_path.write_text(
         json.dumps(result.canonical_payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
 
     rollup_path = output_dir / "rollup.md"
-    rollup_path.write_text(result.markdown, encoding="utf-8")
+    rollup_path.write_text(result.markdown, encoding="utf-8", newline="\n")
 
     # Print markdown to stdout (with fallback encoding for Windows)
     sys.stdout.buffer.write(result.markdown.encode("utf-8", errors="replace"))

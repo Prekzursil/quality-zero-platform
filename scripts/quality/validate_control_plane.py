@@ -43,7 +43,7 @@ def main() -> int:
         if generated_dir is not None:
             payload = build_ruleset_payload(profile)
             output_path = generated_dir / f"{profile['profile_id']}.json"
-            output_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            output_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
 
     if findings:
         for finding in findings:

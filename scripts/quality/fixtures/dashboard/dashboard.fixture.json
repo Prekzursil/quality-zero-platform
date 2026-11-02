@@ -1,0 +1,74 @@
+{
+  "generated_at": "2026-10-21T12:00:00+00:00",
+  "repo_count": 3,
+  "repos": [
+    {
+      "slug": "Prekzursil/example-full",
+      "visibility": "public",
+      "profile": "example-full",
+      "rollout": "phase2-wave0",
+      "issue_policy_mode": "ratchet",
+      "issue_policy_baseline_ref": "main",
+      "enabled_scanners": ["coverage", "sonar"],
+      "coverage_min_percent": 100.0,
+      "branch_min_percent": 85.0,
+      "deps_policy": "zero_critical",
+      "default_branch_health": "partial",
+      "open_pr_health": "success",
+      "ruleset_present": true,
+      "gate_status": "fail",
+      "gates": [
+        { "context": "Coverage 100 Gate", "status": "fail" },
+        { "context": "QLTY Zero", "status": "pass" },
+        { "context": "Dependency Alerts", "status": "pending" }
+      ],
+      "gate_head_sha": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      "gate_head_date": "2026-10-21T08:30:00Z",
+      "gate_note": ""
+    },
+    {
+      "slug": "Prekzursil/example-lean-observe",
+      "visibility": "public",
+      "profile": "example-lean-observe",
+      "rollout": "observe",
+      "issue_policy_mode": "ratchet",
+      "issue_policy_baseline_ref": "",
+      "enabled_scanners": [],
+      "coverage_min_percent": null,
+      "branch_min_percent": null,
+      "deps_policy": "",
+      "default_branch_health": "success",
+      "open_pr_health": "success",
+      "ruleset_present": false,
+      "gate_status": "pass",
+      "gates": [
+        { "context": "quality / quality", "status": "pass" },
+        { "context": "test (ubuntu-latest, 3.12)", "status": "pass" },
+        { "context": "CodeQL", "status": "pr_only" }
+      ],
+      "gate_head_sha": "2c26b46b68ffc68ff99b453c1d1347f50f6a3f0da2f16416c9d9f0f9f1f0e2",
+      "gate_head_date": "2026-10-20T18:02:00Z",
+      "gate_note": ""
+    },
+    {
+      "slug": "<private>",
+      "visibility": "private",
+      "profile": "example-private",
+      "rollout": "observe",
+      "issue_policy_mode": "",
+      "issue_policy_baseline_ref": "",
+      "enabled_scanners": [],
+      "coverage_min_percent": null,
+      "branch_min_percent": null,
+      "deps_policy": "",
+      "default_branch_health": "unknown",
+      "open_pr_health": "unknown",
+      "ruleset_present": false,
+      "gate_status": "stale",
+      "gates": [],
+      "gate_head_sha": "",
+      "gate_head_date": "",
+      "gate_note": "default-branch head unavailable for main"
+    }
+  ]
+}

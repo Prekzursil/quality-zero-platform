@@ -262,7 +262,7 @@ def apply_bump_files(
     # Persist changed files (one write per file, even when multiple
     # targets edited the same file).
     for key, new_text in files_changed.items():
-        (repo_root / key).write_text(new_text, encoding="utf-8")
+        (repo_root / key).write_text(new_text, encoding="utf-8", newline="\n")
 
     return {
         "bumped_files": len(files_changed),

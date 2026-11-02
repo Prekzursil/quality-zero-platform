@@ -15,10 +15,10 @@ jobs:
       pages: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       - name: Install platform dependencies
@@ -30,13 +30,38 @@ jobs:
           python scripts/quality/build_admin_dashboard.py \
             --assets-dir docs/admin \
             --output-dir site
+      # The drift page's source, read live: the open drift-sync PRs of every
+      # repository in inventory/repos.yml. A failed (or truncated) read writes
+      # NO file, so the page says "No data" instead of claiming the fleet is
+      # in sync.
+      - name: Read live drift-sync PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Optional: lets the read see private members' drift PRs too.
+          QZ_FLEET_READ_TOKEN: ${{ secrets.CODEX_FLEET_READ_PAT }}
+        run: |
+          python scripts/quality/fleet_state.py --drift-jsonl audit/drift-sync.jsonl \
+            || echo "::warning::Live drift-sync PRs could not be read; the drift page will say it has no data."
       - name: Build Phase 5 dashboard pages (coverage / drift / audit)
         run: |
           python scripts/quality/admin_dashboard_pages.py \
             --audit-jsonl audit/break-glass.jsonl \
+            --audit-jsonl audit/skip.jsonl \
             --coverage-json quality-rollup/coverage-trend.json \
             --drift-jsonl audit/drift-sync.jsonl \
             --output-dir site
+      - name: Build operator panel data (ruleset drift / rollup gaps)
+        # Lane 8: persists site/data/ruleset-drift.json + rollup-gaps.json.
+        # The gate-status panel rides dashboard.json from the step above.
+        # Per-repo REST sources are 404-tolerant inside the script: private or
+        # stale members degrade to labeled rows and never fail this build.
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/quality/build_dashboard_extras.py \
+            --inventory inventory/repos.yml \
+            --committed-rulesets generated/rulesets \
+            --output-dir site/data
       - name: Stage self-contained admin sub-pages (e.g. codex-fleet-github)
         run: |
           # build_admin_dashboard.py copies only the three root dashboard assets
@@ -53,11 +78,11 @@ jobs:
             echo "staged admin sub-page: site/$name/"
           done
       - name: Configure Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
         with:
           enablement: true
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site
 
@@ -73,4 +98,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

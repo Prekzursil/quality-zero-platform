@@ -6,14 +6,22 @@ name: Scheduled Alerts
 # for each trigger via ``scripts.quality.alerts.open_alert_issue``.
 # Per-event only — no digest.
 #
-# Fleet state sources (all optional; absent → empty list):
-#   - quality-rollup/coverage-trend.json — coverage regression input
-#   - audit/bypass-tracking.jsonl — break-glass stale tracker
-#   - audit/drift-sync.jsonl — drift-stuck PRs
-#   - audit/bump-staging-results.jsonl — fleet-bump wave outcome
+# Fleet state sources:
+#   - LIVE (scripts/quality/fleet_state.py; a failed read fails the run):
+#     open break-glass follow-up issues -> bypass-stale;
+#     open drift-sync PRs in inventory/repos.yml's repos -> drift-stuck.
+#   - files nothing produces yet (absent -> the summary says NOT evaluated):
+#     quality-rollup/coverage-trend.json -> coverage regression detectors;
+#     audit/bump-staging-results.jsonl -> fleet-bump wave outcome.
+# plus the platform's OWN default-branch workflow runs (gh run list): a
+# workflow whose last 3 completed runs all failed opens an
+# alert:workflow-failing issue, closed again when the workflow next succeeds.
 #
-# In dry-run mode (default on workflow_dispatch), the dispatcher
-# computes which issues WOULD open but never calls ``gh``.
+# Scheduled runs are LIVE. They used to default to dry-run too, so 470+
+# "green" runs never opened a single issue while Codex Fleet Wave and the CVE
+# sweep failed every night. In dry-run mode (still the default on a manual
+# workflow_dispatch) the dispatcher computes which issues WOULD open or close
+# but never writes through ``gh``.
 
 permissions: {}
 
@@ -41,12 +49,14 @@ jobs:
     permissions:
       contents: read
       issues: write
+      # gh run list: the platform's own workflow history
+      actions: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
 
@@ -55,10 +65,13 @@ jobs:
 
       - name: Gather fleet state + dispatch triggers
         env:
-          # Default dry_run=true on scheduled runs; workflow_dispatch
-          # takes the explicit input value.
-          QZ_DRY_RUN: ${{ inputs.dry_run || 'true' }}
+          # Scheduled runs are live; a manual dispatch takes its input
+          # (which defaults to a dry run).
+          QZ_DRY_RUN: ${{ github.event_name == 'schedule' && 'false' || inputs.dry_run }}
           GH_TOKEN: ${{ github.token }}
+          # The optional fleet-read PAT, ONLY for the cross-repository drift
+          # search; every issue write keeps the workflow token.
+          QZ_FLEET_READ_TOKEN: ${{ secrets.CODEX_FLEET_READ_PAT }}
         run: |
           python - <<'PY'
           import datetime as dt
@@ -66,8 +79,9 @@ jobs:
           import os
           import sys
           from pathlib import Path
-          from scripts.quality import alert_dispatch
+          from scripts.quality import alert_dispatch, alerts, fleet_state
 
+          PLATFORM = "Prekzursil/quality-zero-platform"
           dry_run = os.environ.get("QZ_DRY_RUN", "true").strip().lower() == "true"
 
           def _safe_jsonl(path_str: str) -> list:
@@ -91,11 +105,25 @@ jobs:
               parsed = json.loads(path.read_text(encoding="utf-8"))
               return parsed if isinstance(parsed, dict) else {}
 
+          # Files the remaining fleet detectors read. Nothing produces them
+          # yet, so the summary says which detectors had NO input and were
+          # therefore not evaluated: a green run must not imply they were.
+          SOURCES = {
+              "quality-rollup/coverage-trend.json": "regression / deadline / escalation / flag",
+              "audit/bump-staging-results.jsonl": "fleet-bump-fail",
+          }
+          missing = {path: detectors for path, detectors in SOURCES.items() if not Path(path).is_file()}
           cov = _safe_json("quality-rollup/coverage-trend.json")
-          bypass_issues = _safe_jsonl("audit/bypass-tracking.jsonl")
-          drift_prs = _safe_jsonl("audit/drift-sync.jsonl")
           staging = _safe_jsonl("audit/bump-staging-results.jsonl")
+          # LIVE sources: read now, never from a file nothing writes. A failed
+          # read raises and fails the run - never a silent all-clear.
+          bypass_issues = fleet_state.bypass_followups(PLATFORM)
+          drift_prs, drift_unread = fleet_state.drift_sync_prs(fleet_state.fleet_slugs())
+          for tag, reason in drift_unread.items():
+              print(f"::warning::{tag} was not read ({reason}): its drift is unknown, its drift alerts stay open.")
+          drift_scope = fleet_state.drift_search_scope(os.environ)
 
+          active = alert_dispatch.fetch_active_workflows(PLATFORM)
           state = {
               "today": dt.date.today(),
               "now": dt.datetime.now(tz=dt.timezone.utc),
@@ -104,11 +132,41 @@ jobs:
               "drift_prs": drift_prs,
               "staging_results": staging,
               "recipe_name": cov.get("active_bump_recipe", ""),
+              # QZP's own workflows: newest-first conclusions per workflow.
+              "workflow_runs": alert_dispatch.workflow_conclusions(
+                  alert_dispatch.fetch_workflow_runs(PLATFORM, workflows=active)
+              ),
           }
+          if not dry_run:
+              # gh issue create rejects a label the repo lacks.
+              alerts.ensure_alert_labels(PLATFORM)
           triggers = alert_dispatch.build_triggers_from_fleet_state(state)
           results = alert_dispatch.dispatch_detected_triggers(
-              platform_slug="Prekzursil/quality-zero-platform",
+              platform_slug=PLATFORM,
               triggers=triggers,
+              dry_run=dry_run,
+          )
+          closed = alert_dispatch.close_recovered_workflow_alerts(
+              platform_slug=PLATFORM,
+              workflow_runs=state["workflow_runs"],
+              active_workflows={str(workflow.get("name", "")) for workflow in active},
+              dry_run=dry_run,
+          )
+          # A closed follow-up / merged drift PR leaves the live set: close its alert.
+          resolved = alert_dispatch.close_resolved_alerts(
+              platform_slug=PLATFORM,
+              alert_type=alerts.AlertType.BYPASS_STALE,
+              live_subjects={f"{i['slug']}#{i['issue_number']}" for i in bypass_issues},
+              close_comment="The break-glass follow-up `{subject}` is no longer open; closing.",
+              dry_run=dry_run,
+          ) + alert_dispatch.close_resolved_alerts(
+              platform_slug=PLATFORM,
+              alert_type=alerts.AlertType.DRIFT_STUCK,
+              live_subjects={f"{p['slug']}#{p['pr_number']}" for p in drift_prs},
+              close_comment="The drift-sync PR `{subject}` is no longer open; closing.",
+              # An unread member's PR is invisible, not gone (no fleet-read PAT,
+              # or a failed read): never close its alert on missing evidence.
+              unverifiable=lambda subject: fleet_state.unverifiable_subject(subject, drift_unread),
               dry_run=dry_run,
           )
 
@@ -119,6 +177,14 @@ jobs:
                   fh.write(f"- Dry-run: `{dry_run}`\n")
                   fh.write(f"- Triggers: {len(triggers)}\n")
                   fh.write(f"- Issues opened/reused: {len(results)}\n")
+                  fh.write(f"- QZP workflows watched: {len(state['workflow_runs'])}\n")
+                  fh.write(f"- Open break-glass follow-ups (live): {len(bypass_issues)}\n")
+                  fh.write(f"- Open drift-sync PRs (live, {drift_scope}): {len(drift_prs)}\n")
+                  fh.write(f"- Fleet repositories NOT read (drift unknown): {len(drift_unread)}\n")
+                  fh.write(f"- Resolved bypass/drift alerts closed: {sum(1 for c in resolved if c.get('closed'))}\n")
+                  for path, detectors in missing.items():
+                      fh.write(f"- NOT evaluated ({detectors}): no `{path}` - nothing produces it yet\n")
+                  fh.write(f"- Recovered workflow alerts closed: {sum(1 for c in closed if c.get('closed'))}\n")
                   per_type = {}
                   for t in triggers:
                       key = t.alert_type.label

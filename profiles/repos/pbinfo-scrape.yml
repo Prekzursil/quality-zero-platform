@@ -1,0 +1,60 @@
+slug: Prekzursil/pbinfo-scrape
+version: 2
+stack: node-frontend
+mode:
+  phase: absolute
+scanners: {}
+overrides: []
+verify_command: bash scripts/verify
+required_contexts_mode: replace
+issue_policy:
+  mode: zero
+  pr_behavior: absolute
+  main_behavior: absolute
+# Lean member (public repo, TypeScript/Electron archival console). Enrolled
+# 2026-11-02 from the fleet-audit backlog (candidate #1). The repo already
+# ran its own green Quality Gate / Desktop Gate / CodeQL on main; the wave
+# added the lean 6-gate caller (quality.yml pinned to the platform SHA) plus
+# the thin CodeQL caller that keeps the repo's reasoned codeql-config.yml
+# paths-ignore (archive/ = verbatim third-party site snapshots, tests/ =
+# scaffolding). Coverage is enforced IN-REPO by vitest thresholds
+# (vitest.config.ts: lines/branches/functions/statements all 100 over
+# src/** with declared excludes) and asserted again by the lean caller's
+# gate-3 jsts lane; QZP collects no coverage artifact.
+enabled_scanners:
+  coverage: false
+  codecov: false
+  sonar: false
+  codacy: false
+  semgrep: false
+  sentry: false
+  qlty: false
+coverage:
+  min_percent: 100.0
+  branch_min_percent: 100.0
+  assert_mode:
+    default: evidence_only
+  policy: repo_enforced
+  evidence_note: >-
+    Coverage is ENFORCED by the repo's own vitest thresholds
+    (vitest.config.ts sets lines/branches/functions/statements to 100 over
+    src/** with the process entry-point excludes documented inline) and the
+    same run is asserted by the lean gate caller's jsts coverage lane at
+    jsts-coverage-min 100. QZP collects and gates no coverage artifact here.
+required_contexts:
+  always:
+  - quality / quality
+  - CodeQL
+  pull_request_only: []
+  target:
+  - quality / quality
+  - CodeQL
+trigger:
+  mode: pr-focused
+  pr_head_sha: true
+codeql:
+  languages:
+  - actions
+  - javascript-typescript
+dependabot:
+  updates: []

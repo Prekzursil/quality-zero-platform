@@ -1,0 +1,66 @@
+slug: Prekzursil/fractal-darkroom
+version: 2
+stack: python-tooling
+mode:
+  phase: shadow
+scanners: {}
+overrides: []
+verify_command: python -m pytest --cov
+required_contexts_mode: replace
+issue_policy:
+  mode: ratchet
+  pr_behavior: introduced_only
+  main_behavior: absolute
+# Lean member (public repo, rollout: observe). Renamed from brot-farm on
+# 2026-10-21. The repo enforces its own quality floor in-repo (stronger than
+# the platform's): ci.yml runs an ubuntu+windows x py3.11-3.14 matrix with a
+# pytest-cov gate at STRICT 100% line+branch, a Playwright site suite and the
+# research lab-notebook gate, aggregated by `ci-green`; quality.yml is the
+# lean 6-gate caller (reusable-quality.yml pinned by commit SHA).
+#
+# Required set re-measured on main@792161c 2026-10-24 (commits/main/check-runs
+# + branch protection): `ci-green`, `quality / quality`, `CodeQL` - exactly the
+# repo's own classic branch protection. `ci-green` is FAIL-CLOSED since
+# fractal-darkroom#4 (`if: always()` + every needs.*.result == success), so it
+# stands for all eight `test (<os>, <py>)` cells plus `site` and `research`;
+# requiring it replaces the brittle matrix-derived names (adding a Python
+# version no longer renames a required context). Before #4 a failed cell left
+# ci-green *skipped*, which a required check counts as passing - which is why
+# the matrix names were required here instead.
+# CodeQL runs via GitHub DEFAULT setup (dynamic), which emits `Analyze
+# (python)` / `Analyze (actions)` but the reliably-PR-present aggregate is
+# the `CodeQL` context (fleet convention: DevExtreme classic protection and
+# env-inspector's active ruleset both require it; per-language Analyze (<lang>)
+# names are not reliably reported on pull_request events).
+# Pages deploys, CodeQL dynamic runs, and Dependency-Graph jobs fire on push
+# only and are deliberately NOT required (nothing that cannot report on a
+# pull_request may be required).
+required_contexts:
+  always:
+    - ci-green
+    - quality / quality
+    - CodeQL
+  pull_request_only: []
+  target:
+    - ci-green
+    - quality / quality
+    - CodeQL
+coverage:
+  command: |
+    python -m pytest --cov --cov-report=xml:coverage/coverage.xml
+  inputs:
+    - format: xml
+      name: fractal-darkroom
+      path: coverage/coverage.xml
+      flag: fractal-darkroom
+codeql:
+  languages:
+    - python
+dependabot:
+  updates:
+    # requirements.txt pins only lower bounds (`>=`); `increase` makes
+    # Dependabot raise them explicitly instead of relying on `auto`'s
+    # app/library heuristic.
+    - ecosystem: pip
+      directory: /
+      versioning_strategy: increase

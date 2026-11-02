@@ -249,6 +249,40 @@ invalid codacy.dashboard_url
             with self.assertRaisesRegex(ValueError, "missing a profile id"):
                 load_repo_profile(inventory, "Example/Repo")
 
+    def test_merge_mode_profile_extends_the_stack_contexts_and_ruleset(self) -> None:
+        """A profile without `required_contexts_mode: replace` adds to its stack.
+
+        Every real profile now declares its contexts explicitly, so this pins the
+        merge path (and the per-profile ruleset override) on a synthetic fleet.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "inventory").mkdir()
+            (root / "profiles" / "stacks").mkdir(parents=True)
+            (root / "profiles" / "repos").mkdir(parents=True)
+            (root / "inventory" / "repos.yml").write_text(
+                "repos:\n  - slug: Example/Repo\n    profile: example\n", encoding="utf-8"
+            )
+            (root / "profiles" / "stacks" / "base.yml").write_text(
+                "required_contexts:\n  always:\n    - quality / quality\n"
+                "ruleset:\n  code_scanning:\n    - tool: CodeQL\n",
+                encoding="utf-8",
+            )
+            (root / "profiles" / "repos" / "example.yml").write_text(
+                "stack: base\nrequired_contexts:\n  always:\n    - ci-green\nruleset:\n  enforcement: evaluate\n",
+                encoding="utf-8",
+            )
+
+            profile = load_repo_profile(load_inventory(root / "inventory" / "repos.yml"), "Example/Repo")
+
+        self.assertEqual(profile["required_contexts_mode"], "merge")
+        self.assertEqual(profile["required_contexts"]["always"], ["quality / quality", "ci-green"])
+        self.assertEqual(profile["ruleset"]["enforcement"], "evaluate")
+        self.assertEqual(
+            profile["ruleset"]["code_scanning"],
+            [{"alerts_threshold": "all", "security_alerts_threshold": "all", "tool": "CodeQL"}],
+        )
+
     def test_yaml_and_inventory_helpers_reject_non_mapping_payloads(self) -> None:
         """Check YAML and inventory loaders reject non-mapping payloads."""
         with tempfile.TemporaryDirectory() as tmp:
@@ -327,7 +361,8 @@ invalid codacy.dashboard_url
 
         visual_profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
         visual_profile["required_contexts"]["target"] = [
-            item for item in visual_profile["required_contexts"]["target"] if item != "Applitools Visual"
+            *visual_profile["required_contexts"]["target"],
+            "Chromatic Playwright",
         ]
 
         findings = validate_profile(visual_profile)
@@ -371,7 +406,7 @@ invalid codacy.dashboard_url
         self.assertEqual(profile_payload["slug"], "Prekzursil/quality-zero-platform")
         self.assertEqual(ruleset_payload["repo_slug"], "Prekzursil/quality-zero-platform")
         self.assertIn("Control Plane Verify", contexts_payload)
-        self.assertIn("codeql / CodeQL", contexts_payload)
+        self.assertIn("CodeQL", contexts_payload)
         self.assertNotIn("shared-scanner-matrix / Coverage 100 Gate", contexts_payload)
 
     def test_script_entrypoint_inserts_repo_root_when_missing(self) -> None:

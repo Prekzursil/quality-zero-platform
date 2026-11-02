@@ -27,10 +27,12 @@ on:
         type: string
         required: false
         default: Prekzursil/quality-zero-platform
+        description: "Deprecated and ignored. The platform is checked out at this workflow file's own commit (job.workflow_repository / job.workflow_sha), so a caller can no longer pick, or drift from, the scripts it runs. Still declared so existing callers that pass it keep working."
       platform_ref:
         type: string
         required: false
         default: main
+        description: "Deprecated and ignored. The platform is checked out at this workflow file's own commit (job.workflow_repository / job.workflow_sha), so a caller can no longer pick, or drift from, the scripts it runs. Still declared so existing callers that pass it keep working."
     secrets:
       DRIFT_SYNC_PAT:
         required: false
@@ -39,18 +41,23 @@ on:
 jobs:
   drift-sync:
     runs-on: ubuntu-latest
+    # Presence flags the steps' `if:` read live here: a step's own env is
+    # not visible to that step's `if:`, which silently skipped it forever.
+    env:
+      DRIFT_SYNC_PAT_PRESENT: ${{ secrets.DRIFT_SYNC_PAT != '' }}
     permissions:
       contents: read
-      id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out the platform at this workflow's own commit
+        # job.workflow_sha is this file's own commit: no caller or PR head picks it.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: ${{ inputs.platform_repository }}
-          ref: ${{ inputs.platform_ref }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: platform
           persist-credentials: false
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ inputs.repo_slug }}
           ref: ${{ inputs.default_branch }}
@@ -58,7 +65,7 @@ jobs:
           token: ${{ secrets.DRIFT_SYNC_PAT || github.token }}
           persist-credentials: true
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
 
@@ -98,7 +105,7 @@ jobs:
 
       - name: Upload drift report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: drift-report-${{ steps.artifact_name.outputs.slug_safe }}
           path: ${{ runner.temp }}/drift.json
@@ -130,21 +137,28 @@ jobs:
                     handle.write(f"- `{entry['output_path']}` ({entry['status']})\n")
           PY
 
+      - name: Fail when an apply runs without DRIFT_SYNC_PAT
+        # The apply-and-open-PR step below needs the PAT. Skipped silently, a non-dry
+        # run would compute everything and finish green having changed nothing.
+        if: ${{ !inputs.dry_run && env.DRIFT_SYNC_PAT_PRESENT != 'true' }}
+        run: |
+          echo "::error title=DRIFT_SYNC_PAT not configured::An apply run (dry_run: false) needs the DRIFT_SYNC_PAT secret for the apply-and-open-PR step. None is configured, so nothing was applied. Pass the secret, or run with dry_run: true."
+          exit 1
+
       - name: Apply drift fixes + open PR
         if: ${{ !inputs.dry_run && env.DRIFT_SYNC_PAT_PRESENT == 'true' }}
         env:
           REPO_SLUG: ${{ inputs.repo_slug }}
           DEFAULT_BRANCH: ${{ inputs.default_branch }}
-          PLATFORM_REF: ${{ inputs.platform_ref }}
+          PLATFORM_REF: ${{ job.workflow_sha }}
           DRIFT_REPORT_PATH: ${{ runner.temp }}/drift.json
           GH_TOKEN: ${{ secrets.DRIFT_SYNC_PAT }}
-          DRIFT_SYNC_PAT_PRESENT: ${{ secrets.DRIFT_SYNC_PAT != '' }}
         working-directory: repo
         run: |
           set -euo pipefail
           # Run the applier + open a PR. Keeps the body of the step in
           # a Python here-doc so env-var indirection replaces every
-          # ``${{ github.* }}`` interpolation (Semgrep CWE-78).
+          # GitHub-context interpolation in this run block (Semgrep CWE-78).
           python "$GITHUB_WORKSPACE/platform/scripts/quality/apply_drift_pr.py" \
             --report "$DRIFT_REPORT_PATH" \
             --repo-slug "$REPO_SLUG" \

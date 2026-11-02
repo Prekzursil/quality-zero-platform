@@ -42,10 +42,12 @@ on:
         type: string
         required: false
         default: Prekzursil/quality-zero-platform
+        description: "Deprecated and ignored. The platform is checked out at this workflow file's own commit (job.workflow_repository / job.workflow_sha), so a caller can no longer pick, or drift from, the scripts it runs. Still declared so existing callers that pass it keep working."
       platform_ref:
         type: string
         required: false
         default: main
+        description: "Deprecated and ignored. The platform is checked out at this workflow file's own commit (job.workflow_repository / job.workflow_sha), so a caller can no longer pick, or drift from, the scripts it runs. Still declared so existing callers that pass it keep working."
     secrets:
       BYPASS_AUDIT_PAT:
         required: false
@@ -54,19 +56,25 @@ on:
 jobs:
   bypass:
     runs-on: ubuntu-latest
+    # Presence flags the steps' `if:` read live here: a step's own env is
+    # not visible to that step's `if:`, which silently skipped it forever.
+    env:
+      HAS_AUDIT_PAT: ${{ secrets.BYPASS_AUDIT_PAT != '' }}
     permissions:
       contents: read
-      id-token: write
       issues: write
     steps:
-      - uses: actions/checkout@v4
+      # The platform CODE, at this workflow file's own commit: never a
+      # caller-chosen ref, and no credential left on disk.
+      - name: Check out the platform at this workflow's own commit
+        # job.workflow_sha is this file's own commit: no caller or PR head picks it.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: ${{ inputs.platform_repository }}
-          ref: ${{ inputs.platform_ref }}
-          token: ${{ secrets.BYPASS_AUDIT_PAT || github.token }}
-          persist-credentials: true
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          persist-credentials: false
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
 
@@ -145,27 +153,35 @@ jobs:
               handle.write(f"- Audit log: `{audit_path}`\n")
           PY
 
+      - name: Audit record not committed (no BYPASS_AUDIT_PAT)
+        # Say so, instead of a silently skipped step: without the PAT this
+        # bypass leaves no record in the platform's audit log.
+        if: ${{ env.HAS_AUDIT_PAT != 'true' }}
+        run: |
+          echo "::warning title=Bypass NOT recorded::The caller passes no BYPASS_AUDIT_PAT, so this bypass was not committed to the platform's audit log. It is visible only in this run."
+          echo "- **Audit record: NOT committed** (the caller passes no \`BYPASS_AUDIT_PAT\`)." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Commit audit log
-        # The ``secrets`` context is NOT available in step ``if:`` conditions
-        # (only github/needs/strategy/matrix/job/runner/env/vars/steps/inputs
-        # are). Referencing ``secrets.*`` here made the workflow fail to
-        # compile (startup_failure on every event). Mirror the proven in-repo
-        # pattern (see ``SonarCloud scan`` in reusable-scanner-matrix.yml):
-        # surface the secret's presence as a step-level ``env`` boolean and
-        # gate on ``env.*`` instead.
+        # Appended through the Contents API (scripts/quality/audit_log_append.py):
+        # no checkout, no write token on disk, and a concurrent bypass only
+        # costs a retry from the new content. Gated on the JOB-level
+        # HAS_AUDIT_PAT: a step's own env is invisible to its `if:`.
         if: ${{ env.HAS_AUDIT_PAT == 'true' }}
         env:
-          HAS_AUDIT_PAT: ${{ secrets.BYPASS_AUDIT_PAT != '' }}
+          GH_TOKEN: ${{ secrets.BYPASS_AUDIT_PAT }}
+          QZ_PLATFORM_REPO: ${{ job.workflow_repository }}
           QZ_AUDIT_PATH: ${{ steps.evaluate.outputs.audit_path }}
           QZ_LABEL: ${{ inputs.label }}
           QZ_PR_SLUG: ${{ inputs.pr_slug }}
           QZ_PR_NUMBER: ${{ inputs.pr_number }}
         run: |
-          git config user.email "platform-bot@quality-zero.local"
-          git config user.name "quality-zero-platform bypass"
-          git add "$QZ_AUDIT_PATH"
-          git commit -m "chore(audit): record $QZ_LABEL for $QZ_PR_SLUG#$QZ_PR_NUMBER"
-          git push
+          set -euo pipefail
+          python scripts/quality/audit_log_append.py \
+            --repo "$QZ_PLATFORM_REPO" \
+            --path "$QZ_AUDIT_PATH" \
+            --branch main \
+            --record-file "$QZ_AUDIT_PATH" \
+            --message "chore(audit): record $QZ_LABEL for $QZ_PR_SLUG#$QZ_PR_NUMBER"
 
       - name: Open post-merge tracking issue
         if: ${{ inputs.label == 'quality-zero:break-glass' && steps.evaluate.outputs.tracking_issue_title != '' }}
@@ -176,7 +192,7 @@ jobs:
           QZ_PR_NUMBER: ${{ inputs.pr_number }}
           QZ_ACTOR: ${{ inputs.actor }}
           QZ_INCIDENT: ${{ steps.evaluate.outputs.incident }}
-          QZ_PLATFORM_REPO: ${{ inputs.platform_repository }}
+          QZ_PLATFORM_REPO: ${{ job.workflow_repository }}
         run: |
           gh issue create \
             --repo "$QZ_PLATFORM_REPO" \

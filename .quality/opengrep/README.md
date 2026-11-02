@@ -1,7 +1,10 @@
 # Curated SAST ruleset (Gate 4)
 
-Pinned tool: **opengrep 1.23.0** (CI) — locally interchangeable with **semgrep CE 1.166.0**
-(opengrep is a fork of semgrep and consumes the same rule syntax).
+Pinned tool: **opengrep**, at the version in [`.quality/tool-pins.yml`](../tool-pins.yml)
+(`pins.opengrep`, with every platform's release-asset SHA-256). CI (this repo's own SAST job
+and the fleet's gate 4) and `scripts/quality/preflight.sh` all run exactly that build; reproduce
+a gate finding with it, not with another engine. The rules are semgrep-compatible syntax
+(opengrep is a fork of semgrep), but only the pinned opengrep decides the gate.
 
 ## Why an in-repo ruleset instead of `--config auto`
 

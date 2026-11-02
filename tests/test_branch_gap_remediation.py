@@ -303,9 +303,9 @@ class BranchGapRemediationTests(unittest.TestCase):
             json_log="run.json",
         )
         completed = SimpleNamespace(stdout="", stderr="warn", returncode=0)
+        # json_log is cwd-relative, so run_codex_exec would drop run.json
+        # into the repo root; keep it in a throwaway directory.
         with (
-            # json_log is cwd-relative, so run_codex_exec would drop run.json
-            # into the repo root; keep it in a throwaway directory.
             isolated_cwd(),
             patch("scripts.quality.run_codex_exec._parse_args", return_value=args),
             patch("pathlib.Path.read_text", return_value="hello"),

@@ -27,28 +27,20 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
     """Regression coverage for repo overlays, provider metadata, and exports."""
 
     def test_reframe_overlay_adds_visual_and_platform_contexts_to_target(self) -> None:
-        """Reframe should retain its visual and platform-specific target overlay."""
+        """Reframe requires its own lean `quality` job plus CodeQL, nothing retired.
+
+        Its old overlay required jobs Reframe no longer runs (`Python API & worker
+        checks`, `Web build`, CodeRabbit) and the retired visual + QLTY lanes.
+        """
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/Reframe")
 
         pr_contexts = active_required_contexts(profile, event_name="pull_request")
         target_contexts = set(profile["required_contexts"]["target"])
 
-        for name in (
-            "Python API & worker checks",
-            "Web build",
-            "codeql / CodeQL",
-            "CodeRabbit",
-        ):
-            self.assertIn(name, pr_contexts)
-        for name in (
-            "qlty check",
-            "qlty coverage",
-            "qlty coverage diff",
-            "Chromatic Playwright",
-            "Applitools Visual",
-        ):
-            self.assertIn(name, target_contexts)
+        self.assertEqual(pr_contexts, ["quality", "CodeQL"])
+        for name in ("Python API & worker checks", "Web build", "CodeRabbit", "qlty check", "Chromatic Playwright"):
+            self.assertNotIn(name, target_contexts)
 
     def test_special_repo_coverage_profiles_capture_multi_language_inputs(self) -> None:
         """Special repos should keep their expected multi-language coverage inputs."""
@@ -164,7 +156,7 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
         pr_contexts = active_required_contexts(profile, event_name="pull_request")
         target_contexts = profile["required_contexts"]["target"]
 
-        for lean in ("Control Plane Verify", "codeql / CodeQL"):
+        for lean in ("Control Plane Verify", "gate-lint-format (ruff)", "gate-sast (opengrep)", "CodeQL"):
             self.assertIn(lean, push_contexts)
             self.assertIn(lean, pr_contexts)
             self.assertIn(lean, target_contexts)
@@ -173,44 +165,14 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
     def test_env_inspector_overlay_aligns_push_required_contexts_to_emitted_surface(
         self,
     ) -> None:
-        """Env Inspector push contexts should match the emitted green surface."""
+        """Env Inspector requires exactly what it emits: the lean pair."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/env-inspector")
 
-        push_contexts = active_required_contexts(profile, event_name="push")
-        pr_contexts = active_required_contexts(profile, event_name="pull_request")
-        target_contexts = set(profile["required_contexts"]["target"])
-
-        self.assertEqual(
-            push_contexts,
-            [
-                "shared-scanner-matrix / Coverage 100 Gate",
-                "shared-codecov-analytics / Codecov Analytics",
-                "codeql / CodeQL",
-                "shared-scanner-matrix / QLTY Zero",
-                "shared-scanner-matrix / Sonar Zero",
-                "shared-scanner-matrix / Codacy Zero",
-                "shared-scanner-matrix / Semgrep Zero",
-                "shared-scanner-matrix / Sentry Zero",
-            ],
-        )
-        self._assert_context_subset(
-            pr_contexts,
-            self._zero_gate_provider_contexts()
-            | {
-                "SonarCloud Code Analysis",
-                "Codacy Static Code Analysis",
-                "qlty check",
-                "qlty coverage",
-                "qlty coverage diff",
-            },
-        )
-        self.assertIn("shared-codecov-analytics / Codecov Analytics", target_contexts)
-        self.assertIn("shared-scanner-matrix / QLTY Zero", target_contexts)
-        self.assertIn("qlty coverage", target_contexts)
-        self.assertIn("qlty coverage diff", target_contexts)
-        for unexpected in ("qlty coverage", "qlty coverage diff"):
-            self.assertNotIn(unexpected, push_contexts)
+        lean = ["quality / quality", "CodeQL"]
+        self.assertEqual(active_required_contexts(profile, event_name="push"), lean)
+        self.assertEqual(active_required_contexts(profile, event_name="pull_request"), lean)
+        self.assertEqual(profile["required_contexts"]["target"], lean)
 
     def test_event_link_profile_installs_lizard_and_enforces_branch_coverage(
         self,
@@ -223,11 +185,9 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
         self.assertEqual(profile["coverage"]["min_percent"], 100.0)
         self.assertEqual(profile["coverage"]["branch_min_percent"], 100.0)
         self.assertEqual(profile["coverage"]["command"].strip(), "bash scripts/verify")
-        self.assertIn(
-            "shared-scanner-matrix / DeepSource Visible Zero",
-            profile["required_contexts"]["always"],
-        )
-        self.assertIn(
+        # The retired DeepSource lane is no longer required; the lean pair is.
+        self.assertEqual(profile["required_contexts"]["always"], ["quality / quality", "CodeQL"])
+        self.assertNotIn(
             "shared-scanner-matrix / DeepSource Visible Zero",
             profile["required_contexts"]["target"],
         )
@@ -333,9 +293,7 @@ class ControlPlaneProfileTests(unittest.TestCase, ControlPlaneAssertions):
         """Removing one visual context should trigger the visual-pair validator."""
         inventory = load_inventory(ROOT / "inventory" / "repos.yml")
         profile = load_repo_profile(inventory, "Prekzursil/TanksFlashMobile")
-        profile["required_contexts"]["target"] = [
-            name for name in profile["required_contexts"]["target"] if name != "Applitools Visual"
-        ]
+        profile["required_contexts"]["target"] = [*profile["required_contexts"]["target"], "Chromatic Playwright"]
 
         findings = validate_profile(profile)
 

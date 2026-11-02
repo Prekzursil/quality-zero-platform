@@ -32,13 +32,6 @@ coverage:
     name: frontend
     path: frontend/webcoder_ui/coverage/lcov.info
     flag: frontend
-required_contexts:
-  always:
-  - Chromatic Playwright
-  - Applitools Visual
-  target:
-  - Chromatic Playwright
-  - Applitools Visual
 visual_pair_required: true
 visual_lane:
   kind: web
@@ -74,3 +67,21 @@ dependabot:
     directory: /backend
   - ecosystem: npm
     directory: /frontend/webcoder_ui
+# LEAN CONTRACT (migrated 2026-10-24). The SaaS-era set this profile used to
+# require (scanner-matrix / Codecov / Sonar / Codacy / Semgrep / Sentry / QLTY /
+# DeepSource contexts) is emitted by nothing any more, so the generated ruleset
+# required 13-19 checks that could never report and would have blocked every
+# pull request if applied. Required = what the repo actually reports on a pull
+# request (re-measured 2026-10-24 against its live rulesets and branch
+# protection); the code_scanning merge protection comes from the common stack.
+#   CodeQL - the code-scanning aggregate. WebCoder does not call the lean gate
+#            yet; `quality / quality` joins this list in the same change that
+#            adds its quality.yml caller (never before: that would be a
+#            phantom required check).
+required_contexts_mode: replace
+required_contexts:
+  always:
+  - CodeQL
+  pull_request_only: []
+  target:
+  - CodeQL

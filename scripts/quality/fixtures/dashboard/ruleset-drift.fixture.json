@@ -1,0 +1,28 @@
+{
+  "generated_at": "2026-10-21T12:00:00+00:00",
+  "committed_dir": "generated/rulesets",
+  "status": "drift",
+  "summary": { "drift": 1, "in_sync": 1, "missing": 2 },
+  "entries": [
+    {
+      "file": "example-repo.json",
+      "side": "both",
+      "status": "drift"
+    },
+    {
+      "file": "renamed-repo.json",
+      "side": "committed_only",
+      "status": "missing"
+    },
+    {
+      "file": "newly-enrolled-repo.json",
+      "side": "generated_only",
+      "status": "missing"
+    },
+    {
+      "file": "steady-repo.json",
+      "side": "both",
+      "status": "in_sync"
+    }
+  ]
+}

@@ -1,3 +1,5 @@
+import { renderDriftPanel, renderGatesPanel, renderRollupGapsPanel } from './panels.mjs';
+
 /**
  * Handle load dashboard.
  */
@@ -7,6 +9,42 @@ async function loadDashboard() {
     throw new Error(`Failed to load dashboard data: ${response.status}`);
   }
   return response.json();
+}
+
+/**
+ * Load one optional operator-panel dataset; resolves null on any failure so
+ * a missing/stale source degrades that panel only (Lane 8 contract).
+ */
+async function loadOptionalJson(path) {
+  try {
+    const response = await fetch(path);
+    if (!response.ok) {
+      return null;
+    }
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Mount one operator panel; renders an explicit unavailable note instead of
+ * throwing so the remaining panels still render.
+ */
+function mountPanel(panelId, data, render) {
+  const section = document.getElementById(panelId);
+  if (!section) {
+    return;
+  }
+  const status = section.querySelector('.panel-status');
+  if (status) {
+    status.remove();
+  }
+  if (data === null) {
+    section.append(createElement('p', { className: 'muted', text: 'Data unavailable (source missing or stale).' }));
+    return;
+  }
+  section.append(render(document, data));
 }
 
 /**
@@ -182,6 +220,13 @@ try {
   document.getElementById('closeDetail').addEventListener('click', () => {
     document.getElementById('detailPanel').classList.add('hidden');
   });
+  const [driftData, rollupData] = await Promise.all([
+    loadOptionalJson('data/ruleset-drift.json'),
+    loadOptionalJson('data/rollup-gaps.json'),
+  ]);
+  mountPanel('gatesPanel', payload, renderGatesPanel);
+  mountPanel('driftPanel', driftData, renderDriftPanel);
+  mountPanel('rollupPanel', rollupData, renderRollupGapsPanel);
 } catch (error) {
   renderError(error.message);
 }

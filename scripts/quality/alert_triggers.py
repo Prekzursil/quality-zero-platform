@@ -53,6 +53,8 @@ _ensure_platform_on_syspath()
 COVERAGE_REGRESSION_THRESHOLD_POINTS = 0.5  # percentage-point drop
 BYPASS_STALE_THRESHOLD_DAYS = 7
 DRIFT_STUCK_THRESHOLD_DAYS = 3
+WORKFLOW_FAILING_THRESHOLD_RUNS = 3
+FAILED_CONCLUSIONS = frozenset({"failure", "timed_out", "startup_failure"})
 
 
 @dataclass(frozen=True)
@@ -221,6 +223,36 @@ def detect_drift_stuck(
         AlertTrigger(
             alert_type=alerts.AlertType.DRIFT_STUCK,
             subject=subject,
+            body=body,
+        )
+    ]
+
+
+def detect_workflow_failing(
+    *,
+    workflow: str,
+    conclusions: Sequence[str],
+    threshold: int = WORKFLOW_FAILING_THRESHOLD_RUNS,
+) -> List[AlertTrigger]:
+    """Fire when the newest ``threshold`` completed runs of one of QZP's own workflows all failed.
+
+    ``conclusions`` is newest first. A platform that leaves its own workflows
+    red (Codex Fleet Wave failed 105 straight scheduled runs, the CVE sweep 73)
+    teaches everyone to ignore red.
+    """
+    recent = [str(conclusion) for conclusion in conclusions][:threshold]
+    if len(recent) < threshold or any(conclusion not in FAILED_CONCLUSIONS for conclusion in recent):
+        return []
+    body = (
+        f"QZP's own workflow **{workflow}** failed its last {threshold} completed runs on the "
+        f"default branch (newest first: {', '.join(recent)}). A red the platform leaves standing "
+        "teaches everyone to ignore red: fix it, or make it skip visibly when it has nothing to do. "
+        "This issue closes itself when the workflow next succeeds."
+    )
+    return [
+        AlertTrigger(
+            alert_type=alerts.AlertType.WORKFLOW_FAILING,
+            subject=workflow,
             body=body,
         )
     ]

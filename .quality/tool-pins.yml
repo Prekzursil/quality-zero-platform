@@ -1,0 +1,69 @@
+# Single source of truth for the lean 6-gate tool pins.
+#
+# These are the EXACT versions the reusable-quality.yml lanes run in CI, and
+# the versions scripts/quality/preflight.sh reproduces locally in a consumer
+# repo. Before this file existed each pin lived only as a literal inside
+# .github/workflows/reusable-quality.yml (some of them in three places).
+#
+# When bumping a pin:
+#   1. edit THIS file;
+#   2. update the matching literal in .github/workflows/reusable-quality.yml.
+#      The workflow carries LITERALS on purpose: a caller pins the workflow by
+#      commit SHA, and a value read from this repo's main at run time would
+#      change under that pin. tests/test_workflow_contracts.py and the weekly
+#      fleet-health pin-drift check fail on any mismatch;
+#   3. update docs/lean-gate/pre-commit-config.template.yaml to match;
+#   4. re-run scripts/quality/preflight.sh on a consumer repo to confirm
+#      local/CI parity before merging the bump.
+#
+# Consumers: do NOT pin tools to different versions locally. A finding that
+# only reproduces on a different tool version is not the gate's finding.
+version: 1
+pins:
+  # gate 1 (py): ruff check + ruff format --check
+  ruff: "0.15.17"
+  # gate 2 (py): basedpyright (standard typeCheckingMode unless caller config)
+  basedpyright: "1.39.8"
+  # gate 3 (py): the measuring tools. pytest + pytest-cov when the caller's
+  # config mentions pytest, otherwise coverage.py over unittest (--branch).
+  pytest: "9.1.1"
+  pytest-cov: "7.1.0"
+  coverage: "7.16.2"
+  # gate 1 (jsts): oxlint --deny-warnings
+  oxlint: "1.69.0"
+  # gate 1 (jsts): biome ci --formatter-enabled (formatter-only)
+  biome: "2.5.15"
+  # gate 4: opengrep scan --config .quality/opengrep
+  opengrep: "v1.32.0"
+  # gate 5: gitleaks detect --redact
+  gitleaks: "8.30.1"
+  # gate 6: osv-scanner scan source
+  osv-scanner: "v2.3.8"
+
+# SHA-256 of the exact release ASSET each pinned download fetches (GitHub's
+# published release-asset digests). The CI workflows verify the linux x86-64
+# assets with `sha256sum -c`; scripts/quality/preflight_tools.sh verifies the
+# asset for the local platform. Nothing is installed on a mismatch. When
+# bumping a pin above, replace ALL its digests here (and the linux x86-64 one in
+# the workflows): tests/test_tool_download_integrity.py,
+# tests/test_preflight_tools.py and the fleet-health pin-drift check fail on
+# any mismatch.
+asset_sha256:
+  # linux x86-64: CI (reusable-quality.yml, scheduled-cve-scan.yml) + preflight
+  opengrep_manylinux_x86: "7360d60174880bd9214f2dfbe439b7bce82b7a3d44cfe945ba833c85cc8bda75"
+  gitleaks_linux_x64: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+  osv-scanner_linux_amd64: "bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc"
+  # other platforms: local preflight only
+  opengrep_manylinux_aarch64: "dc6229319c0d68948733053786a5614873947e5ec1d4669cc0e94ae9038cb99d"
+  opengrep_musllinux_x86: "ad8732262e87aea94750cb06df8423c9cb4b640c1bb3b3b01a377fcf6f08d2ba"
+  opengrep_musllinux_aarch64: "918fead4e82e3d779fef04aeb4e85b3d30c7a3bb73cd7895bca4401257471b65"
+  opengrep_osx_x86: "7dfb68184b7da2895a56e86bc88192fe2b9414993026f5100bacccb4764d19f4"
+  opengrep_osx_arm64: "e161746226bccef5b85c57611946fa21dc3b00a2dc2591343d6160af99397e2f"
+  gitleaks_linux_arm64: "e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080"
+  gitleaks_darwin_x64: "dfe101a4db2255fc85120ac7f3d25e4342c3c20cf749f2c20a18081af1952709"
+  gitleaks_darwin_arm64: "b40ab0ae55c505963e365f271a8d3846efbc170aa17f2607f13df610a9aeb6a5"
+  gitleaks_windows_x64: "d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e"
+  osv-scanner_linux_arm64: "8158b18edd2d03b1a30d905ca91b032bc62262167be8f206c27114f08823e27c"
+  osv-scanner_darwin_amd64: "b8a80a9f14ca4c0cd0fc2d351b28f740da9e6a5b18385ac9f9d083360b5b504e"
+  osv-scanner_darwin_arm64: "a8cd6507b06239f463a7642430cfd2d154882f150f6e30cdc0653e28dfc34216"
+  osv-scanner_windows_amd64: "cb04e79dd9698a7bc821bbfdddec916a416d1409fda79c927c509d37d00c9716"

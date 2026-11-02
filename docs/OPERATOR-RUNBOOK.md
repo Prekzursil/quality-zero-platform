@@ -194,9 +194,16 @@ Runs every 6 hours; aggregates fleet state and dispatches via
 gh workflow run scheduled-alerts.yml --ref main -f dry_run=false
 ```
 
-Default `dry_run=true` is the safe default for the cron schedule
-(no surprise `alert:*` issue creation from a cron firing on
-incomplete fleet state).
+The cron schedule is LIVE: it opens and closes `alert:*` issues (see "Scheduled
+Alerts and the platform's own workflows" below). Only a manual dispatch defaults
+to `dry_run=true`. Three detectors read LIVE state (`scripts/quality/fleet_state.py`):
+- `alert:workflow-failing`: the platform's own workflow runs;
+- `alert:bypass-stale`: open `quality-zero:break-glass-followup` issues;
+- `alert:drift-stuck`: open `quality-zero/drift-sync*` PRs across the fleet.
+
+The coverage and fleet-bump detectors still read files that nothing produces
+yet. Each is listed in the run summary as NOT evaluated. Any failed `gh` call
+fails the run rather than reading as "no issue" or "done".
 
 ### `scheduled-cve-scan.yml` (cron)
 
@@ -243,10 +250,29 @@ Two invariants worth knowing before you touch this workflow:
   left completely untouched (no create, no update, no close) and the run exits
   non-zero. An incomplete scan is not evidence of a clean tree.
 
-Private fleet members (`pbinfo-get-unsolved`, `PrimariRo`,
-`agent-skills-toolchain`) are unreachable with the default `GITHUB_TOKEN` and
-are therefore reported as `scan-error`, never as clean. Setting the optional
-`CODEX_FLEET_READ_PAT` (Contents: Read across the fleet) closes that gap.
+Private fleet members (`PrimariRo`, `agent-skills-toolchain`, measured
+2026-10-24) are unreachable with the default `GITHUB_TOKEN`. A KNOWN private
+member (`fleet_inventory.PRIVATE_INCLUDE_SLUGS`) the token cannot see is
+reported as `unscannable` - NOT watched, never as clean - and gets one open
+"NOT WATCHED" tracking issue, refreshed until a real scan lands (an issue that
+holds a real scan is kept instead). Any other repository GitHub cannot resolve
+is a broken roster entry (deleted, renamed, transferred or misspelled) and
+stays a red `scan-error` until `inventory/repos.yml` is fixed. Unlike a `scan-error`, that standing configuration
+gap does not fail the run every night: the sweep exits `3` and the workflow
+annotates it with a warning. Setting the optional `CODEX_FLEET_READ_PAT`
+(Contents: Read across the fleet) closes the gap; the next sweep scans them.
+That PAT only ever clones: the issue writes keep the workflow's own token, so
+a read-only PAT is all it needs.
+
+## Scheduled Alerts and the platform's own workflows
+
+`scheduled-alerts.yml` runs every 6 hours and is LIVE on its schedule (a
+manual dispatch still defaults to a dry run). Besides the fleet detectors, it
+reads the platform's own default-branch workflow runs: a workflow whose last 3
+completed runs all failed opens an `alert:workflow-failing` issue, which the
+next run closes once that workflow succeeds again. `Codex Fleet Wave` no
+longer fails nightly without `CODEX_DISPATCH_PAT`: a scheduled run skips with
+a notice (a manual dispatch still fails).
 
 ---
 

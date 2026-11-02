@@ -8,6 +8,31 @@ from typing import Any, Dict, List, Mapping
 from scripts.quality import profile_coverage_normalization
 from scripts.quality.string_helpers import dedupe_strings
 
+#: Dependabot's documented ``versioning-strategy`` values, and the ecosystems
+#: the option is "Supported by" (docs.github.com, Dependabot options reference).
+#: The docs define no per-ecosystem restriction on the values themselves.
+DEPENDABOT_VERSIONING_STRATEGIES = frozenset({"auto", "increase", "increase-if-necessary", "lockfile-only", "widen"})
+DEPENDABOT_VERSIONING_ECOSYSTEMS = frozenset({"bundler", "cargo", "composer", "helm", "mix", "npm", "pip", "pub", "uv"})
+
+
+def validate_versioning_strategy(ecosystem: str, directory: str, strategy: str) -> None:
+    """Raise ``ValueError`` for a strategy Dependabot would reject.
+
+    Called while normalising every profile, so each rendering path (the
+    managed-baseline renderer and the drift-sync Jinja templates alike) fails
+    loudly instead of writing a dependabot.yml that stops dependency updates.
+    """
+    if strategy not in DEPENDABOT_VERSIONING_STRATEGIES:
+        raise ValueError(
+            f"unsupported Dependabot versioning-strategy {strategy!r} for {ecosystem} {directory}; "
+            f"expected one of {sorted(DEPENDABOT_VERSIONING_STRATEGIES)}"
+        )
+    if ecosystem not in DEPENDABOT_VERSIONING_ECOSYSTEMS:
+        raise ValueError(
+            f"Dependabot versioning-strategy is not supported for the {ecosystem!r} ecosystem ({directory}); "
+            f"supported: {sorted(DEPENDABOT_VERSIONING_ECOSYSTEMS)}"
+        )
+
 
 def _issue_policy_defaults(mode: str) -> Dict[str, str]:
     """Handle issue policy defaults."""
@@ -166,18 +191,150 @@ def normalize_dependabot(raw: Mapping[str, Any] | None) -> Dict[str, Any]:
         directory = str(item.get("directory", "")).strip()
         if not ecosystem or not directory:
             continue
-        updates.append(
-            {
-                "ecosystem": ecosystem,
-                "directory": directory,
-            }
-        )
+        update = {
+            "ecosystem": ecosystem,
+            "directory": directory,
+        }
+        # Optional Dependabot `versioning-strategy`, validated here so no
+        # rendering path can emit a value Dependabot rejects.
+        strategy = str(item.get("versioning_strategy", "") or "").strip()
+        if strategy:
+            validate_versioning_strategy(ecosystem, directory, strategy)
+            update["versioning_strategy"] = strategy
+        updates.append(update)
     return {
         "enabled": bool(payload.get("enabled", True)),
         "updates": updates,
         "open_pull_requests_limit": int(payload.get("open_pull_requests_limit", 10)),
         "schedule_interval": str(payload.get("schedule_interval", "weekly")).strip() or "weekly",
         "labels": dedupe_strings(payload.get("labels", ["dependencies", "type:chore", "area:ci"])),
+    }
+
+
+#: GitHub's documented values for the repository-ruleset fields a profile may
+#: set (REST "Create a repository ruleset"). Anything else would be rejected by
+#: the API at apply time, so it is rejected here, while rendering.
+RULESET_KEYS = frozenset({"enforcement", "bypass_actors", "code_scanning"})
+RULESET_ENFORCEMENTS = frozenset({"active", "disabled", "evaluate"})
+RULESET_BYPASS_ACTOR_KEYS = frozenset({"actor_type", "actor_id", "bypass_mode"})
+RULESET_BYPASS_ACTOR_TYPES = frozenset(
+    {"Integration", "OrganizationAdmin", "RepositoryRole", "Team", "DeployKey", "User"}
+)
+#: Actor types the API requires an ``actor_id`` for. ``DeployKey`` takes none
+#: (null), and ``OrganizationAdmin`` ignores it.
+RULESET_BYPASS_ACTOR_TYPES_WITH_ID = frozenset({"Integration", "RepositoryRole", "Team", "User"})
+RULESET_BYPASS_MODES = frozenset({"always", "pull_request", "exempt"})
+CODE_SCANNING_TOOL_KEYS = frozenset({"tool", "alerts_threshold", "security_alerts_threshold"})
+CODE_SCANNING_ALERTS_THRESHOLDS = frozenset({"none", "errors", "errors_and_warnings", "all"})
+CODE_SCANNING_SECURITY_ALERTS_THRESHOLDS = frozenset({"none", "critical", "high_or_higher", "medium_or_higher", "all"})
+
+
+def _require_member(value: str, allowed: frozenset, what: str) -> str:
+    """Return ``value`` when it is one of ``allowed``; raise ``ValueError`` otherwise."""
+    if value not in allowed:
+        raise ValueError(f"unsupported ruleset {what} {value!r}; expected one of {sorted(allowed)}")
+    return value
+
+
+def _ruleset_text(item: Mapping[str, Any], key: str, default: str = "") -> str:
+    """Return the stripped string under ``key``, or ``default`` when the key is absent.
+
+    A present value must be a non-blank string: ``str()`` would turn a blank
+    YAML value into the literal text ``"None"`` and let it through.
+    """
+    if key not in item:
+        if default:
+            return default
+        raise ValueError(f"ruleset {key} is required")
+    value = item[key]
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"ruleset {key} must be a non-empty string, got {value!r}")
+    return value.strip()
+
+
+def _reject_unknown_keys(item: Mapping[str, Any], allowed: frozenset, where: str) -> None:
+    """Raise on a key ``allowed`` does not list: a typo must fail, never vanish."""
+    unknown = sorted(str(key) for key in item if key not in allowed)
+    if unknown:
+        raise ValueError(f"unexpected {where} key(s) {unknown}; expected only {sorted(allowed)}")
+
+
+def _ruleset_list(payload: Mapping[str, Any], key: str) -> List[Any]:
+    """Return the list under ``key``: absent means empty, a blank value is an error.
+
+    A blank ``code_scanning:`` in a repo profile would replace the stack's list
+    in the merge and silently drop its merge protection; declaring none takes
+    an explicit ``[]``.
+    """
+    if key not in payload:
+        return []
+    value = payload[key]
+    if not isinstance(value, list):
+        raise ValueError(f"ruleset {key} must be a list (use [] to declare none), got {value!r}")
+    return value
+
+
+def _normalize_bypass_actor(item: Any) -> Dict[str, Any]:
+    """Validate one ruleset bypass actor against the API's per-type rules."""
+    if not isinstance(item, Mapping):
+        raise ValueError(f"ruleset bypass_actors entries must be mappings, got {item!r}")
+    _reject_unknown_keys(item, RULESET_BYPASS_ACTOR_KEYS, "ruleset bypass actor")
+    actor_type = _require_member(_ruleset_text(item, "actor_type"), RULESET_BYPASS_ACTOR_TYPES, "actor_type")
+    raw_id = item.get("actor_id")
+    if raw_id is not None and (not isinstance(raw_id, int) or isinstance(raw_id, bool)):
+        raise ValueError(f"ruleset bypass actor_id must be an integer or null, got {raw_id!r}")
+    if raw_id is None and actor_type in RULESET_BYPASS_ACTOR_TYPES_WITH_ID:
+        raise ValueError(f"ruleset bypass actor_id is required for actor_type {actor_type!r}")
+    if raw_id is not None and actor_type == "DeployKey":
+        raise ValueError("ruleset bypass actor_id must be null for actor_type 'DeployKey'")
+    if actor_type == "OrganizationAdmin":
+        # The API ignores the id today and required exactly 1 before; 1 is
+        # valid under both readings, so it is the one canonical value.
+        if raw_id not in (None, 1):
+            raise ValueError("ruleset bypass actor_id for actor_type 'OrganizationAdmin' must be 1 or omitted")
+        raw_id = 1
+    bypass_mode = _require_member(_ruleset_text(item, "bypass_mode", "always"), RULESET_BYPASS_MODES, "bypass_mode")
+    if bypass_mode == "pull_request" and actor_type == "DeployKey":
+        raise ValueError("ruleset bypass_mode 'pull_request' is not applicable to actor_type 'DeployKey'")
+    return {"actor_id": raw_id, "actor_type": actor_type, "bypass_mode": bypass_mode}
+
+
+def _normalize_code_scanning_tool(item: Any) -> Dict[str, str]:
+    """Validate one code-scanning merge-protection tool entry."""
+    if not isinstance(item, Mapping):
+        raise ValueError(f"ruleset code_scanning entries must be mappings, got {item!r}")
+    _reject_unknown_keys(item, CODE_SCANNING_TOOL_KEYS, "ruleset code_scanning")
+    tool = _ruleset_text(item, "tool")
+    alerts = _require_member(
+        _ruleset_text(item, "alerts_threshold", "all"), CODE_SCANNING_ALERTS_THRESHOLDS, "alerts_threshold"
+    )
+    security = _require_member(
+        _ruleset_text(item, "security_alerts_threshold", "all"),
+        CODE_SCANNING_SECURITY_ALERTS_THRESHOLDS,
+        "security_alerts_threshold",
+    )
+    return {"alerts_threshold": alerts, "security_alerts_threshold": security, "tool": tool}
+
+
+def normalize_ruleset(raw: Any) -> Dict[str, Any]:
+    """Normalize the generated ruleset's enforcement, bypass actors and code-scanning rule.
+
+    Called while normalising every profile (the merged stack + repo profile),
+    so a value the GitHub API would reject fails the render instead of a later
+    ruleset apply. Strict on purpose: profile shape validation runs on the
+    NORMALISED profile, so an unknown key, a blank value or a non-mapping
+    dropped here would never be reported anywhere. An absent block or field
+    takes its default; a blank one is an error, because in the merge it would
+    replace (and silently drop) what the stack declares.
+    """
+    if not isinstance(raw, Mapping):
+        raise ValueError(f"ruleset must be a mapping (omit it to inherit the stack's), got {raw!r}")
+    _reject_unknown_keys(raw, RULESET_KEYS, "ruleset")
+    enforcement = _require_member(_ruleset_text(raw, "enforcement", "active"), RULESET_ENFORCEMENTS, "enforcement")
+    return {
+        "enforcement": enforcement,
+        "bypass_actors": [_normalize_bypass_actor(item) for item in _ruleset_list(raw, "bypass_actors")],
+        "code_scanning": [_normalize_code_scanning_tool(item) for item in _ruleset_list(raw, "code_scanning")],
     }
 
 

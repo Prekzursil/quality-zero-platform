@@ -75,6 +75,16 @@ repos:
     rollout: observe
     default_branch: main
     notes: Lean member (private repo). Ruleset models the repo's own aggregate CI gate (Required / all CI and privacy gates) plus the platform CodeQL baseline context; no active ruleset on main today; coverage informational, not CI-enforced.
+  - slug: Prekzursil/tss
+    profile: tss
+    rollout: phase2-wave3
+    default_branch: main
+    notes: FMI TSS deliverable (testing lab + AmbieGen course project); lean member, coverage repo-enforced, onboarded straight to absolute.
+  - slug: Prekzursil/tsis-agent-evaluation
+    profile: tsis-agent-evaluation
+    rollout: phase2-wave3
+    default_branch: main
+    notes: FMI TSIS Agentic-AI evaluation (tau2-bench reproduction + cross-taxonomy study); lean member, coverage repo-enforced, onboarded straight to absolute.
   - slug: Prekzursil/tracelines
     profile: tracelines
     rollout: observe
@@ -90,3 +100,38 @@ repos:
     rollout: observe
     default_branch: main
     notes: Lean member. The 7 gate-* quality.yml job contexts are already enforced by active repo ruleset 18297434 on main; the platform CodeQL baseline context is added on top; coverage is per-package 100 in repo CI, whole-repo aggregate deliberately not modeled.
+  - slug: Prekzursil/fractal-darkroom
+    profile: fractal-darkroom
+    rollout: observe
+    default_branch: main
+    notes: Lean member (public repo). Buddhabrot-family orbit-density renderer (renamed from brot-farm 2026-10-21). Enforces its own CI (ubuntu+windows x py3.11-3.14 matrix, pytest-cov 100% line+branch, Playwright site suite, research gate; fail-closed ci-green aggregate) plus the lean quality.yml caller. CodeQL via default setup (python) - aggregate CodeQL context, not Analyze (<lang>). Private vulnerability reporting enabled; SECURITY.md in-repo.
+  - slug: Prekzursil/pbinfo-scrape
+    profile: pbinfo-scrape
+    rollout: observe
+    default_branch: main
+    notes: Lean member (public TypeScript/Electron archival console). Enrolled 2026-11-02 wave; lean caller + thin CodeQL caller (config passthrough keeps reasoned paths-ignore); vitest 100% thresholds in-repo.
+  - slug: Prekzursil/bilbo-app
+    profile: bilbo-app
+    rollout: observe
+    default_branch: main
+    notes: Lean member (public Kotlin Multiplatform product). Enrolled 2026-11-02 wave; lean caller pin bumped, CodeQL moved to the thin caller at security-and-quality (javascript-typescript + actions; java/Kotlin scan is a follow-up).
+  - slug: Prekzursil/abbyy-finereader-ocr-mcp
+    profile: abbyy-finereader-ocr-mcp
+    rollout: observe
+    default_branch: main
+    notes: Lean member (public Python MCP OCR server). Enrolled 2026-11-02 wave; the one open CodeQL alert (py/path-injection) fixed by validation, thin CodeQL caller added.
+  - slug: Prekzursil/omniaudit-mcp
+    profile: omniaudit-mcp
+    rollout: observe
+    default_branch: main
+    notes: Lean member (public Python MCP audit connector). Enrolled 2026-11-02 wave; both open CodeQL alerts (actions/unpinned-tag) fixed by SHA-pinning, thin CodeQL caller at security-and-quality.
+  - slug: Prekzursil/grace-iberlef-2026
+    profile: grace-iberlef-2026
+    rollout: observe
+    default_branch: master
+    notes: Lean member (public IberLEF 2026 research deliverable; default branch master). Enrolled 2026-11-02 wave; all 10 open CodeQL alerts fixed (2 unpinned-tag + 8 taint), thin CodeQL caller with the repo's declared paths config.
+  - slug: Prekzursil/fractal-darkroom-research
+    profile: fractal-darkroom-research
+    rollout: observe
+    default_branch: main
+    notes: Lean member (PRIVATE evidence repo, no CodeQL - gitleaks+opengrep lanes are its controls). Enrolled 2026-11-02 wave; tools/ at 100% line+branch enforced by .coveragerc; experiments/ is the byte-exact record, excluded by name and gated by its own research-ci.

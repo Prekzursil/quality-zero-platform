@@ -180,6 +180,7 @@ def migrate_profile_file(path: Path) -> bool:
     path.write_text(
         yaml.safe_dump(migrated, sort_keys=False, default_flow_style=False),
         encoding="utf-8",
+        newline="\n",
     )
     return True
 
@@ -236,6 +237,7 @@ def _migrate_one(path: Path, *, dry_run: bool) -> bool:
     path.write_text(
         yaml.safe_dump(migrated, sort_keys=False, default_flow_style=False),
         encoding="utf-8",
+        newline="\n",
     )
     print(f"migrated: {path.name}", flush=True)
     return True

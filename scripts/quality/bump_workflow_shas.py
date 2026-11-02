@@ -148,7 +148,7 @@ def _run_cli() -> None:  # pragma: no cover — ad-hoc CLI
     if args.apply:
         for path, result in results.items():
             if result["bumped"]:
-                Path(path).write_text(result["new_text"], encoding="utf-8")
+                Path(path).write_text(result["new_text"], encoding="utf-8", newline="\n")
                 print(f"wrote {path} ({result['bumped']} pin(s) bumped)", file=sys.stderr)
 
 

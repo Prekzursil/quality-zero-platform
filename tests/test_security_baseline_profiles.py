@@ -8,6 +8,7 @@ import yaml
 from tests.control_plane_support import ROOT
 
 from scripts.quality.control_plane import active_required_contexts, load_inventory, load_repo_profile
+from scripts.quality.profile_normalization import normalize_dependabot
 from scripts.quality.render_repo_baseline import (
     LEGACY_ZERO_WORKFLOW_FILES,
     render_codeql_wrapper,
@@ -170,6 +171,64 @@ class SecurityBaselineProfileTests(unittest.TestCase):
         self.assertIn(("npm", "/apps/desktop"), pairs)
         self.assertIn(("cargo", "/apps/desktop/src-tauri"), pairs)
         self.assertIn(("pip", "/apps/api"), pairs)
+
+    def test_render_dependabot_config_pins_a_declared_versioning_strategy(self) -> None:
+        """A profile's ``versioning_strategy`` reaches that update entry, and only it."""
+        inventory = load_inventory(ROOT / "inventory" / "repos.yml")
+        profile = load_repo_profile(inventory, "Prekzursil/fractal-darkroom")
+
+        rendered = yaml.safe_load(render_dependabot_config(profile))
+        by_ecosystem = {item["package-ecosystem"]: item for item in rendered["updates"]}
+
+        self.assertEqual(by_ecosystem["pip"]["versioning-strategy"], "increase")
+        self.assertNotIn("versioning-strategy", by_ecosystem["github-actions"])
+
+    def test_render_dependabot_config_rejects_an_unknown_versioning_strategy(self) -> None:
+        """A typo must fail the render, not ship a config Dependabot rejects."""
+        profile = {
+            "dependabot": {
+                "updates": [{"ecosystem": "pip", "directory": "/", "versioning_strategy": "bump-everything"}],
+                "schedule_interval": "weekly",
+                "open_pull_requests_limit": 10,
+                "labels": [],
+            }
+        }
+        with self.assertRaisesRegex(ValueError, "unsupported Dependabot versioning-strategy 'bump-everything'"):
+            render_dependabot_config(profile)
+
+    def test_normalize_dependabot_keeps_a_versioning_strategy_and_drops_blanks(self) -> None:
+        """Normalisation must carry the optional key through (it used to be dropped)."""
+        normalized = normalize_dependabot(
+            {
+                "updates": [
+                    {"ecosystem": "pip", "directory": "/", "versioning_strategy": " increase "},
+                    {"ecosystem": "npm", "directory": "/web", "versioning_strategy": ""},
+                    {"ecosystem": "cargo", "directory": "/rs", "versioning_strategy": None},
+                ]
+            }
+        )
+        self.assertEqual(
+            normalized["updates"],
+            [
+                {"ecosystem": "pip", "directory": "/", "versioning_strategy": "increase"},
+                {"ecosystem": "npm", "directory": "/web"},
+                {"ecosystem": "cargo", "directory": "/rs"},
+            ],
+        )
+
+    def test_normalize_dependabot_rejects_an_invalid_versioning_strategy(self) -> None:
+        """A typo fails at profile load, so the drift-sync template path is guarded too."""
+        with self.assertRaisesRegex(ValueError, "unsupported Dependabot versioning-strategy 'increse'"):
+            normalize_dependabot(
+                {"updates": [{"ecosystem": "pip", "directory": "/", "versioning_strategy": "increse"}]}
+            )
+
+    def test_normalize_dependabot_rejects_a_strategy_on_an_unsupported_ecosystem(self) -> None:
+        """versioning-strategy is documented only for bundler/cargo/composer/helm/mix/npm/pip/pub/uv."""
+        with self.assertRaisesRegex(ValueError, "not supported for the 'github-actions' ecosystem"):
+            normalize_dependabot(
+                {"updates": [{"ecosystem": "github-actions", "directory": "/", "versioning_strategy": "increase"}]}
+            )
 
     def test_render_codeql_wrapper_pins_requested_controller_sha(self) -> None:
         """Repo CodeQL wrappers must use immutable controller refs."""

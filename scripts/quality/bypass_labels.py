@@ -212,7 +212,7 @@ def append_jsonl(audit_path: Path, record: Mapping[str, Any]) -> None:
     """
     audit_path.parent.mkdir(parents=True, exist_ok=True)
     line = json.dumps(record, sort_keys=True, separators=(",", ":"))
-    with audit_path.open("a", encoding="utf-8") as handle:
+    with audit_path.open("a", encoding="utf-8", newline="\n") as handle:
         handle.write(line + "\n")
 
 

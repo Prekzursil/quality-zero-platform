@@ -127,7 +127,7 @@ def _write_workspace_text(path: Path, content: str, *, root: Path) -> None:
     """Write UTF-8 text after revalidating the workspace-relative target."""
     target = _ensure_within_root(path.resolve(strict=False), root)
     target.parent.mkdir(parents=True, exist_ok=True)
-    with target.open("w", encoding="utf-8") as handle:
+    with target.open("w", encoding="utf-8", newline="\n") as handle:
         handle.write(content)
 
 

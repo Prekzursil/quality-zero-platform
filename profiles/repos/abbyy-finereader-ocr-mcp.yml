@@ -1,0 +1,59 @@
+slug: Prekzursil/abbyy-finereader-ocr-mcp
+version: 2
+stack: python-tooling
+mode:
+  phase: absolute
+scanners: {}
+overrides: []
+verify_command: bash scripts/verify
+required_contexts_mode: replace
+issue_policy:
+  mode: zero
+  pr_behavior: absolute
+  main_behavior: absolute
+# Lean member (public repo, Python MCP OCR server). Enrolled 2026-11-02 from
+# the fleet-audit backlog (candidate #3). Already carried the lean quality
+# caller (older pin) green on main; the wave bumped the pin, moved CodeQL to
+# the thin reusable-codeql caller (suite stays security-and-quality, gains
+# the actions language), fixed the one open CodeQL alert (py/path-injection
+# in index.py via path allowlist validation) and added the missing community
+# files (SECURITY.md, CONTRIBUTING.md, .gitleaks.toml). Coverage is enforced
+# by the lean caller's gate-3 pytest lane (pytest-cov --cov-branch,
+# fail-under 100 per the repo's pyproject coverage config).
+enabled_scanners:
+  coverage: false
+  codecov: false
+  sonar: false
+  codacy: false
+  semgrep: false
+  sentry: false
+  qlty: false
+coverage:
+  min_percent: 100.0
+  branch_min_percent: 100.0
+  assert_mode:
+    default: evidence_only
+  policy: repo_enforced
+  evidence_note: >-
+    Coverage is ENFORCED in the repo's own CI by the lean gate caller's
+    gate-3 lane: pytest-cov with --cov-branch and fail_under = 100 from the
+    repo's pyproject [tool.coverage] config; a coverage regression reddens
+    the required quality / quality context. QZP collects and gates no
+    coverage artifact here.
+required_contexts:
+  always:
+  - quality / quality
+  - CodeQL
+  pull_request_only: []
+  target:
+  - quality / quality
+  - CodeQL
+trigger:
+  mode: pr-focused
+  pr_head_sha: true
+codeql:
+  languages:
+  - actions
+  - python
+dependabot:
+  updates: []

@@ -41,10 +41,35 @@ class DegradedFetchTests(unittest.TestCase):
                 module,
                 "load_json_https",
                 side_effect=HTTPError("https://api.github.com/x", 502, "bad", None, None),
-            ),
+            ) as fetch,
+            mock.patch.object(module.time, "sleep") as sleep,
             self.assertRaises(HTTPError),
         ):
             module._github_payload_or_degraded("https://api.github.com/x", "t")
+        self.assertEqual(fetch.call_count, 3)  # a persistent 502 still propagates, after the retries
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [2.0, 5.0])
+
+    def test_a_transient_5xx_is_retried_and_other_errors_are_not(self) -> None:
+        """One 502 failed the whole hourly publish on 2026-10-26; the next run was green."""
+        module = build_admin_dashboard
+        bad = HTTPError("https://api.github.com/x", 503, "busy", None, None)
+        with (
+            mock.patch.object(module, "load_json_https", side_effect=[bad, ({"ok": True}, {"link": ""})]) as fetch,
+            mock.patch.object(module.time, "sleep") as sleep,
+        ):
+            self.assertEqual(module._github_payload("https://api.github.com/x", "t"), {"ok": True})
+        self.assertEqual(fetch.call_count, 2)
+        sleep.assert_called_once_with(2.0)
+        for code in (500, 401):
+            with (
+                mock.patch.object(
+                    module, "load_json_https", side_effect=HTTPError("https://api.github.com/x", code, "no", None, None)
+                ) as fetch,
+                mock.patch.object(module.time, "sleep") as sleep,
+                self.assertRaises(HTTPError),
+            ):
+                module._github_payload("https://api.github.com/x", "t")
+            self.assertEqual((fetch.call_count, sleep.call_count), (1, 0))
 
 
 class NextPageUrlTests(unittest.TestCase):

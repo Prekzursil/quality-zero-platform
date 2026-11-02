@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import sys
+import time
 from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Sequence, Set, Tuple
@@ -218,18 +219,39 @@ def write_dashboard(output_dir: Path, payload: Mapping[str, Any], *, assets_dir:
     (output_dir / "index.html").write_text(render_dashboard_html(payload), encoding="utf-8", newline="\n")
 
 
+#: Transient GitHub answers that get another try before the build fails: one
+#: 502 failed the whole hourly publish on 2026-10-26, and the next run was green.
+RETRYABLE_STATUS = frozenset({502, 503, 504})
+#: Seconds to wait before each retry; after the last one the error propagates.
+RETRY_DELAYS = (2.0, 5.0)
+
+
+def _load_github(url: str, token: str) -> Tuple[Any, Mapping[str, str]]:
+    """One GitHub API GET: ``(payload, headers)``, retried on a transient 502/503/504.
+
+    Any other error, or a transient one that outlasts ``RETRY_DELAYS``,
+    propagates unchanged, so callers keep their 404/403 degradation rules.
+    """
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"Bearer {token}",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "quality-zero-platform",
+    }
+    for delay in (*RETRY_DELAYS, None):
+        try:
+            return load_json_https(url, allowed_hosts={"api.github.com"}, headers=headers)
+        except HTTPError as exc:
+            if exc.code not in RETRYABLE_STATUS or delay is None:
+                raise
+            print(f"::warning::GitHub answered {exc.code} for {url}; retrying in {delay:g}s", flush=True)
+            time.sleep(delay)
+    raise AssertionError("unreachable")  # pragma: no cover - the last attempt returns or raises
+
+
 def _github_payload(url: str, token: str) -> Any:
-    """Handle github payload."""
-    payload, _ = load_json_https(
-        url,
-        allowed_hosts={"api.github.com"},
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {token}",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "quality-zero-platform",
-        },
-    )
+    """One GitHub API GET's payload (transient 5xx retried; see ``_load_github``)."""
+    payload, _ = _load_github(url, token)
     return payload
 
 
@@ -268,16 +290,7 @@ def _github_fetch_degraded(url: str, token: str) -> Tuple[Any, Mapping[str, str]
     propagates. Headers ride along so callers can follow the Link header.
     """
     try:
-        payload, headers = load_json_https(
-            url,
-            allowed_hosts={"api.github.com"},
-            headers={
-                "Accept": "application/vnd.github+json",
-                "Authorization": f"Bearer {token}",
-                "X-GitHub-Api-Version": "2022-11-28",
-                "User-Agent": "quality-zero-platform",
-            },
-        )
+        payload, headers = _load_github(url, token)
     except HTTPError as exc:
         if exc.code in (403, 404):
             return None, None

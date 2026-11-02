@@ -1,42 +1,47 @@
+# Managed by quality-zero-platform (docs/FLEET-BASELINE.md).
+# One update rail per manifest tree, for every ecosystem in this repository.
+# Security updates are grouped per ecosystem so one pull request can clear
+# every open advisory (the dependency gate fails on ANY known advisory);
+# minor/patch updates are grouped; majors are never ignored and arrive one
+# by one. Regenerate with scripts/quality/fleet_baseline.py instead of
+# hand-editing, so a new manifest can never be left without a rail.
 version: 2
 updates:
-- package-ecosystem: pip
-  directory: /
-  schedule:
-    interval: weekly
-  open-pull-requests-limit: 10
-  groups:
-    pip-root-patch-minor:
-      patterns:
-      - '*'
-      update-types:
-      - patch
-      - minor
-  ignore:
-  - dependency-name: '*'
-    update-types:
-    - version-update:semver-major
-  labels:
-  - dependencies
-  - type:chore
-  - area:ci
 - package-ecosystem: github-actions
   directory: /
   schedule:
     interval: weekly
   open-pull-requests-limit: 10
+  labels:
+  - dependencies
   groups:
-    github-actions-root-patch-minor:
+    github-actions-security:
+      applies-to: security-updates
+      patterns:
+      - '*'
+    github-actions-minor-patch:
+      applies-to: version-updates
       patterns:
       - '*'
       update-types:
-      - patch
       - minor
-  ignore:
-  - dependency-name: '*'
-    update-types:
-    - version-update:semver-major
+      - patch
+- package-ecosystem: pip
+  directory: /
+  schedule:
+    interval: weekly
+  open-pull-requests-limit: 10
   labels:
   - dependencies
-  - type:chore
-  - area:ci
+  groups:
+    pip-security:
+      applies-to: security-updates
+      patterns:
+      - '*'
+    pip-minor-patch:
+      applies-to: version-updates
+      patterns:
+      - '*'
+      update-types:
+      - minor
+      - patch

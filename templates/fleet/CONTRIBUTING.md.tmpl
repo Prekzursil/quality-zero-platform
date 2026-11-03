@@ -27,8 +27,7 @@ is genuinely wrong, say so in the pull request and fix the gate itself in
 2. Make the change **together with the tests that exercise it** — in the same
    commit or pull request, never "tests later".
 3. Run the gates locally (below) until every lane is green.
-4. Open a pull request and fill in the checklist from the pull-request
-   template; it maps 1:1 to what CI enforces.
+4. ${pr_template_step}
 5. Every required check must be green, the branch must be up to date with
    `${default_branch}`, and every review conversation must be resolved before
    merging.
@@ -50,15 +49,7 @@ ${extra_controls}
 
 ## Running the gates locally
 
-```bash
-bash scripts/verify
-```
-
-`scripts/verify` runs QZP's preflight at the exact commit that
-`.github/workflows/quality.yml` pins, so every CI lane runs locally with the
-same pinned tool versions. Run it from this repository's root before every
-push. A lane that cannot run locally (for example a missing toolchain) is
-reported as `SKIP`, never as a silent pass — CI will still run it.
+${verify_section}
 
 ${local_commands}
 
@@ -71,11 +62,7 @@ Every new or changed line needs a test that executes it in the same change.
 
 ## Dependencies
 
-Dependabot proposes updates weekly: minor and patch updates are grouped per
-ecosystem, security updates are grouped so one pull request can clear every
-open advisory, and major updates arrive one by one for review. Because the
-dependency gate fails on *any* known advisory, keep lockfiles current — an
-unmerged security update turns every other pull request red too.
+${dependencies_section}
 
 ## Changing the gates (operator-only)
 

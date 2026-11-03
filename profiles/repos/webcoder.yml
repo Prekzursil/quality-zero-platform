@@ -62,11 +62,19 @@ codeql:
   - javascript-typescript
   - python
 dependabot:
+  # npm rail re-homed 2026-11-03: the frontend moved to the ROOT manifest
+  # (single-branch migration 2026-10-27); /frontend/webcoder_ui no longer
+  # exists. Docker + github-actions rails added: backend/Dockerfile and
+  # .github/workflows are real manifest trees (one rail per manifest tree).
   updates:
   - ecosystem: pip
     directory: /backend
   - ecosystem: npm
-    directory: /frontend/webcoder_ui
+    directory: /
+  - ecosystem: docker
+    directory: /backend
+  - ecosystem: github-actions
+    directory: /
 # LEAN CONTRACT (migrated 2026-10-24). The SaaS-era set this profile used to
 # require (scanner-matrix / Codecov / Sonar / Codacy / Semgrep / Sentry / QLTY /
 # DeepSource contexts) is emitted by nothing any more, so the generated ruleset

@@ -1,7 +1,11 @@
 name: "Quality Zero Platform CodeQL Config"
 
-# Default query suite is security-and-quality. No custom packs.
+# Fleet CODEQL DECISION: security-extended + security-and-quality (together
+# they strictly subsume the default suite AND the extended suite). No custom
+# packs. This mirrors the `queries:` input every fleet consumer of
+# reusable-codeql.yml now gets.
 queries:
+  - uses: security-extended
   - uses: security-and-quality
 
 # GLOBAL suppression of ``py/clear-text-storage-sensitive-data`` on

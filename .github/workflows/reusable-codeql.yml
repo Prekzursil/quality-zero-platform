@@ -157,7 +157,11 @@ jobs:
           # own ``codeql.yml`` caller passes ``./.github/codeql/codeql-config.yml``
           # to wire the false-positive suppressions for ``secrets_sync.py``.
           config-file: ${{ inputs.codeql_config_file }}
-          queries: security-and-quality
+          # Fleet CODEQL DECISION: security-extended + security-and-quality.
+          # Together they strictly subsume the default suite AND the extended
+          # suite; running only security-and-quality left the security-extended
+          # queries (and their findings) off every fleet analysis.
+          queries: security-extended,security-and-quality
 
       - name: Autobuild
         if: ${{ needs.resolve-profile.outputs.build_mode == 'autobuild' }}

@@ -68,11 +68,21 @@ codeql:
   - javascript-typescript
   - python
 dependabot:
+  # Rails completed 2026-11-03: root pyproject.toml (pip /), both Dockerfiles
+  # (docker) and github-actions were missing — one rail per manifest tree.
   updates:
+  - ecosystem: pip
+    directory: /
   - ecosystem: pip
     directory: /backend
   - ecosystem: npm
     directory: /frontend
+  - ecosystem: docker
+    directory: /backend
+  - ecosystem: docker
+    directory: /frontend
+  - ecosystem: github-actions
+    directory: /
 # LEAN CONTRACT (migrated 2026-10-24). The SaaS-era set this profile used to
 # require (scanner-matrix / Codecov / Sonar / Codacy / Semgrep / Sentry / QLTY /
 # DeepSource contexts) is emitted by nothing any more, so the generated ruleset

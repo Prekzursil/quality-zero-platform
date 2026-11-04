@@ -121,12 +121,16 @@ class FakeRunner:
         config_repos: Sequence[str] = (),
         inaccessible: Sequence[str] = (),
         inaccessible_stderr: str = "GraphQL: Could not resolve to a Repository with the name '{slug}'. (repository)\n",
+        transient_clone_failures: int = 0,
+        transient_clone_stderr: str = "HTTP 504: 504 Gateway Timeout (https://api.github.com/graphql)\n",
     ) -> None:
         """Script the fake ``gh`` / ``osv-scanner`` responses for one test."""
         self.calls: List[List[str]] = []
         self.call_kwargs: List[Dict[str, Any]] = []
         self.osv_results = list(osv_results or [(0, json.dumps(CLEAN_REPORT))])
         self.clone_returncode = clone_returncode
+        self.transient_clone_failures = transient_clone_failures
+        self.transient_clone_stderr = transient_clone_stderr
         self.issue_list = issue_list
         self.issue_list_returncode = issue_list_returncode
         self.create_stdout = create_stdout
@@ -163,6 +167,9 @@ class FakeRunner:
     def _clone(self, argv: List[str]) -> "subprocess.CompletedProcess[str]":
         """Create the destination tree so the config probe has something to see."""
         slug = argv[3]
+        if self.transient_clone_failures > 0:
+            self.transient_clone_failures -= 1
+            return _completed(argv, returncode=1, stderr=self.transient_clone_stderr)
         if slug in self.inaccessible:
             return _completed(argv, returncode=1, stderr=self.inaccessible_stderr.format(slug=slug))
         if self.clone_returncode != 0:
@@ -400,6 +407,51 @@ class ScanRepoTests(unittest.TestCase):
         self.assertIs(scan.status, sweep.ScanStatus.SCAN_ERROR)
         self.assertFalse(scan.status.is_clean_result)
         self.assertEqual(runner.argv_starting("osv-scanner"), [], "no scan should be attempted")
+
+    def test_transient_clone_predicate_both_states(self) -> None:
+        """Only a FAILED clone carrying a gateway status is transient.
+
+        BOTH-STATES: a clone that SUCCEEDED never counts (git warns through
+        stderr too), a failed 504 does, and a failed 404 - a grant problem a
+        retry cannot fix - does not.
+        """
+        succeeded_with_warning_text = subprocess.CompletedProcess(["gh"], 0, stderr="HTTP 504: noise")
+        failed_transient = subprocess.CompletedProcess(
+            ["gh"], 1, stderr="HTTP 504: 504 Gateway Timeout (https://api.github.com/graphql)\n"
+        )
+        failed_permanent = subprocess.CompletedProcess(["gh"], 1, stderr="remote: Repository not found.\n")
+        self.assertFalse(sweep.is_transient_clone_failure(succeeded_with_warning_text))
+        self.assertTrue(sweep.is_transient_clone_failure(failed_transient))
+        self.assertFalse(sweep.is_transient_clone_failure(failed_permanent))
+
+    def test_a_transient_gateway_clone_failure_is_retried_to_success(self) -> None:
+        """One 504 answer (2026-11-03 run 41640352539) gets another try, not a red sweep."""
+        runner = FakeRunner(transient_clone_failures=1)
+        sleeper = NoopSleeper()
+        scan = self._scan(runner, sleeper=sleeper)
+        self.assertIs(scan.status, sweep.ScanStatus.CLEAN)
+        self.assertEqual(len(runner.argv_starting("gh", "repo", "clone")), 2, "initial try + one retry")
+        self.assertEqual(sleeper.slept, [2.0])
+
+    def test_a_persistent_gateway_outage_is_a_scan_error_after_both_retries(self) -> None:
+        """A 504 that outlasts both delays stays an honest scan error, never clean."""
+        runner = FakeRunner(transient_clone_failures=99)
+        sleeper = NoopSleeper()
+        scan = self._scan(runner, sleeper=sleeper)
+        self.assertIs(scan.status, sweep.ScanStatus.SCAN_ERROR)
+        self.assertFalse(scan.status.is_clean_result)
+        self.assertEqual(len(runner.argv_starting("gh", "repo", "clone")), 3, "initial try + 2 retries")
+        self.assertEqual(sleeper.slept, [2.0, 5.0])
+        self.assertEqual(runner.argv_starting("osv-scanner"), [], "no scan should be attempted")
+
+    def test_a_plain_clone_failure_is_not_retried(self) -> None:
+        """Only gateway blips retry; a deterministic clone failure fails at once."""
+        runner = FakeRunner(clone_returncode=1)
+        sleeper = NoopSleeper()
+        scan = self._scan(runner, sleeper=sleeper)
+        self.assertIs(scan.status, sweep.ScanStatus.SCAN_ERROR)
+        self.assertEqual(len(runner.argv_starting("gh", "repo", "clone")), 1)
+        self.assertEqual(sleeper.slept, [])
 
     def test_a_repo_the_token_cannot_see_is_unscannable_not_a_scan_error(self) -> None:
         """A private repo without a read token is a standing gap, not a transient failure."""

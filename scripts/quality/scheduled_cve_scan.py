@@ -136,6 +136,20 @@ from EXIT_OK, so nothing reports "every governed repo was scanned"."""
 INACCESSIBLE_CLONE = re.compile(r"Could not resolve to a Repository|Repository not found|HTTP 404", re.IGNORECASE)
 """``gh repo clone`` stderr when the token cannot see the repository at all."""
 
+TRANSIENT_CLONE = re.compile(r"HTTP 50[234]:", re.IGNORECASE)
+"""``gh repo clone`` stderr when GitHub answered with a transient gateway error.
+
+A single 504 failed the whole nightly sweep on 2026-11-03 (run 41640352539,
+``omniaudit-mcp``: ``HTTP 504: 504 Gateway Timeout``); the failure was an
+outage minute, not a verdict. Same transient set as the dashboard's retry
+(``build_admin_dashboard.RETRYABLE_STATUS``), applied to the clone instead of
+an API GET. Any other clone failure keeps its existing classification.
+"""
+
+CLONE_RETRY_DELAYS: Tuple[float, ...] = (2.0, 5.0)
+"""Seconds to wait before each clone retry; after the last one the failure is
+classified exactly as before (scan error / unscannable / roster error)."""
+
 FLEET_READ_PAT_NAME = "CODEX_FLEET_READ_PAT"
 
 ProcessRunner = Callable[..., "subprocess.CompletedProcess[str]"]
@@ -281,6 +295,18 @@ def is_retryable_exit(code: int) -> bool:
     return int(code) in RETRYABLE_EXITS
 
 
+def is_transient_clone_failure(completed: "subprocess.CompletedProcess[str]") -> bool:
+    """True when a failed clone failed with a transient gateway (502/503/504) answer.
+
+    BOTH-STATES: a clone that SUCCEEDED never counts as transient, even when
+    its stderr happens to carry the text (git warns through the same stream),
+    so a warning can never trigger a retry of a healthy clone.
+    """
+    if completed.returncode == 0:
+        return False
+    return bool(TRANSIENT_CLONE.search(str(completed.stderr or "")))
+
+
 # ---------------------------------------------------------------------------
 # Roster.
 # ---------------------------------------------------------------------------
@@ -385,6 +411,34 @@ def osv_command(repo_dir: Path, *, config: Optional[Path] = None) -> List[str]:
     return args
 
 
+def _clone_with_retries(
+    command: Sequence[str],
+    *,
+    runner: ProcessRunner,
+    sleeper: Sleeper,
+    env: Optional[Mapping[str, str]],
+) -> "subprocess.CompletedProcess[str]":
+    """Run the clone, retrying ONLY transient gateway (HTTP 502/503/504) failures.
+
+    A gateway blip is an outage, not a verdict: the run must stay honest
+    (never clean) without going red for one bad minute. Every other failure -
+    unresolvable slug, missing grant, disk - is returned immediately and
+    classified by ``scan_repo`` exactly as before.
+    """
+    completed = _run(command, runner=runner, env=env)
+    for delay in CLONE_RETRY_DELAYS:
+        if not is_transient_clone_failure(completed):
+            return completed
+        print(
+            f"::warning::gh repo clone hit a transient gateway error "
+            f"(exit {completed.returncode}); retrying in {delay:g}s",
+            flush=True,
+        )
+        sleeper(delay)
+        completed = _run(command, runner=runner, env=env)
+    return completed
+
+
 def _scan_with_retries(
     command: Sequence[str],
     *,
@@ -421,7 +475,12 @@ def scan_repo(
     must not claim it is clean. Only the clone sees the fleet-read PAT.
     """
     dest = Path(workdir) / slug.replace("/", "__")
-    clone = _run(clone_command(slug, dest), runner=runner, env=clone_env(os.environ if environ is None else environ))
+    clone = _clone_with_retries(
+        clone_command(slug, dest),
+        runner=runner,
+        sleeper=sleeper,
+        env=clone_env(os.environ if environ is None else environ),
+    )
     unresolvable = clone.returncode != 0 and bool(INACCESSIBLE_CLONE.search(str(clone.stderr or "")))
     # GitHub answers "not found" both for a private repo the token cannot see
     # and for one that does not exist. Only a KNOWN private member (the

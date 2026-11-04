@@ -118,8 +118,13 @@ vendors:
   sonar:
     project_key: Prekzursil_quality-zero-platform
 codeql:
+  # javascript-typescript added 2026-11-03: the repo "actually has" JS/TS
+  # (scripts/provider_ui/*.mjs, scripts/dashboard_ui/*.mjs, scripts/beads-*.ts
+  # per GitHub language stats) and the lean gate already measures their
+  # coverage; CodeQL must analyze every language the repo has (fleet decision).
   languages:
   - actions
+  - javascript-typescript
   - python
 dependabot:
   updates:

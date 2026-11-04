@@ -48,8 +48,18 @@ required_contexts:
   - Required / all CI and privacy gates
   - codeql / CodeQL
 codeql:
+  # javascript-typescript added 2026-11-03: app/ is a SvelteKit front end
+  # (TypeScript + JavaScript + Svelte per GitHub language stats) — the repo
+  # "actually has" the language, so the fleet decision matrixes over it.
   languages:
   - actions
+  - javascript-typescript
   - python
 dependabot:
-  updates: []
+  updates:
+  - ecosystem: npm
+    directory: /app
+  - ecosystem: pip
+    directory: /pipeline
+  - ecosystem: github-actions
+    directory: /

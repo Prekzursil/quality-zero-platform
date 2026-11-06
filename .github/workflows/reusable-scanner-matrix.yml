@@ -184,7 +184,7 @@ jobs:
           java-version: ${{ steps.profile.outputs.coverage_java_version }}
       - name: Set up .NET
         if: matrix.lane == 'coverage' && steps.profile.outputs.coverage_dotnet_version != ''
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: ${{ steps.profile.outputs.coverage_dotnet_version }}
       - name: Set up Rust
@@ -192,7 +192,7 @@ jobs:
         uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7
       - name: Install Qlty CLI
         if: steps.profile.outputs.qlty_enabled == 'true' && (matrix.lane == 'qlty_zero' || (matrix.lane == 'coverage' && steps.profile.outputs.qlty_coverage_files != '' && runner.os != 'Windows'))
-        uses: qltysh/qlty-action/install@c9b09987143d1e4ac955f4803c7bea742102feb5
+        uses: qltysh/qlty-action/install@ebcd284bf32e36a030afe15f1e136c7be08b9506
       - name: Run selected lane
         shell: bash
         env:
@@ -464,7 +464,7 @@ jobs:
         # any rule on the line below — the rule-id form was being
         # ignored by --config auto so we drop the suffix.
         # nosem
-        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
+        uses: SonarSource/sonarqube-scan-action@e805d875275f728fac1885b413934be6d7c63f65 # v8.4.1
         with:
           projectBaseDir: repo
         env:

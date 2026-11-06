@@ -147,7 +147,7 @@ jobs:
           java-version: ${{ needs.resolve-profile.outputs.java_version }}
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        uses: github/codeql-action/init@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
         with:
           languages: ${{ needs.resolve-profile.outputs.languages_csv }}
           build-mode: ${{ needs.resolve-profile.outputs.build_mode }}
@@ -165,10 +165,10 @@ jobs:
 
       - name: Autobuild
         if: ${{ needs.resolve-profile.outputs.build_mode == 'autobuild' }}
-        uses: github/codeql-action/autobuild@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        uses: github/codeql-action/autobuild@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
 
       - name: Analyze
-        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        uses: github/codeql-action/analyze@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4.39.2
 
   # ── Fail-closed gate: the check fleet branch protection requires ──────────
   # `codeql / CodeQL` used to be the analysis job itself, guarded by

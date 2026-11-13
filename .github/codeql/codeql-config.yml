@@ -28,3 +28,11 @@ query-filters:
       id: py/clear-text-storage-sensitive-data
   - exclude:
       id: py/clear-text-logging-sensitive-data
+  # Reviewed sink: scripts/beads-fetch-pr-comments.ts writes its PR-comment
+  # fetch to OUTPUT_PATH — a fixed local artifact path (constant default or
+  # --output flag) — as inert JSON.stringify output; the untrusted comment
+  # content can influence neither the path nor execution. The inline
+  # suppression comment did not register with the analyzer, so the exclusion
+  # lives here with the repo's other reviewed suppressions.
+  - exclude:
+      id: js/http-to-file-access

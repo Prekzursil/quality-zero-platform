@@ -107,7 +107,7 @@ test('resolveProviderTarget defaults to provider home when no repo is supplied',
   const target = resolveProviderTarget('codecov');
   assert.equal(target.repoSlug, null);
   // Codecov home page when no repo is supplied
-  assert.match(target.targetUrl, /codecov\.io/);
+  assert.match(target.targetUrl, /^https:\/\/app\.codecov\.io\//);
 });
 
 test('resolveProviderTarget rejects an unknown provider key', () => {

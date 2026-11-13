@@ -44,8 +44,10 @@ codeql:
   runner: windows-latest
   languages:
   - actions
+  - cpp
   - csharp
   - javascript-typescript
+  - python
 dependabot:
   updates:
   - ecosystem: nuget

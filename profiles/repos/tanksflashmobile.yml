@@ -51,6 +51,7 @@ codeql:
   - actions
   - javascript-typescript
   - java-kotlin
+  - python
 dependabot:
   updates:
   - ecosystem: npm

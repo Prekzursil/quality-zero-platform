@@ -370,7 +370,10 @@ async function main() {
     mkdirSync(dir, { recursive: true });
   }
 
-  // Write output
+  // Write output. Reviewed sink: OUTPUT_PATH is a fixed local artifact path
+  // (constant above) and the payload is inert JSON.stringify output — the
+  // PR-comment content cannot influence the path or execution.
+  // codeql[js/http-to-file-access]
   writeFileSync(OUTPUT_PATH, JSON.stringify(output, null, 2));
 
   console.log(

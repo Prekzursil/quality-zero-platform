@@ -42,7 +42,6 @@ vendors:
     - SWFOC-Mod-Menu
 codeql:
   runner: windows-latest
-  build_mode: autobuild
   languages:
   - actions
   - cpp

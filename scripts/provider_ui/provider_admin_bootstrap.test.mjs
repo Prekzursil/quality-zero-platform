@@ -130,7 +130,7 @@ test('promptForManualLogin writes guidance and waits for Enter', async () => {
 
   assert.equal(closed, true);
   assert.match(writes.join(''), /Manual login handoff for Codecov/);
-  assert.match(writes.join(''), /https:\/\/example\.com/);
+  assert.match(writes.join(''), /Target URL: https:\/\/example\.com$/m);
   assert.match(writes.join(''), /\/qzp-fixture\/profile/);
   assert.match(writes.join(''), /Press something/);
   assert.match(questionAsked, /press Enter to continue/);

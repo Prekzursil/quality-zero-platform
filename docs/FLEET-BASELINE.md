@@ -81,11 +81,11 @@ floor.
   - Security updates are grouped per ecosystem, so one pull request can clear
     every open advisory.
   - Minor and patch updates are grouped.
-  - **Majors are never ignored**; each arrives as its own pull request. This
-    deliberately differs from the legacy profile renderer
-    (`render_repo_baseline.py`), which ignores semver-major. Under a
-    zero-tolerance dependency gate, a fix that only ships in a new major has
-    to be able to arrive.
+  - **Majors are never ignored**; each arrives as its own pull request. The
+    profile renderer (`render_repo_baseline.py` and
+    `profiles/templates/common/dependabot.yml.j2`) follows the same policy and
+    labels updates `dependencies` only. Under a zero-tolerance dependency gate,
+    a fix that only ships in a new major has to be able to arrive.
 
 Exclusions stay explicit and documented in the repository that needs them.
 For example, `fractal-darkroom`'s `research/` tree is a byte-identical archive

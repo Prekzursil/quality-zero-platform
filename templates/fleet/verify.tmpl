@@ -18,13 +18,16 @@ if [ -z "$$pin" ]; then
   exit 2
 fi
 
-# A dedicated clone (never your working copy of QZP): the checkout below moves its HEAD.
-qzp="$${QZP_DIR:-$${XDG_CACHE_HOME:-$$HOME/.cache}/qzp-verify/quality-zero-platform}"
+# A dedicated clone per pinned commit, never your working copy of QZP: every run forces it
+# to the pin and cleans it, so an edit made there can never leak into a verdict.
+qzp="$${QZP_DIR:-$${XDG_CACHE_HOME:-$$HOME/.cache}/qzp-verify/$$pin}"
 if [ ! -d "$$qzp/.git" ]; then
-  git clone --quiet https://github.com/Prekzursil/quality-zero-platform.git "$$qzp"
+  mkdir -p "$$(dirname "$$qzp")"
+  git clone --quiet --filter=blob:none https://github.com/Prekzursil/quality-zero-platform.git "$$qzp"
 fi
 git -C "$$qzp" fetch --quiet origin "$$pin"
-git -C "$$qzp" -c advice.detachedHead=false checkout --quiet --detach "$$pin"
+git -C "$$qzp" -c advice.detachedHead=false checkout --quiet --force --detach "$$pin"
+git -C "$$qzp" clean -ffdq
 
 cd "$$root"
 exec bash "$$qzp/scripts/quality/preflight.sh" "$$@"

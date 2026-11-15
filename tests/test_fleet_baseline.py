@@ -351,6 +351,9 @@ class TemplateTests(unittest.TestCase):
         facts = _facts(["app.py", "Main.java", "pyproject.toml"])
         context = fb.template_context(facts, _reader({"pyproject.toml": "pytest"}), PIN)
         self.assertIn("security/advisories/new", context["reporting_channel"])
+        self.assertIn("If that form is unavailable to you", context["reporting_channel"])
+        self.assertEqual(context["security_contact_url"], "https://github.com/Prekzursil/demo/security/advisories/new")
+        self.assertIn("- **SAST** — opengrep in the lean gate (`quality / quality`).", context["security_controls"])
         self.assertIn("*extended* query suite", context["security_controls"])
         self.assertIn("push protection", context["security_controls"])
         self.assertIn("**Java**", context["extra_controls"])
@@ -375,14 +378,21 @@ class TemplateTests(unittest.TestCase):
         self.assertIn(
             "grep -rhE '^[^#]*uses:.*reusable-quality\\.yml@[0-9a-f]{40}' \"$root/.github/workflows\"", verify
         )
-        self.assertIn("${QZP_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/qzp-verify/quality-zero-platform}", verify)
+        self.assertIn("${QZP_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/qzp-verify/$pin}", verify)
+        self.assertIn('mkdir -p "$(dirname "$qzp")"', verify)
+        self.assertIn("checkout --quiet --force --detach", verify)
+        self.assertIn('git -C "$qzp" clean -ffdq', verify)
         self.assertIn('exec bash "$qzp/scripts/quality/preflight.sh" "$@"', verify)
         for form in fb.ISSUE_FORMS:
             with self.subTest(form=form):
                 self.assertIsInstance(yaml.safe_load(fb.render_template("ISSUE_TEMPLATE/" + form, context)), dict)
         caller = yaml.safe_load(fb.render_template("quality.yml", context))
         self.assertEqual(caller["jobs"]["quality"], {"uses": CALLER_PREFIX + PIN})
-        self.assertEqual(caller["concurrency"]["group"], "quality-${{ github.ref }}")
+        self.assertEqual(
+            caller["concurrency"]["group"],
+            "quality-${{ github.event_name == 'pull_request' && github.ref || github.sha }}",
+        )
+        self.assertEqual(caller[True]["push"], {"branches": ["main"]})
         self.assertEqual(caller[True]["merge_group"], {"types": ["checks_requested"]})
 
     def test_default_branch_is_a_quoted_yaml_scalar(self) -> None:
@@ -419,9 +429,7 @@ class TemplateTests(unittest.TestCase):
 
     def test_private_context(self) -> None:
         context = fb.template_context(_facts(["a.py"], private=True), _reader({}), PIN)
-        self.assertEqual(
-            context["security_contact_url"], "https://github.com/Prekzursil/demo/issues/new?labels=security"
-        )
+        self.assertEqual(context["security_contact_url"], "https://github.com/Prekzursil/demo/blob/main/SECURITY.md")
         self.assertIn("visible only to people with access", context["reporting_channel"])
         self.assertIn("this repository is private", context["conduct_contact"])
         self.assertIn("This repository is private", context["reporting_channel"])
@@ -503,8 +511,17 @@ class CallerTests(unittest.TestCase):
             ".github/workflows/q.yaml": f"name: quality\non: [push, pull_request]\njobs:\n  quality:\n"
             f"    uses: {CALLER_PREFIX}{PIN}\n"
         }
-        kept = fb._plan_quality_caller(_facts(list(pinned)), _reader(pinned), context, PIN)
+        regenerated = fb._plan_quality_caller(_facts(list(pinned)), _reader(pinned), context, PIN)
+        self.assertEqual([(a.path, a.action) for a in regenerated], [(".github/workflows/q.yaml", "replace")])
+        current = {".github/workflows/q.yaml": regenerated[0].content or ""}
+        kept = fb._plan_quality_caller(_facts(list(current)), _reader(current), context, PIN)
         self.assertEqual([(a.path, a.action) for a in kept], [(".github/workflows/q.yaml", "keep")])
+        hand = {
+            ".github/workflows/q.yaml": f"name: quality\non: [push, pull_request]\njobs:\n  quality:\n"
+            f"    uses: {CALLER_PREFIX}{PIN}\n  lint:\n    runs-on: ubuntu-latest\n"
+        }
+        pinned_hand = fb._plan_quality_caller(_facts(list(hand)), _reader(hand), context, PIN)
+        self.assertEqual([(a.path, a.action) for a in pinned_hand], [(".github/workflows/q.yaml", "keep")])
         in_repo = fb._plan_quality_caller(_facts([fb.QUALITY_CALLER]), _reader({}), context, PIN)
         self.assertEqual([(a.path, a.action) for a in in_repo], [(fb.QUALITY_CALLER, "gap")])
         commented = {".github/workflows/ci.yml": f"# uses: {CALLER_PREFIX}v1\njobs: {{}}\n"}
@@ -596,7 +613,12 @@ class PlanTests(unittest.TestCase):
                 self.assertEqual(index[path].action, "keep")
         self.assertEqual(index[".github/dependabot.yml"].action, "gap")
         self.assertIn("github-actions /", index[".github/dependabot.yml"].reason)
-        bump = index[".github/workflows/quality.yml"]
+        regenerated = index[".github/workflows/quality.yml"]
+        self.assertEqual(regenerated.action, "replace")
+        self.assertIn(f"reusable-quality.yml@{PIN}", regenerated.content or "")
+        self.assertEqual(regenerated.reason, f"thin caller regenerated from the fleet template (pin v1 -> {PIN})")
+        files[".github/workflows/quality.yml"] = caller + "  lint:\n    runs-on: ubuntu-latest\n"
+        bump = _by_path(fb.plan_baseline(_facts(paths), _reader(files), PIN))[".github/workflows/quality.yml"]
         self.assertEqual(bump.action, "bump")
         self.assertIn(f"reusable-quality.yml@{PIN}", bump.content or "")
         self.assertEqual(bump.reason, f"pin v1 -> {PIN}")
@@ -697,7 +719,7 @@ class PlanTests(unittest.TestCase):
         self.assertEqual([(a.path, a.action) for a in flagged], [(".github/workflows/quality.yml", "gap")])
         folded = {
             ".github/workflows/quality.yml": "name: quality\non: pull_request\njobs:\n  quality:\n    uses: >-\n"
-            f"      {CALLER_PREFIX}v1\n"
+            f"      {CALLER_PREFIX}v1\n  lint:\n    runs-on: ubuntu-latest\n"
         }
         stuck = fb._plan_quality_caller(_facts(list(folded)), _reader(folded), context, PIN)
         self.assertEqual([a.action for a in stuck], ["gap"])
@@ -741,20 +763,107 @@ class PlanTests(unittest.TestCase):
         self.assertIn(".semgrepignore", written)
 
     def test_rails_gate_six_cannot_scan(self) -> None:
-        rails = {"bun": ["/"], "nuget": ["/src"], "npm": ["/", "/web"], "gradle": ["/"], "pip": ["/"]}
-        paths = ["package-lock.json", "web/package.json"]
-        self.assertEqual(
-            fb.unscanned_rails(rails, paths),
-            [
-                "Bun lockfiles (/)",
-                "NuGet manifests (/src)",
-                "npm /web has no lockfile (package-lock.json / yarn.lock / pnpm-lock.yaml)",
-                "gradle / has no lockfile (gradle.lockfile)",
-            ],
-        )
-        plan = _by_path(fb.plan_baseline(_facts(["package.json", "bun.lock", "a.js"]), _reader({}), PIN))
-        self.assertIn("Bun lockfiles", plan[fb.GATE6_SCOPE].reason)
+        def gap(ecosystem: str, directory: str) -> str:
+            return f"{ecosystem} {directory} has no file osv-scanner reads ({' / '.join(fb._SCANNED_LOCKFILES[ecosystem])})"
+
+        rails = {
+            "swift": ["/"],
+            "bun": ["/"],
+            "nuget": ["/src", "/tools"],
+            "npm": ["/", "/web", "/web/sub"],
+            "gradle": ["/", "/app"],
+            "pip": ["/", "/svc", "/lib", "/ws/packages/a", "/ws/other"],
+            "cargo": ["/", "/crates/a", "/crates/b", "/tools/x"],
+            "uv": ["/py", "/ws"],
+            "composer": ["/"],
+            "bundler": ["/"],
+            "gomod": ["/"],
+        }
+        paths = [
+            "package-lock.json",
+            "bun.lock",
+            "web/package.json",
+            "web/sub/yarn.lock",
+            "gradle/verification-metadata.xml",
+            "verification-metadata.xml",
+            "src/App.deps.json",
+            "requirements/requirements-dev.txt",
+            "svc/requirements/base.txt",
+            "lib/pyproject.toml",
+            "lib/nested/requirements.txt",
+            "Cargo.lock",
+            "crates/a/Cargo.toml",
+            "other/uv.lock",
+            "vendor/x/composer.lock",
+            "examples/Gemfile.lock",
+            "ws/uv.lock",
+        ]
+        files = {
+            "Cargo.toml": '[workspace]\nmembers = ["crates/*"]\nexclude = ["crates/b"]\n',
+            "ws/pyproject.toml": "[tool.uv.workspace]\nmembers = ['packages/*']\n",
+        }
+        expected = [
+            "Swift packages (/)",
+            gap("npm", "/web"),
+            gap("pip", "/svc"),
+            gap("pip", "/lib"),
+            gap("pip", "/ws/other"),
+            gap("uv", "/py"),
+            gap("cargo", "/crates/b"),
+            gap("cargo", "/tools/x"),
+            gap("composer", "/"),
+            gap("bundler", "/"),
+            gap("gradle", "/app"),
+            gap("nuget", "/tools"),
+        ]
+        self.assertEqual(fb.unscanned_rails(rails, paths, _reader(files)), expected)
+        # without a reader no workspace membership can be shown, so every member is a gap
+        self.assertIn(gap("cargo", "/crates/a"), fb.unscanned_rails(rails, paths))
+        self.assertTrue(fb._readable("app/gradle/verification-metadata.xml", fb._SCANNED_LOCKFILES["gradle"]))
+        self.assertFalse(fb._readable("svc/requirements/base.txt", fb._SCANNED_LOCKFILES["pip"]))
+        self.assertIsNone(fb._rail_of("other/uv.lock", ["/py"]))
+        self.assertEqual(fb._rail_of("web/sub/yarn.lock", ["/", "/web", "/web/sub"]), "/web/sub")
+        self.assertIsNone(fb._lockfile_rail("npm", "web/sub/yarn.lock", ["/", "/web"], paths, None))
+        # Gradle folds a module into the root rail only when the root build declares it
+        build = {"settings.gradle": "include 'app'\n"}
+        gradle_paths = ["settings.gradle", "app/gradle.lockfile", "examples/gradle.lockfile"]
+        self.assertEqual(fb._lockfile_rail("gradle", "app/gradle.lockfile", ["/"], gradle_paths, _reader(build)), "/")
+        self.assertIsNone(fb._lockfile_rail("gradle", "examples/gradle.lockfile", ["/"], gradle_paths, _reader(build)))
+        self.assertIsNone(fb._lockfile_rail("gradle", "app/gradle.lockfile", ["/"], gradle_paths, None))
+        plan = _by_path(fb.plan_baseline(_facts(["Package.swift", "a.swift"]), _reader({}), PIN))
+        self.assertIn("Swift packages", plan[fb.GATE6_SCOPE].reason)
         self.assertNotIn(fb.GATE6_SCOPE, _by_path(fb.plan_baseline(_facts(["a.py"]), _reader({}), PIN)))
+
+    def test_js_workspaces_share_the_root_lockfile(self) -> None:
+        def gap(ecosystem: str, directory: str) -> str:
+            return f"{ecosystem} {directory} has no file osv-scanner reads ({' / '.join(fb._SCANNED_LOCKFILES[ecosystem])})"
+
+        files = {"package.json": '{"workspaces": ["packages/*", "!packages/legacy"]}'}
+        rails = {"npm": ["/", "/packages/a", "/packages/legacy", "/tools/x"]}
+        paths = ["package.json", "package-lock.json", "packages/a/package.json"]
+        self.assertEqual(
+            fb.unscanned_rails(rails, paths, _reader(files)), [gap("npm", "/packages/legacy"), gap("npm", "/tools/x")]
+        )
+        yarn = {"package.json": '{"workspaces": {"packages": ["./apps/*"]}}'}
+        self.assertEqual(fb.workspace_members("npm", "/", _reader(yarn)), (["apps/*"], []))
+        pnpm = {"web/pnpm-workspace.yaml": "packages:\n  - 'libs/*'\n  - '!libs/old'\n"}
+        self.assertEqual(fb.workspace_members("npm", "/web", _reader(pnpm)), (["web/libs/*"], ["web/libs/old"]))
+        broken = {"package.json": "{nope", "pnpm-workspace.yaml": "packages: [unclosed"}
+        self.assertEqual(fb.workspace_members("bun", "/", _reader(broken)), ([], []))
+        odd = {"package.json": "[1]", "pnpm-workspace.yaml": "- 1\n"}
+        self.assertEqual(fb.workspace_members("npm", "/", _reader(odd)), ([], []))
+
+    def test_workspace_members(self) -> None:
+        uv = {"py/pyproject.toml": "[tool.uv.workspace]\nmembers = ['packages/*']\n"}
+        self.assertEqual(fb.workspace_members("uv", "/py", _reader(uv)), (["py/packages/*"], []))
+        self.assertEqual(fb.workspace_members("cargo", "/", _reader({"Cargo.toml": "[[broken"})), ([], []))
+        self.assertEqual(
+            fb.workspace_members("cargo", "/", _reader({"Cargo.toml": "[package]\nname = 'x'\n"})), ([], [])
+        )
+        self.assertEqual(fb.workspace_members("cargo", "/", _reader({})), ([], []))
+        odd = {"Cargo.toml": "[workspace]\nmembers = 'crates/*'\n"}
+        self.assertEqual(fb.workspace_members("cargo", "/", _reader(odd)), ([], []))
+        self.assertFalse(fb._in_workspace("cargo", "/", "/crates/a", _reader(odd)))
 
     def test_jsts_tests_need_a_coverage_script(self) -> None:
         files = {"package.json": json.dumps({"scripts": {"test": "vitest run"}})}
@@ -819,6 +928,269 @@ class PlanTests(unittest.TestCase):
         self.assertEqual((action.path, action.action), (".github/dependabot.yaml", "keep"))
         unreadable = fb._plan_dependabot(_facts([".github/dependabot.yml", "go.mod"]), _reader({}))
         self.assertEqual(unreadable.action, "gap")
+
+
+class TruthfulDocumentTests(unittest.TestCase):
+    """The documents describe the repository as it is, not as the managed default."""
+
+    def test_codeql_queries_reads_the_parsed_inputs(self) -> None:
+        self.assertEqual(fb._codeql_queries(None), "default")
+        self.assertEqual(fb._codeql_queries({}), "default")
+        self.assertEqual(fb._codeql_queries({"config-file": "./.github/codeql.yml"}), "configured")
+        self.assertEqual(fb._codeql_queries({"config": "paths: [src]"}), "configured")
+        self.assertEqual(fb._codeql_queries({"queries": "security-extended"}), "security-extended")
+        self.assertEqual(
+            fb._codeql_queries({"queries": "security-extended,security-and-quality"}),
+            "security-extended,security-and-quality",
+        )
+        # a block scalar listing several suites, a list, or an empty value is "configured"
+        self.assertEqual(fb._codeql_queries({"queries": "security-extended\nsecurity-and-quality\n"}), "configured")
+        self.assertEqual(fb._codeql_queries({"queries": ["security-extended"]}), "configured")
+        self.assertEqual(fb._codeql_queries({"queries": ""}), "configured")
+
+    def test_codeql_workflow_detection(self) -> None:
+        self.assertIsNone(fb.codeql_workflow(_facts(["a.py"]), _reader({})))
+        reusable = "Prekzursil/quality-zero-platform/.github/workflows/reusable-codeql.yml@" + PIN
+        files = {
+            ".github/workflows/ci.yml": "jobs: {}\n",
+            ".github/workflows/codeql.yml": f"jobs:\n  codeql:\n    uses: {reusable}\n",
+            ".github/workflows/notes.md": "uses: github/codeql-action/init@v3\n",
+        }
+        found = fb.codeql_workflow(_facts(list(files)), _reader(files))
+        self.assertEqual(found, (".github/workflows/codeql.yml", None, True))
+        own = {
+            ".github/workflows/scan.yaml": "# uses: x/reusable-codeql.yml@v1\njobs:\n  odd: 3\n  lint:\n    steps: nope\n"
+            "  analyze:\n    steps:\n      - run: echo hi\n      - 7\n"
+            "      - uses: github/codeql-action/init@v3\n        with:\n          queries: security-and-quality\n"
+            "      - uses: github/codeql-action/analyze@v3\n"
+        }
+        self.assertEqual(
+            fb.codeql_workflow(_facts(list(own)), _reader(own)),
+            (".github/workflows/scan.yaml", "security-and-quality", False),
+        )
+        init_only = {
+            ".github/workflows/scan.yml": "jobs:\n  a:\n    steps:\n      - uses: github/codeql-action/init@v3\n"
+        }
+        self.assertIsNone(fb.codeql_workflow(_facts(list(init_only)), _reader(init_only)))
+        commented = {".github/workflows/scan.yml": f"# uses: {reusable}\n# - uses: github/codeql-action/init@v3\n"}
+        self.assertIsNone(fb.codeql_workflow(_facts(list(commented)), _reader(commented)))
+        # an inline comment, shell text or an unparseable file never counts as a CodeQL workflow
+        mentions = {
+            ".github/workflows/a.yml": "jobs: {}  # formerly github/codeql-action/init@v3\n",
+            ".github/workflows/b.yml": "jobs:\n  x:\n    steps:\n      - run: echo github/codeql-action/init@v3\n",
+            ".github/workflows/c.yml": "jobs: [unclosed\n",
+            ".github/workflows/d.yml": "- a list\n",
+        }
+        self.assertIsNone(fb.codeql_workflow(_facts(list(mentions)), _reader(mentions)))
+
+    def test_codeql_control_variants(self) -> None:
+        self.assertIn("GitHub Advanced Security", fb._codeql_control(_facts(["a.py"], private=True), _reader({})))
+        self.assertIn("GitHub default setup", fb._codeql_control(_facts(["a.py"]), _reader({})))
+        reusable = "Prekzursil/quality-zero-platform/.github/workflows/reusable-codeql.yml@v1"
+        managed = {".github/workflows/codeql.yml": f"jobs:\n  codeql:\n    uses: {reusable}\n"}
+        text = fb._codeql_control(_facts(list(managed)), _reader(managed))
+        self.assertIn(
+            "advanced setup: `.github/workflows/codeql.yml` calls quality-zero-platform's `reusable-codeql.yml` at "
+            "the commit it pins",
+            text,
+        )
+        self.assertIn("any severity cannot be merged", text)
+        head = "jobs:\n  analyze:\n    steps:\n      - uses: github/codeql-action/init@v3\n"
+        analyze = "      - uses: github/codeql-action/analyze@v3\n"
+        bare = {".github/workflows/codeql.yml": head + analyze}
+        self.assertIn(
+            "`.github/workflows/codeql.yml` runs the default query suite",
+            fb._codeql_control(_facts(list(bare)), _reader(bare)),
+        )
+        named = {
+            ".github/workflows/codeql.yml": head + "        with:\n          queries: security-extended\n" + analyze
+        }
+        self.assertIn("runs the `security-extended` queries", fb._codeql_control(_facts(list(named)), _reader(named)))
+        listed = {".github/workflows/codeql.yml": head + "        with:\n          config-file: c.yml\n" + analyze}
+        self.assertIn(
+            "runs the queries its configuration lists", fb._codeql_control(_facts(list(listed)), _reader(listed))
+        )
+
+    def test_repository_authored_files_are_described_as_such(self) -> None:
+        own = {
+            "scripts/verify": "#!/bin/sh\n./gradlew test\n",
+            ".github/dependabot.yml": "version: 2\nupdates: []\n",
+        }
+        paths = list(own) + ["app.py", ".github/pull_request_template.md"]
+        context = fb.template_context(_facts(paths), _reader(own), PIN)
+        contributing = fb.render_template("CONTRIBUTING.md", context)
+        self.assertIn("this repository's own verification script", contributing)
+        self.assertIn("4. Open a pull request and fill in the pull-request template.\n", contributing)
+        self.assertIn("on the schedule set in\n`.github/dependabot.yml`", contributing)
+        self.assertNotIn("maps 1:1", contributing)
+        self.assertIn("configured by `.github/dependabot.yml`, this repository's own file", context["extra_controls"])
+        self.assertIn("Dependabot alerts and security updates.", context["security_controls"])
+        self.assertIn("(this\n  repository's own checks)", fb.render_template("AGENTS.md", context))
+        for name in ("CONTRIBUTING.md", "AGENTS.md"):
+            with self.subTest(name=name):
+                rendered = fb.render_template(name, context)
+                self.assertNotIn("${", rendered)
+                self.assertNotIn("\n\n\n", rendered)
+
+    def test_managed_files_keep_the_managed_wording(self) -> None:
+        managed = {
+            "scripts/verify": "# means what a CI pass means. Managed by quality-zero-platform\n",
+            ".github/dependabot.yml": fb.render_dependabot({"pip": ["/"]}).replace("\n", "\r\n"),
+        }
+        context = fb.template_context(_facts(list(managed) + ["app.py"]), _reader(managed), PIN)
+        contributing = fb.render_template("CONTRIBUTING.md", context)
+        self.assertIn("`scripts/verify` runs QZP's preflight", contributing)
+        self.assertIn("security updates are grouped", contributing)
+        self.assertIn("template; it maps 1:1 to what CI enforces.", contributing)
+        self.assertIn("grouped security updates.", context["security_controls"])
+        self.assertIn("It runs\n  every lane of the QZP lean gate", fb.render_template("AGENTS.md", context))
+
+
+class ThinCallerTests(unittest.TestCase):
+    """A thin lean-gate caller is platform-owned and regenerated with its inputs."""
+
+    THIN = (
+        f"name: quality\non:\n  pull_request:\n  workflow_dispatch:\njobs:\n  quality:\n    uses: {CALLER_PREFIX}v1\n"
+    )
+
+    def test_yaml_scalar_round_trips(self) -> None:
+        for value in ("any", "backend frontend", "3.12", "true", "-", "on", "2026-01-01"):
+            with self.subTest(value=value):
+                self.assertEqual(yaml.safe_load(f"k: {fb._yaml_scalar(value)}")["k"], value)
+        self.assertEqual(fb._yaml_scalar("backend/api"), "backend/api")
+        self.assertEqual(fb._yaml_scalar("3.12"), '"3.12"')
+
+    def test_caller_with(self) -> None:
+        self.assertEqual(fb.caller_with({}, "t0"), "")
+        self.assertEqual(fb.caller_with({}, "any"), "    with:\n      deps-severity-floor: any\n")
+        self.assertEqual(
+            fb.caller_with({"deps-severity-floor": "t0", "opengrep-paths": "backend frontend"}, "any"),
+            '    with:\n      opengrep-paths: "backend frontend"\n      deps-severity-floor: any\n',
+        )
+        # a regeneration at the default floor never weakens a caller that already runs at zero tolerance
+        self.assertEqual(
+            fb.caller_with({"deps-severity-floor": "any"}, "t0"), "    with:\n      deps-severity-floor: any\n"
+        )
+
+    def test_thin_caller_shapes(self) -> None:
+        # push is absent here, so regeneration adds it on the default branch; pull_request is unfiltered
+        self.assertEqual(fb.thin_caller(self.THIN), fb.ThinCaller({}, ("main",), (), True))
+        self.assertEqual(fb.thin_caller(self.THIN, "trunk").push, ("trunk",))
+        listed = self.THIN.replace("on:\n  pull_request:\n  workflow_dispatch:\n", "on: [push, pull_request]\n")
+        self.assertEqual(fb.thin_caller(listed), fb.ThinCaller({}, (), (), False))
+        scalar = self.THIN.replace("on:\n  pull_request:\n  workflow_dispatch:\n", "on: pull_request\n")
+        self.assertEqual(fb.thin_caller(scalar), fb.ThinCaller({}, ("main",), (), False))
+        filtered = self.THIN.replace(
+            "  pull_request:\n", "  push:\n    branches: [main, master]\n  pull_request:\n    branches: [main]\n"
+        )
+        self.assertEqual(fb.thin_caller(filtered), fb.ThinCaller({}, ("main", "master"), ("main",), True))
+        with_inputs = self.THIN + "    with:\n      opengrep-paths: src\n      jsts-coverage-min: 100\n"
+        self.assertEqual(fb.thin_caller(with_inputs).inputs, {"opengrep-paths": "src", "jsts-coverage-min": 100})
+        job_scoped = self.THIN + "    permissions:\n      contents: read\n"
+        self.assertEqual(fb.thin_caller(job_scoped), fb.ThinCaller({}, ("main",), (), True))
+        manual = self.THIN.replace("  workflow_dispatch:\n", "  workflow_dispatch: {}\n")
+        self.assertTrue(fb.thin_caller(manual).dispatch)
+        queued = self.THIN.replace("  workflow_dispatch:\n", "  merge_group:\n    types: [checks_requested]\n")
+        self.assertEqual(fb.thin_caller(queued), fb.ThinCaller({}, ("main",), (), False))
+        for broken in (
+            "jobs: [unclosed\n",
+            "- a list\n",
+            self.THIN + "env:\n  A: b\n",
+            self.THIN.replace("  pull_request:\n", "  push:\n"),
+            self.THIN + "  lint:\n    runs-on: ubuntu-latest\n",
+            self.THIN + "    secrets: inherit\n",
+            self.THIN + "    with: nope\n",
+            # YAML 1.1 reads `on` as a boolean; GitHub reads it as text, so the caller stays hand-written
+            self.THIN + "    with:\n      opengrep-paths: on\n",
+            self.THIN + "    with:\n      flag: true\n",
+            self.THIN + "    with:\n      on: x\n",
+            self.THIN.replace(
+                "  workflow_dispatch:\n", "  workflow_dispatch:\n    inputs:\n      x:\n        type: string\n"
+            ),
+            self.THIN + "permissions:\n  contents: write\n",
+            self.THIN + "    permissions:\n      contents: write\n",
+            # a trigger the template does not render, or a filter other than branches, stays hand-written
+            self.THIN.replace("  workflow_dispatch:\n", "  schedule:\n    - cron: '0 3 * * 1'\n"),
+            listed.replace("[push, pull_request]", "[push, pull_request, schedule]"),
+            self.THIN.replace("  workflow_dispatch:\n", "  merge_group:\n    branches: [release]\n"),
+            listed.replace("[push, pull_request]", "[pull_request, {push: 1}]"),
+            self.THIN.replace("  pull_request:\n", "  pull_request:\n    paths: ['src/**']\n"),
+            self.THIN.replace("  pull_request:\n", "  pull_request:\n    branches: []\n"),
+            self.THIN.replace("  pull_request:\n", "  pull_request:\n    branches: main\n"),
+            self.THIN.replace("  pull_request:\n", "  pull_request:\n    branches: [1]\n"),
+            self.THIN.replace("  pull_request:\n", "  pull_request:\n  push:\n    tags: ['v*']\n"),
+        ):
+            with self.subTest(broken=broken):
+                self.assertIsNone(fb.thin_caller(broken))
+
+    def test_render_triggers(self) -> None:
+        self.assertEqual(
+            fb.render_triggers(("main", "release/*"), (), True),
+            '  push:\n    branches: ["main", "release/*"]\n  pull_request:\n'
+            "  # a merge queue's synthetic commit must report the required check too\n"
+            "  merge_group:\n    types: [checks_requested]\n  workflow_dispatch:\n",
+        )
+
+    def test_regeneration_carries_inputs_and_the_manual_trigger(self) -> None:
+        context = fb.template_context(_facts([]), _reader({}), PIN)
+        text = self.THIN + "    with:\n      opengrep-paths: src\n"
+        files = {".github/workflows/quality.yml": text}
+        action = fb._plan_quality_caller(_facts(list(files)), _reader(files), context, PIN)[0]
+        self.assertEqual(action.action, "replace")
+        self.assertEqual(action.reason, f"thin caller regenerated from the fleet template (pin v1 -> {PIN})")
+        caller = yaml.safe_load(action.content or "")
+        self.assertIn("workflow_dispatch", caller[True])
+        self.assertIsNone(caller[True]["pull_request"])
+        self.assertEqual(caller[True]["push"], {"branches": ["main"]})
+        self.assertEqual(caller["jobs"]["quality"]["with"], {"opengrep-paths": "src"})
+        strict = fb.template_context(_facts([]), _reader({}), PIN, "any")
+        zero = fb._plan_quality_caller(_facts(list(files)), _reader(files), strict, PIN)[0]
+        self.assertTrue(zero.reason.endswith(", deps-severity-floor: any)"))
+        self.assertEqual(
+            yaml.safe_load(zero.content or "")["jobs"]["quality"]["with"],
+            {"opengrep-paths": "src", "deps-severity-floor": "any"},
+        )
+        current = {".github/workflows/quality.yml": (zero.content or "").replace("\n", "\r\n")}
+        kept = fb._plan_quality_caller(_facts(list(current)), _reader(current), strict, PIN)[0]
+        self.assertEqual((kept.action, kept.reason), ("keep", "lean-gate caller is current"))
+
+
+class VerifyAndFloorTests(unittest.TestCase):
+    """The managed verify wrapper is upgraded in place; the documented floor follows the caller."""
+
+    def test_plan_verify(self) -> None:
+        context = fb.template_context(_facts([]), _reader({}), PIN)
+        created = fb._plan_verify(_facts([]), _reader({}), context)
+        self.assertEqual((created.action, created.executable), ("create", True))
+        own = fb._plan_verify(_facts([fb.VERIFY_SCRIPT]), _reader({fb.VERIFY_SCRIPT: "make test\n"}), context)
+        self.assertEqual((own.action, own.reason), ("keep", "repository-authored file"))
+        variant = fb._plan_verify(_facts(["Scripts/Verify"]), _reader({"Scripts/Verify": "make test\n"}), context)
+        self.assertEqual((variant.path, variant.action), ("Scripts/Verify", "keep"))
+        managed = fb.template_context(_facts(["Scripts/Verify"]), _reader({"Scripts/Verify": "make test\n"}), PIN)
+        self.assertIn("this repository's own verification script", managed["verify_section"])
+        current = {fb.VERIFY_SCRIPT: (created.content or "").replace("\n", "\r\n")}
+        kept = fb._plan_verify(_facts(list(current)), _reader(current), context)
+        self.assertEqual((kept.action, kept.reason), ("keep", "managed verify is current"))
+        outdated = {fb.VERIFY_SCRIPT: "# Managed by quality-zero-platform\ngit checkout --detach x\n"}
+        upgraded = fb._plan_verify(_facts(list(outdated)), _reader(outdated), context)
+        self.assertEqual((upgraded.action, upgraded.executable), ("replace", True))
+        self.assertEqual(upgraded.content, created.content)
+
+    def test_effective_floor_never_drops_an_existing_any(self) -> None:
+        strict = f"jobs:\n  quality:\n    uses: {CALLER_PREFIX}{PIN}\n    with:\n      deps-severity-floor: any\n"
+        files = {
+            ".github/workflows/a.yml": "jobs: [unclosed\n",
+            ".github/workflows/b.yml": "- a list\n",
+            ".github/workflows/c.yml": "jobs:\n  odd: 3\n  other:\n    uses: x/y/.github/workflows/z.yml@v1\n",
+            ".github/workflows/d.yml": f"jobs:\n  quality:\n    uses: {CALLER_PREFIX}v1\n    with: nope\n",
+            "notes/quality.yml": strict,
+        }
+        self.assertEqual(fb.effective_floor(_facts(list(files)), _reader(files), "t0"), "t0")
+        files[".github/workflows/quality.yml"] = strict
+        self.assertEqual(fb.effective_floor(_facts(list(files)), _reader(files), "t0"), "any")
+        self.assertEqual(fb.effective_floor(_facts([]), _reader({}), "any"), "any")
+        plan = _by_path(fb.plan_baseline(_facts(list(files)), _reader(files), PIN))
+        self.assertIn("zero known advisories, any severity", plan["CONTRIBUTING.md"].content or "")
 
 
 class ApplyAndIoTests(unittest.TestCase):
@@ -974,7 +1346,7 @@ class MainTests(unittest.TestCase):
                 "scripts/verify",
                 fb.QUALITY_CALLER,
             ]
-            code, out, _err = self._run(base, tracked)
+            code, out, _err = self._run(base + ["--default-branch", "trunk"], tracked)
             self.assertEqual(code, 0, out)
             (root / ".github" / "dependabot.yml").write_text("version: 2\nupdates: []\n", encoding="utf-8")
             code, out, _err = self._run(base + ["--write"], tracked)

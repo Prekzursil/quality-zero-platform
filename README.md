@@ -9,6 +9,7 @@ It replaces the old queue/template baseline with reusable workflows, shared qual
 > - **Adding a new repo to the fleet?** → [`docs/ONBOARDING.md`](docs/ONBOARDING.md)
 > - **Choosing gates / thresholds?** → [`docs/QUALITY-GATES.md`](docs/QUALITY-GATES.md)
 > - **Running fleet-wide operations?** → [`docs/OPERATOR-RUNBOOK.md`](docs/OPERATOR-RUNBOOK.md)
+> - **About to dismiss a code-scanning alert?** → [`docs/CODE-SCANNING-DISMISSALS.md`](docs/CODE-SCANNING-DISMISSALS.md) (fix beats dismiss; every dismissal is logged)
 > - **Full architecture reference?** → [`docs/QZP-V2-DESIGN.md`](docs/QZP-V2-DESIGN.md)
 
 ## What This Repo Owns

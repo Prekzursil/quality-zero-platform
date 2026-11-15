@@ -447,7 +447,7 @@ class WorkflowContractTests(unittest.TestCase):
     def test_scanner_matrix_pins_qlty_actions_to_full_sha(self) -> None:
         """Pin QLTY and PR creation actions to immutable full SHAs."""
         text = (ROOT / ".github" / "workflows" / "reusable-scanner-matrix.yml").read_text(encoding="utf-8")
-        self.assertIn("qltysh/qlty-action/install@c9b09987143d1e4ac955f4803c7bea742102feb5", text)
+        self.assertIn("qltysh/qlty-action/install@ebcd284bf32e36a030afe15f1e136c7be08b9506", text)
         self.assertIn(
             "matrix.lane == 'qlty_zero' || (matrix.lane == 'coverage' && steps.profile.outputs.qlty_coverage_files != '' && runner.os != 'Windows')",
             text,
@@ -467,8 +467,8 @@ class WorkflowContractTests(unittest.TestCase):
         remediation_text = (ROOT / ".github" / "workflows" / "reusable-remediation-loop.yml").read_text(
             encoding="utf-8"
         )
-        self.assertIn("peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1", backlog_text)
-        self.assertIn("peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1", remediation_text)
+        self.assertIn("peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1", backlog_text)
+        self.assertIn("peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1", remediation_text)
 
     def test_scanner_matrix_pins_codecov_upload_and_keeps_token_optional(self) -> None:
         """Codecov upload removed from scanner-matrix per §7.3 — kept in reusable-codecov-analytics.yml only."""

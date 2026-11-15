@@ -80,6 +80,7 @@ class DismissalLogTests(unittest.TestCase):
             "113", "114", "126", "127", "128", "129", "138", "139", "166", "167", "168", "169", "173",
             "245", "246", "247", "272", "273", "297", "298", "299", "300", "301", "302",
             "306", "307", "308", "309", "310", "312", "313", "314", "315", "316", "317",
+            "321", "322", "323",
         }  # fmt: skip
         self.assertEqual(recorded - logged, set(), "a logged dismissal disappeared")
         self.assertEqual(logged - recorded, set(), "add each new log row's alert number to this baseline")

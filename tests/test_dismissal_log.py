@@ -284,7 +284,8 @@ class DismissalLogTests(unittest.TestCase):
         """Review finding: a one-cell pipe row under the heading 'documented' an exclusion."""
         text = DOC.read_text(encoding="utf-8")
         self.assertEqual(log.decision_problems(text), [])
-        self.assertEqual(log.documented_queries(text), set())  # no global exclusion is left
+        # every surviving exclusion (js/http-to-file-access, main #383) is a documented decision
+        self.assertNotEqual(log.documented_queries(text), set())
         self.assertEqual(log.decision_problems("# Doc\n\nno decisions here\n"), [])
 
         def decisions(*rows: str, header: str = "| Query | Decided | Decision |") -> str:
@@ -481,10 +482,12 @@ class DismissalLogTests(unittest.TestCase):
         """Rule 4: a global query filter cannot land without its row in the decisions table."""
         text = DOC.read_text(encoding="utf-8")
         config = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
-        # No global exclusion is left (py/clear-text-* was fixed in code); the synthetic configs below keep
-        # the reconciliation itself under test.
-        self.assertNotIn("query-filters", config)
+        # py/clear-text-* was fixed in code and carries no filter; the one remaining filter
+        # (js/http-to-file-access, main #383 — a reviewed artifact sink newer than this
+        # branch's review cycle) is reconciled by rule 4: every excluded id must be a
+        # documented decision row, which is what the reconciliation enforces.
         self.assertEqual(log.undocumented_exclusions(config, text), [])
+        self.assertNotEqual(log.documented_queries(text), set())
         decisions = "## Query configuration decisions\n\n| Query | Decided | Decision |\n| --- | --- | --- |\n"
         decisions += (
             "| `py/kept`, `py/also` | 2026-10-24 | **Excluded.** Review by 2099-12-31. |\n\n## Log\n\n"

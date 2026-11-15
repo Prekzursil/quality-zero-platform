@@ -310,7 +310,7 @@ class LiveHealthGateWiringTests(unittest.TestCase):
 
     def test_live_health_without_profile_has_no_gate_fields(self) -> None:
         with (
-            mock.patch.object(build_admin_dashboard, "_github_payload_or_none") as fake,
+            mock.patch.object(build_admin_dashboard, "_github_payload_or_degraded") as fake,
             mock.patch.object(build_admin_dashboard, "_github_fetch_degraded", return_value=([], {})),
         ):
             fake.return_value = {"workflow_runs": [], "visibility": "public"}
@@ -342,7 +342,7 @@ class LiveHealthGateWiringTests(unittest.TestCase):
 
         with (
             mock.patch.object(build_admin_dashboard, "_github_fetch_degraded", side_effect=fake),
-            mock.patch.object(build_admin_dashboard, "_github_payload_or_none", side_effect=fake_or_none),
+            mock.patch.object(build_admin_dashboard, "_github_payload_or_degraded", side_effect=fake_or_none),
         ):
             health = build_admin_dashboard._live_health(
                 "t",

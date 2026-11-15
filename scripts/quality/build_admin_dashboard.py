@@ -255,36 +255,16 @@ def _github_payload(url: str, token: str) -> Any:
     return payload
 
 
-def _github_payload_or_none(url: str, token: str) -> Any:
-    """Fetch ``url``; return ``None`` when GitHub reports the resource 404.
-
-    A newly-registered governed repo can be PRIVATE and/or lack the fetched
-    resource entirely (no Pages site, no rulesets, or a repo the workflow
-    token cannot read at all) — GitHub reports every one of those as HTTP
-    404. That is a per-repo "resource is absent" signal, not a build-stopping
-    error: the caller degrades that repo's row (health ``unknown``, redacted
-    slug) instead of aborting the whole dashboard publish, mirroring how
-    ``redact_private_repos`` already tolerates private repos. Any other
-    ``HTTPError`` (403 rate-limit, 5xx, ...) still propagates. The SSRF
-    hardening in ``scripts.security_helpers`` keeps raising unconditionally;
-    only this caller decides a 404 is tolerable.
-    """
-    try:
-        return _github_payload(url, token)
-    except HTTPError as exc:
-        if exc.code == 404:
-            return None
-        raise
-
-
 def _github_fetch_degraded(url: str, token: str) -> Tuple[Any, Mapping[str, str] | None]:
     """Fetch ``url``; ``(payload, headers)`` or ``(None, None)`` on 404/403.
 
-    Broader than ``_github_payload_or_none`` (the heatmap's 404-only
-    contract above, kept unchanged): the Lane-8 gate panel must also survive
-    403, because a token CAN read a private member's metadata while being
-    denied its check-runs feed (measured live 2026-10-21 against
-    Prekzursil/PrimariRo: head commit 200, check-runs 403), and an hourly
+    Per-repo fleet fetches (runs listing, rulesets, repo metadata, PR
+    health, the Lane-8 gate panel) must survive 403 as well as 404, because
+    a token CAN read a private member's metadata while being denied its
+    check-runs feed (measured live 2026-10-21 against Prekzursil/PrimariRo:
+    head commit 200, check-runs 403), and a member can be staff/TOS-blocked
+    outright (measured live 2026-11-03: agent-skills-toolchain answers 403
+    'Repository access blocked' to every endpoint), and an hourly
     dashboard publish must degrade that ONE repo to a stale row instead of
     failing the whole build. Any other ``HTTPError`` (5xx, ...) still
     propagates. Headers ride along so callers can follow the Link header.
@@ -383,7 +363,7 @@ def _default_branch_health(token: str, repo_slug: str, default_branch: str) -> s
     eligible: List[Mapping[str, Any]] = []
     exhausted = False
     for page in range(1, MAX_DEFAULT_BRANCH_PAGES + 1):
-        payload = _github_payload_or_none(
+        payload = _github_payload_or_degraded(
             f"{GITHUB_API_BASE}/repos/{repo_slug}/actions/runs"
             f"?branch={default_branch}&per_page={DEFAULT_BRANCH_WINDOW}&page={page}",
             token,
@@ -596,12 +576,15 @@ def _live_health(
     default_branch: str,
     profile: Mapping[str, Any] | None = None,
 ) -> Dict[str, Any]:
-    # Every per-repo fetch is 404-tolerant: a 404 means "this repo has no
-    # such resource visible to the token" (private repo, no runs, no
-    # rulesets) and must degrade that ONE row, never abort the whole
+    # Every per-repo fetch is 404/403-tolerant: a 404 means "this repo has
+    # no such resource visible to the token" (private repo, no runs, no
+    # rulesets) and a 403 means "denied" — a staff/TOS-blocked member
+    # (measured live 2026-11-03: agent-skills-toolchain answers 403
+    # 'Repository access blocked' to every endpoint) or a feed the token
+    # cannot read. Either way that ONE row degrades, never the whole
     # dashboard build.
     default_branch_health = _default_branch_health(token, repo_slug, default_branch)
-    rulesets = _github_payload_or_none(f"{GITHUB_API_BASE}/repos/{repo_slug}/rulesets", token)
+    rulesets = _github_payload_or_degraded(f"{GITHUB_API_BASE}/repos/{repo_slug}/rulesets", token)
     # Fetch repo metadata to capture visibility for the redaction step
     # in ``build_dashboard_payload``. Using the same token lets private
     # repos (where the bot has read access) report their true visibility;
@@ -611,7 +594,7 @@ def _live_health(
     # gone). Worst-case default to ``"private"`` so ``redact_private_repos``
     # masks the slug on the public dashboard instead of leaking it
     # (Phase 5 §8). Reachable-but-unusable metadata keeps ``"public"``.
-    repo_meta = _github_payload_or_none(f"{GITHUB_API_BASE}/repos/{repo_slug}", token)
+    repo_meta = _github_payload_or_degraded(f"{GITHUB_API_BASE}/repos/{repo_slug}", token)
     visibility = "public"
     if repo_meta is None:
         visibility = "private"

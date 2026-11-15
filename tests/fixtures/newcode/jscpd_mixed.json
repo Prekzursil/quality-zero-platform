@@ -1,0 +1,81 @@
+{
+  "duplicates": [
+    {
+      "firstFile": {
+        "end": 27,
+        "endLoc": {
+          "column": 21,
+          "line": 27,
+          "position": 762
+        },
+        "name": "src\\legacy_settings.py",
+        "start": 6,
+        "startLoc": {
+          "column": 17,
+          "line": 6,
+          "position": 103
+        }
+      },
+      "format": "python",
+      "fragment": "def load_settings(path, defaults):\n    \"\"\"Read a JSON settings file and merge it over the supplied defaults.\"\"\"\n    merged = dict(defaults)\n    try:\n        with open(path, \"r\", encoding=\"utf-8\") as handle:\n            payload = json.load(handle)\n    except OSError:\n        return merged\n    except ValueError:\n        return merged\n    if not isinstance(payload, dict):\n        return merged\n    for key, value in payload.items():\n        if key not in defaults:\n            continue\n        if value is None:\n            continue\n        merged[key] = value\n    normalised = {}\n    for key in sorted(merged):\n        normalised[str(key)] = merged[key]\n    return normalised",
+      "lines": 22,
+      "secondFile": {
+        "end": 27,
+        "endLoc": {
+          "column": 21,
+          "line": 27,
+          "position": 768
+        },
+        "name": "src\\new_settings.py",
+        "start": 6,
+        "startLoc": {
+          "column": 15,
+          "line": 6,
+          "position": 109
+        }
+      },
+      "tokens": 116
+    }
+  ],
+  "statistics": {
+    "detectionDate": "2026-08-11T19:57:07.759Z",
+    "formats": {
+      "go": {
+        "clones": 0,
+        "duplicatedLines": 0,
+        "duplicatedTokens": 0,
+        "lines": 59,
+        "newClones": 0,
+        "newDuplicatedLines": 0,
+        "percentage": 0.0,
+        "percentageTokens": 0.0,
+        "sources": 1,
+        "tokens": 207
+      },
+      "python": {
+        "clones": 1,
+        "duplicatedLines": 21,
+        "duplicatedTokens": 116,
+        "lines": 111,
+        "newClones": 0,
+        "newDuplicatedLines": 0,
+        "percentage": 18.91891891891892,
+        "percentageTokens": 24.267782426778243,
+        "sources": 3,
+        "tokens": 478
+      }
+    },
+    "total": {
+      "clones": 1,
+      "duplicatedLines": 21,
+      "duplicatedTokens": 116,
+      "lines": 170,
+      "newClones": 0,
+      "newDuplicatedLines": 0,
+      "percentage": 12.352941176470589,
+      "percentageTokens": 16.934306569343065,
+      "sources": 4,
+      "tokens": 685
+    }
+  }
+}

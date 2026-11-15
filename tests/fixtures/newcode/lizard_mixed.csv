@@ -1,0 +1,9 @@
+2,1,10,1,3,"ok@1-3@.\src\clean.py",".\src\clean.py","ok","ok( value )",1,3
+38,21,160,5,39,"classify@4-42@.\src\legacy_knot.py",".\src\legacy_knot.py","classify","classify( value , mode , flag_a , flag_b , flag_c )",4,42
+2,1,10,1,3,"tiny@45-47@.\src\legacy_knot.py",".\src\legacy_knot.py","tiny","tiny( value )",45,47
+2,1,10,1,3,"also_ok@50-52@.\src\legacy_knot.py",".\src\legacy_knot.py","also_ok","also_ok( value )",50,52
+21,8,115,2,22,"load_settings@6-27@.\src\legacy_settings.py",".\src\legacy_settings.py","load_settings","load_settings( path , defaults )",6,27
+6,2,20,1,6,"Simple@4-9@.\src\new_knot.go",".\src\new_knot.go","Simple","Simple value int",4,9
+47,18,160,5,47,"Knot@13-59@.\src\new_knot.go",".\src\new_knot.go","Knot","Knot value int , mode string , a bool , b bool , c bool",13,59
+21,8,115,2,22,"read_config@6-27@.\src\new_settings.py",".\src\new_settings.py","read_config","read_config( path , defaults )",6,27
+2,1,14,1,3,"unique_helper@30-32@.\src\new_settings.py",".\src\new_settings.py","unique_helper","unique_helper( items )",30,32

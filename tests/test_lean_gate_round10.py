@@ -348,10 +348,14 @@ class PythonRuntimeDepsTests(_StepHarness):
         """The documented bar is zero errors AND zero warnings: '1 warning' used to pass gate 2."""
         run = str(step_named("gate-types basedpyright")["run"])
         self.assertIn("  basedpyright --warnings\n", run)
-        self.assertIn("basedpyright --typecheckingmode standard --warnings", run)
+        # FIX 2026-11-17: --typecheckingmode is not a basedpyright CLI flag
+        # ("Unexpected option", exit 4); the standard bar is materialized as an
+        # in-tree config and used via -p.
+        self.assertIn("basedpyright -p .qzp-pyright-standard.json --warnings", run)
+        self.assertIn('{"typeCheckingMode": "standard"}', run)
         calls = [line.strip() for line in run.splitlines() if line.strip().startswith("basedpyright")]
         self.assertEqual(len(calls), 2)
-        self.assertTrue(all(call.endswith("--warnings") for call in calls), calls)
+        self.assertTrue(all("--warnings" in call for call in calls), calls)
         # The local preflight mirrors CI one-for-one: a warning fails it too.
         preflight = (ROOT / "scripts" / "quality" / "preflight.sh").read_text(encoding="utf-8")
         local = [line.strip() for line in preflight.splitlines() if line.strip().startswith("python -m basedpyright")]

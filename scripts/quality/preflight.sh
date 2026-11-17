@@ -307,7 +307,13 @@ if [ "$DETECT_PYTHON" = "true" ]; then
     python -m basedpyright --warnings || rc=$?
   else
     echo "No caller basedpyright/pyright config - using standard typeCheckingMode (mirrors Reframe)."
-    python -m basedpyright --typecheckingmode standard --warnings || rc=$?
+    # FIX 2026-11-17: --typecheckingmode is not a basedpyright CLI flag (exit 4,
+    # "Unexpected option"); typeCheckingMode is config-file-only, so materialize
+    # the standard bar as an in-tree config and point basedpyright at it with -p.
+    printf '%s
+' '{"typeCheckingMode": "standard"}' > .qzp-pyright-standard.json
+    python -m basedpyright -p .qzp-pyright-standard.json --warnings || rc=$?
+    rm -f .qzp-pyright-standard.json
   fi
   if [ "$rc" -ne 0 ]; then
     lane_fail gate-types-py "basedpyright@$PIN_BASEDPYRIGHT reported type errors or warnings"

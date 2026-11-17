@@ -94,7 +94,7 @@ inventory and files/updates ONE tracking issue.
 Model: **Prevent (auto-fix) - Binary green/red - Ratchet-retired (100% everywhere)**.
 
 1. **Lint + format** (SELF-CONTAINED in CI — the workflow's OWN pinned CLIs, NOT the caller's pre-commit): Ruff [py] (`gate-lint-format-py`: `ruff check` + `ruff format --check`, honoring a caller `[tool.ruff]`/`ruff.toml`) - Oxlint+Biome [ts/js] (`gate-lint-format-jsts`; Oxlint = linter, Biome = formatter-only). The other-language autofixers (clippy+rustfmt [rust], golangci-lint v2 [go], ErrorProne+Spotless [java], Roslyn+dotnet-format [c#], clang-tidy+clang-format [c/c++]) run in the LOCAL pre-commit only; they are not yet self-contained in CI (round-6).
-2. **Types**: `tsc --noEmit` [ts] - basedpyright at the **standard** `typeCheckingMode` [py] (honors a caller basedpyright/pyright config when present; otherwise `--typecheckingmode standard`, mirroring Reframe).
+2. **Types**: `tsc --noEmit` [ts] - basedpyright at the **standard** `typeCheckingMode` [py] (honors a caller basedpyright/pyright config when present; otherwise a materialized `typeCheckingMode: standard` config via `-p` (the CLI has no mode flag), mirroring Reframe).
 3. **Tests + coverage**: STRICT **100% line+branch** (standing user policy; ratchet retired). Reasoned, greppable pragma only. **No silent-pass** — a language with source *and* test files but no coverage config/script **FAILS** (the 100% gate cannot pass unmeasured); the only skip is the narrow *no-test-surface-by-design* case (source present with **zero** test files).
 4. **SAST**: Opengrep (Semgrep CE acceptable). **Always runs** (round-10): the caller's curated `.quality/opengrep` ruleset when present, otherwise the platform's curated default ruleset, embedded in the workflow at the pinned ref.
 5. **Secrets**: gitleaks (pinned + allowlist) + push-protection. SELF-CONTAINED and **always runs** (round-7); a caller `.gitleaks.toml` is an optional allowlist, never the trigger.
@@ -275,7 +275,7 @@ hard-fail *before* a gate can run:
   basedpyright step now **honors a caller-shipped basedpyright/pyright config**
   (`pyrightconfig.json`, `basedpyrightconfig.json`, or a `pyproject.toml` carrying a
   `[tool.basedpyright]` / `[tool.pyright]` table) by running `basedpyright` as-is;
-  when **no** such config exists it passes `--typecheckingmode standard` so the gate
+  when **no** such config exists it materializes a `typeCheckingMode: standard` config and runs `basedpyright -p` on it (the CLI has no mode flag) so the gate
   uses the proven standard bar instead of basedpyright's stricter default. This is
   **not** a weakening — standard is the proven bar and reportAny-everywhere is
   gold-plating; **real** type errors at standard level still **FAIL**.

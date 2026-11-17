@@ -1890,7 +1890,18 @@ jobs:
             basedpyright --warnings
           else
             echo "No caller basedpyright/pyright config - using standard typeCheckingMode (mirrors Reframe)."
-            basedpyright --typecheckingmode standard --warnings
+            # FIX 2026-11-17: `--typecheckingmode` is NOT a basedpyright CLI flag
+            # (verified on the pinned basedpyright==1.39.8: "Unexpected option
+            # --typecheckingmode", exit 4) — every config-less caller's types lane
+            # hard-failed on the FLAG, not on types (observed: tiktok-mcp, openmm-
+            # md-mcp, schrodinger-mcp, fb-messenger-mcp, PrimariRo lean-gate PRs).
+            # typeCheckingMode is config-file-only, so materialize the standard
+            # bar as an in-tree config and point basedpyright at it with -p.
+            printf '%s\n' '{"typeCheckingMode": "standard"}' > .qzp-pyright-standard.json
+            rc=0
+            basedpyright -p .qzp-pyright-standard.json --warnings || rc=$?
+            rm -f .qzp-pyright-standard.json
+            exit "$rc"
           fi
 
       # ── GATE 3 — tests + coverage (STRICT 100% line+branch) ───────────────

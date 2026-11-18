@@ -1,0 +1,21 @@
+codecov:
+  require_ci_to_pass: true
+
+flags:
+  platform:
+    paths:
+      - coverage/
+  provider_ui:
+    paths:
+      - coverage/
+
+coverage:
+  status:
+    project:
+      default:
+        target: 100.0%
+        threshold: 0%
+    patch:
+      default:
+        target: 100.0%
+        threshold: 0%

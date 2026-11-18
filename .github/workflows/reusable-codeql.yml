@@ -142,19 +142,25 @@ jobs:
       # scanning API is available, so the analyze step can skip its upload
       # and export the SARIF as a workflow artifact instead of failing red
       # on a state the repo cannot change.
-      - name: Probe GHAS availability
+      - name: Probe code-scanning availability
         id: ghas
         env:
           GH_TOKEN: ${{ github.token }}
           REPO_SLUG: ${{ inputs.repo_slug }}
         run: |
           set -euo pipefail
+          # Upload is possible when the repo is PUBLIC (code scanning is free
+          # there regardless of GHAS; security_and_analysis is typically null)
+          # or when GHAS advanced_security is explicitly enabled. Private
+          # personal-account repos can do neither — the API answers 403.
+          visibility="$(gh api "repos/$REPO_SLUG" --jq '.private')"
           status="$(gh api "repos/$REPO_SLUG" --jq '.security_and_analysis.advanced_security.status // "unavailable"')"
-          echo "ghas_status=$status" >> "$GITHUB_OUTPUT"
-          if [ "$status" = "enabled" ]; then
-            echo "GHAS advanced_security=enabled: analyzing with code-scanning upload."
+          if [ "$visibility" = "false" ] || [ "$status" = "enabled" ]; then
+            echo "ghas_status=enabled" >> "$GITHUB_OUTPUT"
+            echo "repo private=$visibility, advanced_security=$status: analyzing with code-scanning upload."
           else
-            echo "GHAS advanced_security=$status: analyzing WITHOUT code-scanning upload (SARIF kept as a workflow artifact) — the repository cannot enable code scanning (personal-account private repo, docs/BEST-CONFIG.md §2)."
+            echo "ghas_status=unavailable" >> "$GITHUB_OUTPUT"
+            echo "repo private=$visibility, advanced_security=$status: analyzing WITHOUT code-scanning upload (SARIF kept as a workflow artifact) — the repository cannot enable code scanning (personal-account private repo, docs/BEST-CONFIG.md §2)."
           fi
 
       - name: Set up Go

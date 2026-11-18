@@ -69,7 +69,13 @@ jobs:
                   continue
               if slug_filter and slug_filter not in slug:
                   continue
-              slugs.append(slug)
+              # Repos whose default branch is not 'main' carry it in the
+              # inventory; the reusable's caller must pass it or its checkout
+              # fetches a branch that does not exist (grace-iberlef-2026 is
+              # master-defaulted and failed exactly this way, wave run
+              # 44341494931: git fetch 'refs/heads/main*' -> exit 1).
+              branch = str(entry.get("default_branch", "main") or "main").strip()
+              slugs.append(f"{slug}@{branch}" if branch != "main" else slug)
           output_path = os.environ.get("GITHUB_OUTPUT")
           if output_path:
               with open(output_path, "a", encoding="utf-8") as fh:
@@ -97,6 +103,9 @@ jobs:
     uses: ./.github/workflows/reusable-drift-sync.yml # zizmor: ignore[self-repository]
     with:
       repo_slug: ${{ matrix.slug }}
+      # matrix entries may be 'slug@branch' for non-main default branches
+      # (the inventory records them); the reusable takes the branch apart.
+      default_branch: ${{ contains(matrix.slug, '@') && format('{0}', split(matrix.slug, '@')[1]) || 'main' }}
       dry_run: ${{ inputs.dry_run }}
     secrets:
       DRIFT_SYNC_PAT: ${{ secrets.DRIFT_SYNC_PAT }}

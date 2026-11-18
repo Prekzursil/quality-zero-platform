@@ -9,7 +9,7 @@ version: 2
 updates:
 {% for update in dep.get('updates') or [] %}
   - package-ecosystem: {{ update['ecosystem'] }}
-    directory: "{{ update['directory'] }}"
+    directory: '{{ update['directory'] }}'
     schedule:
       interval: {{ update.get('interval') or 'weekly' }}
     open-pull-requests-limit: {{ update.get('limit') or 10 }}
@@ -22,7 +22,7 @@ updates:
         applies-to: version-updates
         patterns:
 {% for pattern in group.get('patterns') or ['*'] %}
-          - "{{ pattern }}"
+          - '{{ pattern }}'
 {% endfor %}
         update-types:
 {% for t in group.get('update_types') or ['patch', 'minor'] %}
@@ -32,7 +32,7 @@ updates:
       security-updates:
         applies-to: security-updates
         patterns:
-          - "*"
+          - '*'
     labels:
 {% for label in update.get('labels') or ['dependencies'] %}
       - {{ label }}

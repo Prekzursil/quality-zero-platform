@@ -133,6 +133,36 @@ jobs:
           ref: ${{ inputs.sha != '' && inputs.sha || github.sha }}
           persist-credentials: false
 
+      # ── no-GHAS tolerance (docs/BEST-CONFIG.md §2) ─────────────────────────
+      # Private repositories owned by a personal account cannot use GHAS at
+      # all: the code-scanning API answers 403 "Code scanning is not enabled
+      # for this repository" no matter the settings. The ANALYSIS still runs
+      # (that is the value); only the UPLOAD is impossible. Probe the repo's
+      # advanced_security status up front and record whether the code
+      # scanning API is available, so the analyze step can skip its upload
+      # and export the SARIF as a workflow artifact instead of failing red
+      # on a state the repo cannot change.
+      - name: Probe code-scanning availability
+        id: ghas
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO_SLUG: ${{ inputs.repo_slug }}
+        run: |
+          set -euo pipefail
+          # Upload is possible when the repo is PUBLIC (code scanning is free
+          # there regardless of GHAS; security_and_analysis is typically null)
+          # or when GHAS advanced_security is explicitly enabled. Private
+          # personal-account repos can do neither — the API answers 403.
+          visibility="$(gh api "repos/$REPO_SLUG" --jq '.private')"
+          status="$(gh api "repos/$REPO_SLUG" --jq '.security_and_analysis.advanced_security.status // "unavailable"')"
+          if [ "$visibility" = "false" ] || [ "$status" = "enabled" ]; then
+            echo "ghas_status=enabled" >> "$GITHUB_OUTPUT"
+            echo "repo private=$visibility, advanced_security=$status: analyzing with code-scanning upload."
+          else
+            echo "ghas_status=unavailable" >> "$GITHUB_OUTPUT"
+            echo "repo private=$visibility, advanced_security=$status: analyzing WITHOUT code-scanning upload (SARIF kept as a workflow artifact) — the repository cannot enable code scanning (personal-account private repo, docs/BEST-CONFIG.md §2)."
+          fi
+
       - name: Set up Go
         if: ${{ needs.resolve-profile.outputs.go_version != '' }}
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -169,6 +199,19 @@ jobs:
 
       - name: Analyze
         uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          # Upload only where the code scanning API exists; no-GHAS repos
+          # (personal-account private) keep the SARIF via the artifact step.
+          upload: ${{ steps.ghas.outputs.ghas_status == 'enabled' }}
+          output: ${{ runner.temp }}/sarif
+
+      - name: Keep SARIF as an artifact when code scanning is unavailable
+        if: ${{ steps.ghas.outputs.ghas_status != 'enabled' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: codeql-sarif-no-ghas
+          path: ${{ runner.temp }}/sarif
+          retention-days: 14
 
   # ── Fail-closed gate: the check fleet branch protection requires ──────────
   # `codeql / CodeQL` used to be the analysis job itself, guarded by

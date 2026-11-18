@@ -104,6 +104,17 @@ unavailable there. Their security policy routes reports to a labelled issue;
 the lean gate's gitleaks + opengrep lanes are their secret-scanning and
 code-scanning controls (see [`FLEET-BASELINE.md`](FLEET-BASELINE.md)).
 
+**The no-GHAS CodeQL pattern** (implemented in
+[`reusable-codeql.yml`](../.github/workflows/reusable-codeql.yml)): the
+workflow probes `repos/{slug}.security_and_analysis.advanced_security.status`
+first. When it is not `enabled` — the personal-account-private case — the
+CodeQL ANALYSIS still runs (`queries: security-extended,security-and-quality`,
+fail-closed gate intact) but the analyze step runs with `upload: false` and
+the SARIF is exported as a workflow artifact (`codeql-sarif-no-ghas`, 14-day
+retention) instead of failing red on the API's 403 "Code scanning is not
+enabled for this repository". Upgrading the account or transferring the repo
+flips the probe and upload resumes automatically — nothing to un-do.
+
 ## 3. Secret scanning — three layers
 
 1. **GitHub secret scanning + push protection: enabled** (`PATCH

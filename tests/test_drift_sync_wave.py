@@ -55,13 +55,25 @@ class DriftSyncWaveWorkflowTests(unittest.TestCase):
         self.assertIn("reusable-drift-sync.yml", uses)
 
     def test_matrix_strategy_fanouts_per_slug(self) -> None:
-        """Matrix strategy expands to one job per fleet slug."""
+        """Matrix strategy expands to one job per fleet slug.
+
+        2026-11-18: the matrix became an `include` of {slug, default_branch}
+        objects so master-defaulted repos (grace-iberlef-2026) reach the
+        reusable with their real default branch — a flat slug list made the
+        reusable fetch refs/heads/main* on a master-only repo (run
+        44341494931, git fetch exit 1 x3). The fanout contract (one job per
+        slug, fail-fast false) is unchanged.
+        """
         sync_job = self.doc["jobs"]["sync"]
         strategy = sync_job.get("strategy", {})
         self.assertIn("matrix", strategy)
-        self.assertIn("slug", strategy["matrix"])
+        self.assertIn("include", strategy["matrix"])
         # fail-fast MUST be false so one broken repo doesn't abort the wave.
         self.assertIs(strategy.get("fail-fast"), False)
+        # and the reusable still receives the slug + its default branch
+        with_args = sync_job.get("with", {})
+        self.assertEqual(with_args.get("repo_slug"), "${{ matrix.slug }}")
+        self.assertEqual(with_args.get("default_branch"), "${{ matrix.default_branch }}")
 
     def test_drift_sync_pat_forwarded_as_secret(self) -> None:
         """The wave passes DRIFT_SYNC_PAT into the reusable workflow."""

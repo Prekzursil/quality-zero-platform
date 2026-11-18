@@ -18,7 +18,7 @@ codecov:
 
 flags:
 {% for item in coverage.get('inputs') or [] %}
-  {{ item.flag }}:
+  {{ item.get('flag') or item.get('name') }}:
     paths:
 {% if item.get('sources') %}
 {% for src in item['sources'] %}

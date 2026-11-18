@@ -87,7 +87,7 @@ jobs:
                   fh.write(f"- Total repos in inventory: {len(repos)}\n")
                   fh.write(f"- Selected after filter: {len(entries)}\n")
                   for entry in entries:
-                      fh.write(f"  - `{slug}`\n")
+                      fh.write(f"  - `{entry['slug']}`\n")
           PY
 
   sync:

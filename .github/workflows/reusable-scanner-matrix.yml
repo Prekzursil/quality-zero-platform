@@ -192,7 +192,7 @@ jobs:
         uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7
       - name: Install Qlty CLI
         if: steps.profile.outputs.qlty_enabled == 'true' && (matrix.lane == 'qlty_zero' || (matrix.lane == 'coverage' && steps.profile.outputs.qlty_coverage_files != '' && runner.os != 'Windows'))
-        uses: qltysh/qlty-action/install@0ff2178667bf8eb28ed0013a7ef54857a24d4056
+        uses: qltysh/qlty-action/install@a46e29cfd54065ae8a2c6b1fd3446aed1b1a4257
       - name: Run selected lane
         shell: bash
         env:
@@ -464,7 +464,7 @@ jobs:
         # any rule on the line below — the rule-id form was being
         # ignored by --config auto so we drop the suffix.
         # nosem
-        uses: SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4 # v8.5.0
+        uses: SonarSource/sonarqube-scan-action@70bad232163b09d998ea0707ee80c0ec80798c16 # v8.5.1
         with:
           projectBaseDir: repo
         env:

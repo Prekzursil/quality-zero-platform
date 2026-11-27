@@ -177,7 +177,7 @@ jobs:
           java-version: ${{ needs.resolve-profile.outputs.java_version }}
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        uses: github/codeql-action/init@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
         with:
           languages: ${{ needs.resolve-profile.outputs.languages_csv }}
           build-mode: ${{ needs.resolve-profile.outputs.build_mode }}
@@ -195,10 +195,10 @@ jobs:
 
       - name: Autobuild
         if: ${{ needs.resolve-profile.outputs.build_mode == 'autobuild' }}
-        uses: github/codeql-action/autobuild@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        uses: github/codeql-action/autobuild@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
 
       - name: Analyze
-        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        uses: github/codeql-action/analyze@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
         with:
           # Upload only where the code scanning API exists; no-GHAS repos
           # (personal-account private) keep the SARIF via the artifact step.

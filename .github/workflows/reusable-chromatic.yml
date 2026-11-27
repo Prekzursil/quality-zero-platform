@@ -85,7 +85,7 @@ jobs:
 
       - name: Run Chromatic
         id: chromatic
-        uses: chromaui/action@86505fc3fa3b2ed5f39eda89f34f4051ea8ff0c8  # v11 — pinned per §A.2.4
+        uses: chromaui/action@25d2d37fcbe164dfbf5479a432fbd73d03bae733  # v11 — pinned per §A.2.4
         with:
           projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
           buildScriptName: ${{ inputs.storybook_build_script }}
